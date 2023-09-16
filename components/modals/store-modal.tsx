@@ -36,6 +36,7 @@ const StoreModal = () => {
 
       const response = await axios.post('/api/departments', values);
       
+      window.location.assign(`/${response.data.id}`)
       toast({
         title: "Success",
         description: "New Department created."
