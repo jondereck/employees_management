@@ -1,7 +1,6 @@
 "use client";
 import Modal from '@/components/ui/modal'
 import useStoreModal from '@/hooks/use-store-modal';
-import { UserButton } from '@clerk/nextjs'
 import Image from 'next/image'
 import { useEffect } from 'react';
 
@@ -16,9 +15,6 @@ export default function SetupPage() {
   }, [isOpen, onOpen]);
 
 
-  return (
-    <p className='p-4'>
-       Root pAGE
-    </p>
-  )
+  return null;
+  
 }
