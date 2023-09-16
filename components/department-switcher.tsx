@@ -15,7 +15,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 type PopoverTriggerProps = React.ComponentPropsWithoutRef<typeof PopoverTrigger>
 
 interface DepartmentSwitcherProps extends PopoverTriggerProps {
-  items: Department[];
+  items?: Department[];
 };
 
 export default function DepartmentSwitcher({
