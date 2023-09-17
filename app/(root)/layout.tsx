@@ -23,4 +23,9 @@ export default async function SetupLayout ({
     redirect(`/${department.id}`)
   }
   
+  return (
+    <>
+      {children}
+    </>
+  );
 }
