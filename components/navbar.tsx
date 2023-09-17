@@ -1,15 +1,28 @@
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, auth } from "@clerk/nextjs";
 import { MainNav } from "./main-nav";
 import DepartmentSwitcher from "./department-switcher";
+import { redirect } from "next/navigation";
+import prismadb from "@/lib/prismadb";
 
 
 
-export const Navbar = () => {
+export const Navbar = async () => {
+  const { userId } = auth();
+
+  if (!userId) {
+    redirect("/sign-in");
+  }
+
+  const department = await prismadb.department.findMany({
+    where: {
+      userId,
+    },
+  })
   return (  
     <div className="border-b ">
       <div className="flex h-16 items-center px-4">
         <div>
-          <DepartmentSwitcher/>
+          <DepartmentSwitcher items={department}/>
         </div>
         <MainNav className="mx-6"/>
         <div className="ml-auto flex items-center space-x-4">

@@ -15,7 +15,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 type PopoverTriggerProps = React.ComponentPropsWithoutRef<typeof PopoverTrigger>
 
 interface DepartmentSwitcherProps extends PopoverTriggerProps {
-  items?: Department[];
+  items: Department[];
 };
 
 export default function DepartmentSwitcher({
@@ -50,7 +50,7 @@ export default function DepartmentSwitcher({
           aria-label="Select a department"
           className={cn("w-[250px] justify-between", className)}>
           <Building2 className="mr-2 h-4 w-4 " />
-          Current Department
+          {currentDepartment?.label}
           <ChevronsUpDownIcon className="ml-auto h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>

@@ -16,8 +16,11 @@ import { toast } from "../ui/use-toast";
 
 
 const formSchema = z.object({
-  name: z.string().min(1).optional()
-})
+  name: z.string().min(1, {
+    message: "Department name is required"
+  }),
+});
+
 
 const StoreModal = () => {
   const storeModal = useStoreModal();
@@ -35,7 +38,7 @@ const StoreModal = () => {
       setIsLoading(true)
 
       const response = await axios.post('/api/departments', values);
-      
+
       window.location.assign(`/${response.data.id}`)
       toast({
         title: "Success",
@@ -53,8 +56,8 @@ const StoreModal = () => {
   }
   return (
     <Modal
-      title="Create "
-      description="Add new  "
+      title="Create Department "
+      description="Add a new department.  "
       isOpen={storeModal.isOpen}
       onClose={storeModal.onClose}
     >
@@ -83,7 +86,7 @@ const StoreModal = () => {
                   onClick={storeModal.onClose}
                 >Cancel
                 </Button>
-                <Button  disabled={isLoading}type="submit">Continue</Button>
+                <Button disabled={isLoading} type="submit">Continue</Button>
               </div>
 
             </form>
