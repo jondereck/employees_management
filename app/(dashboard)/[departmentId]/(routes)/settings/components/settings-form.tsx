@@ -15,6 +15,7 @@ import { toast } from "@/components/ui/use-toast";
 import axios from "axios";
 import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
+import { ApiAlert } from "@/components/api-alert";
 
 
 
@@ -138,6 +139,12 @@ export const SettingsForm = ({
           </Button>
         </form>
       </Form>
+      <Separator/>
+      <ApiAlert 
+        title="NEXT_PUBLIC_API_URL" 
+        description={`${origin}/api/${params.departmentId}}`} 
+        variant="public"
+      />
     </>
   );
 }
