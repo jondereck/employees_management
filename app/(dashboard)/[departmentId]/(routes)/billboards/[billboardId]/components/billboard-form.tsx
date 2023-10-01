@@ -1,6 +1,6 @@
 "use client";
 import * as z from "zod";
-import { Department } from "@prisma/client";
+import { Billboard } from "@prisma/client";
 import { Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,45 +17,55 @@ import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { ApiAlert } from "@/components/api-alert";
 import { useOrigin } from "@/hooks/use-origin";
+import ImageUpload from "@/components/ui/image-upload";
 
-
-
-
-interface SettingsFormProps {
-  initialData: Department;
-}
 
 const formSchema = z.object({
-  name: z.string().min(1, {
-    message: "Department name is required"
+  label: z.string().min(1, {
+    message: "Label is required"
   }),
+  imageUrl: z.string().min(0),
 });
 
-type SettingsFormValues = z.infer<typeof formSchema>;
+type BillboardFormValues = z.infer<typeof formSchema>;
 
-export const SettingsForm = ({
+interface BillboardFormProps {
+  initialData: Billboard | null;
+}
+
+
+export const BillboardForm = ({
   initialData
-}: SettingsFormProps) => {
+}: BillboardFormProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const title = initialData ? "Edit billboard" : "Create billboard";
+  const description = initialData ? "Edit a billboard" : "Create a billboard";
+  const toastMessage = initialData ? "Billboard updated." : "Billboard created.";
+  const action = initialData ? "Save changes." : "Create";
+
   const params = useParams();
   const router = useRouter();
   const origin = useOrigin();
 
-  const form = useForm<SettingsFormValues>({
+  const form = useForm<BillboardFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData
+    defaultValues: initialData || {
+      label: '',
+      imageUrl: '',
+    }
   });
 
   const onDelete = async () => {
     try {
       setLoading(true);
 
-      await axios.delete(`/api/departments/${params.departmentId}`);
+      await axios.delete(`/api/${params.departmentId}/billboards/${params.billboardId}`);
 
       toast({
         title: "Success!",
-        description: "Department have been removed."
+        description: "Billboards deleted."
       })
 
       router.refresh();
@@ -71,16 +81,21 @@ export const SettingsForm = ({
     }
   }
 
-  const onSubmit = async (values: SettingsFormValues) => {
+  const onSubmit = async (values: BillboardFormValues) => {
     try {
       setLoading(true);
-      await axios.patch(`/api/departments/${params.departmentId}`, values);
+      if (initialData) {
+        await axios.patch(`/api/${params.departmentId}/billboards/${params.billboardId}`, values);
+        
+      } else {
+        await axios.post(`/api/${params.departmentId}/billboards`, values); ;
+      }
 
       router.refresh();
 
       toast({
         title: "Success!",
-        description: "Your changes have been saved."
+        description: toastMessage,
       })
     } catch (error) {
       toast({
@@ -102,32 +117,52 @@ export const SettingsForm = ({
       />
       <div className="flex items-center justify-between">
         <Heading
-          title="Settings"
-          description="Manage your department preferences"
+          title={title}
+          description={description}
         />
-        <Button
-          disabled={loading}
-          variant="destructive"
-          size="icon"
-          onClick={() => setOpen(true)}
-        >
-          <Trash className="h-4 w-4" />
-        </Button>
+        {initialData && (
+          <Button
+            disabled={loading}
+            variant="destructive"
+            size="icon"
+            onClick={() => setOpen(true)}
+          >
+            <Trash className="h-4 w-4" />
+          </Button>
+        )}
       </div >
       <Separator />
       <Form {...form} >
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
+          <FormField
+            control={form.control}
+            name="imageUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Background image</FormLabel>
+                <FormControl>
+                  <ImageUpload
+                    value={field.value ? [field.value] : []}
+                    disabled={loading}
+                    onChange={(url) => field.onChange(url)}
+                    onRemove={() => field.onChange("")}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <div className="grid grid-cols-3 gap-8">
             <FormField
               control={form.control}
-              name="name"
+              name="label"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>Label</FormLabel>
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Department name"
+                      placeholder="Billboard label"
                       {...field}
                     />
                   </FormControl>
@@ -137,16 +172,11 @@ export const SettingsForm = ({
             />
           </div>
           <Button disabled={loading} className="ml-auto" type="submit">
-            Save Changes
+            {action}
           </Button>
         </form>
       </Form>
-      <Separator/>
-      <ApiAlert 
-        title="NEXT_PUBLIC_API_URL" 
-        description={`${origin}/api/${params.departmentId}}`} 
-        variant="public"
-      />
+      <Separator />
     </>
   );
 }
