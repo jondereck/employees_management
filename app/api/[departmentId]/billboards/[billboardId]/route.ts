@@ -7,11 +7,6 @@ export async function GET(
   { params }: { params: {billboardId: string } }
 ) {
   try {
-    const { userId } = auth();
-
-    if (!userId) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
 
     if (!params.billboardId) {
       return new NextResponse("Billboard id is required", { status: 400 });
@@ -67,7 +62,7 @@ export async function PATCH(
     });
 
     if (!departmentByUserId) {
-      return new NextResponse("Unauthorized", { status: 403 })
+      return new NextResponse("Unauthorized", { status: 405 })
     }
 
 
@@ -113,10 +108,10 @@ export async function DELETE(
     });
 
     if (!departmentByUserId) {
-      return new NextResponse("Unauthorized", { status: 403 })
+      return new NextResponse("Unauthorized", { status: 405 })
     }
 
-    const billboard = await prismadb.billboard.deleteMany({
+    const billboard = await prismadb.billboard.delete({
       where: {
         id: params.billboardId,
 

@@ -1,10 +1,17 @@
 "use client"
-
+import axios from "axios";
+import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { BillboardColumn } from "./columns";
 import { Button } from "@/components/ui/button";
 import { Copy, Edit, MoreHorizontal, Trash } from "lucide-react";
-import toast from "react-hot-toast";
+import toasts from "react-hot-toast";
+import { toast } from "@/components/ui/use-toast";
+import { ApiAlert } from "@/components/api-alert";
+import { AlertModal } from "@/components/modals/alert-modal";
+
+
 
 interface CellActionProps {
   data: BillboardColumn;
@@ -12,36 +19,76 @@ interface CellActionProps {
 
 export const CellAction = ({
   data
-}: CellActionProps) =>{
+}: CellActionProps) => {
+  const router = useRouter();
+  const params = useParams();
+
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const onCopy = (id: string) => {
     navigator.clipboard.writeText(id);
-    toast.success("Succefully copied.")
+    toasts.success("Succefully copied.")
 
   }
-  return  (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-8 w-8 p-0"> 
-          <span className="sr-only"> Open Menu</span>
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-        <DropdownMenuItem onClick={() => onCopy}>
-          <Copy className="mr-2 h-4 w-4" />
-          Copy Id
-        </DropdownMenuItem>
-        <DropdownMenuItem>
-          <Edit className="mr-2 h-4 w-4" />
-          Update
-        </DropdownMenuItem>
-        <DropdownMenuItem>
-          <Trash className="mr-2 h-4 w-4" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+
+  const onConfirm = async () => {
+    try {
+      setLoading(true);
+
+      await axios.delete(`/api/${params.departmentId}/billboards/${data.id}`);
+
+      toast({
+        title: "Success!",
+        description: "Billboards deleted."
+      })
+
+      window.location.reload();
+
+    } catch (error) {
+      toast({
+        title: "Error!",
+        description: "Make sure you removed all categories using this billboard first."
+      })
+    } finally {
+      setLoading(false);
+      setOpen(false);
+    }
+  }
+  return (
+    <>
+      <AlertModal
+        isOpen={open}
+        onClose={() => setOpen(!open)}
+        onConfirm={onConfirm}
+        loading={loading}
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-8 w-8 p-0">
+            <span className="sr-only"> Open Menu</span>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => onCopy(data.id)}>
+            <Copy className="mr-2 h-4 w-4" />
+            Copy Id
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => router.push(`/${params.departmentId}/billboards/${data.id}`)}
+          >
+            <Edit className="mr-2 h-4 w-4" />
+            Update
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setOpen(true)}>
+            <Trash
+              className="mr-2 h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
 }

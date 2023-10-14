@@ -23,6 +23,12 @@ export function MainNav({
       active: pathname === `/${params.departmentId}/billboards`
     },
     {
+      href:`/${params.departmentId}/offices`,
+      label: 'Offices',
+      active: pathname === `/${params.departmentId}/offices`
+    },
+ 
+    {
       href:`/${params.departmentId}/settings`,
       label: 'Settings',
       active: pathname === `/${params.departmentId}/settings`

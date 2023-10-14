@@ -16,6 +16,7 @@ model Department {
   name       String
   userId     String
   billboards Billboard[] @relation("DepartmentToBillboard")
+  offices    Offices[]   @relation("DepartmentToOffices")
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 }
@@ -26,8 +27,23 @@ model Billboard {
   department   Department @relation("DepartmentToBillboard", fields: [departmentId], references: [id])
   label        String
   imageUrl     String
+  offices      Offices[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@index([departmentId])
+}
+
+model Offices {
+  id           String     @id @default(uuid())
+  departmentId String
+  department   Department @relation("DepartmentToOffices", fields: [departmentId], references: [id])
+  billboardId  String
+  billboard    Billboard  @relation(fields: [billboardId], references: [id])
+  name String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId])
+  @@index([billboardId])
 }
