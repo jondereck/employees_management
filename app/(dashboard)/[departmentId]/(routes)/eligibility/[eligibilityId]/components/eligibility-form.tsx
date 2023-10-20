@@ -1,6 +1,6 @@
 "use client";
 import * as z from "zod";
-import { Billboard, Offices } from "@prisma/client";
+import { Eligibility, EligibilityTypes } from "@prisma/client";
 import { Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,74 +16,91 @@ import axios from "axios";
 import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { useOrigin } from "@/hooks/use-origin";
+
 import ImageUpload from "@/components/ui/image-upload";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 const formSchema = z.object({
-  name: z.string().min(1, {
+  customType: z.string().min(0),
+  eligibilityTypes: z.string().min(0, {
     message: "Name is required"
   }),
-  billboardId: z.string().min(1),
+  value: z.string().min(4).regex(/^#/, {
+    message: 'Make sure you enter a valid hex code'
+  }),
 });
 
-type OfficeFormValues = z.infer<typeof formSchema>;
+type EligibilityValues = z.infer<typeof formSchema>;
 
-interface OfficeFormProps {
-  initialData: Offices | null;
-  billboards: Billboard[]
+interface EligibilityProps {
+  initialData: Eligibility | null;
+
 }
 
 
-export const OfficeForm = ({
+export const EligibilityForm = ({
   initialData,
-  billboards
-}: OfficeFormProps) => {
+
+}: EligibilityProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const title = initialData ? "Edit Office" : "Create Office";
-  const description = initialData ? "Edit a Office" : "Add new Office";
-  const toastMessage = initialData ? "Office updated." : "Office created.";
+  const title = initialData ? "Edit Eligibility Type" : "Create Eligibility Type";
+  const description = initialData ? "Edit a Eligibility Type" : "Add new Eligibility Type";
+  const toastMessage = initialData ? "Eligibility Type updated." : "Eligibility Type created.";
   const action = initialData ? "Save changes." : "Create";
 
   const params = useParams();
   const router = useRouter();
 
-  const form = useForm<OfficeFormValues>({
+  const form = useForm<EligibilityValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
-      name: '',
-      billboardId: '73faa7da-6e07-4c5a-b239-45f2f6781cd2',
+      eligibilityTypes: EligibilityTypes.None,
+      customType: '',
+      value: '',
     }
   });
 
+  const eligibilityTypeOptions = Object.values(EligibilityTypes)
 
-
-  const onSubmit = async (values: OfficeFormValues) => {
+  const onSubmit = async (values: EligibilityValues) => {
     try {
       setLoading(true);
       if (initialData) {
-        await axios.patch(`/api/${params.departmentId}/offices/${params.officeId}`, values);
+        await axios.patch(`/api/${params.departmentId}/eligibility/${params.eligibilityId}`, values);
 
       } else {
-        await axios.post(`/api/${params.departmentId}/offices`, values);;
+        await axios.post(`/api/${params.departmentId}/eligibility`, values);;
       }
 
       router.refresh();
-      router.push(`/${params.departmentId}/offices`)
+      router.push(`/${params.departmentId}/eligibility`)
 
 
       toast({
         title: "Success!",
         description: toastMessage,
       })
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Uh oh! Something went wrong.",
-        description: "There was a problem with your request.",
-      })
+    }  catch (error:any) {
+      const { data, status } = error.response
+      if (error.response && error.response.data && error.response.data.error) {
+        // Handle API error messages
+        const errorMessage = error.response.data.error;
+        toast({
+          variant: "destructive",
+          title: "Uh oh! Something went wrong.",
+          description: errorMessage,
+        });
+      } else {
+        // Handle generic error
+        toast({
+          variant: "destructive",
+          title: "Uh oh! Something went wrong.",
+          description: "There was a problem with your request.",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -94,22 +111,25 @@ export const OfficeForm = ({
     try {
       setLoading(true);
 
-      await axios.delete(`/api/${params.departmentId}/offices/${params.officeId}`);
-      
-      router.push(`/${params.departmentId}/offices`)
-      
+      await axios.delete(`/api/${params.departmentId}/employee_type/${params.employeeTypeId}`);
+
       toast({
         title: "Success!",
-        description: "Office deleted."
+        description: "Employee Type deleted."
       })
+
+      router.refresh();
+      router.push(`/${params.departmentId}/employee_type`)
+
 
     } catch (error) {
       toast({
         title: "Error!",
-        description: "Make sure to remove all user associated with office to proceed."
+        description: "To remove this employee type, please make sure to first remove all employees associated with it."
       })
     } finally {
       setLoading(false);
+      setOpen(false);
     }
   }
   return (
@@ -141,16 +161,16 @@ export const OfficeForm = ({
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
 
           <div className="grid grid-cols-3 gap-8">
-            <FormField
+          <FormField
               control={form.control}
-              name="name"
+              name="customType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>Eligibility</FormLabel>
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Office name"
+                      placeholder="Eligibility name"
                       {...field}
                     />
                   </FormControl>
@@ -158,12 +178,12 @@ export const OfficeForm = ({
                 </FormItem>
               )}
             />
-            <FormField
+            {/* <FormField
               control={form.control}
-              name="billboardId"
+              name="eligibilityTypes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Billboard</FormLabel>
+                  <FormLabel>Eligibility Type</FormLabel>
                   <Select
                     disabled={loading}
                     onValueChange={field.onChange}
@@ -174,22 +194,44 @@ export const OfficeForm = ({
                       <SelectTrigger>
                         <SelectValue
                           defaultValue={field.value}
-                          placeholder="Select billboard"
+                          placeholder="Select default eligibility"
                         />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {billboards.map((billboard) => (
+                      {eligibilityTypeOptions.map((item) => (
                         <SelectItem
-                          key={billboard.id}
-                          value={billboard.id}
+                          key={item}
+                          value={item}
                         >
-                          {billboard.label}
+                          {item}
                         </SelectItem>
                       ))}
                     </SelectContent>
 
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            /> */}
+            <FormField
+              control={form.control}
+              name="value"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Color Value</FormLabel>
+                  <FormControl>
+                    <div className="flex items-center gap-x-4">
+                      <Input
+                        disabled={loading}
+                        placeholder="Value "
+                        {...field}
+                      />
+                      <div className="border p-4 rounded-full"
+                      style={{backgroundColor: field.value}}/>
+                    </div>
+
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

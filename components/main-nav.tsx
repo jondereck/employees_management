@@ -27,6 +27,17 @@ export function MainNav({
       label: 'Offices',
       active: pathname === `/${params.departmentId}/offices`
     },
+    {
+      href:`/${params.departmentId}/employee_type`,
+      label: 'Appointment',
+      active: pathname === `/${params.departmentId}/employee_type`
+    },
+
+    {
+      href:`/${params.departmentId}/eligibility`,
+      label: 'Eligibilty',
+      active: pathname === `/${params.departmentId}/eligibility`
+    },
  
     {
       href:`/${params.departmentId}/settings`,

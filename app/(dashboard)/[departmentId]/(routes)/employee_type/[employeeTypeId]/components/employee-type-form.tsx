@@ -1,6 +1,6 @@
 "use client";
 import * as z from "zod";
-import { Billboard, Offices } from "@prisma/client";
+import { EmployeeType } from "@prisma/client";
 import { Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,61 +17,58 @@ import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { useOrigin } from "@/hooks/use-origin";
 import ImageUpload from "@/components/ui/image-upload";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 const formSchema = z.object({
   name: z.string().min(1, {
     message: "Name is required"
   }),
-  billboardId: z.string().min(1),
+  value: z.string().min(0),
 });
 
-type OfficeFormValues = z.infer<typeof formSchema>;
+type EmployeeTypeValues = z.infer<typeof formSchema>;
 
-interface OfficeFormProps {
-  initialData: Offices | null;
-  billboards: Billboard[]
+interface EmployeeTypeProps {
+  initialData: EmployeeType | null;
 }
 
 
-export const OfficeForm = ({
-  initialData,
-  billboards
-}: OfficeFormProps) => {
+export const EmployeeTypeForm = ({
+  initialData
+}: EmployeeTypeProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const title = initialData ? "Edit Office" : "Create Office";
-  const description = initialData ? "Edit a Office" : "Add new Office";
-  const toastMessage = initialData ? "Office updated." : "Office created.";
+  const title = initialData ? "Edit Employee Type" : "Create Employee Type";
+  const description = initialData ? "Edit a Employee Type" : "Add new Employee Type";
+  const toastMessage = initialData ? "Employee Type updated." : "Employee Type created.";
   const action = initialData ? "Save changes." : "Create";
 
   const params = useParams();
   const router = useRouter();
-
-  const form = useForm<OfficeFormValues>({
+  
+  const form = useForm<EmployeeTypeValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
       name: '',
-      billboardId: '73faa7da-6e07-4c5a-b239-45f2f6781cd2',
+      value: '',
     }
   });
 
 
 
-  const onSubmit = async (values: OfficeFormValues) => {
+  const onSubmit = async (values: EmployeeTypeValues) => {
     try {
       setLoading(true);
       if (initialData) {
-        await axios.patch(`/api/${params.departmentId}/offices/${params.officeId}`, values);
-
+        await axios.patch(`/api/${params.departmentId}/employee_type/${params.employeeTypeId}`, values);
+        
       } else {
-        await axios.post(`/api/${params.departmentId}/offices`, values);;
+        await axios.post(`/api/${params.departmentId}/employee_type`, values); ;
       }
 
       router.refresh();
-      router.push(`/${params.departmentId}/offices`)
+      router.push(`/${params.departmentId}/employee_type`)
 
 
       toast({
@@ -94,22 +91,25 @@ export const OfficeForm = ({
     try {
       setLoading(true);
 
-      await axios.delete(`/api/${params.departmentId}/offices/${params.officeId}`);
-      
-      router.push(`/${params.departmentId}/offices`)
-      
+      await axios.delete(`/api/${params.departmentId}/employee_type/${params.employeeTypeId}`);
+
       toast({
         title: "Success!",
-        description: "Office deleted."
+        description: "Employee Type deleted."
       })
+
+      router.refresh();
+      router.push(`/${params.departmentId}/employee_type`)
+
 
     } catch (error) {
       toast({
         title: "Error!",
-        description: "Make sure to remove all user associated with office to proceed."
+        description: "To remove this employee type, please make sure to first remove all employees associated with it."
       })
     } finally {
       setLoading(false);
+      setOpen(false);
     }
   }
   return (
@@ -139,7 +139,7 @@ export const OfficeForm = ({
       <Separator />
       <Form {...form} >
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
-
+         
           <div className="grid grid-cols-3 gap-8">
             <FormField
               control={form.control}
@@ -150,7 +150,7 @@ export const OfficeForm = ({
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Office name"
+                      placeholder="Employee type"
                       {...field}
                     />
                   </FormControl>
@@ -158,38 +158,19 @@ export const OfficeForm = ({
                 </FormItem>
               )}
             />
-            <FormField
+              <FormField
               control={form.control}
-              name="billboardId"
+              name="value"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Billboard</FormLabel>
-                  <Select
-                    disabled={loading}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue
-                          defaultValue={field.value}
-                          placeholder="Select billboard"
-                        />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {billboards.map((billboard) => (
-                        <SelectItem
-                          key={billboard.id}
-                          value={billboard.id}
-                        >
-                          {billboard.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-
-                  </Select>
+                  <FormLabel>Salary Grade</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Value "
+                      {...field}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
