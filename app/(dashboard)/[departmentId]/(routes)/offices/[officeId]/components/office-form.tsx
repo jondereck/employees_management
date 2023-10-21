@@ -78,12 +78,23 @@ export const OfficeForm = ({
         title: "Success!",
         description: toastMessage,
       })
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Uh oh! Something went wrong.",
-        description: "There was a problem with your request.",
-      })
+    } catch (error:any) {
+      if (error.response && error.response.data && error.response.data.error) {
+        // Handle API error messages
+        const errorMessage = error.response.data.error;
+        toast({
+          variant: "destructive",
+          title: "Uh oh! Something went wrong.",
+          description: errorMessage,
+        });
+      } else {
+        // Handle generic error
+        toast({
+          variant: "destructive",
+          title: "Uh oh! Something went wrong.",
+          description: "There was a problem with your request.",
+        });
+      }
     } finally {
       setLoading(false);
     }

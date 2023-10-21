@@ -40,6 +40,22 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 403 })
     }
 
+    const alreadyExist = await prismadb.billboard.findFirst({
+      where: {
+        departmentId:params.departmentId,
+        label: label
+      },
+    });
+    
+    if (alreadyExist) {
+      return new NextResponse(
+        JSON.stringify({ error: " Billboard already exists." }),
+        { status: 400 }
+      );
+    }
+
+
+	
 
     const billboard = await prismadb.billboard.create({
       data: {

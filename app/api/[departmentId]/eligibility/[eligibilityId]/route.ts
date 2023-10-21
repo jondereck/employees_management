@@ -65,7 +65,6 @@ export async function PATCH(
       return new NextResponse("Unauthorized", { status: 405 })
     }
 
-
     const eligibility = await prismadb.eligibility.updateMany({
       where: {
         id: params.eligibilityId,

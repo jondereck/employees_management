@@ -39,6 +39,22 @@ export async function POST(
     if (!departmentByUserId) {
       return new NextResponse("Unauthorized", { status: 403 })
     }
+    const alreadyExist = await prismadb.offices.findFirst({
+      where: {
+        departmentId:params.departmentId,
+        name: name
+      },
+    });
+    
+    if (alreadyExist) {
+      return new NextResponse(
+        JSON.stringify({ error: " Office already exists." }),
+        { status: 400 }
+      );
+    }
+
+
+	
 
 
     const office = await prismadb.offices.create({

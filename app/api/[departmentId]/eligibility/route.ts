@@ -46,6 +46,7 @@ export async function POST(
         customType: customType
       },
     });
+    
     if (alreadyExist) {
       return new NextResponse(
         JSON.stringify({ error: " Eligibility with this type already exists." }),

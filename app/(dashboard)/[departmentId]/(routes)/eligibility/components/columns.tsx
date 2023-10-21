@@ -5,6 +5,9 @@ import { ColumnDef } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
 import { ArrowUpDown } from "lucide-react"
 import { CellAction } from "./cell-actions"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Eligibility } from "@prisma/client"
+import { DataTableColumnHeader } from "@/components/ui/column-header"
 
 
 // This type is used to define the shape of our data.
@@ -18,48 +21,17 @@ export type EligibilityColumn = {
 }
 
 export const columns: ColumnDef<EligibilityColumn>[] = [
-  // {
-  //   accessorKey: "eligibilityTypes",
-  //   header: ({ column }) => {
-  //     return (
-  //       <Button
-  //         variant="ghost"
-  //         onClick={() => column.toggleSorting(column.getIsSorted() === "desc")}
-  //       >
-  //         Eligibility Type
-  //         <ArrowUpDown className="ml-2 h-4 w-4" />
-  //       </Button>
-  //     )
-  //   },
-  // },
+  
   {
     accessorKey: "customType",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "desc")}
-        >
-          Eligibility
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      )
-    },
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Eligibility" />
+    ),
   },
+
   {
     accessorKey: "value",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "desc")}
-        >
-          Value
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      )
-
-    },
+    header: "Value",
     cell: ({ row }) => (
       <div className="flex items-center  gap-2">
         {row.original.value}
@@ -70,17 +42,9 @@ export const columns: ColumnDef<EligibilityColumn>[] = [
   },
   {
     accessorKey: "createdAt",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "desc")}
-        >
-          Date
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      )
-    }
+    header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Date" />  
+    )
   },
 
   {
@@ -88,4 +52,7 @@ export const columns: ColumnDef<EligibilityColumn>[] = [
     cell: ({ row }) => <CellAction data={row.original} />
   }
 
-]
+];
+
+
+// Add the following code to display the selected row count

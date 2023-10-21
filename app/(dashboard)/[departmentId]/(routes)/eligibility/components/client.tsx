@@ -35,12 +35,13 @@ export const  EligibilityClient = ({
     </Button>
     </div>
     <Separator/>
-    <DataTable searchKey="name" columns={columns} data={data}/>
+    <DataTable searchKey="customType" columns={columns} data={data}/>
     <Heading
     title="API"
     description="API calls for employeeType"
     />
     <ApiList entityIdName="eligibilityId" entityName="eligibility"/>
+    
     </>
    );
 }

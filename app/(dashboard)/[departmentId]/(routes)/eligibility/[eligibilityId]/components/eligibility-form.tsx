@@ -84,7 +84,6 @@ export const EligibilityForm = ({
         description: toastMessage,
       })
     }  catch (error:any) {
-      const { data, status } = error.response
       if (error.response && error.response.data && error.response.data.error) {
         // Handle API error messages
         const errorMessage = error.response.data.error;
