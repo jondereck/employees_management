@@ -211,7 +211,7 @@ export const EmployeesForm = ({
       </div >
       <Separator />
       <Form {...form} >
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-full">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
           <h1 className="font-sans text-4xl font-bold">Profile</h1>
           <FormField
             control={form.control}
