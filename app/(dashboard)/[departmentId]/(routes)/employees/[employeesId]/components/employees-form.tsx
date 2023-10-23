@@ -211,21 +211,24 @@ export const EmployeesForm = ({
       </div >
       <Separator />
       <Form {...form} >
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-full">
+          <h1 className="font-sans text-4xl font-bold">Profile</h1>
           <FormField
             control={form.control}
             name="images"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Profile</FormLabel>
                 <FormControl>
                   <ImageUpload
-                    value={field.value.map((image => image.url)) }
+                    value={field.value.map((image => image.url))}
                     disabled={loading}
                     onChange={(url) => field.onChange([...field.value, { url }])}
                     onRemove={(url) => field.onChange([...field.value.filter((current) => current.url !== url)])}
                   />
                 </FormControl>
+                <FormDescription>
+                  Upload picture of an employee
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -244,6 +247,9 @@ export const EmployeesForm = ({
                       {...field}
                     />
                   </FormControl>
+                  <FormDescription>
+                  Ex: Jon
+                </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -261,6 +267,9 @@ export const EmployeesForm = ({
                       {...field}
                     />
                   </FormControl>
+                  <FormDescription>
+                  Ex: Nifas
+                </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -278,6 +287,9 @@ export const EmployeesForm = ({
                       {...field}
                     />
                   </FormControl>
+                  <FormDescription>
+                 Ex: De Guzman
+                </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -295,11 +307,14 @@ export const EmployeesForm = ({
                       {...field}
                     />
                   </FormControl>
+                  <FormDescription>
+                  Ex: Jr
+                </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-              <FormField
+            <FormField
               control={form.control}
               name="position"
               render={({ field }) => (
@@ -312,6 +327,9 @@ export const EmployeesForm = ({
                       {...field}
                     />
                   </FormControl>
+                  <FormDescription>
+                 Ex: Administrative Officer III
+                </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -352,163 +370,153 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-              <FormField
-              control={form.control}
-              name="officeId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Office </FormLabel>
-                  <Select
-                    disabled={loading}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue
-                          defaultValue={field.value}
-                          placeholder="Select Office "
-                        />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {offices.map((item) => (
-                        <SelectItem
-                          key={item.id}
-                          value={item.id}
-                        >
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
 
-                  </Select>
+            <FormField
+              control={form.control}
+              name="birthday"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Date of birth</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className=" w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        captionLayout="dropdown-buttons"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        fromYear={1920}
+                        toYear={2030}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormDescription>
+                    Your date of birth is used to calculate your age.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-                <FormField
-              control={form.control}
-              name="employeeTypeId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Appointment </FormLabel>
-                  <Select
-                    disabled={loading}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue
-                          defaultValue={field.value}
-                          placeholder="Select Appointment "
-                        />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {employeeType.map((item) => (
-                        <SelectItem
-                          key={item.id}
-                          value={item.id}
-                        >
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-               <FormField
-              control={form.control}
-              name="eligibilityId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Eligibility </FormLabel>
-                  <Select
-                    disabled={loading}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue
-                          defaultValue={field.value}
-                          placeholder="Select Eligibility "
-                        />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {eligibility.map((item) => (
-                        <SelectItem
-                          key={item.id}
-                          value={item.id}
-                        >
-                          {item.customType}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-
-
           </div>
           <Separator />
+          <div className="grid grid-cols-2 gap-8">
           <FormField
-          control={form.control}
-          name="birthday"
-          render={({ field }) => (
-            <FormItem className="flex flex-col">
-              <FormLabel>Date of birth</FormLabel>
-              <Popover>
-                <PopoverTrigger asChild>
+            control={form.control}
+            name="officeId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Office </FormLabel>
+                <Select
+                  disabled={loading}
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  defaultValue={field.value}
+                >
                   <FormControl>
-                    <Button
-                      variant={"outline"}
-                      className={cn(
-                        "w-[240px] pl-3 text-left font-normal",
-                        !field.value && "text-muted-foreground"
-                      )}
-                    >
-                      {field.value ? (
-                        format(field.value, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                    </Button>
+                    <SelectTrigger>
+                      <SelectValue
+                        defaultValue={field.value}
+                        placeholder="Select Office "
+                      />
+                    </SelectTrigger>
                   </FormControl>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={field.value}
-                    onSelect={field.onChange}
-                    disabled={(date) =>
-                      date > new Date() || date < new Date("1900-01-01")
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <FormDescription>
-                Your date of birth is used to calculate your age.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                  <SelectContent>
+                    {offices.map((item) => (
+                      <SelectItem
+                        key={item.id}
+                        value={item.id}
+                      >
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="employeeTypeId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Appointment </FormLabel>
+                <Select
+                  disabled={loading}
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue
+                        defaultValue={field.value}
+                        placeholder="Select Appointment "
+                      />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {employeeType.map((item) => (
+                      <SelectItem
+                        key={item.id}
+                        value={item.id}
+                      >
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="eligibilityId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Eligibility </FormLabel>
+                <Select
+                  disabled={loading}
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue
+                        defaultValue={field.value}
+                        placeholder="Select Eligibility "
+                      />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {eligibility.map((item) => (
+                      <SelectItem
+                        key={item.id}
+                        value={item.id}
+                      >
+                        {item.customType}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          </div>
           <Button disabled={loading} className="ml-auto" type="submit">
             {action}
           </Button>
