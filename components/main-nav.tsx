@@ -38,6 +38,11 @@ export function MainNav({
       label: 'Eligibilty',
       active: pathname === `/${params.departmentId}/eligibility`
     },
+    {
+      href:`/${params.departmentId}/employees`,
+      label: 'Employees',
+      active: pathname === `/${params.departmentId}/employees`
+    },
  
     {
       href:`/${params.departmentId}/settings`,

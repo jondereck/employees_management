@@ -11,16 +11,17 @@ datasource db {
   relationMode = "prisma"
 }
 
-model Department {          //store
-  id         String      @id @default(uuid())
-  name       String
-  userId     String
-  billboards Billboard[] @relation("DepartmentToBillboard")
-  offices    Offices[]   @relation("DepartmentToOffices")
+model Department {
+  id           String         @id @default(uuid())
+  name         String
+  userId       String
+  billboards   Billboard[]    @relation("DepartmentToBillboard")
+  offices      Offices[]      @relation("DepartmentToOffices")
   employeeType EmployeeType[] @relation("DepartmentToEmployeeType")
-  eligibilty Eligibility[] @relation("DepartmentToEligibilty")
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  eligibility  Eligibility[]  @relation("DepartmentToEligibility")
+  employee     Employee[]     @relation("DepartmentToEmployee")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 }
 
 model Billboard {
@@ -36,35 +37,33 @@ model Billboard {
   @@index([departmentId])
 }
 
-model Offices {      //category
+model Offices {
   id           String     @id @default(uuid())
   departmentId String
   department   Department @relation("DepartmentToOffices", fields: [departmentId], references: [id])
   billboardId  String
   billboard    Billboard  @relation(fields: [billboardId], references: [id])
-  name String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  employee     Employee[] @relation("OfficesToEmployee")
+  name         String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@index([departmentId])
   @@index([billboardId])
 }
 
-
-
-
 model EmployeeType {
-  id            String     @id @default(uuid())
+  id           String     @id @default(uuid())
   departmentId String
-  department Department @relation("DepartmentToEmployeeType", fields: [departmentId], references: [id])
-  name String 
-  value String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  department   Department @relation("DepartmentToEmployeeType", fields: [departmentId], references: [id])
+  employee     Employee[] @relation()
+  name         String
+  value        String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@index([departmentId])
 }
-
 
 enum EligibilityTypes {
   None
@@ -73,14 +72,75 @@ enum EligibilityTypes {
 }
 
 model Eligibility {
-  id            String     @id @default(uuid())
-  departmentId String
-  department Department @relation("DepartmentToEligibilty", fields: [departmentId], references: [id])
-  eligibilityTypes EligibilityTypes  // No default value for the enum field
-  customType     String
-  value String
+  id               String           @id @default(uuid())
+  departmentId     String
+  department       Department       @relation("DepartmentToEligibility", fields: [departmentId], references: [id])
+  employee         Employee[]
+  eligibilityTypes EligibilityTypes // No default value for the enum field
+  customType       String
+  value            String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([departmentId])
+}
+
+enum Gender {
+  Male
+  Female
+}
+
+model Employee {
+  id             String       @id @default(uuid())
+  departmentId   String
+  department     Department   @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
+  officeId       String
+  offices        Offices      @relation("OfficesToEmployee", fields: [officeId], references: [id])
+  lastName           String
+  firstName String
+  middleName String
+  suffix String
+  gender Gender
+  contactNumber String
+  position String
+  birthday DateTime
+  gsisNo String
+  tinNo String
+  philHealthNo String
+  pagIbigNo String
+  salary Float
+  dateHired DateTime
+  employeeTypeId String
+  employeeType   EmployeeType @relation(fields: [employeeTypeId], references: [id])
+  eligibilityId  String
+  eligibility    Eligibility  @relation(fields: [eligibilityId], references: [id])
+
+  isFeatured Boolean @default(false)
+  isArchived Boolean @default(false)
+
+  
+  images Image[]
+
+
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([departmentId])
+  @@index([officeId])
+  @@index([employeeTypeId])
+  @@index([eligibilityId])
 }
+
+
+model Image {
+  id          String   @id @default(uuid())
+  employeeId   String   // Foreign Key to Product
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  url         String   // URL of the image
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeId])
+}
+
