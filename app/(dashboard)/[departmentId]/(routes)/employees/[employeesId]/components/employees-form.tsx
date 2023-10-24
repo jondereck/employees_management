@@ -40,7 +40,7 @@ const formSchema = z.object({
   employeeTypeId: z.string().min(1, {
     message: "Appointment  is required"
   }),
-  officeId: z.string().min(1, {
+  officesId: z.string().min(1, {
     message: "Office is required"
   }),
   eligibilityId: z.string().min(1, {
@@ -49,13 +49,22 @@ const formSchema = z.object({
 
   suffix: z.string(),
   images: z.object({ url: z.string() }).array(),
-  contactNumber: z.number().min(11).max(11, {
-    message: "Contact number must be at least 11 digits"
-  }),
+  contactNumber: z.string(),
+
   position: z.string().min(1, {
     message: "Position is required"
   }),
-  birthday: z.date()
+  salary:z.number(),
+  birthday: z.date(),
+  gsisNo: z.string(),
+  pagIbigNo: z.string(),
+  tinNo: z.string(),
+  philHealthNo: z.string(),
+  dateHired: z.date(),
+  isFeatured:z.boolean(),
+  isArchived: z.boolean(),
+  
+
 
 
 });
@@ -99,14 +108,15 @@ export const EmployeesForm = ({
       suffix: '',
       images: [],
       gender: Gender.Male,
-      contactNumber: 0,
+      contactNumber: '',
       position: '',
-      birthday: '',
-      gsisNo: 0,
-      tinNo: 0,
-      philHealthNo: 0,
+      birthday: new Date(),
+      gsisNo: '',
+      tinNo: '',
+      pagIbigNo: '',
+      philHealthNo: '',
       salary: 0,
-      dateHired: '',
+      dateHired: new Date(),
       isFeatured: false,
       isArchived: false,
       employeeTypeId: '',
@@ -334,6 +344,41 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
+            
+               <FormField
+              control={form.control}
+              name="birthday"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Date of birth</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className=" w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        captionLayout="dropdown-buttons"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        fromYear={1920}
+                        toYear={2030}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormDescription>
+                    Your date of birth is used to calculate your age.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="gender"
@@ -371,46 +416,35 @@ export const EmployeesForm = ({
               )}
             />
 
-            <FormField
+          
+             
+          </div>
+          <Separator />              
+          <div className="grid grid-cols-2 gap-8">
+        
+             <FormField
               control={form.control}
-              name="birthday"
+              name="salary"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Date of birth</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className=" w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        captionLayout="dropdown-buttons"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        fromYear={1920}
-                        toYear={2030}
-                      />
-                    </PopoverContent>
-                  </Popover>
+                <FormItem>
+                  <FormLabel>Salary </FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Salary"
+                      {...field}
+                    />
+                  </FormControl>
                   <FormDescription>
-                    Your date of birth is used to calculate your age.
-                  </FormDescription>
+                
+                </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          </div>
-          <Separator />
-          <div className="grid grid-cols-2 gap-8">
           <FormField
             control={form.control}
-            name="officeId"
+            name="officesId"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Office </FormLabel>
@@ -516,6 +550,130 @@ export const EmployeesForm = ({
               </FormItem>
             )}
           />
+          </div>   
+          <Separator />
+          <div className="grid grid-cols-2 gap-8">
+          <FormField 
+            control={form.control}
+            name="gsisNo"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>GSIS Number</FormLabel>
+                <FormControl>
+                  <Input 
+                    disabled={loading}
+                    placeholder="GSIS Number"
+                    {...field}
+                  />
+
+                </FormControl>
+                <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+              </FormItem>
+            )}
+          />
+           <FormField 
+            control={form.control}
+            name="tinNo"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>TIN Number</FormLabel>
+                <FormControl>
+                  <Input 
+                    disabled={loading}
+                    placeholder="TIN Number"
+                    {...field}
+                  />
+
+                </FormControl>
+                <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField 
+            control={form.control}
+            name="philHealthNo"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Philhealth Number</FormLabel>
+                <FormControl>
+                  <Input 
+                    disabled={loading}
+                    placeholder="Philhealth Number"
+                    {...field}
+                  />
+
+                </FormControl>
+                <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField 
+            control={form.control}
+            name="pagIbigNo"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Pagibig Number</FormLabel>
+                <FormControl>
+                  <Input 
+                    disabled={loading}
+                    placeholder="Pagibig Number"
+                    {...field}
+                  />
+
+                </FormControl>
+                <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <FormField
+              control={form.control}
+              name="dateHired"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Date hired</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className=" w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        captionLayout="dropdown-buttons"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        fromYear={1920}
+                        toYear={2030}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormDescription>
+                   Date hired is used to calculate years of service.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
           <Button disabled={loading} className="ml-auto" type="submit">
             {action}
