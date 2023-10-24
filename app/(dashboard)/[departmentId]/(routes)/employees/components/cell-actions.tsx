@@ -3,18 +3,18 @@ import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { BillboardColumn } from "./columns";
 import { Button } from "@/components/ui/button";
 import { Copy, Edit, MoreHorizontal, Trash } from "lucide-react";
 import toasts from "react-hot-toast";
 import { toast } from "@/components/ui/use-toast";
 import { ApiAlert } from "@/components/api-alert";
 import { AlertModal } from "@/components/modals/alert-modal";
+import { EmployeesColumn } from "./columns";
 
 
 
 interface CellActionProps {
-  data: BillboardColumn;
+  data: EmployeesColumn;
 }
 
 export const CellAction = ({
@@ -36,11 +36,11 @@ export const CellAction = ({
     try {
       setLoading(true);
 
-      await axios.delete(`/api/${params.departmentId}/billboards/${data.id}`);
+      await axios.delete(`/api/${params.departmentId}/employees/${data.id}`);
 
       toast({
         title: "Success!",
-        description: "Billboards deleted."
+        description: "Employee deleted."
       })
 
       window.location.reload();
@@ -48,7 +48,7 @@ export const CellAction = ({
     } catch (error) {
       toast({
         title: "Error!",
-        description: "To remove this billboard, please make sure to first remove all offices associated with it."
+        description: "To remove this Employee, please make sure to first remove all offices associated with it."
 
         
       })
@@ -79,7 +79,7 @@ export const CellAction = ({
             Copy Id
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => router.push(`/${params.departmentId}/billboards/${data.id}`)}
+            onClick={() => router.push(`/${params.departmentId}/employees/${data.id}`)}
           >
             <Edit className="mr-2 h-4 w-4" />
             Update

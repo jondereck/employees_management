@@ -49,7 +49,9 @@ const formSchema = z.object({
 
   suffix: z.string(),
   images: z.object({ url: z.string() }).array(),
-  contactNumber: z.string(),
+  contactNumber: z.string().min(11).max(11, {
+    message: "Maximum 11 number"
+  }),
 
   position: z.string().min(1, {
     message: "Position is required"
@@ -108,7 +110,7 @@ export const EmployeesForm = ({
       suffix: '',
       images: [],
       gender: Gender.Male,
-      contactNumber: '',
+      contactNumber: 's',
       position: '',
       birthday: new Date(),
       gsisNo: '',
@@ -318,7 +320,7 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                  Ex: Jr
+                  Ex: Jr.
                 </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -344,7 +346,27 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-            
+               <FormField
+              control={form.control}
+              name="contactNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Contact Number </FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Contact Number"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+              
+                </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
                <FormField
               control={form.control}
               name="birthday"
