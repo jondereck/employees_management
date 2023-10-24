@@ -40,7 +40,7 @@ const formSchema = z.object({
   employeeTypeId: z.string().min(1, {
     message: "Appointment  is required"
   }),
-  officesId: z.string().min(1, {
+  officeId: z.string().min(1, {
     message: "Office is required"
   }),
   eligibilityId: z.string().min(1, {
@@ -56,7 +56,7 @@ const formSchema = z.object({
   position: z.string().min(1, {
     message: "Position is required"
   }),
-  salary:z.number(),
+  salary:z.coerce.number().min(1),
   birthday: z.date(),
   gsisNo: z.string(),
   pagIbigNo: z.string(),
@@ -103,7 +103,11 @@ export const EmployeesForm = ({
 
   const form = useForm<EmployeesFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData || {
+    defaultValues: initialData ? {
+    ...initialData, 
+    salary: parseFloat(String(initialData?.salary)) }
+    
+  : {
       lastName: '',
       firstName: '',
       middleName: '',
@@ -117,12 +121,12 @@ export const EmployeesForm = ({
       tinNo: '',
       pagIbigNo: '',
       philHealthNo: '',
-      salary: 0,
+      salary: 0.00,
       dateHired: new Date(),
       isFeatured: false,
       isArchived: false,
       employeeTypeId: '',
-      officesId: '',
+      officeId: '',
       eligibilityId: '',
 
     }
@@ -466,7 +470,7 @@ export const EmployeesForm = ({
             />
           <FormField
             control={form.control}
-            name="officesId"
+            name="officeId"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Office </FormLabel>
