@@ -152,7 +152,7 @@ export async function GET(
     const officeId = searchParams.get("officeId") || undefined;
     const employeeTypeId = searchParams.get("employeeTypeId") || undefined;
     const eligibilityId = searchParams.get("eligibilityId") || undefined;
-    const isFeatured = searchParams.get("isFeatured");
+    const isFeatured = searchParams.get('isFeatured');
 
 
 
@@ -167,6 +167,7 @@ export async function GET(
         employeeTypeId,
         eligibilityId,
         isFeatured: isFeatured ? true : undefined,
+        isArchived: false,
       },
       include: {
         images: true,
@@ -182,7 +183,7 @@ export async function GET(
     return NextResponse.json(employee)
 
   } catch (error) {
-    console.log('[BILLBOARDS_GET]', error);
+    console.log('[EMPLOYEES_GET]', error);
     return new NextResponse("Internal error", { status: 500 })
   }
 }
