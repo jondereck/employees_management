@@ -32,6 +32,7 @@ const EmployeesPage = async ({
     middleName: item.middleName,
     suffix: item.suffix,
     gender: item.gender,
+    age: item.age,
     contactNumber: item.contactNumber,
     position: item.position,
     birthday: format(item.birthday, "MMMM do, yyyy"),

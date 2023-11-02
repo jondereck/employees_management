@@ -104,6 +104,7 @@ model Employee {
   contactNumber String
   position String
   birthday DateTime
+  age String @default("")
   gsisNo String
   tinNo String
   philHealthNo String

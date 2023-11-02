@@ -8,14 +8,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import axios from "axios";
 import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
-import { useOrigin } from "@/hooks/use-origin";
 import ImageUpload from "@/components/ui/image-upload";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -57,6 +56,7 @@ const formSchema = z.object({
   }),
   salary: z.coerce.number().min(1),
   birthday: z.date(),
+  age: z.string(),
   gsisNo: z.string().length(10, {
     message: "GSIS No should be exactly 10 digits long"
   }),
@@ -125,6 +125,7 @@ export const EmployeesForm = ({
         contactNumber: 's',
         position: '',
         birthday: new Date(),
+        age: '',
         gsisNo: '',
         tinNo: '',
         pagIbigNo: '',
@@ -140,6 +141,31 @@ export const EmployeesForm = ({
       }
   });
 
+
+  const [calculatedAge, setCalculatedAge] = useState<number | null>(null);
+
+  // Function to calculate age
+  const calculateAgeFromBirthday = (birthday: Date) => {
+    const today = new Date();
+    const birthDate = new Date(birthday);
+    const age = today.getFullYear() - birthDate.getFullYear();
+
+    // Adjust age based on the birth month and day
+    if (
+      today.getMonth() < birthDate.getMonth() ||
+      (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())
+    ) {
+      return age   ;
+    } else {
+      return age;
+    }
+  };
+
+  // Update the age whenever the birthday field changes
+  useEffect(() => {
+    const age = calculateAgeFromBirthday(form.getValues("birthday"));
+    setCalculatedAge(age);
+  }, [form.getValues("birthday")]);
 
 
   const onSubmit = async (values: EmployeesFormValues) => {
@@ -413,6 +439,22 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
+               {/* <FormField
+        control={form.control}
+        name="age"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Age</FormLabel>
+            <FormControl>
+              <Input
+                disabled={loading}
+            
+                {...field}
+              />
+            </FormControl>
+          </FormItem>
+        )}
+      /> */}
             <FormField
               control={form.control}
               name="gender"
