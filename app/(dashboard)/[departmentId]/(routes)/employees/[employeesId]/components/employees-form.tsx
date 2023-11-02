@@ -1,6 +1,6 @@
 "use client";
 import * as z from "zod";
-import { Billboard, Eligibility, Employee, EmployeeType, Gender, Image, Offices } from "@prisma/client";
+import { Eligibility, Employee, EmployeeType, Gender, Image, Offices } from "@prisma/client";
 import { CalendarIcon, Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Checkbox } from "@/components/ui/checkbox";
 
 
 const formSchema = z.object({
@@ -49,23 +50,29 @@ const formSchema = z.object({
 
   suffix: z.string(),
   images: z.object({ url: z.string() }).array(),
-  contactNumber: z.string().min(11).max(11, {
-    message: "Maximum 11 number"
-  }),
+  contactNumber: z.string(),
 
   position: z.string().min(1, {
     message: "Position is required"
   }),
-  salary:z.coerce.number().min(1),
+  salary: z.coerce.number().min(1),
   birthday: z.date(),
-  gsisNo: z.string(),
-  pagIbigNo: z.string(),
-  tinNo: z.string(),
-  philHealthNo: z.string(),
+  gsisNo: z.string().length(10, {
+    message: "GSIS No should be exactly 10 digits long"
+  }),
+  pagIbigNo: z.string().length(12, {
+    message: "Pagibig No. should be exactlyy 12 digits long"
+  }),
+  tinNo: z.string().length(9, {
+    message: "TIN No. should be exactly 9 digits long."
+  }),
+  philHealthNo: z.string().length(12, {
+    message: "Philhealth No. should be exactly 12 digits long."
+  }),
   dateHired: z.date(),
-  isFeatured:z.boolean(),
+  isFeatured: z.boolean(),
   isArchived: z.boolean(),
-  
+
 
 
 
@@ -104,32 +111,33 @@ export const EmployeesForm = ({
   const form = useForm<EmployeesFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData ? {
-    ...initialData, 
-    salary: parseFloat(String(initialData?.salary)) }
-    
-  : {
-      lastName: '',
-      firstName: '',
-      middleName: '',
-      suffix: '',
-      images: [],
-      gender: Gender.Male,
-      contactNumber: 's',
-      position: '',
-      birthday: new Date(),
-      gsisNo: '',
-      tinNo: '',
-      pagIbigNo: '',
-      philHealthNo: '',
-      salary: 0.00,
-      dateHired: new Date(),
-      isFeatured: false,
-      isArchived: false,
-      employeeTypeId: '',
-      officeId: '',
-      eligibilityId: '',
-
+      ...initialData,
+      salary: parseFloat(String(initialData?.salary))
     }
+
+      : {
+        lastName: '',
+        firstName: '',
+        middleName: '',
+        suffix: '',
+        images: [],
+        gender: Gender.Male,
+        contactNumber: 's',
+        position: '',
+        birthday: new Date(),
+        gsisNo: '',
+        tinNo: '',
+        pagIbigNo: '',
+        philHealthNo: '',
+        salary: 0.00,
+        dateHired: new Date(),
+        isFeatured: false,
+        isArchived: false,
+        employeeTypeId: '',
+        officeId: '',
+        eligibilityId: '',
+
+      }
   });
 
 
@@ -138,7 +146,7 @@ export const EmployeesForm = ({
     try {
       setLoading(true);
       if (initialData) {
-        await axios.patch(`/api/${params.departmentId}/employees/${params.billboardId}`, values);
+        await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
 
       } else {
         await axios.post(`/api/${params.departmentId}/employees`, values);;
@@ -179,15 +187,15 @@ export const EmployeesForm = ({
     try {
       setLoading(true);
 
-      await axios.delete(`/api/${params.departmentId}/billboards/${params.billboardId}`);
+      await axios.delete(`/api/${params.departmentId}/employees/${params.employeesId}`);
 
       toast({
         title: "Success!",
-        description: "Billboards deleted."
+        description: "Employee deleted."
       })
 
       router.refresh();
-      router.push(`/${params.departmentId}/billboards`)
+      router.push(`/${params.departmentId}/employees`)
 
 
     } catch (error) {
@@ -264,8 +272,8 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                  Ex: Jon
-                </FormDescription>
+                    Ex: Jon
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -284,8 +292,8 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                  Ex: Nifas
-                </FormDescription>
+                    Ex: Nifas
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -304,8 +312,8 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                 Ex: De Guzman
-                </FormDescription>
+                    Ex: De Guzman
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -324,8 +332,8 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                  Ex: Jr.
-                </FormDescription>
+                    Ex: Jr.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -344,13 +352,13 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                 Ex: Administrative Officer III
-                </FormDescription>
+                    Ex: Administrative Officer III
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-               <FormField
+            <FormField
               control={form.control}
               name="contactNumber"
               render={({ field }) => (
@@ -364,24 +372,24 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-              
-                </FormDescription>
+
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-               <FormField
+            <FormField
               control={form.control}
               name="birthday"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
+                <FormItem>
                   <FormLabel>Date of birth</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
                         variant={"outline"}
-                        className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                        className={cn("flex justify-start text-left font-normal", !field.value && "text-muted-foreground")}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
@@ -435,20 +443,19 @@ export const EmployeesForm = ({
                         </SelectItem>
                       ))}
                     </SelectContent>
-
                   </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-          
-             
+
+
           </div>
-          <Separator />              
+          <Separator />
           <div className="grid grid-cols-2 gap-8">
-        
-             <FormField
+
+            <FormField
               control={form.control}
               name="salary"
               render={({ field }) => (
@@ -462,211 +469,211 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                
-                </FormDescription>
+
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          <FormField
-            control={form.control}
-            name="officeId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Office </FormLabel>
-                <Select
-                  disabled={loading}
-                  onValueChange={field.onChange}
-                  value={field.value}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue
-                        defaultValue={field.value}
-                        placeholder="Select Office "
-                      />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {offices.map((item) => (
-                      <SelectItem
-                        key={item.id}
-                        value={item.id}
-                      >
-                        {item.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+            <FormField
+              control={form.control}
+              name="officeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Office </FormLabel>
+                  <Select
+                    disabled={loading}
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue
+                          defaultValue={field.value}
+                          placeholder="Select Office "
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {offices.map((item) => (
+                        <SelectItem
+                          key={item.id}
+                          value={item.id}
+                        >
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
 
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="employeeTypeId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Appointment </FormLabel>
-                <Select
-                  disabled={loading}
-                  onValueChange={field.onChange}
-                  value={field.value}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue
-                        defaultValue={field.value}
-                        placeholder="Select Appointment "
-                      />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {employeeType.map((item) => (
-                      <SelectItem
-                        key={item.id}
-                        value={item.id}
-                      >
-                        {item.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="employeeTypeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Appointment </FormLabel>
+                  <Select
+                    disabled={loading}
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue
+                          defaultValue={field.value}
+                          placeholder="Select Appointment "
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {employeeType.map((item) => (
+                        <SelectItem
+                          key={item.id}
+                          value={item.id}
+                        >
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
 
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="eligibilityId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Eligibility </FormLabel>
-                <Select
-                  disabled={loading}
-                  onValueChange={field.onChange}
-                  value={field.value}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue
-                        defaultValue={field.value}
-                        placeholder="Select Eligibility "
-                      />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {eligibility.map((item) => (
-                      <SelectItem
-                        key={item.id}
-                        value={item.id}
-                      >
-                        {item.customType}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="eligibilityId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Eligibility </FormLabel>
+                  <Select
+                    disabled={loading}
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue
+                          defaultValue={field.value}
+                          placeholder="Select Eligibility "
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {eligibility.map((item) => (
+                        <SelectItem
+                          key={item.id}
+                          value={item.id}
+                        >
+                          {item.customType}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
 
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          </div>   
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
           <Separator />
           <div className="grid grid-cols-2 gap-8">
-          <FormField 
-            control={form.control}
-            name="gsisNo"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>GSIS Number</FormLabel>
-                <FormControl>
-                  <Input 
-                    disabled={loading}
-                    placeholder="GSIS Number"
-                    {...field}
-                  />
+            <FormField
+              control={form.control}
+              name="gsisNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>GSIS Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Ex: 0000000000"
+                      {...field}
+                    />
 
-                </FormControl>
-                <FormDescription>
-
-                  </FormDescription>
-                  <FormMessage />
-              </FormItem>
-            )}
-          />
-           <FormField 
-            control={form.control}
-            name="tinNo"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>TIN Number</FormLabel>
-                <FormControl>
-                  <Input 
-                    disabled={loading}
-                    placeholder="TIN Number"
-                    {...field}
-                  />
-
-                </FormControl>
-                <FormDescription>
+                  </FormControl>
+                  <FormDescription>
 
                   </FormDescription>
                   <FormMessage />
-              </FormItem>
-            )}
-          />
-          
-          <FormField 
-            control={form.control}
-            name="philHealthNo"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Philhealth Number</FormLabel>
-                <FormControl>
-                  <Input 
-                    disabled={loading}
-                    placeholder="Philhealth Number"
-                    {...field}
-                  />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="tinNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>TIN Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="TIN Number"
+                      {...field}
+                    />
 
-                </FormControl>
-                <FormDescription>
-
-                  </FormDescription>
-                  <FormMessage />
-              </FormItem>
-            )}
-          />
-          
-          <FormField 
-            control={form.control}
-            name="pagIbigNo"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Pagibig Number</FormLabel>
-                <FormControl>
-                  <Input 
-                    disabled={loading}
-                    placeholder="Pagibig Number"
-                    {...field}
-                  />
-
-                </FormControl>
-                <FormDescription>
+                  </FormControl>
+                  <FormDescription>
 
                   </FormDescription>
                   <FormMessage />
-              </FormItem>
-            )}
-          />
-          
-          <FormField
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="philHealthNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Philhealth Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Philhealth Number"
+                      {...field}
+                    />
+
+                  </FormControl>
+                  <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="pagIbigNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Pagibig Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Pagibig Number"
+                      {...field}
+                    />
+
+                  </FormControl>
+                  <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
               control={form.control}
               name="dateHired"
               render={({ field }) => (
@@ -694,19 +701,65 @@ export const EmployeesForm = ({
                     </PopoverContent>
                   </Popover>
                   <FormDescription>
-                   Date hired is used to calculate years of service.
+                    Date hired is used to calculate years of service.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
+          <Separator />
+          <div className="grid grid-cols-2 gap-8 ">
+            <FormField
+              control={form.control}
+              name='isFeatured'
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      //@ts-ignore
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Is featured employee?</FormLabel>
+                    <FormDescription>
+                      This employee will apear on home page
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='isArchived'
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      //@ts-ignore
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Archived employee?</FormLabel>
+                    <FormDescription>
+                      This employee will not appear anywhere
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
+          </div>
+          <Separator />
           <Button disabled={loading} className="ml-auto" type="submit">
             {action}
           </Button>
         </form>
       </Form>
-      <Separator />
+
     </>
   );
 }

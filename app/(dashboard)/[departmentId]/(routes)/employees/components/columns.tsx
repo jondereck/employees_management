@@ -20,13 +20,13 @@ export type EmployeesColumn = {
   gender: string;
   contactNumber: string; 
   position: string;
-  birthday: Date;
+  birthday: string;
   gsisNo: string;
   tinNo: string;
   philHealthNo: string;
   pagibigNo: string;
   salary: string; // You may need to adjust the type if salary is not a number
-  dateHired: Date;
+  dateHired: string;
   isFeatured: boolean;
   isArchived: boolean;
   createdAt: string;
@@ -99,16 +99,17 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Birthday" />
     ),
   },
-  {
-    accessorKey: "gsisNo",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="GSIS No." />
-    ),
-  },
+
   {
     accessorKey: "tinNo",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="TIN No." />
+    ),
+  },
+  {
+    accessorKey: "gsisNo",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="GSIS No." />
     ),
   },
   {
@@ -145,6 +146,12 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     accessorKey: "isArchived",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title=" Archived" />
+    ),
+  },
+  {
+    accessorKey: "createdAt",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title=" Created at" />
     ),
   },
   {

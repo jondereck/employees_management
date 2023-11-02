@@ -4,33 +4,40 @@ import { NextResponse } from "next/server"
 
 export async function GET(
   req: Request,
-  { params }: { params: {billboardId: string } }
+  { params }: { params: {employeesId: string } }
 ) {
   try {
 
-    if (!params.billboardId) {
-      return new NextResponse("Billboard id is required", { status: 400 });
+
+    if (!params.employeesId) {
+      return new NextResponse("Employee id is required", { status: 400 });
     }
 
  
-    const billboard = await prismadb.billboard.findUnique({
+    const employee = await prismadb.employee.findUnique({
       where: {
-        id: params.billboardId,
+        id: params.employeesId,
 
+      },
+      include: {
+        images: true,
+        offices: true,
+        employeeType: true,
+        eligibility: true
       },
     });
 
-    return NextResponse.json(billboard);
+    return NextResponse.json(employee);
 
   } catch (error) {
-    console.log("[BILLBOARD_GET]", error);
+    console.log("[EMPLOYEES_GET]", error);
     return new NextResponse("Internal Error", { status: 500 })
   }
 }
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { departmentId: string, billboardId: string } }
+  { params }: { params: { departmentId: string, employeesId: string } }
 ) {
   try {
     const { userId } = auth();
@@ -40,17 +47,52 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { label, imageUrl } = body;
+    const {
+      lastName,
+      firstName,
+      middleName,
+      suffix,
+      images,
+      gender,
+      contactNumber,
+      position,
+      birthday,
+      gsisNo,
+      tinNo,
+      pagIbigNo,
+      philHealthNo,
+      salary,
+      dateHired,
+      isFeatured,
+      isArchived,
+      employeeTypeId,
+      officeId,
+      eligibilityId
+    } = body;
 
-    if (!label) {
-      return new NextResponse("Label is required", { status: 400 });
+    if (!firstName) {
+      return new NextResponse("First Name is required", { status: 400 })
+    }
+    if (!lastName) {
+      return new NextResponse("Last Name is required", { status: 400 })
+    }
+    if (!middleName) {
+      return new NextResponse("Middle Name is required", { status: 400 })
+    }
+    if (!position) {
+      return new NextResponse("Position is required", { status: 400 })
+    }
+    // if (!contactNumber) {
+    //   return new NextResponse("Contact Number is required", { status: 400 })
+    // }
+    if (!officeId) {
+      return new NextResponse("Office url is required", { status: 400 })
+    }
+    if (!employeeTypeId) {
+      return new NextResponse("Appointment is required", { status: 400 })
     }
 
-    if (!imageUrl) {
-      return new NextResponse("Image Url is required", { status: 400 });
-    }
-
-    if (!params.billboardId) {
+    if (!params.employeesId) {
       return new NextResponse("Billboard id is required", { status: 400 });
     }
 
@@ -66,20 +108,55 @@ export async function PATCH(
     }
 
 
-    const billboard = await prismadb.billboard.updateMany({
+     await prismadb.employee.update({
       where: {
-        id: params.billboardId,
+        id: params.employeesId,
       },
       data: {
-        label,
-        imageUrl
+        lastName,
+        firstName,
+        middleName,
+        suffix,
+        images: { 
+          deleteMany: {}
+        },
+        gender,
+        contactNumber,
+        position,
+        birthday,
+        gsisNo,
+        tinNo,
+        pagIbigNo,
+        philHealthNo,
+        salary,
+        dateHired,
+        isFeatured,
+        isArchived,
+        employeeTypeId,
+        officeId,
+        eligibilityId
       }
     });
 
-    return NextResponse.json(billboard);
+    const employee = await prismadb.employee.update({
+      where: {
+        id: params.employeesId,
+      },
+      data: {
+        images: {
+          createMany: {
+            data: [
+              ...images.map((image: { url: string }) => image),
+            ]
+          }
+        }
+      }
+    });
+
+    return NextResponse.json(employee);
 
   } catch (error) {
-    console.log("[BILLBOARD_PATCH]", error);
+    console.log("[EMPLOYEES_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 })
   }
 }
@@ -87,7 +164,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { departmentId: string, billboardId: string } }
+  { params }: { params: { departmentId: string, employeesId: string } }
 ) {
   try {
     const { userId } = auth();
@@ -96,8 +173,8 @@ export async function DELETE(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!params.billboardId) {
-      return new NextResponse("Billboard id is required", { status: 400 });
+    if (!params.employeesId) {
+      return new NextResponse("Employees id is required", { status: 400 });
     }
 
     const departmentByUserId = await prismadb.department.findFirst({
@@ -111,17 +188,17 @@ export async function DELETE(
       return new NextResponse("Unauthorized", { status: 405 })
     }
 
-    const billboard = await prismadb.billboard.delete({
+    const employee = await prismadb.employee.delete({
       where: {
-        id: params.billboardId,
+        id: params.employeesId,
 
       },
     });
 
-    return NextResponse.json(billboard);
+    return NextResponse.json(employee);
 
   } catch (error) {
-    console.log("[BILLBOARD_DELETE]", error);
+    console.log("[EMPLOYEES_DELETE]", error);
     return new NextResponse("Internal Error", { status: 500 })
   }
 }

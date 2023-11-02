@@ -53,9 +53,9 @@ export async function POST(
     if (!position) {
       return new NextResponse("Position is required", { status: 400 })
     }
-    if (!contactNumber) {
-      return new NextResponse("Contact Number is required", { status: 400 })
-    }
+    // if (!contactNumber) {
+    //   return new NextResponse("Contact Number is required", { status: 400 })
+    // }
     if (!officeId) {
       return new NextResponse("Office url is required", { status: 400 })
     }
@@ -80,21 +80,21 @@ export async function POST(
       return new NextResponse("Unauthorized", { status: 403 })
     }
 
-    // const alreadyExist = await prismadb.employee.findFirst({
-    //   where: {
-    //     departmentId:params.departmentId,
-    //     lastName: lastName,
-    //     firstName: firstName,
-    //     middleName: middleName,
-    //   },
-    // });
+    const alreadyExist = await prismadb.employee.findFirst({
+      where: {
+        departmentId:params.departmentId,
+        lastName: lastName,
+        firstName: firstName,
+        middleName: middleName,
+      },
+    });
     
-    // if (alreadyExist) {
-    //   return new NextResponse(
-    //     JSON.stringify({ error: " Employee already exists." }),
-    //     { status: 400 }
-    //   );
-    // }
+    if (alreadyExist) {
+      return new NextResponse(
+        JSON.stringify({ error: " Employee already exists." }),
+        { status: 400 }
+      );
+    }
 
 
 	
@@ -145,20 +145,39 @@ export async function GET(
   req: Request,
   { params }: { params: { departmentId: string } }
 ) {
-  try {
+  try {     
+    const { searchParams } = new URL(req.url);
+    const officeId = searchParams.get("officeId") || undefined;
+    const employeeTypeId = searchParams.get("employeeTypeId") || undefined;
+    const eligibilityId = searchParams.get("eligibilityId") || undefined;
+    const isFeatured = searchParams.get("isFeatured");
+
 
 
     if (!params.departmentId) {
       return new NextResponse("Department Id is required", { status: 400 });
     }
 
-    const billboards = await prismadb.billboard.findMany({
+    const employee = await prismadb.employee.findMany({
       where: {
         departmentId: params.departmentId,
+        officeId,
+        employeeTypeId,
+        eligibilityId,
+        isFeatured: isFeatured ? true : undefined,
       },
-    })
+      include: {
+        images: true,
+        offices: true,
+        employeeType: true,
+        eligibility: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
 
-    return NextResponse.json(billboards)
+    return NextResponse.json(employee)
 
   } catch (error) {
     console.log('[BILLBOARDS_GET]', error);
