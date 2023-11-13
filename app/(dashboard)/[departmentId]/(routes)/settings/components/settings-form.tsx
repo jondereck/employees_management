@@ -144,7 +144,7 @@ export const SettingsForm = ({
       <Separator/>
       <ApiAlert 
         title="NEXT_PUBLIC_API_URL" 
-        description={`${origin}/api/${params.departmentId}}`} 
+        description={`${origin}/api/${params.departmentId}`} 
         variant="public"
       />
     </>
