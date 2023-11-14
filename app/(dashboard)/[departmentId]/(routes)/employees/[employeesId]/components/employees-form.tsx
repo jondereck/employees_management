@@ -56,7 +56,7 @@ const formSchema = z.object({
   }),
   salary: z.coerce.number().min(1),
   birthday: z.date(),
-  age: z.string(),
+  // age: z.string(),
   gsisNo: z.string().length(10, {
     message: "GSIS No should be exactly 10 digits long"
   }),
@@ -125,7 +125,7 @@ export const EmployeesForm = ({
         contactNumber: 's',
         position: '',
         birthday: new Date(),
-        age: '',
+        // age: '',
         gsisNo: '',
         tinNo: '',
         pagIbigNo: '',
