@@ -20,7 +20,7 @@ export const Navbar = async () => {
   })
   return (  
     <div className="border-b ">
-      <div className="flex flex-col lg:flex-row items-center lg:justify-between px-4 my-2 md:my-5 h-16 ">
+      <div className="flex flex-col lg:flex-row items-center lg:justify-between px-4 my-5 md:my-2 h-16 ">
         <div>
           <DepartmentSwitcher items={department}/>
         </div>
