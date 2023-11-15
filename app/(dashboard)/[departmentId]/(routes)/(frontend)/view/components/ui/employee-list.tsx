@@ -16,7 +16,7 @@ const EmployeeList = ({
     <div className="space-y-4 ">
       <h3 className="font-bold text-3xls">{title}</h3>
       {items.length === 0 && <NoResults/>}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 space-x-2">
         {items.map((item) => (
           <EmployeeCard key={item.id} data={item} />
         ))}
