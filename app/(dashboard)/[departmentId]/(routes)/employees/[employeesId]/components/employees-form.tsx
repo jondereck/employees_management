@@ -179,7 +179,7 @@ export const EmployeesForm = ({
       }
 
       router.refresh();
-      router.push(`/${params.departmentId}/employees`)
+      router.back();
 
 
       toast({

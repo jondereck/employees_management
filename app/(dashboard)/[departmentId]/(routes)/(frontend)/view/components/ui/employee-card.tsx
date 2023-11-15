@@ -2,6 +2,11 @@
 
 import Image from "next/image";
 import { Employees } from "../../types";
+import IconButton from "./icon-button";
+import { Edit, Expand } from "lucide-react";
+import { useRouter, useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+
 
 interface EmployeeCardProps {
   data: Employees;
@@ -10,6 +15,37 @@ interface EmployeeCardProps {
 const EmployeeCard = ({
   data,
 }: EmployeeCardProps) => {
+  const router = useRouter();
+  const params = useParams();
+  const [age, setAge ] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Calculate age when component mounts or when data.birthday changes
+    calculateAge();
+  },[data.birthday])
+
+  const calculateAge = () => {
+    const birthdate = new Date(data.birthday);
+    const currentDate = new Date();
+
+    let ageDiff = currentDate.getFullYear() - birthdate.getFullYear();
+
+   // Check if the birthday for this year has already occurred
+   const hasBirthdayOccurred =
+   currentDate.getMonth() > birthdate.getMonth() ||
+   (currentDate.getMonth() === birthdate.getMonth() &&
+     currentDate.getDate() >= birthdate.getDate());
+
+      // Adjust age if the birthday hasn't occurred yet this year
+      if (!hasBirthdayOccurred) {
+        ageDiff -= 0;
+      }
+
+    setAge(ageDiff);
+
+  }
+
+
   return ( 
   <div className="bg-white group cursor-pointer rounded-xl border p-3 space-y-4">
     <div className="aspect-square rounded-xl bg-gray-100 relative">
@@ -17,7 +53,29 @@ const EmployeeCard = ({
         src={data?.images?.[0]?.url}
         fill
         alt="Image"
+        className="aspect-square object-cover rounded-md"
       />
+      <div className="opacity-0 group-hover:opacity-100 transition absolute w-full px-6 bottom-5">
+        <div className="flex gap-x-6  justify-center">
+        <IconButton
+          onClick={() => {}}
+          icon={<Expand  size={20} className="text-gray-600" />}
+        />
+         <IconButton
+             onClick={() => router.push(`/${params.departmentId}/employees/${data.id}`)}
+          icon={<Edit  size={20} className="text-gray-600" />}
+        />
+        </div>
+      </div>
+    </div>
+    {/* description */}
+    <div>
+      <p className="font-semibold text-lg">{data.firstName} {data.lastName}</p>
+      <p className="font-light">{data.position}</p>
+    
+      {/* {age !== null && (
+        <p className="semi-bold text-lg">{`Age: ${age} years`}</p>
+      )} */}
     </div>
   </div> );
 }
