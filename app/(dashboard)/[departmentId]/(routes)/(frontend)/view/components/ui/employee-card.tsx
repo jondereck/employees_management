@@ -17,36 +17,9 @@ const EmployeeCard = ({
 }: EmployeeCardProps) => {
   const router = useRouter();
   const params = useParams();
-  const [age, setAge ] = useState<number | null>(null);
-
-  useEffect(() => {
-    // Calculate age when component mounts or when data.birthday changes
-    calculateAge();
-  },[data.birthday])
-
-  const calculateAge = () => {
-    const birthdate = new Date(data.birthday);
-    const currentDate = new Date();
-
-    let ageDiff = currentDate.getFullYear() - birthdate.getFullYear();
-
-   // Check if the birthday for this year has already occurred
-   const hasBirthdayOccurred =
-   currentDate.getMonth() > birthdate.getMonth() ||
-   (currentDate.getMonth() === birthdate.getMonth() &&
-     currentDate.getDate() >= birthdate.getDate());
-
-      // Adjust age if the birthday hasn't occurred yet this year
-      if (!hasBirthdayOccurred) {
-        ageDiff -= 0;
-      }
-
-    setAge(ageDiff);
-
-  }
-
+  
   const handleClick = () => {
-    router.push(`/${params.departmentId}/view/employee/${data.id}`)
+    router.push(`/${params.departmentId}/view/employee/${data?.id}`)
   }
 
 

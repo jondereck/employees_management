@@ -33,7 +33,7 @@ const Gallery = ({
                     src={image.url}
                     alt="Image"
                     // style={{ width: '100%', height: '100%' }}
-                    className="object-cover object-center "
+                    className="object-cover object-center border-4 rounded-xl bg-gray-100 "
                   />
                 </div>
             </Tab.Panel>

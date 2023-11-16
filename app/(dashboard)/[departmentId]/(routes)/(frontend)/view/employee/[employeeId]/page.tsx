@@ -6,6 +6,7 @@ import getEmployee from "../../actions/get-employee";
 import getEmployees from "../../actions/get-employees";
 import Container from "../../components/ui/container";
 import EmployeeList from "../../components/ui/employee-list";
+import Info from "../../components/ui/info";
 
 export const revalidate = 0;
 
@@ -28,8 +29,8 @@ const EmployeeInvdividualPage = async ({
         <div className="px-4 py-10 sm:px-6 lg:px-8">
           <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
             <Gallery images={employee.images} />
-            <div className="mt-10 sm:mt-16 sm:px-0 lg:mt-0">
-              Information
+            <div className="font-bold text-2xl mt-10 sm:mt-16 sm:px-0 lg:mt-0">
+              <Info data={employee}/>
             </div>
           </div>
         <hr className="my-10" />
