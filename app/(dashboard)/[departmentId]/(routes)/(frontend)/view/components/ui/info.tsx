@@ -126,14 +126,15 @@ const Info = ({
 
   const fullName = `${data.firstName.toUpperCase()} ${data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
   return (
-<div className="bg-white p-6 rounded-lg shadow-md">
+<div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `5px solid ${data?.employeeType?.value}` }}
+>
   <h1 className="text-3xl font-semibold text-gray-900">{fullName}</h1>
   <div className="flex flex-col items-start font-sans font-light justify-between mt-2">
     <p className="text-lg">{data.position}</p>
     <h3 className="text-sm font-light text-gray-700">{data?.offices?.name}</h3>
   </div>
       <Separator />
-      <div className="flex flex-col items-start gap-x-4 mt-4 bg-white p-6 rounded-lg shadow-md">
+      <div className="flex flex-col  gap-x-4 mt-4 bg-white p-6 rounded-lg shadow-md " >
         <p className="text-2xl font-bold border-b-2">Personal Details</p>
         <div className="flex items-center">
           <h3 className="font-semibold mr-2">Gender:</h3>
@@ -180,11 +181,11 @@ const Info = ({
           <h3 className="font-semibold mr-2">Date Hired:</h3>
           <p className="font-light">{formatDateHired()}</p>
         </div>
-        <div className="flex items-start">
+        <div className="flex items">
           <h3 className="font-semibold mr-2">Year of Service:</h3>
           {yearService && (
-            <p className="font-light">
-              {yearService.years} Year/s, {yearService.months} Month/s, {yearService.days} Day/s
+            <p className="font-light items-start">
+              {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
             </p>
           )}
         </div>
