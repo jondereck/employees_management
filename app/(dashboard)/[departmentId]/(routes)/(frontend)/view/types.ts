@@ -17,7 +17,7 @@ export interface Image {
 
 export interface Eligibility {
   id: string;
-  name: string;
+  customType: string;
   value: string;
 }
 export interface EmployeeType {

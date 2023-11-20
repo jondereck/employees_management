@@ -122,7 +122,7 @@ export const EmployeesForm = ({
         suffix: '',
         images: [],
         gender: Gender.Male,
-        contactNumber: 's',
+        contactNumber: ' ',
         position: '',
         birthday: new Date(),
         // age: '',

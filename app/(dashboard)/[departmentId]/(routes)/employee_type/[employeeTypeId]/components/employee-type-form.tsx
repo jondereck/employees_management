@@ -169,18 +169,23 @@ export const EmployeeTypeForm = ({
                 </FormItem>
               )}
             />
-              <FormField
+               <FormField
               control={form.control}
               name="value"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Salary Grade</FormLabel>
+                  <FormLabel>Color Value</FormLabel>
                   <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Value "
-                      {...field}
-                    />
+                    <div className="flex items-center gap-x-4">
+                      <Input
+                        disabled={loading}
+                        placeholder="Value "
+                        {...field}
+                      />
+                      <div className="border p-4 rounded-full"
+                      style={{backgroundColor: field.value}}/>
+                    </div>
+
                   </FormControl>
                   <FormMessage />
                 </FormItem>

@@ -21,7 +21,6 @@ export type EmployeesColumn = {
   contactNumber: string; 
   position: string;
   birthday: string;
-  age: string;
   gsisNo: string;
   tinNo: string;
   philHealthNo: string;
@@ -98,13 +97,6 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     accessorKey: "birthday",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Birthday" />
-    ),
-  },
-
-  {
-    accessorKey: "age",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Age" />
     ),
   },
   {
