@@ -42,7 +42,7 @@ export async function PATCH(
     const body = await req.json();
     const { customType, eligibilityTypes, value } = body;
 
-    if (!customType) {
+    if (!) {
       return new NextResponse("Name is required", { status: 400 });
     }
 

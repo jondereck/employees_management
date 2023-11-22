@@ -118,7 +118,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
   },
   {
-    accessorKey: "pagIbigNo",
+    accessorKey: "pagibigNo",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Pagibig No." />
     ),

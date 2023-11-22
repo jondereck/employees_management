@@ -24,7 +24,9 @@ const formSchema = z.object({
   name: z.string().min(1, {
     message: "Name is required"
   }),
-  billboardId: z.string().min(1),
+  billboardId: z.string().min(1,  {
+    message: "Billboard is required"
+  }),
 });
 
 type OfficeFormValues = z.infer<typeof formSchema>;
@@ -54,7 +56,7 @@ export const OfficeForm = ({
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
       name: '',
-      billboardId: '73faa7da-6e07-4c5a-b239-45f2f6781cd2',
+      billboardId: '',
     }
   });
 

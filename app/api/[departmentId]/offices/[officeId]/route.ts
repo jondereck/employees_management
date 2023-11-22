@@ -7,11 +7,6 @@ export async function GET(
   { params }: { params: {officeId: string } }
 ) {
   try {
-    const { userId } = auth();
-
-    if (!userId) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
 
     if (!params.officeId) {
       return new NextResponse("Office id is required", { status: 400 });
@@ -21,8 +16,10 @@ export async function GET(
     const office = await prismadb.offices.findUnique({
       where: {
         id: params.officeId,
-
       },
+      include: {
+        billboard: true,
+      }
     });
 
     return NextResponse.json(office);

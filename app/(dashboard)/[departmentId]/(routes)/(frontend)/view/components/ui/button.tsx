@@ -1,9 +1,9 @@
 import { forwardRef } from "react";
 import { cn } from "../../lib/utils";
-import NavbarActions from "../navbar-actions";
+
 
 export interface Button2Props
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> { }
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {}
 
 const Button2 = forwardRef<HTMLButtonElement, Button2Props>(({
   className,

@@ -8,16 +8,21 @@ import getBillboard from "./actions/get-billboard";
 import getEmployees from "./actions/get-employees";
 import EmployeeList from "./components/ui/employee-list";
 
+
 export const revalidate = 0;
 
-const Hompage = async () => {
+
+
+const Homepage = async ({
+}) => {
   const employees = await getEmployees({ isFeatured: true });
-  const billboard = await getBillboard("e2857486-84df-48ab-a342-26fd832e179b");
+  const billboard = await getBillboard(`${process.env.DEFAULTPAGE}`);
+  
   return (
     <Container>
-      <div className="space-y-10 pb-10">
+      <div className="space-y-10 pb-10 overflow-y-auto">
         <Navbar2 />
-        <Billboard data={billboard} />
+        <Billboard data={billboard} offices={billboard}/>
         
       </div>
       <div className="flex flex-col gap-y-8 px-4 sm:px-6 lg:px-8">
@@ -28,4 +33,4 @@ const Hompage = async () => {
   );
 }
 
-export default Hompage;
+export default Homepage;

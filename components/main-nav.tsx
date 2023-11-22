@@ -131,7 +131,7 @@ export function MainNav({
                     >
                       <PersonIcon />
                       <div className="mb-2 mt-4 text-lg font-medium">
-                        Employees
+                        Manage Employees
                       </div>
                       <p className="text-sm leading-tight text-muted-foreground">
                         Browse and manage the list of department employees.

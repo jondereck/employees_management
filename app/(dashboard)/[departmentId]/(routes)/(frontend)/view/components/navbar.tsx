@@ -11,9 +11,9 @@ const Navbar2 = async () => {
   return (
     <div className="border-b">
       <Container>
-       <div className="relative flex px-4 sm:px-6 lg:px-8 h-16 items-center">
-       <Link href="/" className="ml-4 flex lg:ml-0 gap-x-2">
-          <p className="font-bold text-xl">Employees   </p>
+       <div className="relative flex px-4 sm:px-6 lg:px-8 h-16 items-center overflow-auto">
+       <Link href={`/${process.env.HOMEPAGE}/view`} className="ml-4 flex  lg:ml-0 gap-x-2">
+          <p className="font-semibold font-sans text-xl">Employees </p>
        
         </Link>
        <MainNav data={offices}/>

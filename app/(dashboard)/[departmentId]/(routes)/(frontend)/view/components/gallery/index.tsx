@@ -9,12 +9,10 @@ import { cn } from "@/lib/utils";
 
 interface GalleryProps {
   images: ImageType[];
-  appointment: EmployeeType[];
 }
 
 const Gallery = ({
   images,
-  appointment,
 }: GalleryProps) => {
   const hexToRgba = (hex: string, alpha: number = 1) => {
     const bigint = parseInt(hex.slice(1), 16);
