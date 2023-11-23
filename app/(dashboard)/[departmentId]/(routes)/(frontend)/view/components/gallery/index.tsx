@@ -14,13 +14,7 @@ interface GalleryProps {
 const Gallery = ({
   images,
 }: GalleryProps) => {
-  const hexToRgba = (hex: string, alpha: number = 1) => {
-    const bigint = parseInt(hex.slice(1), 16);
-    const r = (bigint >> 16) & 255;
-    const g = (bigint >> 8) & 255;
-    const b = bigint & 255;
-    return `rgba(${r},${g},${b},${alpha})`;
-  };
+
   return ( 
     <Tab.Group as="div" className="flex flex-col-reverse">
       <div className="mx-auto mt-6 hidden w-full max-w-2xl sm:block lg:max-w-none">
