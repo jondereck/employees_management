@@ -7,7 +7,10 @@ import Billboard from "../../components/billboard";
 import Footer from "../../components/footer";
 import Navbar2 from "../../components/navbar";
 import Container from "../../components/ui/container";
+import EmployeeCard from "../../components/ui/employee-card";
+import NoResults from "../../components/ui/no-results";
 import Filter from "./components/filter";
+import MobileFilter from "./components/mobile-filter";
 
 
 
@@ -38,36 +41,47 @@ const OfficesPage = async ({
   const eligibility = await getEligibility();
   const office = await getOffice(params.officeId);
 
-  
-  return ( 
+
+  return (
     <div className="bg-white">
       <Container>
         <Navbar2 />
-        <Billboard 
+        <Billboard
           data={office.billboard}
           offices={office}
         />
         <div className="px-4 sm:px-6 lg:px-8 pb-24">
           <div className="lg:grid lg:grid-cols-5 lg:gap-x-8">
-            {/*Mobile */}
+            <MobileFilter employeeType={employeeType} eligibility={eligibility} />
             <div className="hidden lg:block">
-              <Filter 
+              <Filter
                 valueKey="employeeType"
                 name="Appointment"
                 data={employeeType}
               />
-              <Filter 
-                valueKey=""
+              <Filter
+                valueKey="eligibility"
                 name="Eligibility"
                 data={eligibility}
               />
             </div>
+            <div className="mt-6 lg:col-span-4 lg:mt-0">
+              {employees.length === 0 && <NoResults />}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {employees.map((item) => (
+                  <EmployeeCard 
+                    key={item.id}
+                    data={item}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-        <Footer/>
+        <Footer />
       </Container>
     </div>
-   );
+  );
 }
- 
+
 export default OfficesPage;

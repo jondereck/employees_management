@@ -16,7 +16,7 @@ export const revalidate = 0;
 const Homepage = async ({
 }) => {
   const employees = await getEmployees({ isFeatured: true });
-  const billboard = await getBillboard(`${process.env.DEFAULTPAGE}`);
+  const billboard = await getBillboard(`${process.env.DEFAULTBILLBOARD}`);
   
   return (
     <Container>

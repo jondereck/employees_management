@@ -15,7 +15,7 @@ import { DataTableColumnHeader } from "@/components/ui/column-header"
 export type EligibilityColumn = {
   id: string
   eligibilityTypes: string
-  customType: string
+  name: string
   value: string
   createdAt: string
 }
@@ -23,7 +23,7 @@ export type EligibilityColumn = {
 export const columns: ColumnDef<EligibilityColumn>[] = [
   
   {
-    accessorKey: "customType",
+    accessorKey: "name",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Eligibility" />
     ),

@@ -43,7 +43,7 @@ const EmployeesPage = async ({
     dateHired: format(item.dateHired, "MMMM do, yyyy"),
     employeeType: item.employeeType.name,
     offices: item.offices.name,
-    eligibility: item.eligibility.customType,
+    eligibility: item.eligibility.name,
     isFeatured: item.isFeatured,
     isArchived: item.isArchived,
     createdAt: format(item.createdAt, "MMMM do, yyyy"),

@@ -615,7 +615,7 @@ export const EmployeesForm = ({
                           key={item.id}
                           value={item.id}
                         >
-                          {item.customType}
+                          {item.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

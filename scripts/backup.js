@@ -1,8 +1,8 @@
-
 const { PrismaClient } = require("@prisma/client");
 const { runBackup } = require("@vorlefan/prisma-backup");
 
-const db = new PrismaClient();
+const prisma = new PrismaClient();
+
 async function main() {
   try {
     const timestamp = new Date();
@@ -14,38 +14,34 @@ async function main() {
     
     const folderName = `${hours}-${minutes}-${year}-${month}-${day}`;
 
-    // prisma models
-    const department = await db.department.findMany();
-    const billboard = await db.billboard.findMany();
-    const offices = await db.offices.findMany();
-    const employeeType = await db.employeeType.findMany();
-    const eligibility = await db.eligibility.findMany();
-    const images = await db.image.findMany();
-    const employees = await db.employee.findMany({
-      include: {
-        images: true, // Include related images
-      },
-    });
-
-    await runBackup({
+    const backupProps = {
+      // encrypt: true,
+      // password: 'test', 
+      folder: 'backups',
       models: {
-        department: department,
-        billboard: billboard,
-        offices: offices,
-        employeeType: employeeType,
-        eligibility: eligibility,
-        image: images,
-        employees: employees,
+          Department: await prisma.department.findMany(),
+          Billboard: await prisma.billboard.findMany(),
+          Offices: await prisma.offices.findMany(),
+          EmployeeType: await prisma.employeeType.findMany(),
+          Eligibility: await prisma.eligibility.findMany(),
+          Employee: await prisma.employee.findMany(),
+          Image: await prisma.image.findMany(),
       },
-      folder: "/backups",
-      backupFolderName: folderName
-    });
+      onRoute: (route) => {
+          // Define the route if needed
+      },
+      backupFolderName: folderName, // Use the variable directly
+    };
 
-    await db.$disconnect;
+    // Call runBackup with the backupProps
+    await runBackup(backupProps);
 
+    // Close the Prisma connection
+    await prisma.$disconnect();
   } catch (error) {
-    console.error("Error creating a backup", error)
+    console.error("Error creating a backup", error);
   }
 }
 
+// Call the async function to start the backup process
 main();

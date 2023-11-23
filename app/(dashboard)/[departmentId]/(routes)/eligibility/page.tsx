@@ -21,7 +21,7 @@ const EligibiltyPage = async ({
   const formattedEligibilty: EligibilityColumn[] = eligibility.map((item)=> ({
     id: item.id,
     eligibilityTypes: item.eligibilityTypes,
-    customType: item.customType,
+    name: item.name,
     value: item.value, 
     createdAt: format(item.createdAt, "MMMM do, yyyy"),
   }));

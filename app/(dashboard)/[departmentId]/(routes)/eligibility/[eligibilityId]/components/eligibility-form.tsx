@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 
 const formSchema = z.object({
-  customType: z.string().min(0),
+  name: z.string().min(0),
   eligibilityTypes: z.string().min(0, {
     message: "Name is required"
   }),
@@ -58,7 +58,7 @@ export const EligibilityForm = ({
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
       eligibilityTypes: EligibilityTypes.None,
-      customType: '',
+      name: '',
       value: '',
     }
   });
@@ -162,7 +162,7 @@ export const EligibilityForm = ({
           <div className="grid grid-cols-3 gap-8">
           <FormField
               control={form.control}
-              name="customType"
+              name="name"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Eligibility</FormLabel>

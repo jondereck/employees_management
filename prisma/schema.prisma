@@ -37,6 +37,9 @@ model Billboard {
   @@index([departmentId])
 }
 
+
+
+
 model Offices {
   id           String     @id @default(uuid())
   departmentId String
@@ -77,7 +80,7 @@ model Eligibility {
   department       Department       @relation("DepartmentToEligibility", fields: [departmentId], references: [id])
   employee         Employee[]
   eligibilityTypes EligibilityTypes // No default value for the enum field
-  customType       String
+  name       String
   value            String
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt

@@ -158,7 +158,7 @@ const Info = ({
         </div>
         <div className="flex items-center">
           <h3 className="font-semibold mr-2">Eligibility:</h3>
-          <p className="font-light">{data?.eligibility?.customType}</p>
+          <p className="font-light">{data?.eligibility?.name}</p>
         </div>
         <div className="flex items-center">
           <h3 className="font-semibold mr-2">Salary:</h3>

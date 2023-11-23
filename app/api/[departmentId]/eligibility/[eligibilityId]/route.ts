@@ -40,9 +40,9 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { customType, eligibilityTypes, value } = body;
+    const { name, eligibilityTypes, value } = body;
 
-    if (!) {
+    if (!name) {
       return new NextResponse("Name is required", { status: 400 });
     }
 
@@ -70,7 +70,7 @@ export async function PATCH(
         id: params.eligibilityId,
       },
       data: {
-        customType,
+        name,
         eligibilityTypes,
         value,
       }

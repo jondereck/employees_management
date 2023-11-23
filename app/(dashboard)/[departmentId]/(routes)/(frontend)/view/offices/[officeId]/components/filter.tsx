@@ -65,6 +65,7 @@ const Filter = ({
           </div>
         ))}
       </div>
+   
     </div>
   );
 }

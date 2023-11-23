@@ -12,15 +12,15 @@ export async function POST(
     const { userId } = auth();
     const body = await req.json()
 
-    const { customType, eligibilityTypes, value } = body;
+    const { name, eligibilityTypes, value } = body;
 
     if (!userId) {
       return new NextResponse("Unauthenticated", { status: 401 });
 
     }
 
-    if (!customType) {
-      return new NextResponse("CustomType is required", { status: 400 })
+    if (!name) {
+      return new NextResponse("Name is required", { status: 400 })
     }
     if (!value) {
       return new NextResponse("Color value is required", { status: 400 })
@@ -43,7 +43,7 @@ export async function POST(
     const alreadyExist = await prismadb.eligibility.findFirst({
       where: {
         departmentId:params.departmentId,
-        customType: customType
+        name: name
       },
     });
     
@@ -58,7 +58,7 @@ export async function POST(
     const eligibility = await prismadb.eligibility.create({
       data: {
         departmentId: params.departmentId,
-        customType,
+        name,
         eligibilityTypes,
         value,
 
