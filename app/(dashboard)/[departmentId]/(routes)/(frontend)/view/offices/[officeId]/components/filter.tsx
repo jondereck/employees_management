@@ -31,16 +31,16 @@ const Filter = ({
 
     const query = {
       ...current,
-      [valueKey]: id
-    }
+      [valueKey]: current[valueKey] === id ? null : id,
+    };
 
     if (current[valueKey] === id ) {
-      query[valueKey] = null
+      query[valueKey] = null;
     }
 
     const url = qs.stringifyUrl({
       url: window.location.href,
-      query
+      query,
     }, { skipNull: true});
 
     router.push(url);

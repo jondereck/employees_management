@@ -55,12 +55,12 @@ const OfficesPage = async ({
             <MobileFilter employeeType={employeeType} eligibility={eligibility} />
             <div className="hidden lg:block">
               <Filter
-                valueKey="employeeType"
+                valueKey="employeeTypeId"
                 name="Appointment"
                 data={employeeType}
               />
               <Filter
-                valueKey="eligibility"
+                valueKey="eligibilityId"
                 name="Eligibility"
                 data={eligibility}
               />

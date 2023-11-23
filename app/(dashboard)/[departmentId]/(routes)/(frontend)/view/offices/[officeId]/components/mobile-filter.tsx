@@ -51,12 +51,12 @@ const MobileFilter = ({
 
           </SheetHeader>
           <Filter
-            valueKey="employeeType"
+            valueKey="employeeTypeId"
             name="Appointment"
             data={employeeType}
           />
           <Filter
-            valueKey="eligibility"
+            valueKey="employeeTypeId"
             name="Eligibility"
             data={eligibility}
           />
