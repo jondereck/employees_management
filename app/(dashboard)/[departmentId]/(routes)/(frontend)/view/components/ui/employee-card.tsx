@@ -5,7 +5,8 @@ import { Employees } from "../../types";
 import IconButton from "./icon-button";
 import { Edit, Expand } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { MouseEventHandler, useEffect, useState } from "react";
+import usePreviewModal from "../../hooks/use-preview-modal";
 
 
 interface EmployeeCardProps {
@@ -17,13 +18,23 @@ const EmployeeCard = ({
 }: EmployeeCardProps) => {
   const router = useRouter();
   const params = useParams();
+  const previewModal = usePreviewModal();
 
-  const onPreview:MouseEventHandler<HTMLButtonElement> = (event) => {
+  const onPreview: MouseEventHandler<HTMLButtonElement> = (event) => {
     event.stopPropagation();
+
+    previewModal.onOpen(data);
+
   }
   
   const handleClick = () => {
     router.push(`/${params.departmentId}/view/employee/${data?.id}`)
+  }
+
+  const handleEdit: MouseEventHandler<HTMLButtonElement> =
+  (event) => {
+    event.stopPropagation();
+    router.push(`/${params.departmentId}/employees/${data.id}`)
   }
 
 
@@ -45,7 +56,7 @@ const EmployeeCard = ({
           icon={<Expand  size={20} className="text-gray-600" />}
         />
          <IconButton
-             onClick={() => router.push(`/${params.departmentId}/employees/${data.id}`)}
+             onClick={handleEdit}
           icon={<Edit  size={20} className="text-gray-600" />}
         />
         </div>
