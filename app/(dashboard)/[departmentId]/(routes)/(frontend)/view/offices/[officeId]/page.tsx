@@ -6,6 +6,7 @@ import getOffices from "../../actions/get-offices";
 import Billboard from "../../components/billboard";
 import Footer from "../../components/footer";
 import Navbar2 from "../../components/navbar";
+import SearchInput from "../../components/search-bar";
 import Container from "../../components/ui/container";
 import EmployeeCard from "../../components/ui/employee-card";
 import NoResults from "../../components/ui/no-results";
@@ -53,7 +54,11 @@ const OfficesPage = async ({
         <div className="px-4 sm:px-6 lg:px-8 pb-24">
           <div className="lg:grid lg:grid-cols-5 lg:gap-x-8">
             <MobileFilter employeeType={employeeType} eligibility={eligibility} />
+          
             <div className="hidden lg:block">
+            <SearchInput
+            
+            />
               <Filter
                 valueKey="employeeTypeId"
                 name="Appointment"

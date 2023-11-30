@@ -23,49 +23,51 @@ const Filter = ({
   const router = useRouter();
 
 
-  const selectedValue = searchParams.get(valueKey);
-
+  const selectedValues = searchParams.getAll(valueKey);
 
   const onClick = (id: string) => {
     const current = qs.parse(searchParams.toString());
 
+    let updatedValues;
+
+    if (selectedValues.includes(id)) {
+      // If the value is already selected, remove it
+      updatedValues = selectedValues.filter(value => value !== id);
+    } else {
+      // If the value is not selected, add it
+      updatedValues = [...selectedValues, id];
+    }
+
     const query = {
       ...current,
-      [valueKey]: current[valueKey] === id ? null : id,
+      [valueKey]: updatedValues.length > 0 ? updatedValues : null,
     };
-
-    if (current[valueKey] === id ) {
-      query[valueKey] = null;
-    }
 
     const url = qs.stringifyUrl({
       url: window.location.href,
       query,
-    }, { skipNull: true});
+    }, { skipNull: true });
 
     router.push(url);
   }
-
-
   return (  
     <div className="mb-8">
       <h3 className="text-lg font-semibold">
         {name}
       </h3>
-      <Separator className="my-4"/>
+      <Separator className="my-4" />
       <div className="flex flex-wrap gap-2">
         {data.map((filter) => (
           <div key={filter.id} className="flex items-center">
             <Button2
               onClick={() => onClick(filter.id)}
-              className={cn("rounded-md text-sm font-bold text-gray-800 p-2 bg-white border border-gray-300", selectedValue === filter.id && "bg-black text-white")}
+              className={cn("rounded-md text-sm font-bold text-gray-800 p-2 bg-white border border-gray-300", selectedValues.includes(filter.id) && "bg-black text-white")}
             >
               {filter.name}
             </Button2>
           </div>
         ))}
       </div>
-   
     </div>
   );
 }

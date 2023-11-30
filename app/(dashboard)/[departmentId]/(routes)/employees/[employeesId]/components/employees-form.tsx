@@ -24,16 +24,18 @@ import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 
 
+
+
 const formSchema = z.object({
   lastName: z.string().min(1, {
     message: "Last Name is required"
-  }),
+  }).transform((value) => value.toUpperCase(),),
   firstName: z.string().min(1, {
     message: "First Name is required"
-  }),
+  }).transform((value) => value.toUpperCase(),),
   middleName: z.string().min(1, {
     message: "Middle Name is required"
-  }),
+  }).transform((value) => value.toUpperCase(),),
   gender: z.string().min(0, {
     message: "Gender is required"
   }),
@@ -53,7 +55,18 @@ const formSchema = z.object({
 
   position: z.string().min(1, {
     message: "Position is required"
+  }).transform((value) => {
+    return value.toLowerCase().replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
   }),
+  addresses: z.object({
+    house: z.string(),
+    barangay: z.string(),
+    street: z.string(),
+    city: z.string(),
+    province: z.string(),
+    zipCode: z.string(),
+  }).optional(),
+
   salary: z.coerce.number().min(1),
   birthday: z.date(),
   // age: z.string(),
@@ -100,6 +113,41 @@ export const EmployeesForm = ({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const [regions, setRegions] = useState([]);
+
+  
+
+  const fetchRegions = async () => {
+    try {
+      const response = await axios.get('/api/');
+      console.log(response.data); // Log the response to inspect the structure
+      setRegions(response.data); // Assuming the response is an array directly, adjust as needed
+    } catch (error) {
+      console.error("Error fetching regions", error);
+    }
+  };
+  
+
+  useEffect(() => {
+    fetchRegions();
+  }, []);
+  
+  useEffect(() => {
+    console.log(regions); // Log the regions state
+  }, [regions]);
+  
+
+  // const fetchProvinces = async () => {
+  //   try {
+  //     if (selectedRegion) {
+  //       const response = await axios.get(`/api/geo?action=provinces&regionId=${selectedRegion}`);
+  //       setProvinces(response.data);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error fetching provinces", error);
+  //   }
+  // };
+
   const title = initialData ? "Edit Employee" : "Create Employee";
   const description = initialData ? "Edit a Employee" : "Add new Employee";
   const toastMessage = initialData ? "Employee updated." : "Employee created.";
@@ -108,10 +156,16 @@ export const EmployeesForm = ({
   const params = useParams();
   const router = useRouter();
 
+
+  
+
   const form = useForm<EmployeesFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData ? {
       ...initialData,
+      firstName: initialData.firstName.toUpperCase(),
+      middleName: initialData.middleName.toUpperCase(),
+      lastName: initialData.lastName.toUpperCase(),
       salary: parseFloat(String(initialData?.salary))
     }
 
@@ -155,7 +209,7 @@ export const EmployeesForm = ({
       today.getMonth() < birthDate.getMonth() ||
       (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())
     ) {
-      return age   ;
+      return age;
     } else {
       return age;
     }
@@ -171,6 +225,10 @@ export const EmployeesForm = ({
   const onSubmit = async (values: EmployeesFormValues) => {
     try {
       setLoading(true);
+
+      values.firstName = values.firstName.toUpperCase();
+      values.lastName = values.lastName.toUpperCase();
+      values.middleName = values.middleName.toUpperCase();
       if (initialData) {
         await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
 
@@ -439,7 +497,7 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-               {/* <FormField
+            {/* <FormField
         control={form.control}
         name="age"
         render={({ field }) => (
@@ -491,6 +549,40 @@ export const EmployeesForm = ({
               )}
             />
 
+            <FormField
+            control={form.control}
+            name="addresses.barangay"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Region</FormLabel>
+                <Select
+                  disabled={loading}
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue
+                        defaultValue={field.value}
+                        placeholder="Region "
+                      />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {regions.map((item) => (
+                      <SelectItem
+                        key={item}
+                        value={item}
+                      >
+                          {item}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )}
+          />
 
 
           </div>

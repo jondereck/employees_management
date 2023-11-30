@@ -7,6 +7,7 @@ import Billboard from "./components/billboard";
 import getBillboard from "./actions/get-billboard";
 import getEmployees from "./actions/get-employees";
 import EmployeeList from "./components/ui/employee-list";
+import SearchInput from "./components/search-bar";
 
 
 export const revalidate = 0;
@@ -21,7 +22,9 @@ const Homepage = async ({
   return (
     <Container>
       <div className="space-y-10 pb-10 overflow-y-auto">
+     
         <Navbar2 />
+        
         <Billboard data={billboard} offices={billboard}/>
         
       </div>

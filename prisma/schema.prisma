@@ -2,7 +2,8 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
 }
 
 datasource db {
@@ -36,9 +37,6 @@ model Billboard {
 
   @@index([departmentId])
 }
-
-
-
 
 model Offices {
   id           String     @id @default(uuid())
@@ -80,7 +78,7 @@ model Eligibility {
   department       Department       @relation("DepartmentToEligibility", fields: [departmentId], references: [id])
   employee         Employee[]
   eligibilityTypes EligibilityTypes // No default value for the enum field
-  name       String
+  name             String
   value            String
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
@@ -93,27 +91,43 @@ enum Gender {
   Female
 }
 
+model Address {
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  houseNo    String?
+  street     String?
+  barangay   String?
+  city       String?
+  province   String?
+  zipCode    String?
+
+  @@index([employeeId])
+}
+
 model Employee {
   id             String       @id @default(uuid())
   departmentId   String
   department     Department   @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
   officeId       String
   offices        Offices      @relation("OfficesToEmployee", fields: [officeId], references: [id])
-  lastName           String
-  firstName String
-  middleName String
-  suffix String
-  gender Gender
-  contactNumber String
-  position String
-  birthday DateTime
-  age String @default("")
-  gsisNo String
-  tinNo String
-  philHealthNo String
-  pagIbigNo String
-  salary Float
-  dateHired DateTime
+  lastName       String       @db.Text()
+  firstName      String       @db.Text()
+  middleName     String
+  suffix         String
+  gender         Gender
+  contactNumber  String
+  position       String
+  education      String
+  birthday       DateTime
+  addresses      Address[]
+  age            String       @default("")
+  gsisNo         String
+  tinNo          String
+  philHealthNo   String
+  pagIbigNo      String
+  salary         Float
+  dateHired      DateTime
   employeeTypeId String
   employeeType   EmployeeType @relation(fields: [employeeTypeId], references: [id])
   eligibilityId  String
@@ -122,10 +136,7 @@ model Employee {
   isFeatured Boolean @default(false)
   isArchived Boolean @default(false)
 
-  
   images Image[]
-
-
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -134,17 +145,16 @@ model Employee {
   @@index([officeId])
   @@index([employeeTypeId])
   @@index([eligibilityId])
+  @@fulltext([lastName, firstName])
 }
 
-
 model Image {
-  id          String   @id @default(uuid())
-  employeeId   String   // Foreign Key to Product
-  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  url         String   // URL of the image
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  employeeId String // Foreign Key to Product
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  url        String // URL of the image
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([employeeId])
 }
-
