@@ -58,12 +58,17 @@ const OfficesPage = async ({
         />
         <div className="px-4 sm:px-6 lg:px-8 pb-24">
           <div className="lg:grid lg:grid-cols-5 lg:gap-x-8">
-            <MobileFilter employeeType={employeeType} eligibility={eligibility} />
-          
-            <div className="hidden lg:block">
-            <SearchInput
-            
+            <MobileFilter
+              employeeType={employeeType}
+              eligibility={eligibility}
+              officeId={officeId}
+              total={total}
             />
+
+            <div className="hidden lg:block">
+              <SearchInput
+
+              />
               <Filter
                 officeId={officeId}
                 total={total}
@@ -72,18 +77,18 @@ const OfficesPage = async ({
                 data={employeeType}
               />
               <Filter
-              officeId={officeId}
-              total={totalEligibility}
+                officeId={officeId}
+                total={totalEligibility}
                 valueKey="eligibilityId"
                 name="Eligibility"
                 data={eligibility}
-              /> 
+              />
             </div>
             <div className="mt-6 lg:col-span-4 lg:mt-0">
               {employees.length === 0 && <NoResults />}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {employees.map((item) => (
-                  <EmployeeCard 
+                  <EmployeeCard
                     key={item.id}
                     data={item}
                   />

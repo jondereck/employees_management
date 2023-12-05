@@ -23,12 +23,21 @@ import { Separator } from "@/components/ui/separator";
 interface MobileFilterProps {
   employeeType: EmployeeType[];
   eligibility: Eligibility[];
+  officeId: string
+  total: {
+    id: string;
+    count: {
+      _all: number;
+    };
+  }[];
 }
 
 
 const MobileFilter = ({
   employeeType,
   eligibility,
+  officeId,
+  total
 }: MobileFilterProps) => {
 
 
@@ -39,7 +48,7 @@ const MobileFilter = ({
         <SheetTrigger asChild>
           <Button2
             className="flex items-center gap-x-2 lg:hidden"
-   
+
           >
             Filter
             <Plus size={20} />
@@ -47,15 +56,19 @@ const MobileFilter = ({
         <SheetContent>
           <SheetHeader>
             <SheetTitle className="text-2xl ">Filters</SheetTitle>
-            <Separator className="h-2"/>
+            <Separator className="h-2" />
 
           </SheetHeader>
           <Filter
+            total={total}
+            officeId={officeId}
             valueKey="employeeTypeId"
             name="Appointment"
             data={employeeType}
           />
           <Filter
+          total={total}
+            officeId={officeId}
             valueKey="employeeTypeId"
             name="Eligibility"
             data={eligibility}
