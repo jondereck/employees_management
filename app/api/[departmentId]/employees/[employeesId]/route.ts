@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
 
 export async function GET(
   req: Request,
-  { params }: { params: {employeesId: string } }
+  { params }: { params: { employeesId: string } }
 ) {
   try {
 
@@ -13,7 +13,7 @@ export async function GET(
       return new NextResponse("Employee id is required", { status: 400 });
     }
 
- 
+
     const employee = await prismadb.employee.findUnique({
       where: {
         id: params.employeesId,
@@ -57,6 +57,13 @@ export async function PATCH(
       contactNumber,
       position,
       birthday,
+      education,
+      houseNo,
+      // street,
+      // barangay,
+      // city,
+      // province,
+      // zipCode,
       gsisNo,
       tinNo,
       pagIbigNo,
@@ -108,7 +115,7 @@ export async function PATCH(
     }
 
 
-     await prismadb.employee.update({
+    await prismadb.employee.update({
       where: {
         id: params.employeesId,
       },
@@ -117,13 +124,20 @@ export async function PATCH(
         firstName,
         middleName,
         suffix,
-        images: { 
+        images: {
           deleteMany: {}
         },
         gender,
         contactNumber,
         position,
         birthday,
+        education,
+        houseNo,
+        // street,
+        // barangay,
+        // city,
+        // province,
+        // zipCode,
         gsisNo,
         tinNo,
         pagIbigNo,

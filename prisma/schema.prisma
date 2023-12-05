@@ -91,19 +91,6 @@ enum Gender {
   Female
 }
 
-model Address {
-  id         String   @id @default(uuid())
-  employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  houseNo    String?
-  street     String?
-  barangay   String?
-  city       String?
-  province   String?
-  zipCode    String?
-
-  @@index([employeeId])
-}
 
 model Employee {
   id             String       @id @default(uuid())
@@ -120,7 +107,12 @@ model Employee {
   position       String
   education      String
   birthday       DateTime
-  addresses      Address[]
+  houseNo        String
+  // street         String
+  // barangay       String
+  // city           String
+  // province       String
+  // zipCode        String
   age            String       @default("")
   gsisNo         String
   tinNo          String
@@ -138,8 +130,9 @@ model Employee {
 
   images Image[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+ 
 
   @@index([departmentId])
   @@index([officeId])

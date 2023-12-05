@@ -3,6 +3,7 @@ import getEmployeeType from "../../actions/get-employee-type";
 import getEmployees from "../../actions/get-employees";
 import getOffice from "../../actions/get-office";
 import getOffices from "../../actions/get-offices";
+import { getEmployeeTypeCountsByOffice } from "../../actions/get-employee-type-by-offices";
 import Billboard from "../../components/billboard";
 import Footer from "../../components/footer";
 import Navbar2 from "../../components/navbar";
@@ -32,6 +33,8 @@ const OfficesPage = async ({
   params,
   searchParams
 }: OfficesPageProps) => {
+  const officeId = params.officeId;
+  const total = await getEmployeeTypeCountsByOffice(officeId)
   const employees = await getEmployees({
     officeId: params.officeId,
     employeeTypeId: searchParams.employeeTypeId,
@@ -60,15 +63,19 @@ const OfficesPage = async ({
             
             />
               <Filter
+                officeId={officeId}
+                total={total}
                 valueKey="employeeTypeId"
                 name="Appointment"
                 data={employeeType}
               />
               <Filter
+              officeId={officeId}
+              total={total}
                 valueKey="eligibilityId"
                 name="Eligibility"
                 data={eligibility}
-              />
+              /> 
             </div>
             <div className="mt-6 lg:col-span-4 lg:mt-0">
               {employees.length === 0 && <NoResults />}

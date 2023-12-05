@@ -22,6 +22,13 @@ export async function POST(
       contactNumber,
       position,
       birthday,
+      education,
+      houseNo,
+      // street,
+      // barangay,
+      // city,
+      // province,
+      // zipCode,
       gsisNo,
       tinNo,
       pagIbigNo,
@@ -117,6 +124,13 @@ export async function POST(
         contactNumber,
         position,
         birthday,
+        education,
+        houseNo,
+        // street,
+        // barangay,
+        // city,
+        // province,
+        // zipCode,
         gsisNo,
         tinNo,
         pagIbigNo,
@@ -128,7 +142,6 @@ export async function POST(
         employeeTypeId,
         officeId,
         eligibilityId,
-
       }
     })
 

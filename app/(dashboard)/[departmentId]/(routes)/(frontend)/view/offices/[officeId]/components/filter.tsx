@@ -8,16 +8,27 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import Button2 from "../../../components/ui/button";
 
+
 interface FilterProps {
   data: (EmployeeType | Eligibility)[];
   name: string;
   valueKey: string;
+  officeId: string;
+  total: {
+    employeeTypeId: string;
+    count: {
+      _all: number;
+    };
+  }[];
 }
 
-const Filter = ({
+const Filter = async ({
   data,
   name,
-  valueKey
+  valueKey,
+  officeId,
+  total
+
 }: FilterProps) => {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -45,12 +56,23 @@ const Filter = ({
 
     const url = qs.stringifyUrl({
       url: window.location.href,
-      query,
+      query: {
+        ...query,
+        officeId,
+      },
     }, { skipNull: true });
 
     router.push(url);
   }
-  return (  
+
+
+  const countMap = total.reduce((acc, item) => {
+    acc[item.employeeTypeId] = item.count._all;
+    return acc;
+  }, {} as { [key: string]: number });
+
+
+  return (
     <div className="mb-8">
       <h3 className="text-lg font-semibold">
         {name}
@@ -63,13 +85,14 @@ const Filter = ({
               onClick={() => onClick(filter.id)}
               className={cn("rounded-md text-sm font-bold text-gray-800 p-2 bg-white border border-gray-300", selectedValues.includes(filter.id) && "bg-black text-white")}
             >
-              {filter.name}
+              {filter.name} ({countMap[filter.id] || 0})
             </Button2>
+
           </div>
         ))}
       </div>
     </div>
   );
 }
- 
+
 export default Filter;
