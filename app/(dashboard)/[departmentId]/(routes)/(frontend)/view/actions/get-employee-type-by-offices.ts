@@ -13,7 +13,7 @@ export const getEmployeeTypeCountsByOffice = async (officeId: string) => {
   });
 
   return employeeTypeCounts.map((count) => ({
-    employeeTypeId: count.employeeTypeId || '',
+    id: count.employeeTypeId || '',
     count: count._count || 0,
   }));
 }

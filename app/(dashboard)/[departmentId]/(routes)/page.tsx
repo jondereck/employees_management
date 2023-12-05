@@ -19,7 +19,6 @@ const DashboardPage = async ({
   const permanent = 'aeaf6a42-2586-46c3-bb2a-0464be2e5ba7';
   const casual = '07eb3541-f2c8-4482-843e-0aacc0197992';
   const jobOrder = 'd5c55388-fd2b-4bc5-817a-c2a987e97be8';
-  const OfficeId = ``
 
   const totalEmployee = await getTotalEmployees(params.departmentId);
   const totalPermanent = await getTotalPermanent(permanent);

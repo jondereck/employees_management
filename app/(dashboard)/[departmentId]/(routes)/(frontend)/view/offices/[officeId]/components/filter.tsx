@@ -15,11 +15,12 @@ interface FilterProps {
   valueKey: string;
   officeId: string;
   total: {
-    employeeTypeId: string;
+    id: string;
     count: {
       _all: number;
     };
   }[];
+
 }
 
 const Filter = async ({
@@ -32,6 +33,8 @@ const Filter = async ({
 }: FilterProps) => {
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  
 
 
   const selectedValues = searchParams.getAll(valueKey);
@@ -67,9 +70,11 @@ const Filter = async ({
 
 
   const countMap = total.reduce((acc, item) => {
-    acc[item.employeeTypeId] = item.count._all;
+    acc[item.id] = item.count._all;
     return acc;
   }, {} as { [key: string]: number });
+
+
 
 
   return (
@@ -85,7 +90,7 @@ const Filter = async ({
               onClick={() => onClick(filter.id)}
               className={cn("rounded-md text-sm font-bold text-gray-800 p-2 bg-white border border-gray-300", selectedValues.includes(filter.id) && "bg-black text-white")}
             >
-              {filter.name} ({countMap[filter.id] || 0})
+              {filter.name} ( {countMap[filter.id] || 0}  )
             </Button2>
 
           </div>

@@ -13,6 +13,7 @@ import EmployeeCard from "../../components/ui/employee-card";
 import NoResults from "../../components/ui/no-results";
 import Filter from "./components/filter";
 import MobileFilter from "./components/mobile-filter";
+import { getEligibilityCountsByOffice } from "../../actions/get-eligibility-by-offices";
 
 
 
@@ -34,7 +35,8 @@ const OfficesPage = async ({
   searchParams
 }: OfficesPageProps) => {
   const officeId = params.officeId;
-  const total = await getEmployeeTypeCountsByOffice(officeId)
+  const total = await getEmployeeTypeCountsByOffice(officeId);
+  const totalEligibility = await getEligibilityCountsByOffice(officeId)
   const employees = await getEmployees({
     officeId: params.officeId,
     employeeTypeId: searchParams.employeeTypeId,
@@ -71,7 +73,7 @@ const OfficesPage = async ({
               />
               <Filter
               officeId={officeId}
-              total={total}
+              total={totalEligibility}
                 valueKey="eligibilityId"
                 name="Eligibility"
                 data={eligibility}
