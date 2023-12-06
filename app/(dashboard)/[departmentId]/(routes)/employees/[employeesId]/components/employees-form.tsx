@@ -46,7 +46,7 @@ const formSchema = z.object({
     message: "Office is required"
   }),
   eligibilityId: z.string().min(1, {
-    message: "Eligibility is required"
+    message: "Eligibility is required."
   }),
 
   suffix: z.string(),
