@@ -1,5 +1,5 @@
-"use client";
-
+// @ts-nocheck
+"use client"
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eligibility, EmployeeType } from "../../../types";
 import qs from "query-string";
@@ -23,7 +23,7 @@ interface FilterProps {
 
 }
 
-const Filter = async ({
+const Filter =  ({
   data,
   name,
   valueKey,
@@ -35,8 +35,6 @@ const Filter = async ({
   const router = useRouter();
 
   
-
-
   const selectedValues = searchParams.getAll(valueKey);
 
   const onClick = (id: string) => {

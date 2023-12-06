@@ -10,7 +10,7 @@ const SearchInput = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const officeId = searchParams.get("officeId")
+
   const lastName = searchParams.get("lastName");
 
   const [value, setValue] = useState(lastName || "");
@@ -24,7 +24,6 @@ const SearchInput = () => {
   useEffect(() => {
     const query = {
       lastName: debounceValue,
-      officeId: officeId,
     };
 
     const url = qs.stringifyUrl({
@@ -34,9 +33,9 @@ const SearchInput = () => {
 
     console.log("New URL:", url);
 
-     router.push(url);
+    return router.push(url)
 
-  },[debounceValue, router, officeId])
+  },[debounceValue, router])
   return (
     <div className="relative">
       <Search  className="absolute h-4 w-4 top-3 left-4 text-muted-foreground"/>

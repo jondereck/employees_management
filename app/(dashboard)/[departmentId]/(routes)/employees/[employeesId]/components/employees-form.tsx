@@ -52,12 +52,26 @@ const formSchema = z.object({
   suffix: z.string(),
   images: z.object({ url: z.string() }).array(),
   contactNumber: z.string(),
+  position: z
+  .string()
+  .min(1, {
+    message: "Position is required",
+  })
+  .transform((value) => {
+    // Function to remove Roman numerals within parentheses, excluding at the end
+    const cleanPosition = (position:string) =>
+      position.replace(/\(([^)]*)\)/, (match, p1) => {
+        if (p1) {
+          const cleanedText = p1.replace(/\b[IVXLCDM]+\b(?![\s\S]*\b[IVXLCDM]+\b)/g, '').trim();
+          return `(${cleanedText})`;
+        }
+        return match;
+      });
 
-  position: z.string().min(1, {
-    message: "Position is required"
-  }).transform((value) => {
-    return value.toLowerCase().replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
+    return cleanPosition(value);
   }),
+
+
 
   education: z.string(),
   houseNo: z.string(),

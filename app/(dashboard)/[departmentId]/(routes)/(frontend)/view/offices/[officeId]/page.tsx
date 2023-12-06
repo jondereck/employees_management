@@ -14,6 +14,7 @@ import NoResults from "../../components/ui/no-results";
 import Filter from "./components/filter";
 import MobileFilter from "./components/mobile-filter";
 import { getEligibilityCountsByOffice } from "../../actions/get-eligibility-by-offices";
+import EmployeeList from "./components/employee-list-view";
 
 
 
@@ -66,9 +67,7 @@ const OfficesPage = async ({
             />
 
             <div className="hidden lg:block">
-              <SearchInput
-
-              />
+              
               <Filter
                 officeId={officeId}
                 total={total}
@@ -85,15 +84,7 @@ const OfficesPage = async ({
               />
             </div>
             <div className="mt-6 lg:col-span-4 lg:mt-0">
-              {employees.length === 0 && <NoResults />}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {employees.map((item) => (
-                  <EmployeeCard
-                    key={item.id}
-                    data={item}
-                  />
-                ))}
-              </div>
+            <EmployeeList items={employees} />
             </div>
           </div>
         </div>

@@ -1,21 +1,18 @@
-"use client"
-
-import { useEffect, useState } from "react";
-import { Employees } from "../../types";
-import EmployeeCard from "./employee-card";
-import NoResults from "./no-results";
+"use client";
 import PaginationControls from "@/components/ui/pagination-control";
+import { Employees } from "../../../types";
+import { useEffect, useState } from "react";
+import NoResults from "../../../components/ui/no-results";
+import EmployeeCard from "../../../components/ui/employee-card";
 
 
 const EmployeePerPage = 10;
 
 interface EmployeeListProps {
-  title: string;
   items: Employees[];
 }
 
 const EmployeeList = ({
-  title,
   items,
 }: EmployeeListProps) => {
   const [currentPage, setCurrentPage] = useState(1);
@@ -39,27 +36,37 @@ const EmployeeList = ({
   }, [currentPage, items]);
 
   return (
-    <div className="space-y-4 ">
-      <h3 className="font-bold text-3xls">{title}</h3>
-      {displayedEmployee.length === 0 && <NoResults/>}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 space-x-2">
-        {items.map((item) => (
-          <EmployeeCard key={item.id} data={item} />
-        ))}
-      
 
-      {items.length > EmployeePerPage && (
-        <>
-          <div className="flex justify-center items-center">
-          <PaginationControls 
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
+    <>
+      {displayedEmployee.length === 0 && <NoResults />}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        {items.map((item) => (
+          <EmployeeCard
+            key={item.id}
+            data={item}
           />
-          </div>
-         </>
-      )}
-    </div></div>
+        ))}
+        {/* <SearchInput/> */}
+      </div>
+
+
+
+      <>
+
+        {items.length > EmployeePerPage && (
+          <>
+
+            <div className="flex justify-center items-center ">
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+              />
+            </div>
+          </>
+        )}
+      </>
+    </>
   );
 }
 
