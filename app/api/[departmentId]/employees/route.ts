@@ -37,6 +37,7 @@ export async function POST(
       dateHired,
       isFeatured,
       isArchived,
+      isHead,
       employeeTypeId,
       officeId,
       eligibilityId
@@ -54,9 +55,9 @@ export async function POST(
     if (!lastName) {
       return new NextResponse("Last Name is required", { status: 400 })
     }
-    if (!middleName) {
-      return new NextResponse("Middle Name is required", { status: 400 })
-    }
+    // if (!middleName) {
+    //   return new NextResponse("Middle Name is required", { status: 400 })
+    // }
     if (!position) {
       return new NextResponse("Position is required", { status: 400 })
     }
@@ -139,6 +140,7 @@ export async function POST(
         dateHired,
         isFeatured,
         isArchived,
+        isHead,
         employeeTypeId,
         officeId,
         eligibilityId,
@@ -164,6 +166,7 @@ export async function GET(
     const employeeTypeId = searchParams.get("employeeTypeId") || undefined;
     const eligibilityId = searchParams.get("eligibilityId") || undefined;
     const isFeatured = searchParams.get('isFeatured');
+    const isHead = searchParams.get('isHead');
 
 
 
@@ -179,6 +182,8 @@ export async function GET(
         eligibilityId,
         isFeatured: isFeatured ? true : undefined,
         isArchived: false,
+        isHead: isHead ? true : undefined,
+
       },
       include: {
         images: true,

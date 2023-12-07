@@ -46,6 +46,7 @@ export interface Employees {
   salary:  string; 
   dateHired: string;
   isFeatured: boolean;
+  isHead: boolean;
   eligibility: Eligibility;
   employeeType: EmployeeType;
   images: Image[];

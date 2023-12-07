@@ -72,6 +72,7 @@ export async function PATCH(
       dateHired,
       isFeatured,
       isArchived,
+      isHead,
       employeeTypeId,
       officeId,
       eligibilityId
@@ -146,6 +147,7 @@ export async function PATCH(
         dateHired,
         isFeatured,
         isArchived,
+        isHead,
         employeeTypeId,
         officeId,
         eligibilityId

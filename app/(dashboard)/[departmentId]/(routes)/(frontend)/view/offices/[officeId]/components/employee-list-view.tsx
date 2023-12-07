@@ -25,14 +25,16 @@ const EmployeeList = ({
   };
 
   useEffect(() => {
+    const employeeSort = [...items].sort((a, b) => (b.isHead ? 1 : 0) - (a.isHead ? 1 : 0));
+  
     // Calculate start and end indices based on currentPage
-    const startIdx = (currentPage - 1) * EmployeePerPage; // -13
-    const endIdx = startIdx + EmployeePerPage; // 1
-
-    // Slice items to get displayed bookmarks for the current page
-    const bookmarksForPage = items.slice(startIdx, endIdx);
-    setDisplayedEmployee(bookmarksForPage);
-
+    const startIdx = (currentPage - 1) * EmployeePerPage;
+    const endIdx = startIdx + EmployeePerPage;
+  
+    // Slice items to get displayed employees for the current page
+    const employeeForPage = employeeSort.slice(startIdx, endIdx);
+    setDisplayedEmployee(employeeForPage);
+  
   }, [currentPage, items]);
 
   return (
@@ -40,7 +42,7 @@ const EmployeeList = ({
     <>
       {displayedEmployee.length === 0 && <NoResults />}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        {items.map((item) => (
+        {displayedEmployee.map((item) => (
           <EmployeeCard
             key={item.id}
             data={item}

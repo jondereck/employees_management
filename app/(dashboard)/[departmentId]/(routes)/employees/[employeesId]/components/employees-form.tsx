@@ -33,9 +33,7 @@ const formSchema = z.object({
   firstName: z.string().min(1, {
     message: "First Name is required"
   }).transform((value) => value.toUpperCase(),),
-  middleName: z.string().min(1, {
-    message: "Middle Name is required"
-  }).transform((value) => value.toUpperCase(),),
+  middleName: z.string(),
   gender: z.string().min(0, {
     message: "Gender is required"
   }),
@@ -79,21 +77,14 @@ const formSchema = z.object({
   salary: z.coerce.number().min(1),
   birthday: z.date(),
   // age: z.string(),
-  gsisNo: z.string().length(10, {
-    message: "GSIS No should be exactly 10 digits long"
-  }),
-  pagIbigNo: z.string().length(12, {
-    message: "Pagibig No. should be exactlyy 12 digits long"
-  }),
-  tinNo: z.string().length(9, {
-    message: "TIN No. should be exactly 9 digits long."
-  }),
-  philHealthNo: z.string().length(12, {
-    message: "Philhealth No. should be exactly 12 digits long."
-  }),
+  gsisNo: z.string(),
+  pagIbigNo: z.string(),
+  tinNo: z.string(),
+  philHealthNo: z.string(),
   dateHired: z.date(),
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
+  isHead: z.boolean(),
 
 
 
@@ -197,6 +188,7 @@ export const EmployeesForm = ({
         dateHired: new Date(),
         isFeatured: false,
         isArchived: false,
+        isHead: false,
         employeeTypeId: '',
         officeId: '',
         eligibilityId: '',
@@ -860,7 +852,29 @@ export const EmployeesForm = ({
               />
             </div>
             <Separator />
+            
             <div className="grid grid-cols-2 gap-8 ">
+            <FormField
+                control={form.control}
+                name='isHead'
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        //@ts-ignore
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Is this employee a Department Head?</FormLabel>
+                      <FormDescription>
+                      Marking this option will ensure that this employee always appears at the top.
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name='isFeatured'
