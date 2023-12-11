@@ -295,6 +295,10 @@ export const EmployeesForm = ({
     }
   }
 
+  const currentYear = new Date().getFullYear();
+  const fromYear = currentYear - 74;
+
+
   const genderOptions = Object.values(Gender);
   return (
     <>
@@ -488,8 +492,8 @@ export const EmployeesForm = ({
                         captionLayout="dropdown-buttons"
                         selected={field.value}
                         onSelect={field.onChange}
-                        fromYear={1920}
-                        toYear={2030}
+                        fromYear={fromYear}
+                        toYear={currentYear}
                       />
                     </PopoverContent>
                   </Popover>
@@ -838,8 +842,8 @@ export const EmployeesForm = ({
                           captionLayout="dropdown-buttons"
                           selected={field.value}
                           onSelect={field.onChange}
-                          fromYear={1920}
-                          toYear={2030}
+                          fromYear={fromYear}
+                          toYear={currentYear} 
                         />
                       </PopoverContent>
                     </Popover>

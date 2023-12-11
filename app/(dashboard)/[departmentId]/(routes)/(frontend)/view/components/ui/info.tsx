@@ -124,6 +124,24 @@ const Info = ({
 
   }
 
+  const calculateAnnualSalary = () => {
+    const monthlySalary = parseFloat(data.salary);
+    if (isNaN(monthlySalary)) {
+      // Handle the case where the conversion to a number fails
+      return 'Invalid Salary';
+    }
+
+    const annualSalary = monthlySalary * 12 
+    const formattedSalary = new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      minimumFractionDigits: 0,
+    }).format(annualSalary);
+
+    return `${formattedSalary}`
+
+  }
+
   const fullName = `${data.firstName.toUpperCase()} ${data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
   return (
     <div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `5px solid ${data?.employeeType?.value}` }}
@@ -163,6 +181,10 @@ const Info = ({
     <div className="flex flex-col lg:flex-row ">
       <h3 className="font-semibold lg:mr-2">Salary:</h3>
       <p className="font-light">{formatSalary()}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Annual Salary:</h3>
+      <p className="font-light">{calculateAnnualSalary()}</p>
     </div>
     <Separator />
     <div className="flex flex-col lg:flex-row ">
