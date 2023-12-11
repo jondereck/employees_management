@@ -32,7 +32,7 @@ export const  EligibilityClient = ({
     />
     <Button onClick={() => router.push(`/${params.departmentId}/eligibility/new`)}>
       <Plus className="mr-2 h-4 w-4"/>
-      Add new
+      New
     </Button>
     </div>
     <Separator/>

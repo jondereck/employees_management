@@ -32,7 +32,7 @@ export const  BillboardsClient = ({
     />
     <Button onClick={() => router.push(`/${params.departmentId}/billboards/new`)}>
       <Plus className="mr-2 h-4 w-4"/>
-      Add new
+      New
     </Button>
     </div>
     <Separator/>

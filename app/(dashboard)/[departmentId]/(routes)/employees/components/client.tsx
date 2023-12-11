@@ -32,7 +32,7 @@ export const  EmployeesClient = ({
     />
     <Button onClick={() => router.push(`/${params.departmentId}/employees/new`)}>
       <Plus className="mr-2 h-4 w-4"/>
-      Add new
+      Add
     </Button>
     </div>
     <Separator/>

@@ -16,32 +16,35 @@ interface OfficesClientProps {
   data: OfficesColumn[];
 }
 
-export const  OfficesClient = ({
+export const OfficesClient = ({
   data
 }: OfficesClientProps) => {
   const router = useRouter();
   const params = useParams();
 
 
-  return ( 
+  return (
     <>
-    <div className="flex items-center justify-between">
-    <Heading
-      title={`Offices (${data.length})`}
-      description="Manage offices on your work workplace."
-    />
-    <Button onClick={() => router.push(`/${params.departmentId}/offices/new`)}>
-      <Plus className="mr-2 h-4 w-4"/>
-      Add new
-    </Button>
-    </div>
-    <Separator/>
-    <DataTable searchKey="name" columns={columns} data={data}/>
-    <ApiHeading
-    title="API"
-    description="API calls for Offices"
-    />
-    <ApiList entityIdName="officeId" entityName="offices"/>
+      <div className="flex items-center justify-between">
+        <Heading
+          title={`Offices (${data.length})`}
+          description="Manage offices on your work workplace."
+        />
+
+        <Button onClick={() => router.push(`/${params.departmentId}/offices/new`)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New
+        </Button>
+
+
+      </div>
+      <Separator />
+      <DataTable searchKey="name" columns={columns} data={data} />
+      <ApiHeading
+        title="API"
+        description="API calls for Offices"
+      />
+      <ApiList entityIdName="officeId" entityName="offices" />
     </>
-   );
+  );
 }
