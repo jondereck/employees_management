@@ -4,6 +4,8 @@ import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import ModalProvider from "./(routes)/(frontend)/providers/modal-provider";
+import { MainNav } from "@/components/main-nav";
+import MobileNavbar from "@/components/mobile-sidebar";
 
 export default async function DashboardLayout ({
   children,
@@ -33,7 +35,7 @@ export default async function DashboardLayout ({
     <>
       <div>
         <ModalProvider/>
-        <Navbar/>
+       <Navbar/>
         {children}
       </div>    
     </>
