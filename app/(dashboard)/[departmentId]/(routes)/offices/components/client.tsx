@@ -9,6 +9,7 @@ import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
 import { DataTable } from "@/components/ui/data-table";
 import ApiList from "@/components/ui/api-list";
+import ApiHeading from "@/components/ui/api-heading";
 
 
 interface OfficesClientProps {
@@ -36,7 +37,7 @@ export const  OfficesClient = ({
     </div>
     <Separator/>
     <DataTable searchKey="name" columns={columns} data={data}/>
-    <Heading
+    <ApiHeading
     title="API"
     description="API calls for Offices"
     />

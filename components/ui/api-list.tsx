@@ -17,7 +17,7 @@ const ApiList = ({
   const baseURL = `${origin}/api/${params.departmentId}`
 
   return ( 
-  <>
+  <div className="hidden md:inline">
     <ApiAlert
       title="GET"
       variant="public"
@@ -48,7 +48,7 @@ const ApiList = ({
       description={`${baseURL}/${entityName}/{${entityIdName}}`}
     
     />
-  </> 
+  </div> 
   );
 }
  
