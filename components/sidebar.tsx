@@ -112,9 +112,9 @@ export function MobileSidebar2({
   return (
     <div className={cn("flex flex-col h-screen ", className)}>
       {routes.map((route) => (
-        <div className="p-4">
+        <div  key={route.href} className="p-4">
           <Link
-            key={route.href}
+           
             href={route.href}
             onClick={handleLinkClick}
             className={cn("text-sm font-medium transition-colors hover:text-primary ", route.active ? "text-black dark:text-white" : "text-muted-foreground")}
@@ -171,7 +171,7 @@ export function MobileSidebar2({
           </NavigationMenuList>
         </NavigationMenu>
 
-        <div className="p-4 ">
+        <div  className="p-4 ">
           {/* Your logo or settings link */}
           <Link
           
