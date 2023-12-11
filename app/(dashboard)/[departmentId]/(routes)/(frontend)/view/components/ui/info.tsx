@@ -109,7 +109,7 @@ const Info = ({
 
 
   const formatSalary = () => {
-    const salary = parseFloat( data.salary);
+    const salary = parseFloat(data.salary);
     if (isNaN(salary)) {
       // Handle the case where the conversion to a number fails
       return 'Invalid Salary';
@@ -126,71 +126,70 @@ const Info = ({
 
   const fullName = `${data.firstName.toUpperCase()} ${data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
   return (
-<div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `5px solid ${data?.employeeType?.value}` }}
->
-  <h1 className="text-3xl font-semibold text-gray-900">{fullName}</h1>
-  <div className="flex flex-col items-start font-sans font-light justify-between mt-2">
-    <p className="text-lg">{data.position}</p>
-    <h3 className="text-sm font-light text-gray-700">{data?.offices?.name}</h3>
-  </div>
-      <Separator />
-      <div className="flex flex-col  gap-x-4 mt-4 bg-white p-6 rounded-lg shadow-md " >
-        <p className="text-2xl font-bold border-b-2">Personal Details</p>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">Gender:</h3>
-          <p className="font-light">{data?.gender}</p>
-        </div>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">Contact Number:</h3>
-          <p className="font-light">{data?.contactNumber}</p>
-        </div>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">Birthday:</h3>
-          <p className="font-light">{formatBirthday()}</p>
-        </div>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">Age:</h3>
-          {age !== null && <p className="font-light">{age} </p>}
-        </div>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">Appointment:</h3>
-          <p className="font-light">{data?.employeeType?.name}</p>
-        </div>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">Eligibility:</h3>
-          <p className="font-light">{data?.eligibility?.name}</p>
-        </div>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">Salary:</h3>
-          <p className="font-light">{formatSalary()}</p>
-        </div>
-        <Separator />
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">GSIS Number:</h3>
-          <p className="font-light">{data?.gsisNo}</p>
-        </div>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">TIN Number:</h3>
-          <p className="font-light">{data?.tinNo}</p>
-        </div>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">Philhealth Number:</h3>
-          <p className="font-light">{data?.philHealthNo}</p>
-        </div>
-        <div className="flex items-center">
-          <h3 className="font-semibold mr-2">Date Hired:</h3>
-          <p className="font-light">{formatDateHired()}</p>
-        </div>
-        <div className="flex items">
-          <h3 className="font-semibold mr-2">Year of Service:</h3>
-          {yearService && (
-            <p className="font-light items-start">
-              {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
-            </p>
-          )}
-        </div>
-
+    <div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `5px solid ${data?.employeeType?.value}` }}
+    >
+      <h1 className="text-2xl lg:text-4xl font-bold text-gray-900">{fullName}</h1>
+      <div className="flex flex-col items-start font-sans font-light justify-between mt-2">
+        <p className="text-lg">{data.position}</p>
+        <h3 className="text-sm font-light text-gray-700">({data?.offices?.name})</h3>
       </div>
+      <Separator />
+      <div className="flex flex-col mt-4">
+    <p className="text-2xl font-bold border-b-2">Personal Details</p>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Gender:</h3>
+      <p className="font-light text-sm lg:text-2xl">{data?.gender}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Contact Number:</h3>
+      <p className="font-light">{data?.contactNumber}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Birthday:</h3>
+      <p className="font-light">{formatBirthday()}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Age:</h3>
+      {age !== null && <p className="font-light">{age} </p>}
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Appointment:</h3>
+      <p className="font-light">{data?.employeeType?.name}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Eligibility:</h3>
+      <p className="font-light">{data?.eligibility?.name}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Salary:</h3>
+      <p className="font-light">{formatSalary()}</p>
+    </div>
+    <Separator />
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">GSIS Number:</h3>
+      <p className="font-light">{data?.gsisNo}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">TIN Number:</h3>
+      <p className="font-light">{data?.tinNo}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Philhealth Number:</h3>
+      <p className="font-light">{data?.philHealthNo}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Date Hired:</h3>
+      <p className="font-light">{formatDateHired()}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Year of Service:</h3>
+      {yearService && (
+        <p className="font-light items-start">
+          {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
+        </p>
+      )}
+    </div>
+  </div>
 
     </div>);
 }
