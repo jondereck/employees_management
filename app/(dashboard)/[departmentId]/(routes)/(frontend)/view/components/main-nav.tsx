@@ -39,7 +39,7 @@ const MainNav = ({
 
 
 
-  const currentDepartment = formattedItems.find((item) => item.value === params.officeId);
+  const currentDepartment = formattedItems.find((item) => item.value === params.officeId) || { value: `/${process.env.HOMEPAGE}/view`, label: "Select Office"};
 
   const [open, setOpen] = useState(false);
 
@@ -76,8 +76,8 @@ const MainNav = ({
           className={cn("w-[200px] lg:w-[250px] justify-between", className)}>
           
           <Building className="mr-2 h-4 w-4 " />
-          {currentDepartment?.label}
-          Select Office
+          {currentDepartment.label}
+          
           <ChevronsUpDownIcon className="ml-auto h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
