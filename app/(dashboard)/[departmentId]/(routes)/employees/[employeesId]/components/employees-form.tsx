@@ -348,7 +348,7 @@ export const EmployeesForm = ({
               </FormItem>
             )}
           />
-          <div className="grid grid-cols-3 gap-8">
+          <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-3 gap-8">
             <FormField
               control={form.control}
               name="firstName"
@@ -600,7 +600,7 @@ export const EmployeesForm = ({
 
             </div>
             <Separator />
-            <div className="grid grid-cols-2 gap-8">
+            <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
 
               <FormField
                 control={form.control}
@@ -857,7 +857,7 @@ export const EmployeesForm = ({
             </div>
             <Separator />
             
-            <div className="grid grid-cols-2 gap-8 ">
+            <div className="grid lg:grid-cols-2  grid-cols-1 gap-8  space-y-0 ">
             <FormField
                 control={form.control}
                 name='isHead'
