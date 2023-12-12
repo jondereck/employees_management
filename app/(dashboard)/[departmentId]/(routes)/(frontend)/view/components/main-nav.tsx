@@ -110,12 +110,13 @@ const MainNav = ({
           <CommandSeparator/>
           <CommandList>
             <CommandGroup>
-              <CommandItem
-                onClick={() => router.push(`/${params.departmentId}/offices`)}
+              <Button
+                variant="ghost"
+                onClick={() => router.push(`/${params.departmentId}/offices/new`)}
               >
                 <PlusCircle className="mr-2 h-5 w-5"/>
                 Create Office
-              </CommandItem>
+              </Button>
             </CommandGroup>
           </CommandList>
           </Command>
