@@ -17,7 +17,7 @@ const Navbar2 = async () => {
        
         </Link>
        <MainNav data={offices}/>
-       <NavbarActions />
+       {/* <NavbarActions /> */}
        </div>
       </Container>
     </div>

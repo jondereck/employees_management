@@ -56,8 +56,8 @@ const StoreModal = () => {
   }
   return (
     <Modal
-      title="Create Department "
-      description="Add a new department.  "
+      title="Create Institution "
+      description="Add a new.  "
       isOpen={storeModal.isOpen}
       onClose={storeModal.onClose}
     >
@@ -73,7 +73,7 @@ const StoreModal = () => {
                     <FormLabel>Name</FormLabel>
                     <FormControl>
                       <Input
-                        disabled={isLoading} placeholder="Department" {...field} />
+                        disabled={isLoading} placeholder="Institution" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

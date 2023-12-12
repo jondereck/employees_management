@@ -25,12 +25,9 @@ export const Navbar = async () => {
       <div className="flex items-center lg:justify-between px-4 my-5 md:my-2 h-16 "> 
       <MobileNavbar />
         <div>
-          <DepartmentSwitcher items={department} className="hidden md:flex px-2"/>
+          <DepartmentSwitcher items={department}/>
         </div>
         <MainNav  className="hidden md:flex px-2"/>
-
-       
-        
         <div className="ml-auto flex items-center space-x-4">
           <UserButton afterSignOutUrl="/" />
         </div>

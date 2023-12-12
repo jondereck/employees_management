@@ -174,7 +174,7 @@ export function MobileSidebar2({
         <div  className="p-4 ">
           {/* Your logo or settings link */}
           <Link
-          
+             onClick={handleLinkClick}
             href={`/${params.departmentId}/settings`}
             className={cn("text-sm font-medium transition-colors hover:text-primary ", pathname === `/${params.departmentId}/settings` ? "text-black dark:text-white" : "text-muted-foreground")}
           >
