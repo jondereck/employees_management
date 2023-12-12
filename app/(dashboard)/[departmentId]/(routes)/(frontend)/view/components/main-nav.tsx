@@ -39,7 +39,7 @@ const MainNav = ({
 
 
 
-  const currentDepartment = formattedItems.find((item) => item.value === params.officeId) || { value: "", label: "Select Office"};
+  const currentDepartment = formattedItems.find((item) => item.value === params.officeId);
 
   const [open, setOpen] = useState(false);
 
@@ -77,7 +77,7 @@ const MainNav = ({
           
           <Building className="mr-2 h-4 w-4 " />
           {currentDepartment?.label}
-          
+          Select Office
           <ChevronsUpDownIcon className="ml-auto h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
