@@ -11,6 +11,7 @@ import { ApiAlert } from "@/components/api-alert";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { EmployeesColumn } from "./columns";
 import usePreviewModal from "../../(frontend)/view/hooks/use-preview-modal";
+import { Employees } from "../../(frontend)/view/types";
 
 
 
@@ -27,11 +28,6 @@ export const CellAction = ({
 
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const previewModal = usePreviewModal();
-
-  // const onPreview = () => {
-  //   previewModal.onOpen(data);
-  // }
 
 
 
@@ -144,7 +140,7 @@ export const CellAction = ({
             Delete
           </DropdownMenuItem>
 
-
+  
         </DropdownMenuContent>
       </DropdownMenu>
     </>

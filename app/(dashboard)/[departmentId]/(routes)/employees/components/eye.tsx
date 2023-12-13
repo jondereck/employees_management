@@ -12,11 +12,12 @@ import { AlertModal } from "@/components/modals/alert-modal";
 import { EmployeesColumn } from "./columns";
 import usePreviewModal from "../../(frontend)/view/hooks/use-preview-modal";
 import { Employees } from "../../(frontend)/view/types";
+import usePreviewModal2 from "../../(frontend)/view/hooks/use-preview-modal2";
 
 
 
 interface EyeProps {
-  data: Employees;
+  data: EmployeesColumn;
 }
 
 export const Eye = ({
@@ -24,12 +25,11 @@ export const Eye = ({
 }: EyeProps) => {
   const router = useRouter();
   const params = useParams();
-  const previewModal = usePreviewModal();
-  const [isPreviewModalOpen, setPreviewModalOpen] = useState(false);
+  const previewModal = usePreviewModal2();
+
 
   const onPreview: MouseEventHandler<HTMLButtonElement> = (event) => {
     event.stopPropagation();
-
     previewModal.onOpen(data);
   }
 

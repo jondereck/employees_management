@@ -9,36 +9,60 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DataTableColumnHeader } from "@/components/ui/column-header"
 import PreviewModal from "../../(frontend)/view/components/preview"
 import { Eye } from "./eye"
-import { Eligibility, EmployeeType, Image, Offices } from "../../(frontend)/view/types"
 
 
 
 // This type is used to define the shape of our data.
 // You can use a Zod schema here if you want.
+
+export interface Offices {
+  id: string;
+  name: string;
+}
+
+export interface Image {
+  id: string;
+  url: string;
+  value: EmployeeType;
+}
+
+export interface Eligibility {
+  id: string;
+  name: string;
+  value: string;
+}
+
+export interface EmployeeType {
+  id: string;
+  name: string;
+  value: string;
+}
+
+
+
+
 export type EmployeesColumn = {
   id: string;
-  lastName: string;
+  offices: Offices;
   firstName: string;
   middleName: string;
+  lastName: string;
   suffix: string;
   gender: string;
   contactNumber: string;
   position: string;
-  birthday: string;
+  birthday: string
   gsisNo: string;
-  tinNo: string;
-  philHealthNo: string;
-  pagibigNo: string;
-  salary: string; // You may need to adjust the type if salary is not a number
+  tinNo: string; 
+  philHealthNo: string;  
+
+  salary:  string; 
   dateHired: string;
   isFeatured: boolean;
-  isArchived: boolean;
-  createdAt: string;
-  images: Image[];
-  offices: string;
   isHead: boolean;
-  eligibility: string;
-  employeeType: string;
+  eligibility: Eligibility;
+  employeeType: EmployeeType;
+  images: Image[];
 }
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
@@ -66,10 +90,10 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     id: "actions",
     cell: ({ row }) => <CellAction data={row.original} />
   },
-  // {
-  //   id: "eye",
-  //   cell: ({ row }) => <Eye data={row.original} />
-  // },
+  {
+    id: "eye",
+    cell: ({ row }) => <Eye data={row.original} />
+  },
   {
     accessorKey: "lastName",
     header: ({ column }) => (
@@ -135,7 +159,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
   },
   {
-    accessorKey: "pagibigNo",
+    accessorKey: "pagIbigNo",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Pagibig No." />
     ),

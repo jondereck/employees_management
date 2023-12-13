@@ -3,12 +3,13 @@
 import { Separator } from "@/components/ui/separator";
 import { Employees } from "../../types";
 import { useEffect, useState } from "react";
+import { EmployeesColumn } from "../../../../employees/components/columns";
 
 
 
 
 interface InfoProps {
-  data: Employees;
+  data: EmployeesColumn;
 }
 
 const Info = ({

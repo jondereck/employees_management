@@ -38,17 +38,33 @@ const EmployeesPage = async ({
     gsisNo: item.gsisNo,
     tinNo: item.tinNo,
     philHealthNo: item.philHealthNo,
-    pagibigNo: item.pagIbigNo,
+    pagIbigNo: item.pagIbigNo,
     salary: formatter.format(item.salary),
     dateHired: format(item.dateHired, "MMMM do, yyyy"),
-    employeeType: item.employeeType.name,
-    offices: item.offices.name,
-    eligibility: item.eligibility.name,
+    // employeeType: item.employeeType.name,
+    // offices: item.offices.name,
+    // eligibility: item.eligibility.name,
     isFeatured: item.isFeatured,
     isArchived: item.isArchived,
     isHead: item.isHead,
     createdAt: format(item.createdAt, "MMMM do, yyyy"),
-    images: [],
+    // images: [],
+    eligibility: {
+      id: item.eligibility.id,
+      name: item.eligibility.name,
+      value: item.eligibility.value,
+    },
+    employeeType: {
+      id: item.employeeType.id,
+      name: item.employeeType.name,
+      value: item.employeeType.value,
+    },
+    offices: {
+      id: item.offices.id,
+      name: item.offices.name,
+    },
+    images:[]
+
 
   }));
 
