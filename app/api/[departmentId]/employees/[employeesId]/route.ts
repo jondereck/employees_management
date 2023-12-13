@@ -219,3 +219,47 @@ export async function DELETE(
   }
 }
 
+export async function PUT(
+  req: Request,
+  { params }: { params: { departmentId: string, employeesId: string } }
+) {
+  try {
+    const { userId } = auth();
+
+    if (!userId) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    if (!params.employeesId) {
+      return new NextResponse("Employees id is required", { status: 400 });
+    }
+
+    const departmentByUserId = await prismadb.department.findFirst({
+      where: {
+        id: params.departmentId,
+        userId,
+      }
+    });
+
+    if (!departmentByUserId) {
+      return new NextResponse("Unauthorized", { status: 405 })
+    }
+
+    const employee = await prismadb.employee.update({
+      where: {
+        id: params.employeesId,
+      },
+      data: {
+        isArchived: true, // Set the archived status
+        // You might also move the employee to an archived section if necessary
+        // archivedDepartmentId: 'your_archived_department_id',
+      },
+    });
+
+    return NextResponse.json(employee);
+
+  } catch (error) {
+    console.log("[EMPLOYEES_PUT]", error);
+    return new NextResponse("Internal Error", { status: 500 })
+  }
+}

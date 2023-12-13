@@ -14,7 +14,7 @@ async function restoreModel(model, data) {
 
 async function main() {
   try {
-    const backupFolderName = '13-53-2023-12-07'; // Provide the actual backup folder name
+    const backupFolderName = '08-12-2023-12-13'; // Provide the actual backup folder name
 
     const getBackupProps = {
       folder: 'backups',

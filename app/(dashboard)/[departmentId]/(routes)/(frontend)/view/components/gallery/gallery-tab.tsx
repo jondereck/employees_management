@@ -19,7 +19,7 @@ const GalleryTab = ({
         <Image 
           fill
           src={image.url}
-          alt=""
+          alt="test "
           className="object-cover object-center"
         />
       </span>
@@ -27,7 +27,8 @@ const GalleryTab = ({
 
     </div>
   )}
-  </Tab>  );
+  </Tab> 
+   );
 }
  
 export default GalleryTab;

@@ -113,29 +113,7 @@ export const EmployeesForm = ({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [regions, setRegions] = useState([]);
-
-
-
-  const fetchRegions = async () => {
-    try {
-      const response = await axios.get('/api/');
-      console.log(response.data); // Log the response to inspect the structure
-      setRegions(response.data); // Assuming the response is an array directly, adjust as needed
-    } catch (error) {
-      console.error("Error fetching regions", error);
-    }
-  };
-
-
-  useEffect(() => {
-    fetchRegions();
-  }, []);
-
-  useEffect(() => {
-    console.log(regions); // Log the regions state
-  }, [regions]);
-
+  
 
   // const fetchProvinces = async () => {
   //   try {

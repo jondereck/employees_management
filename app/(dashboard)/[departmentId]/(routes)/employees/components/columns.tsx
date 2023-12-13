@@ -7,6 +7,10 @@ import { ArrowUpDown } from "lucide-react"
 import { CellAction } from "./cell-actions"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DataTableColumnHeader } from "@/components/ui/column-header"
+import PreviewModal from "../../(frontend)/view/components/preview"
+import { Eye } from "./eye"
+import { Eligibility, EmployeeType, Image, Offices } from "../../(frontend)/view/types"
+
 
 
 // This type is used to define the shape of our data.
@@ -18,7 +22,7 @@ export type EmployeesColumn = {
   middleName: string;
   suffix: string;
   gender: string;
-  contactNumber: string; 
+  contactNumber: string;
   position: string;
   birthday: string;
   gsisNo: string;
@@ -30,6 +34,13 @@ export type EmployeesColumn = {
   isFeatured: boolean;
   isArchived: boolean;
   createdAt: string;
+  images: Image[];
+  offices: Offices;
+  age: string;
+  pagIbigNo: string;
+  isHead: boolean;
+  eligibility: Eligibility;
+  employeeType: EmployeeType;
 }
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
@@ -54,6 +65,14 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
   },
   {
+    id: "actions",
+    cell: ({ row }) => <CellAction data={row.original} />
+  },
+  // {
+  //   id: "eye",
+  //   cell: ({ row }) => <Eye data={row.original} />
+  // },
+  {
     accessorKey: "lastName",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Last Name" />
@@ -74,7 +93,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Suffix" />
     ),
-    },
+  },
   {
     accessorKey: "gender",
     header: ({ column }) => (
@@ -153,9 +172,6 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title=" Created at" />
     ),
   },
-  {
-      id: "actions",
-      cell: ({ row }) => <CellAction data={row.original}/> 
-  }
+
 
 ]

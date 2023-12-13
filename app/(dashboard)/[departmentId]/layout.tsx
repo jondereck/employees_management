@@ -7,12 +7,12 @@ import ModalProvider from "./(routes)/(frontend)/providers/modal-provider";
 import { MainNav } from "@/components/main-nav";
 import MobileNavbar from "@/components/mobile-sidebar";
 
-export default async function DashboardLayout ({
+export default async function DashboardLayout({
   children,
   params
 }: {
   children: React.ReactNode;
-  params: { departmentId: string}
+  params: { departmentId: string }
 }) {
   const { userId } = auth();
 
@@ -34,10 +34,10 @@ export default async function DashboardLayout ({
   return (
     <>
       <div>
-        <ModalProvider/>
-       <Navbar/>
+        <ModalProvider />
+        <Navbar />
         {children}
-      </div>    
+      </div>
     </>
   )
 }
