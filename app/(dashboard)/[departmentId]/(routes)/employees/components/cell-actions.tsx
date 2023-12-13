@@ -29,9 +29,9 @@ export const CellAction = ({
   const [open, setOpen] = useState(false);
   const previewModal = usePreviewModal();
 
-  const onPreview = () => {
-    previewModal.onOpen(data);
-  }
+  // const onPreview = () => {
+  //   previewModal.onOpen(data);
+  // }
 
 
 

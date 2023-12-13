@@ -46,7 +46,10 @@ const EmployeesPage = async ({
     eligibility: item.eligibility.name,
     isFeatured: item.isFeatured,
     isArchived: item.isArchived,
+    isHead: item.isHead,
     createdAt: format(item.createdAt, "MMMM do, yyyy"),
+    images: [],
+
   }));
 
   return ( 

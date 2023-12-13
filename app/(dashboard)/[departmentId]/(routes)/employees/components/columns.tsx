@@ -35,12 +35,10 @@ export type EmployeesColumn = {
   isArchived: boolean;
   createdAt: string;
   images: Image[];
-  offices: Offices;
-  age: string;
-  pagIbigNo: string;
+  offices: string;
   isHead: boolean;
-  eligibility: Eligibility;
-  employeeType: EmployeeType;
+  eligibility: string;
+  employeeType: string;
 }
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
