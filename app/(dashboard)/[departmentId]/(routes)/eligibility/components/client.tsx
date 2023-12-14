@@ -36,7 +36,7 @@ export const  EligibilityClient = ({
     </Button>
     </div>
     <Separator/>
-    <DataTable searchKey="name" columns={columns} data={data}/>
+    <DataTable searchKeys={['name']} columns={columns} data={data}/>
     <ApiHeading
     title="API"
     description="API calls for employeeType"

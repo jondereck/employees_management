@@ -45,13 +45,13 @@ import { DataTableViewOptions } from "./column-toggle"
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
-  searchKey: string
+  searchKeys?: string[]
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
-  searchKey
+  searchKeys
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(
@@ -86,14 +86,17 @@ export function DataTable<TData, TValue>({
   return (
     <div>
       <div className="flex items-center py-4">
-        <Input
-          placeholder="Search..."
-          value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ""}
-          onChange={(event) =>
-            table.getColumn(searchKey)?.setFilterValue(event.target.value)
-          }
-          className="max-w-sm"
-        />
+        {searchKeys?.map((key) => (
+          <Input
+            key={key}
+            placeholder={`Search ${key}...`}
+            value={(table.getColumn(key)?.getFilterValue() as string) ?? ""}
+            onChange={(event) =>
+              table.getColumn(key)?.setFilterValue(event.target.value)
+            }
+            className="max-w-sm"
+          />
+        ))}
         <DataTableViewOptions table={table} />
 
 

@@ -39,7 +39,7 @@ export const OfficesClient = ({
 
       </div>
       <Separator />
-      <DataTable searchKey="name" columns={columns} data={data} />
+      <DataTable searchKeys={['name']} columns={columns} data={data} />
       <ApiHeading
         title="API"
         description="API calls for Offices"

@@ -34,7 +34,7 @@ const formSchema = z.object({
     message: "First Name is required"
   }).transform((value) => value.toUpperCase(),),
   middleName: z.string(),
-  gender: z.string().min(0, {
+  gender: z.string().min(1, {
     message: "Gender is required"
   }),
   employeeTypeId: z.string().min(1, {
@@ -153,7 +153,7 @@ export const EmployeesForm = ({
         middleName: '',
         suffix: '',
         images: [{ url: 'https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg' }],
-        gender: Gender.Male,
+        gender: '',
         contactNumber: ' ',
         position: '',
         birthday: new Date(),

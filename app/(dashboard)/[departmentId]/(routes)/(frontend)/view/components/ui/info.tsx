@@ -147,7 +147,7 @@ const Info = ({
   return (
     <div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `5px solid ${data?.employeeType?.value}` }}
     >
-      <h1 className="text-2xl lg:text-4xl font-bold text-gray-900">{fullName}</h1>
+      <h1 className="text-3xl lg:text-4xl font-bold text-gray-900">{fullName}</h1>
       <div className="flex flex-col items-start font-sans font-light justify-between mt-2">
         <p className="text-lg">{data.position}</p>
         <h3 className="text-sm font-light text-gray-700">({data?.offices?.name})</h3>
@@ -157,7 +157,7 @@ const Info = ({
     <p className="text-2xl font-bold border-b-2">Personal Details</p>
     <div className="flex flex-col lg:flex-row ">
       <h3 className="font-semibold lg:mr-2">Gender:</h3>
-      <p className="font-light text-sm lg:text-2xl">{data?.gender}</p>
+      <p className="font-light">{data?.gender}</p>
     </div>
     <div className="flex flex-col lg:flex-row ">
       <h3 className="font-semibold lg:mr-2">Contact Number:</h3>

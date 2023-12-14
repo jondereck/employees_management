@@ -36,7 +36,7 @@ export const  BillboardsClient = ({
     </Button>
     </div>
     <Separator/>
-    <DataTable searchKey="label" columns={columns} data={data}/>
+    <DataTable searchKeys={['label']} columns={columns} data={data}/>
     <ApiHeading
     title="API"
     description="API calls for billboards"
