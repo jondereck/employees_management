@@ -6,7 +6,6 @@ generator client {
   previewFeatures = ["fullTextSearch", "fullTextIndex"]
 }
 
-
 datasource db {
   provider     = "mysql"
   url          = env("DATABASE_URL")
@@ -92,7 +91,6 @@ enum Gender {
   Female
 }
 
-
 model Employee {
   id             String       @id @default(uuid())
   departmentId   String
@@ -121,6 +119,7 @@ model Employee {
   pagIbigNo      String
   salary         Float
   dateHired      DateTime
+ latestAppointment DateTime @default(now())
   employeeTypeId String
   employeeType   EmployeeType @relation(fields: [employeeTypeId], references: [id])
   eligibilityId  String
@@ -128,13 +127,12 @@ model Employee {
 
   isFeatured Boolean @default(false)
   isArchived Boolean @default(false)
-  isHead Boolean @default(false)
+  isHead     Boolean @default(false)
 
   images Image[]
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
- 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([departmentId])
   @@index([officeId])

@@ -29,7 +29,8 @@ yarn-error.log*
 .env
 
 # vercel
-.vercel
+.vercel 
+.main-nav employees-form
 
 # typescript
 *.tsbuildinfo

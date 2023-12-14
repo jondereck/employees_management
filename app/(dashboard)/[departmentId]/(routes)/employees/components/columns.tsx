@@ -55,9 +55,9 @@ export type EmployeesColumn = {
   gsisNo: string;
   tinNo: string; 
   philHealthNo: string;  
-
   salary:  string; 
   dateHired: string;
+  latestAppointment: string;
   isFeatured: boolean;
   isHead: boolean;
   eligibility: Eligibility;

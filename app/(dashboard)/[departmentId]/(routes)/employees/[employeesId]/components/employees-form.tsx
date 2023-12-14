@@ -1,7 +1,7 @@
 "use client";
 import * as z from "zod";
 import { Eligibility, Employee, EmployeeType, Gender, Image, Offices } from "@prisma/client";
-import { CalendarIcon, Trash } from "lucide-react";
+import { CalendarIcon, Check, ChevronDown, Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -22,6 +22,13 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command"
 
 
 
@@ -51,29 +58,29 @@ const formSchema = z.object({
   images: z.object({ url: z.string() }).array(),
   contactNumber: z.string(),
   position: z
-  .string()
-  .min(1, {
-    message: "Position is required",
-  })
-  .transform((value) => {
-    // Function to remove Roman numerals within parentheses, excluding at the end
-    const cleanPosition = (position:string) =>
-      position.replace(/\(([^)]*)\)/, (match, p1) => {
-        if (p1) {
-          const cleanedText = p1.replace(/\b[IVXLCDM]+\b(?![\s\S]*\b[IVXLCDM]+\b)/g, '').trim();
-          return `(${cleanedText})`;
-        }
-        return match;
-      });
+    .string()
+    .min(1, {
+      message: "Position is required",
+    })
+    .transform((value) => {
+      // Function to remove Roman numerals within parentheses, excluding at the end
+      const cleanPosition = (position: string) =>
+        position.replace(/\(([^)]*)\)/, (match, p1) => {
+          if (p1) {
+            const cleanedText = p1.replace(/\b[IVXLCDM]+\b(?![\s\S]*\b[IVXLCDM]+\b)/g, '').trim();
+            return `(${cleanedText})`;
+          }
+          return match;
+        });
 
-    return cleanPosition(value);
-  }),
+      return cleanPosition(value);
+    }),
 
 
 
   education: z.string(),
   houseNo: z.string(),
-  
+
   salary: z.coerce.number().min(1),
   birthday: z.date(),
   // age: z.string(),
@@ -82,6 +89,7 @@ const formSchema = z.object({
   tinNo: z.string(),
   philHealthNo: z.string(),
   dateHired: z.date(),
+  latestAppointment: z.date().optional(),
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
   isHead: z.boolean(),
@@ -112,8 +120,12 @@ export const EmployeesForm = ({
 }: EmployeesFormProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [inputSearchOpen, setInputSearchOpen] = useState(false);
 
-  
+
+  const [value, setValue] = useState("")
+
+
 
   // const fetchProvinces = async () => {
   //   try {
@@ -164,6 +176,7 @@ export const EmployeesForm = ({
         philHealthNo: '',
         salary: 0.00,
         dateHired: new Date(),
+        latestAppointment: new Date(),
         isFeatured: false,
         isArchived: false,
         isHead: false,
@@ -533,377 +546,428 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-
-           
-              <FormField
-                control={form.control}
-                name="houseNo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>House Number</FormLabel>
-                    <FormControl>
-                      <Input
-                        disabled={loading}
-                        placeholder="03"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Ex: Jon
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-                <FormField
-                control={form.control}
-                name="education"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Education</FormLabel>
-                    <FormControl>
-                      <Input
-                        disabled={loading}
-                        placeholder="First Name"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Ex: Jon
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-            </div>
-            <Separator />
-            <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
-
-              <FormField
-                control={form.control}
-                name="salary"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Salary </FormLabel>
-                    <FormControl>
-                      <Input
-                        disabled={loading}
-                        placeholder="Salary"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="officeId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Office </FormLabel>
-                    <Select
-                      disabled={loading}
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue
-                            defaultValue={field.value}
-                            placeholder="Select Office "
-                          />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {offices.map((item) => (
-                          <SelectItem
-                            key={item.id}
-                            value={item.id}
-                          >
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="employeeTypeId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Appointment </FormLabel>
-                    <Select
-                      disabled={loading}
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue
-                            defaultValue={field.value}
-                            placeholder="Select Appointment "
-                          />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {employeeType.map((item) => (
-                          <SelectItem
-                            key={item.id}
-                            value={item.id}
-                          >
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="eligibilityId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Eligibility </FormLabel>
-                    <Select
-                      disabled={loading}
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue
-                            defaultValue={field.value}
-                            placeholder="Select Eligibility "
-                          />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {eligibility.map((item) => (
-                          <SelectItem
-                            key={item.id}
-                            value={item.id}
-                          >
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <Separator />
-            <div className="grid grid-cols-2 gap-8">
-              <FormField
-                control={form.control}
-                name="gsisNo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>GSIS Number</FormLabel>
-                    <FormControl>
-                      <Input
-                        disabled={loading}
-                        placeholder="Ex: 0000000000"
-                        {...field}
-                      />
-
-                    </FormControl>
-                    <FormDescription>
-
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="tinNo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>TIN Number</FormLabel>
-                    <FormControl>
-                      <Input
-                        disabled={loading}
-                        placeholder="TIN Number"
-                        {...field}
-                      />
-
-                    </FormControl>
-                    <FormDescription>
-
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="philHealthNo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Philhealth Number</FormLabel>
-                    <FormControl>
-                      <Input
-                        disabled={loading}
-                        placeholder="Philhealth Number"
-                        {...field}
-                      />
-
-                    </FormControl>
-                    <FormDescription>
-
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="pagIbigNo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Pagibig Number</FormLabel>
-                    <FormControl>
-                      <Input
-                        disabled={loading}
-                        placeholder="Pagibig Number"
-                        {...field}
-                      />
-
-                    </FormControl>
-                    <FormDescription>
-
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="dateHired"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Date hired</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="start" className=" w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          captionLayout="dropdown-buttons"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          fromYear={fromYear}
-                          toYear={currentYear} 
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormDescription>
-                      Date hired is used to calculate years of service.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <Separator />
-            
-            <div className="grid lg:grid-cols-2  grid-cols-1 gap-8  space-y-0 ">
             <FormField
-                control={form.control}
-                name='isHead'
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+              control={form.control}
+              name="houseNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>House Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="03"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Ex: Jon
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="education"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Education</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="First Name"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Ex: Jon
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+          </div>
+          <Separator />
+          <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
+            <FormField
+              control={form.control}
+              name="salary"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Salary </FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Salary"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="officeId"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex flex-col gap-4">
+                    <FormLabel>Office </FormLabel>
+                  <Popover open={inputSearchOpen} onOpenChange={setInputSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={inputSearchOpen}
+                        className="w-auto justify-between"
+                      >
+                        {field.value ? offices.find((office) => office.id === field.value)?.name : "Select Office..."}
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+             
+                    <PopoverContent className="w-auto p-0">
+                      <Command>
+                        <CommandInput placeholder="Search office..." />
+                        <CommandEmpty>No office found.</CommandEmpty>
+                        <CommandGroup className="max-h-48 overflow-y-auto">
+                        {offices.map((office) => (
+                  <CommandItem
+                    key={office.id}
+                  
+                    onSelect={(currentValue) => {
+                      field.onChange(currentValue === field.value ? "" : currentValue);
+                      setOpen(false);
+                    }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  field.value === office.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {office.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+
+                  </div>
+                  
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+
+            <FormField
+              control={form.control}
+              name="employeeTypeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Appointment </FormLabel>
+                  <Select
+                    disabled={loading}
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    defaultValue={field.value}
+                  >
                     <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        //@ts-ignore
-                        onCheckedChange={field.onChange}
-                      />
+                      <SelectTrigger>
+                        <SelectValue
+                          defaultValue={field.value}
+                          placeholder="Select Appointment "
+                        />
+                      </SelectTrigger>
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Is this employee a Department Head?</FormLabel>
-                      <FormDescription>
+                    <SelectContent>
+                      {employeeType.map((item) => (
+                        <SelectItem
+                          key={item.id}
+                          value={item.id}
+                        >
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="eligibilityId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Eligibility </FormLabel>
+                  <Select
+                    disabled={loading}
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue
+                          defaultValue={field.value}
+                          placeholder="Select Eligibility "
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {eligibility.map((item) => (
+                        <SelectItem
+                          key={item.id}
+                          value={item.id}
+                        >
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <Separator />
+          <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
+            <FormField
+              control={form.control}
+              name="gsisNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>GSIS Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Ex: 0000000000"
+                      {...field}
+                    />
+
+                  </FormControl>
+                  <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="tinNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>TIN Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="TIN Number"
+                      {...field}
+                    />
+
+                  </FormControl>
+                  <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="philHealthNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Philhealth Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Philhealth Number"
+                      {...field}
+                    />
+
+                  </FormControl>
+                  <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="pagIbigNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Pagibig Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Pagibig Number"
+                      {...field}
+                    />
+
+                  </FormControl>
+                  <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="dateHired"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Date hired</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className=" w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        captionLayout="dropdown-buttons"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        fromYear={fromYear}
+                        toYear={currentYear}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormDescription>
+                    Date hired is used to calculate years of service.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="latestAppointment"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Latest Appointment</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className=" w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        captionLayout="dropdown-buttons"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        fromYear={fromYear}
+                        toYear={currentYear}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormDescription>
+                    It is used to calculate years of service from the date of latest appointment.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <Separator />
+
+          <div className="grid lg:grid-cols-2  grid-cols-1 gap-8  space-y-0 ">
+            <FormField
+              control={form.control}
+              name='isHead'
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      //@ts-ignore
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Is this employee a Department Head?</FormLabel>
+                    <FormDescription>
                       Marking this option will ensure that this employee always appears at the top.
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='isFeatured'
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        //@ts-ignore
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Is featured employee?</FormLabel>
-                      <FormDescription>
-                        This employee will apear on home page
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name='isArchived'
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        //@ts-ignore
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Archived employee?</FormLabel>
-                      <FormDescription>
-                        This employee will not appear anywhere
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                )}
-              />
-            </div>
-            <Separator />
-            <Button disabled={loading} className="ml-auto" type="submit">
-              {action}
-            </Button>
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='isFeatured'
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      //@ts-ignore
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Is featured employee?</FormLabel>
+                    <FormDescription>
+                      This employee will apear on home page
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='isArchived'
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      //@ts-ignore
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Archived employee?</FormLabel>
+                    <FormDescription>
+                      This employee will not appear anywhere
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
+          </div>
+          <Separator />
+          <Button disabled={loading} className="ml-auto" type="submit">
+            {action}
+          </Button>
         </form>
       </Form>
 

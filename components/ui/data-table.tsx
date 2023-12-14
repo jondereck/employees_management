@@ -85,7 +85,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div>
-      <div className="flex items-center py-4">
+      <div className="flex items-center gap-2 py-4">
         {searchKeys?.map((key) => (
           <Input
             key={key}
@@ -94,7 +94,7 @@ export function DataTable<TData, TValue>({
             onChange={(event) =>
               table.getColumn(key)?.setFilterValue(event.target.value)
             }
-            className="max-w-sm"
+            className="max-w-sm  "
           />
         ))}
         <DataTableViewOptions table={table} />

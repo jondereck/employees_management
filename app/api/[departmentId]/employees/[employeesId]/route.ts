@@ -70,6 +70,7 @@ export async function PATCH(
       philHealthNo,
       salary,
       dateHired,
+      latestAppointment,
       isFeatured,
       isArchived,
       isHead,
@@ -84,9 +85,9 @@ export async function PATCH(
     if (!lastName) {
       return new NextResponse("Last Name is required", { status: 400 })
     }
-    if (!middleName) {
-      return new NextResponse("Middle Name is required", { status: 400 })
-    }
+    // if (!middleName) {
+    //   return new NextResponse("Middle Name is required", { status: 400 })
+    // }
     if (!position) {
       return new NextResponse("Position is required", { status: 400 })
     }
@@ -145,6 +146,7 @@ export async function PATCH(
         philHealthNo,
         salary,
         dateHired,
+        latestAppointment,
         isFeatured,
         isArchived,
         isHead,

@@ -18,6 +18,8 @@ const Info = ({
 
   const [age, setAge] = useState<number | null>(null);
   const [yearService, setYearService] = useState<{ years: number; months: number; days: number; } | null>(null);
+  const [latestAppointDate, setLatestAppointDate] = useState<{ years: number; months: number; days: number; } | null>(null);
+
 
 
 
@@ -25,7 +27,8 @@ const Info = ({
     // Calculate age when component mounts or when data.birthday changes
     calculateAge();
     calculateYearService();
-  }, [data.birthday, data.dateHired],)
+    calculateYearServiceLatestAppointment();
+  }, [data.birthday, data.dateHired, data.latestAppointment],)
 
   const calculateAge = () => {
     const birthdate = new Date(data.birthday);
@@ -96,6 +99,40 @@ const Info = ({
   };
 
 
+  const calculateYearServiceLatestAppointment = () => {
+    const latestAppointment = new Date(data.latestAppointment);
+    const currentDate = new Date();
+
+    let serviceYears = currentDate.getFullYear() - latestAppointment.getFullYear();
+    let serviceMonths = currentDate.getMonth() - latestAppointment.getMonth();
+    let serviceDays = currentDate.getDate() - latestAppointment.getDate();
+
+    // Adjust service years, months, and days if the hiring date hasn't occurred yet this year
+    if (currentDate.getMonth() < latestAppointment.getMonth() ||
+      (currentDate.getMonth() === latestAppointment.getMonth() && currentDate.getDate() < latestAppointment.getDate())) {
+      serviceYears -= 1;
+
+      // Adjust months for the case where the current month is before the hiring month
+      serviceMonths = (12 + currentDate.getMonth()) - latestAppointment.getMonth();
+    }
+
+    // Ensure positive values for months and days
+    if (serviceMonths < 0) {
+      serviceMonths += 12;
+    }
+
+    if (serviceDays < 0) {
+      serviceDays += new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+    }
+
+    setLatestAppointDate({
+      years: serviceYears,
+      months: serviceMonths,
+      days: serviceDays
+    });
+  };
+
+
   const formatDateHired = () => {
     const dateHired = new Date(data.dateHired);
     const options: Intl.DateTimeFormatOptions = {
@@ -106,6 +143,21 @@ const Info = ({
 
     return dateHired.toLocaleDateString('en-US', options);
   }
+
+
+  
+  const formatLatestAppointment = () => {
+    const latestAppointment = new Date(data.latestAppointment);
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'long',
+      day: '2-digit'
+    };
+
+    return latestAppointment.toLocaleDateString('en-US', options);
+  }
+
+
 
 
 
@@ -209,6 +261,18 @@ const Info = ({
       {yearService && (
         <p className="font-light items-start">
           {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
+        </p>
+      )}
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">Latest Appointment:</h3>
+      <p className="font-light">{formatLatestAppointment()}</p>
+    </div>
+    <div className="flex flex-col lg:flex-row ">
+      <h3 className="font-semibold lg:mr-2">YoS latest appoint:</h3>
+      {latestAppointDate && (
+        <p className="font-light items-start">
+          {latestAppointDate.years} Y/s, {latestAppointDate.months} Mon/s, {latestAppointDate.days} Day/s
         </p>
       )}
     </div>

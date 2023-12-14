@@ -45,6 +45,7 @@ export interface Employees {
   pagIbigNo: string;  
   salary:  string; 
   dateHired: string;
+  latestAppointment: string;
   isFeatured: boolean;
   isHead: boolean;
   eligibility: Eligibility;
