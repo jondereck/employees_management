@@ -24,6 +24,7 @@ const Info = ({
 
 
   useEffect(() => {
+    console.log("Data changed:", data);
     // Calculate age when component mounts or when data.birthday changes
     calculateAge();
     calculateYearService();
@@ -55,6 +56,7 @@ const Info = ({
 
 
   const formatBirthday = () => {
+      console.log("Formatting birthday...");
     const birthdate = new Date(data.birthday);
     const options: Intl.DateTimeFormatOptions = {
       year: 'numeric',

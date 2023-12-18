@@ -117,6 +117,34 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
   },
   {
+    accessorKey: "offices",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Department" />
+    ),
+    cell: ({ row }) => (
+      row.original.offices ? row.original.offices.name : "N/A"
+    ),
+  },
+  {
+    accessorKey: "eligibility",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Eligibility" />
+    ),
+    cell: ({ row }) => (
+      row.original.eligibility ? row.original.eligibility.name : "N/A"
+    ),
+  },
+  {
+    accessorKey: "employeeType",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Appointment" />
+    ),
+    cell: ({ row }) => (
+      row.original.employeeType ? row.original.employeeType.name : "N/A"
+    ),
+  },
+  
+  {
     accessorKey: "gender",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Gender" />

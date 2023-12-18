@@ -95,6 +95,7 @@ export async function POST(
         lastName: lastName,
         firstName: firstName,
         middleName: middleName,
+        contactNumber: contactNumber,
       },
     });
     
@@ -105,6 +106,8 @@ export async function POST(
       );
     }
 
+
+    
 
 	
 

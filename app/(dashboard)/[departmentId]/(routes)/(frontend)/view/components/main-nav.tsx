@@ -10,7 +10,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator  } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import useSearchModal from "@/hooks/user-search-modal";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getEmployeeCountsByOffice } from "../actions/get-employee-counts-office";
 
 type PopoverTriggerProps = React.ComponentPropsWithoutRef<typeof PopoverTrigger>
 
@@ -37,15 +38,36 @@ const MainNav = ({
   }));
 
 
+  
+
 
 
   const currentDepartment = formattedItems.find((item) => item.value === params.officeId) || { value: `/${process.env.HOMEPAGE}/view`, label: "Select Office"};
 
   const [open, setOpen] = useState(false);
 
-  const onDepartmentSelect = (department: { value: string, label: string }) => {
+  const [employeeCounts, setEmployeeCounts] = useState<number>(0);
+
+  const onDepartmentSelect = async (department: { value: string, label: string }) => {
     setOpen(false);
     router.push(`/${params.departmentId}/view/offices/${department.value}`);
+    
+    // Fetch and set the employee counts for the selected office
+    try {
+      const counts = await getEmployeeCountsByOffice(department.value);
+      console.log("Employee counts:", counts); // Add this line to check the structure of counts
+  
+      if (counts && counts.length > 0) {
+        const employeeCount = counts[0].count._all; // Extract count property
+        console.log("Employee count:", employeeCount); // Add this line to check the extracted count
+        setEmployeeCounts(employeeCount);
+      } else {
+        setEmployeeCounts(0);
+      }
+    } catch (error) {
+      console.error("Error fetching employee counts:", error);
+      setEmployeeCounts(0);
+    }
   }
   
   // const routes = data.map((route) => ({
@@ -103,8 +125,10 @@ const MainNav = ({
                       : "opacity-0"
                     )}
                   />
+                    <span className="ml-2 text-gray-500">{employeeCounts}</span>
+               
                 </CommandItem>
-              ))}
+              ))} 
             </CommandGroup>
           </CommandList>
           <CommandSeparator/>

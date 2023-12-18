@@ -610,7 +610,7 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-            <FormField
+            {/* <FormField
               control={form.control}
               name="officeId"
               render={({ field }) => (
@@ -625,7 +625,7 @@ export const EmployeesForm = ({
                         aria-expanded={inputSearchOpen}
                         className="w-auto justify-between"
                       >
-                        {field.value ? offices.find((office) => office.id === field.value)?.name : "Select Office..."}
+                        {field.value ? offices.find((office) => office.name === field.value)?.id : "Select Office..."}
                         <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -638,7 +638,7 @@ export const EmployeesForm = ({
                         {offices.map((office) => (
                   <CommandItem
                     key={office.id}
-                  
+                       value={office.id}        
                     onSelect={(currentValue) => {
                       field.onChange(currentValue === field.value ? "" : currentValue);
                       setOpen(false);
@@ -663,9 +663,44 @@ export const EmployeesForm = ({
                   <FormMessage />
                 </FormItem>
               )}
+            /> */}
+
+            <FormField
+              control={form.control}
+              name="officeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Office </FormLabel>
+                  <Select
+                    disabled={loading}
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue
+                          defaultValue={field.value}
+                          placeholder="Select Office "
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent style={{ maxHeight: '200px', overflowY: 'auto' }} >
+                      {offices.map((item) => (
+                        <SelectItem
+                          key={item.id}
+                          value={item.id}
+                        >
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-
-
             <FormField
               control={form.control}
               name="employeeTypeId"
