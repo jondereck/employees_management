@@ -62,7 +62,7 @@ const OfficesPage = async ({
           data={office.billboard}
           offices={office}
         />
-        <div className="mx-8 mb-4 text-2xl flex font-semibold border-b-2 ">
+        <div className="mx-8 mb-5 lg:text-2xl text-sm flex font-semibold border-b-2 ">
           {/* Display total employee count */}
           <p className="font-bold">
               Total Employee(s): {typeof totalEmployeeCount === 'object' ? totalEmployeeCount._all : totalEmployeeCount}
