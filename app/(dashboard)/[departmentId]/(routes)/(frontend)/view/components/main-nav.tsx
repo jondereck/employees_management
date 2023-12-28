@@ -54,6 +54,7 @@ const MainNav = ({
 
   }
   
+  const sortedItems = formattedItems.slice().sort((a, b) => a.label.localeCompare(b.label));
   // const routes = data.map((route) => ({
   //   href: `/${params.departmentId}/view/offices/${route.id}`,
   //   label: route.name,
@@ -93,14 +94,15 @@ const MainNav = ({
             <CommandInput placeholder="Search Office..."/>
             <CommandEmpty>No office(s) found.</CommandEmpty>
             <CommandGroup heading="Offices">
-              {formattedItems.map((department) => (
-                <CommandItem
+            {sortedItems.map((department) => (
+              <CommandItem
                 key={department.value}
                 onSelect={() => onDepartmentSelect(department)}
                 className="text-sm"
-                >
+              >
                   <Building className="mr-2 h-4 w-4"/>
                   {department.label}
+                  
 
                   <Check 
                     className={cn("ml-auto h-4 w-4 ",
