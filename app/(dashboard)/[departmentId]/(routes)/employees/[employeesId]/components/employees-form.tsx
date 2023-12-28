@@ -686,14 +686,14 @@ export const EmployeesForm = ({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent style={{ maxHeight: '200px', overflowY: 'auto' }} >
-                      {offices.map((item) => (
-                        <SelectItem
-                          key={item.id}
-                          value={item.id}
-                        >
-                          {item.name}
-                        </SelectItem>
-                      ))}
+                      {offices
+                        .slice()
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
 
                   </Select>

@@ -51,9 +51,9 @@ const DashboardPage = async ({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Permanent Employee
+                Permanent
               </CardTitle>
-              <ShieldCheck />
+              <ShieldCheck  className="text-green-500"/>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
@@ -66,7 +66,7 @@ const DashboardPage = async ({
               <CardTitle className="text-sm font-medium">
                 Casual
               </CardTitle>
-              <Shield />
+              <Shield  className="text-blue-500"/>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
@@ -77,7 +77,7 @@ const DashboardPage = async ({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Job Order Employee
+                Job Order 
               </CardTitle>
               <ShieldOff />
             </CardHeader>

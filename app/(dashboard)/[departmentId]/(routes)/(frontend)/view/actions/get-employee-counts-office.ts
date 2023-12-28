@@ -1,5 +1,6 @@
 import prismadb from "@/lib/prismadb";
 
+
 export const getEmployeeCountsByOffice = async (officeId: string) => {
   const employeeCounts = await prismadb.employee.groupBy({
     by: ['officeId'],
@@ -8,6 +9,7 @@ export const getEmployeeCountsByOffice = async (officeId: string) => {
     },
     where: {
       officeId: officeId,
+      isArchived: false,
     },
   });
 

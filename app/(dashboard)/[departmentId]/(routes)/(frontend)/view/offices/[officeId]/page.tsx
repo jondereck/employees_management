@@ -15,6 +15,7 @@ import Filter from "./components/filter";
 import MobileFilter from "./components/mobile-filter";
 import { getEligibilityCountsByOffice } from "../../actions/get-eligibility-by-offices";
 import EmployeeList from "./components/employee-list-view";
+import { getEmployeeCountsByOffice } from "../../actions/get-employee-counts-office";
 
 
 
@@ -36,6 +37,9 @@ const OfficesPage = async ({
   searchParams
 }: OfficesPageProps) => {
   const officeId = params.officeId;
+  const employeeCounts = await getEmployeeCountsByOffice(officeId);
+  const totalEmployeeCount = employeeCounts.find((count) => count.id === officeId)?.count || 0;
+
   const total = await getEmployeeTypeCountsByOffice(officeId);
   const totalEligibility = await getEligibilityCountsByOffice(officeId)
   const employees = await getEmployees({
@@ -53,12 +57,22 @@ const OfficesPage = async ({
     <div className="bg-white">
       <Container>
         <Navbar2 />
+
         <Billboard
           data={office.billboard}
           offices={office}
         />
+        <div className="mx-8 mb-4 text-2xl flex font-semibold border-b-2 ">
+          {/* Display total employee count */}
+          <p className="font-bold">
+              Total Employee(s): {typeof totalEmployeeCount === 'object' ? totalEmployeeCount._all : totalEmployeeCount}
+          </p>
+        </div>
+
         <div className="px-4 sm:px-6 lg:px-8 pb-24">
           <div className="lg:grid lg:grid-cols-5 lg:gap-x-8">
+
+
             <MobileFilter
               employeeType={employeeType}
               eligibility={eligibility}
@@ -67,7 +81,7 @@ const OfficesPage = async ({
             />
 
             <div className="hidden lg:block">
-              
+
               <Filter
                 officeId={officeId}
                 total={total}
@@ -84,10 +98,11 @@ const OfficesPage = async ({
               />
             </div>
             <div className="mt-6 lg:col-span-4 lg:mt-0">
-            <EmployeeList items={employees} />
+              <EmployeeList items={employees} />
             </div>
           </div>
         </div>
+
         <Footer />
       </Container>
     </div>
