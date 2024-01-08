@@ -4,6 +4,8 @@ import { Separator } from "@/components/ui/separator";
 import { Employees } from "../../types";
 import { useEffect, useState } from "react";
 import { EmployeesColumn } from "../../../../employees/components/columns";
+import IconButton from "./icon-button";
+import { StarFilledIcon } from "@radix-ui/react-icons";
 
 
 
@@ -56,7 +58,7 @@ const Info = ({
 
 
   const formatBirthday = () => {
-      console.log("Formatting birthday...");
+    console.log("Formatting birthday...");
     const birthdate = new Date(data.birthday);
     const options: Intl.DateTimeFormatOptions = {
       year: 'numeric',
@@ -147,7 +149,7 @@ const Info = ({
   }
 
 
-  
+
   const formatLatestAppointment = () => {
     const latestAppointment = new Date(data.latestAppointment);
     const options: Intl.DateTimeFormatOptions = {
@@ -161,28 +163,28 @@ const Info = ({
 
   const formatContactNumber = () => {
     const rawNumber = data?.contactNumber || '';
-    
+
     // If rawNumber is empty, return an empty string
     if (!rawNumber.trim()) {
       return 'No data';
     }
-  
+
     const numericOnly = rawNumber.replace(/\D/g, ''); // Remove non-numeric characters
-  
+
     // Remove '+63' or '63' from the beginning
     const formattedNumber = numericOnly.replace(/^(\+63|63)/, '');
-  
+
     // Add a leading '0' if it's missing
     const finalNumber = formattedNumber.startsWith('0') ? formattedNumber : `0${formattedNumber}`;
-  
+
     // Format the number with spaces
     const formattedWithSpaces = `${finalNumber.slice(0, 4)}-${finalNumber.slice(4, 7)}-${finalNumber.slice(7)}`;
-  
+
     return formattedWithSpaces;
   };
-  
-  
-  
+
+
+
 
 
 
@@ -210,7 +212,7 @@ const Info = ({
       return 'Invalid Salary';
     }
 
-    const annualSalary = monthlySalary * 12 
+    const annualSalary = monthlySalary * 12
     const formattedSalary = new Intl.NumberFormat('en-PH', {
       style: 'currency',
       currency: 'PHP',
@@ -223,86 +225,90 @@ const Info = ({
 
   const fullName = `${data.firstName.toUpperCase()} ${data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `5px solid ${data?.employeeType?.value}` }}
+    <div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `10px solid ${data?.employeeType?.value}` }}
     >
-      <h1 className="text-3xl lg:text-4xl font-bold text-gray-900">{fullName}</h1>
+      <h1 className=" flex items-center text-3xl lg:text-4xl font-bold text-gray-900 gap-4">{fullName}
+        {data.isHead && <IconButton icon={<StarFilledIcon className="text-yellow-600 "  />}
+        />}
+        
+      </h1>
       <div className="flex flex-col items-start font-sans font-light justify-between mt-2">
-        <p className="text-lg">{data.position}</p>
+        <p className="text-lg font-bold">{data.position}</p>
         <h3 className="text-sm font-light text-gray-700">({data?.offices?.name})</h3>
       </div>
       <Separator />
       <div className="flex flex-col mt-4">
-    <p className="text-2xl font-bold border-b-2">Personal Details</p>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Gender:</h3>
-      <p className="font-light">{data?.gender}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Contact Number:</h3>
-      <p className="font-light">{formatContactNumber()}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Birthday:</h3>
-      <p className="font-light">{formatBirthday()}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Age:</h3>
-      {age !== null && <p className="font-light">{age} </p>}
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Appointment:</h3>
-      <p className="font-light">{data?.employeeType?.name}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Eligibility:</h3>
-      <p className="font-light">{data?.eligibility?.name}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Monthly Salary:</h3>
-      <p className="font-light">{formatSalary()}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Annual Salary:</h3>
-      <p className="font-light">{calculateAnnualSalary()}</p>
-    </div>
-    <Separator />
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">GSIS Number:</h3>
-      <p className="font-light">{data?.gsisNo}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">TIN Number:</h3>
-      <p className="font-light">{data?.tinNo}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Philhealth Number:</h3>
-      <p className="font-light">{data?.philHealthNo}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Date Hired:</h3>
-      <p className="font-light">{formatDateHired()}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Year of Service:</h3>
-      {yearService && (
-        <p className="font-light items-start">
-          {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
-        </p>
-      )}
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Latest Appointment:</h3>
-      <p className="font-light">{formatLatestAppointment()}</p>
-    </div>
-    <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">YoS latest appoint:</h3>
-      {latestAppointDate && (
-        <p className="font-light items-start">
-          {latestAppointDate.years} Y/s, {latestAppointDate.months} Mon/s, {latestAppointDate.days} Day/s
-        </p>
-      )}
-    </div>
-  </div>
+        <p className="text-2xl font-bold border-b-2">Personal Details</p>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Gender:</h3>
+          <p className="font-light">{data?.gender}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Contact Number:</h3>
+          <p className="font-light">{formatContactNumber()}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Birthday:</h3>
+          <p className="font-light">{formatBirthday()}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Age:</h3>
+          {age !== null && <p className="font-light">{age} </p>}
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Appointment:</h3>
+          <p className="font-light">{data?.employeeType?.name}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Eligibility:</h3>
+          <p className="font-light">{data?.eligibility?.name}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Monthly Salary:</h3>
+          <p className="font-light">{formatSalary()}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Annual Salary:</h3>
+          <p className="font-light">{calculateAnnualSalary()}</p>
+        </div>
+        <Separator />
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">GSIS Number:</h3>
+          <p className="font-light">{data?.gsisNo}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">TIN Number:</h3>
+          <p className="font-light">{data?.tinNo}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Philhealth Number:</h3>
+          <p className="font-light">{data?.philHealthNo}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Date Hired:</h3>
+          <p className="font-light">{formatDateHired()}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Year of Service:</h3>
+          {yearService && (
+            <p className="font-light items-start">
+              {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">Latest Appointment:</h3>
+          <p className="font-light">{formatLatestAppointment()}</p>
+        </div>
+        <div className="flex flex-col lg:flex-row ">
+          <h3 className="font-semibold lg:mr-2">YoS latest appoint:</h3>
+          {latestAppointDate && (
+            <p className="font-light items-start">
+              {latestAppointDate.years} Y/s, {latestAppointDate.months} Mon/s, {latestAppointDate.days} Day/s
+            </p>
+          )}
+        </div>
+      </div>
 
     </div>);
 }
