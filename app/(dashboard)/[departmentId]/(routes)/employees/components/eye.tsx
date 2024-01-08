@@ -27,18 +27,43 @@ export const Eye = ({
   const params = useParams();
   const previewModal = usePreviewModal2();
 
+  const [loading, setLoading] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  const onPreview: MouseEventHandler<HTMLButtonElement> = (event) => {
-    event.stopPropagation();
-    previewModal.onOpen(data);
+  useEffect(() => {
+    setIsMounted(true);
+  },[]);
+
+  if(!isMounted) {
+    return null;
   }
 
+  // const onPreview: MouseEventHandler<HTMLButtonElement> = (event) => {
+  //   event.stopPropagation();
+  //   previewModal.onOpen(data);
+  // }
+
+  const onView = async () => {
+    try {
+      setLoading(true);
+      router.push(`/${params.departmentId}/view/employee/${data?.id}`)
+
+    } catch (error) {
+      toast({
+        title: "Error!",
+        description: "Failed to archive employee."
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   
   return (
     <>
       <Button
         variant="ghost"
-        onClick={onPreview}
+        onClick={onView}
+        disabled={loading}
       >
         <EyeIcon />
       </Button>

@@ -38,7 +38,6 @@ export interface Employees {
   contactNumber: string;
   position: string;
   birthday: string
-  age: string;
   gsisNo: string;
   tinNo: string; 
   philHealthNo: string;  

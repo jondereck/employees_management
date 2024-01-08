@@ -51,10 +51,11 @@ export type EmployeesColumn = {
   gender: string;
   contactNumber: string;
   position: string;
-  birthday: string
+  birthday: string;
   gsisNo: string;
   tinNo: string; 
   philHealthNo: string;  
+  pagIbigNo: string;  
   salary:  string; 
   dateHired: string;
   latestAppointment: string;

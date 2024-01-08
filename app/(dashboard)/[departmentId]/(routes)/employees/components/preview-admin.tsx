@@ -1,11 +1,11 @@
 "use client"
 
 
-import usePreviewModal from "../hooks/use-preview-modal";
-import usePreviewModal2 from "../hooks/use-preview-modal2";
-import Gallery from "./gallery";
-import Info from "./ui/info";
-import Modal from "./ui/modal";
+import usePreviewModal from "../../(frontend)/view/hooks/use-preview-modal";
+import usePreviewModal2 from "../../(frontend)/view/hooks/use-preview-modal2";
+import Gallery from "../../(frontend)/view/components/gallery";
+import Info from "../../(frontend)/view/components/ui/info";
+import Modal from "../../(frontend)/view/components/ui/modal";
 
 const PreviewModal2 = () => {
   const previewModal = usePreviewModal2();
