@@ -451,6 +451,11 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Contact Number"
                       {...field}
+                      onChange={(e) => {
+                        // Remove the "+63" prefix and any non-numeric characters
+                        const formattedValue = e.target.value.replace(/^(\+63|63|0)/, '').replace(/\D/g, ''); // Remove non-numeric characters
+                        field.onChange(formattedValue);
+                      }}
                     />
                   </FormControl>
                   <FormDescription>

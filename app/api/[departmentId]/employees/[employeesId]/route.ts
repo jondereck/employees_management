@@ -116,6 +116,8 @@ export async function PATCH(
       return new NextResponse("Unauthorized", { status: 405 })
     }
 
+    
+   
 
     await prismadb.employee.update({
       where: {
@@ -156,6 +158,27 @@ export async function PATCH(
       }
     });
 
+
+    if (contactNumber) {
+      const contactNumberExists = await prismadb.employee.findFirst({
+        where: {
+          id: {
+            not: params.employeesId, // Exclude the current employee being updated
+          },
+          contactNumber: contactNumber,
+        },
+      });
+    
+      if (contactNumberExists) {
+        return new NextResponse(
+          JSON.stringify({ error: " Contact number already exists." }),
+          { status: 400 }
+        );
+      }
+    }
+    
+    
+    
     const employee = await prismadb.employee.update({
       where: {
         id: params.employeesId,

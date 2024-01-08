@@ -66,7 +66,6 @@ const EmployeeCard = ({
     <div>
       <p className="font-semibold text-lg">{data.firstName} {data.lastName}</p>
       <p className="font-light text-sm text-gray-500">{data.position}</p>
-   
       {/* {age !== null && (
         <p className="semi-bold text-lg">{`Age: ${age} years`}</p>
       )} */}

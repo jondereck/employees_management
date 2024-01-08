@@ -159,6 +159,30 @@ const Info = ({
     return latestAppointment.toLocaleDateString('en-US', options);
   }
 
+  const formatContactNumber = () => {
+    const rawNumber = data?.contactNumber || '';
+    
+    // If rawNumber is empty, return an empty string
+    if (!rawNumber.trim()) {
+      return 'No data';
+    }
+  
+    const numericOnly = rawNumber.replace(/\D/g, ''); // Remove non-numeric characters
+  
+    // Remove '+63' or '63' from the beginning
+    const formattedNumber = numericOnly.replace(/^(\+63|63)/, '');
+  
+    // Add a leading '0' if it's missing
+    const finalNumber = formattedNumber.startsWith('0') ? formattedNumber : `0${formattedNumber}`;
+  
+    // Format the number with spaces
+    const formattedWithSpaces = `${finalNumber.slice(0, 4)}-${finalNumber.slice(4, 7)}-${finalNumber.slice(7)}`;
+  
+    return formattedWithSpaces;
+  };
+  
+  
+  
 
 
 
@@ -215,7 +239,7 @@ const Info = ({
     </div>
     <div className="flex flex-col lg:flex-row ">
       <h3 className="font-semibold lg:mr-2">Contact Number:</h3>
-      <p className="font-light">{data?.contactNumber}</p>
+      <p className="font-light">{formatContactNumber()}</p>
     </div>
     <div className="flex flex-col lg:flex-row ">
       <h3 className="font-semibold lg:mr-2">Birthday:</h3>
@@ -234,7 +258,7 @@ const Info = ({
       <p className="font-light">{data?.eligibility?.name}</p>
     </div>
     <div className="flex flex-col lg:flex-row ">
-      <h3 className="font-semibold lg:mr-2">Salary:</h3>
+      <h3 className="font-semibold lg:mr-2">Monthly Salary:</h3>
       <p className="font-light">{formatSalary()}</p>
     </div>
     <div className="flex flex-col lg:flex-row ">
