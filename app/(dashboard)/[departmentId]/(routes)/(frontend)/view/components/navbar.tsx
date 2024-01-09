@@ -3,6 +3,7 @@ import Container from "./ui/container";
 import MainNav from "./main-nav";
 import getOffices from "../actions/get-offices";
 import NavbarActions from "./navbar-actions";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 
 export const revalidate = 0;
 
@@ -13,8 +14,12 @@ const Navbar2 = async () => {
       <Container>
        <div className="relative flex px-4 sm:px-6 lg:px-8 h-16 items-center overflow-auto">
        <Link href={`/${process.env.HOMEPAGE}/view`} className="ml-4 flex  lg:ml-0 gap-x-2">
+        <ActionTooltip 
+          label="Main page"
+          side="top"
+        >
           <p className="font-semibold font-sans text-xl">Employees </p>
-       
+          </ActionTooltip>
         </Link>
        <MainNav data={offices}/>
        {/* <NavbarActions /> */}

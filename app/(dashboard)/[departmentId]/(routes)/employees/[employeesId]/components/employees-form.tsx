@@ -161,15 +161,15 @@ export const EmployeesForm = ({
         gender: '',
         contactNumber: ' ',
         position: '',
-        birthday: new Date(),
+        birthday: undefined,
         // age: '',
         gsisNo: '',
         tinNo: '',
         pagIbigNo: '',
         philHealthNo: '',
         salary: 0.00,
-        dateHired: new Date(),
-        latestAppointment: new Date(),
+        dateHired: undefined,
+        latestAppointment: undefined,
         isFeatured: false,
         isArchived: false,
         isHead: false,
@@ -1150,7 +1150,8 @@ export const EmployeesForm = ({
                         mode="single"
                         captionLayout="dropdown-buttons"
                         selected={undefined}
-                        onSelect={undefined}
+                        onSelect={field.onChange}
+                        onClear={() => field.onChange(undefined)} 
                         fromYear={fromYear}
                         toYear={currentYear}
                       />

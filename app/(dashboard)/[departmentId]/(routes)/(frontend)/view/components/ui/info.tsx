@@ -233,7 +233,7 @@ const Info = ({
         
       </h1>
       <div className="flex flex-col items-start font-sans font-light justify-between mt-2">
-        <p className="text-lg font-bold">{data.position}</p>
+        <p className="text-lg font-semibold">{data.position}</p>
         <h3 className="text-sm font-light text-gray-700">({data?.offices?.name})</h3>
       </div>
       <Separator />

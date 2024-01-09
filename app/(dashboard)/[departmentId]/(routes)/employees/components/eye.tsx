@@ -13,6 +13,7 @@ import { EmployeesColumn } from "./columns";
 import usePreviewModal from "../../(frontend)/view/hooks/use-preview-modal";
 import { Employees } from "../../(frontend)/view/types";
 import usePreviewModal2 from "../../(frontend)/view/hooks/use-preview-modal2";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 
 
 
@@ -59,7 +60,10 @@ export const Eye = ({
   };
   
   return (
-    <>
+    <ActionTooltip
+      label="Preview"
+      side="top"
+    >
       <Button
         variant="ghost"
         onClick={onView}
@@ -68,7 +72,6 @@ export const Eye = ({
         <EyeIcon />
       </Button>
 
-
-    </>
+      </ActionTooltip>
   );
 }
