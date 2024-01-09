@@ -92,38 +92,38 @@ enum Gender {
 }
 
 model Employee {
-  id             String       @id @default(uuid())
-  departmentId   String
-  department     Department   @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
-  officeId       String
-  offices        Offices      @relation("OfficesToEmployee", fields: [officeId], references: [id])
-  lastName       String       @db.Text()
-  firstName      String       @db.Text()
-  middleName     String
-  suffix         String
-  gender         Gender
-  contactNumber  String
-  position       String
-  education      String
-  birthday       DateTime
-  houseNo        String
-  // street         String
-  // barangay       String
-  // city           String
-  // province       String
+  id            String     @id @default(uuid())
+  departmentId  String
+  department    Department @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
+  officeId      String
+  offices       Offices    @relation("OfficesToEmployee", fields: [officeId], references: [id])
+  lastName      String     @db.Text()
+  firstName     String     @db.Text()
+  middleName    String
+  suffix        String
+  gender        Gender
+  contactNumber String
+  position      String
+  education     String
+  birthday      DateTime
+  region       String     @default("")
+  province      String     @default("")
+  city          String     @default("")
+  barangay      String     @default("")
+  houseNo       String     @default("")
+  street        String     @default("")
   // zipCode        String
-  age            String       @default("")
-  gsisNo         String
-  tinNo          String
-  philHealthNo   String
-  pagIbigNo      String
-  salary         Float
-  dateHired      DateTime
- latestAppointment DateTime @default(now())
-  employeeTypeId String
-  employeeType   EmployeeType @relation(fields: [employeeTypeId], references: [id])
-  eligibilityId  String
-  eligibility    Eligibility  @relation(fields: [eligibilityId], references: [id])
+  gsisNo            String
+  tinNo             String
+  philHealthNo      String
+  pagIbigNo         String
+  salary            Float
+  dateHired         DateTime
+  latestAppointment DateTime     @default(now())
+  employeeTypeId    String
+  employeeType      EmployeeType @relation(fields: [employeeTypeId], references: [id])
+  eligibilityId     String
+  eligibility       Eligibility  @relation(fields: [eligibilityId], references: [id])
 
   isFeatured Boolean @default(false)
   isArchived Boolean @default(false)

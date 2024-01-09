@@ -22,14 +22,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command"
-
 
 
 
@@ -75,12 +67,13 @@ const formSchema = z.object({
 
       return cleanPosition(value);
     }),
-
-
-
   education: z.string(),
+  region: z.string(),
+  province: z.string(),
+  city: z.string(),
+  barangay: z.string(),
   houseNo: z.string(),
-
+  street: z.string(),
   salary: z.coerce.number().min(1),
   birthday: z.date(),
   // age: z.string(),
@@ -93,10 +86,6 @@ const formSchema = z.object({
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
   isHead: z.boolean(),
-
-
-
-
 });
 
 
@@ -156,6 +145,10 @@ export const EmployeesForm = ({
       firstName: initialData.firstName.toUpperCase(),
       middleName: initialData.middleName.toUpperCase(),
       lastName: initialData.lastName.toUpperCase(),
+      province: initialData.province.toUpperCase(),
+      city: initialData.city.toUpperCase(),
+      barangay: initialData.barangay.toUpperCase(),
+      street: initialData.street.toUpperCase(),
       salary: parseFloat(String(initialData?.salary)),
     }
 
@@ -185,6 +178,12 @@ export const EmployeesForm = ({
         eligibilityId: '',
         houseNo: '',
         education: '',
+        region: '',
+        province: '',
+        city: '',
+        barangay: '',
+        street: '',
+
 
       }
   });
@@ -223,6 +222,10 @@ export const EmployeesForm = ({
       values.firstName = values.firstName.toUpperCase();
       values.lastName = values.lastName.toUpperCase();
       values.middleName = values.middleName.toUpperCase();
+      values.province = values.province.toUpperCase();
+      values.city = values.city.toUpperCase();
+      values.barangay = values.barangay.toUpperCase();
+      values.street = values.street.toUpperCase();
       if (initialData) {
         await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
 
@@ -291,6 +294,41 @@ export const EmployeesForm = ({
 
 
   const genderOptions = Object.values(Gender);
+
+ 
+  const capitalizeWordsIgnoreSpecialChars = (input: string) => {
+    return input.replace(/\b\w+\b/g, (word) => {
+      // Check if the word is a Roman numeral (I, II, III, IV, V, etc.)
+      if (/^(?=[MDCLXVI])M{0,3}(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})$/.test(word.toUpperCase())) {
+        return word; // Return unchanged if it's a Roman numeral
+      }
+  
+      // Capitalize the word while ignoring special characters
+      const wordWithoutSpecialChars = word.replace(/[^\w\s]/g, '');
+      return wordWithoutSpecialChars.charAt(0).toUpperCase() +
+        wordWithoutSpecialChars.slice(1).toLowerCase();
+    });
+  };
+  
+
+  function formatNumber(input: string): string {
+    // Remove non-numeric characters from the input
+    const numericValue = input.replace(/\D/g, '');
+  
+    // Determine the group size for formatting
+    const groupSize = 3;
+  
+    // Split the numeric value into groups of three digits
+    const groups = numericValue.match(new RegExp(`\\d{1,${groupSize}}`, 'g'));
+  
+    // Join the groups with a hyphen
+    const formattedValue = groups ? groups.join('-') : '';
+  
+    return formattedValue;
+  }
+  
+  
+
   return (
     <>
       <AlertModal
@@ -351,6 +389,12 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="First Name"
                       {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
                     />
                   </FormControl>
                   <FormDescription>
@@ -371,6 +415,12 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Last Name"
                       {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
                     />
                   </FormControl>
                   <FormDescription>
@@ -391,6 +441,12 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Middle Name"
                       {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
                     />
                   </FormControl>
                   <FormDescription>
@@ -431,6 +487,15 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Position"
                       {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase for every word
+                        const capitalizedValue = capitalizeWordsIgnoreSpecialChars(
+                          e.target.value
+                        );
+
+                        // Set the field value to the capitalized value
+                        field.onChange(capitalizedValue);
+                      }}
                     />
                   </FormControl>
                   <FormDescription>
@@ -470,13 +535,13 @@ export const EmployeesForm = ({
               control={form.control}
               name="birthday"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className="flex flex-col mt-2">
                   <FormLabel>Date of birth</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
-                        variant={"outline"}
-                        className={cn("flex justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                        variant={"outline"} w-auto justify-start text-left font-normal
+                        className={cn("w-auto  justify-start text-left font-normal", !field.value && "text-muted-foreground")}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
@@ -553,26 +618,6 @@ export const EmployeesForm = ({
             />
             <FormField
               control={form.control}
-              name="houseNo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>House Number</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="03"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Ex: Jon
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
               name="education"
               render={({ field }) => (
                 <FormItem>
@@ -580,21 +625,173 @@ export const EmployeesForm = ({
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="First Name"
+                      placeholder="Education"
                       {...field}
                     />
                   </FormControl>
                   <FormDescription>
-                    Ex: Jon
+                    Ex: Bachelor of Information Technology
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
+
           </div>
           <Separator />
-          <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
+          <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
+            {/* <FormField
+              control={form.control}
+              name="region"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Region</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Ilocos"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    This Information is private
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            /> */}
+            <FormField
+              control={form.control}
+              name="province"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Province</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Pangasinan"
+                      {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="city"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>City/Municipal</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Lingayen"
+                      {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="barangay"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Barangay</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Wawa"
+                      {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+
+            <FormField
+              control={form.control}
+              name="houseNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Unit/Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Home Number"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    This is optional
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="street"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Street</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Mendoza Street"
+                      {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    This is optional
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+
+          </div>
+
+          <Separator />
+
+          <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
             <FormField
               control={form.control}
               name="salary"
@@ -606,6 +803,12 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Salary"
                       {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
                     />
                   </FormControl>
                   <FormDescription>
@@ -790,8 +993,13 @@ export const EmployeesForm = ({
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Ex: 0000000000"
+                      placeholder="Ex: 000-000-0000"
                       {...field}
+                      onChange={(e) => {
+                        const inputValue = e.target.value;
+                        const formattedValue = formatNumber(inputValue);
+                        field.onChange(formattedValue);
+                      }}
                     />
 
                   </FormControl>
@@ -813,6 +1021,13 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="TIN Number"
                       {...field}
+                      {...field}
+                      onChange={(e) => {
+                        const inputValue = e.target.value;
+                        const formattedValue = formatNumber(inputValue);
+                        field.onChange(formattedValue);
+                      }}
+                      
                     />
 
                   </FormControl>
@@ -835,6 +1050,12 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Philhealth Number"
                       {...field}
+                      {...field}
+                      onChange={(e) => {
+                        const inputValue = e.target.value;
+                        const formattedValue = formatNumber(inputValue);
+                        field.onChange(formattedValue);
+                      }}
                     />
 
                   </FormControl>
@@ -857,6 +1078,12 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Pagibig Number"
                       {...field}
+                      {...field}
+                      onChange={(e) => {
+                        const inputValue = e.target.value;
+                        const formattedValue = formatNumber(inputValue);
+                        field.onChange(formattedValue);
+                      }}
                     />
 
                   </FormControl>
@@ -878,7 +1105,7 @@ export const EmployeesForm = ({
                     <PopoverTrigger asChild>
                       <Button
                         variant={"outline"}
-                        className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                        className={cn("w-auto  justify-start text-left font-normal", !field.value && "text-muted-foreground")}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
@@ -912,7 +1139,7 @@ export const EmployeesForm = ({
                     <PopoverTrigger asChild>
                       <Button
                         variant={"outline"}
-                        className={cn("w-[240px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                        className={cn("w-auto justify-start text-left font-normal", !field.value && "text-muted-foreground")}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
@@ -922,8 +1149,8 @@ export const EmployeesForm = ({
                       <Calendar
                         mode="single"
                         captionLayout="dropdown-buttons"
-                        selected={field.value}
-                        onSelect={field.onChange}
+                        selected={undefined}
+                        onSelect={undefined}
                         fromYear={fromYear}
                         toYear={currentYear}
                       />
