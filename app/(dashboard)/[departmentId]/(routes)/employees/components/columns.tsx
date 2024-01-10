@@ -64,6 +64,11 @@ export type EmployeesColumn = {
   eligibility: Eligibility;
   employeeType: EmployeeType;
   images: Image[];
+  region: string;
+  province: string;
+  city: string;
+  barangay: string;
+  houseNo: string;
 }
 
 export const columns: ColumnDef<EmployeesColumn>[] = [

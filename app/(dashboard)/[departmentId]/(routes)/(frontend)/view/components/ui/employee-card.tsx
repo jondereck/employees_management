@@ -9,6 +9,7 @@ import { MouseEventHandler, useEffect, useState } from "react";
 import usePreviewModal from "../../hooks/use-preview-modal";
 import { cn } from "@/lib/utils";
 import { StarFilledIcon } from "@radix-ui/react-icons";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 
 
 interface EmployeeCardProps {
@@ -51,12 +52,15 @@ const EmployeeCard = ({
           alt="Image"
           className={cn("object-cover object-center rounded-md h-full w-full")}
         />
+        <ActionTooltip
+          label="Executive Level"
+          side="left"
+        >
         <div className={cn(`${data.isHead && 'absolute w-full left-0 top-0'}`)}>
           {data.isHead && <IconButton icon={<StarFilledIcon className="text-yellow-600" />}
           />}
         </div> 
-
-
+        </ActionTooltip>
         <div className="opacity-0 group-hover:opacity-100 transition absolute w-full px-6 bottom-5 ">
           <div className="flex gap-x-6  justify-center">
             <IconButton
