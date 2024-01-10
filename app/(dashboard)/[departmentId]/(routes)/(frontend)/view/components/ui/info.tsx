@@ -325,7 +325,7 @@ const Info = ({
           <p className="font-light text-sm lg:text-2xl">{formatDateHired()}</p>
         </div>
         <div className="flex flex-col  ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Year of Service</h3>
+          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Year(s) of Service</h3>
           {yearService && (
             <p className="font-light text-sm lg:text-2xl items-start">
               {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
