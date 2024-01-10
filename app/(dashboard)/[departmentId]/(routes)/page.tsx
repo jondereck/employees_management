@@ -11,11 +11,10 @@ import { EmployeeType } from "./(frontend)/view/types";
 
 
 interface DashboardProps {
-  data: (EmployeeType)[];
   params: { departmentId: string; officeId: string };
 }
 
-const DashboardPage = async ({ params, data }: DashboardProps) => {
+const DashboardPage = async ({ params }: DashboardProps) => {
 
   const employeeTypes = [
     {
