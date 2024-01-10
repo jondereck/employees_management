@@ -64,7 +64,12 @@ const EmployeesPage = async ({
       id: item.offices.id,
       name: item.offices.name,
     },
-    images:[]
+    images:[],
+    region: item.region,
+  province: item.province,
+  city: item.city,
+  barangay: item.barangay,
+  houseNo: item.houseNo,
 
 
   }));
