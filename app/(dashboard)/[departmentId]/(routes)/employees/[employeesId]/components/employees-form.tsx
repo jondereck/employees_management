@@ -150,6 +150,7 @@ export const EmployeesForm = ({
       barangay: initialData.barangay.toUpperCase(),
       street: initialData.street.toUpperCase(),
       salary: parseFloat(String(initialData?.salary)),
+      latestAppointment: initialData.latestAppointment || undefined,
     }
 
       : {
@@ -804,15 +805,16 @@ export const EmployeesForm = ({
                       placeholder="Salary"
                       {...field}
                       onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
-                        field.onChange(uppercaseValue);
+                        // Get the input value and remove commas and periods
+                        const inputValue = e.target.value.replace(/[,\.]/g, '');
+            
+                        // Update the field value with the modified input
+                        field.onChange(inputValue);
                       }}
                     />
                   </FormControl>
                   <FormDescription>
-
+                  {field.value && `₱ ${Number(field.value).toLocaleString()}`}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

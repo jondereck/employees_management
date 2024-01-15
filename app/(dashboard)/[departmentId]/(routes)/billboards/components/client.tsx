@@ -27,8 +27,8 @@ export const  BillboardsClient = ({
     <>
     <div className="flex items-center justify-between">
     <Heading
-      title={`Billboards (${data.length})`}
-      description="Manage billboards for your departments"
+      title={`Covers (${data.length})`}
+      description="Manage covers for your departments"
     />
     <Button onClick={() => router.push(`/${params.departmentId}/billboards/new`)}>
       <Plus className="mr-2 h-4 w-4"/>

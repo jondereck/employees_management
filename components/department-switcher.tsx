@@ -57,8 +57,8 @@ export default function DepartmentSwitcher({
       <PopoverContent className="w-[250px] p-0">
         <Command>
           <CommandList>
-            <CommandInput placeholder="Search Department..."/>
-            <CommandEmpty>No department found.</CommandEmpty>
+            <CommandInput placeholder="Search Goverment Institution..."/>
+            <CommandEmpty>No government institution found.</CommandEmpty>
             <CommandGroup heading="departments">
               {formattedItems.map((department) => (
                 <CommandItem
@@ -90,7 +90,7 @@ export default function DepartmentSwitcher({
                 }}
               >
                 <PlusCircle className="mr-2 h-5 w-5"/>
-                Create Department
+                Create Goverment Institution
               </CommandItem>
             </CommandGroup>
           </CommandList>

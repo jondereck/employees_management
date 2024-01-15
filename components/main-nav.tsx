@@ -39,7 +39,7 @@ export function MainNav({
     },
     {
       href: `/${params.departmentId}/billboards`,
-      label: 'Billboards',
+      label: 'Covers',
       active: pathname === `/${params.departmentId}/billboards`
     },
     {

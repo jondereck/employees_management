@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DataTableColumnHeader } from "@/components/ui/column-header"
 import PreviewModal from "../../(frontend)/view/components/preview"
 import { Eye } from "./eye"
+import { parse } from "date-fns"
 
 
 
@@ -71,6 +72,28 @@ export type EmployeesColumn = {
   houseNo: string;
 }
 
+const calculateAge = (birthdate: string) => {
+  // Parse the birthdate using date-fns parse function
+  const parsedBirthdate = parse(birthdate, 'MMMM do, yyyy', new Date());
+
+  if (isNaN(parsedBirthdate.getTime())) {
+    console.log("Invalid birthdate:", birthdate);
+    return null;
+  }
+
+  const today = new Date();
+
+  const age = today.getFullYear() - parsedBirthdate.getFullYear();
+  const monthDiff = today.getMonth() - parsedBirthdate.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < parsedBirthdate.getDate())) {
+    return age - 1;
+  }
+
+  return age;
+};
+
+
 export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     id: "select",
@@ -123,6 +146,15 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
   },
   {
+    accessorKey: "birthday",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Age" />
+    ),
+    cell: ({ row }) => (
+      <span>{calculateAge(row.original.birthday)}</span>
+    ),
+  },
+  {
     accessorKey: "offices",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Department" />
@@ -168,12 +200,12 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Position" />
     ),
   },
-  {
-    accessorKey: "birthday",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Birthday" />
-    ),
-  },
+  // {
+  //   accessorKey: "birthday",
+  //   header: ({ column }) => (
+  //     <DataTableColumnHeader column={column} title="Birthday" />
+  //   ),
+  // },
   {
     accessorKey: "tinNo",
     header: ({ column }) => (
