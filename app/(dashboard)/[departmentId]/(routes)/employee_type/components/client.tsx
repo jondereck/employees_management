@@ -26,8 +26,8 @@ export const  EmployeeTypeClient = ({
     <>
     <div className="flex items-center justify-between">
     <Heading
-      title={`Employee Type (${data.length})`}
-      description="Manage employee type for your offices"
+      title={`Appointment Type (${data.length})`}
+      description="Manage appointment type for your offices"
     />
     <Button onClick={() => router.push(`/${params.departmentId}/employee_type/new`)}>
       <Plus className="mr-2 h-4 w-4"/>

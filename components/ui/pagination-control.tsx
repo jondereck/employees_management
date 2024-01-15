@@ -17,7 +17,7 @@ const PaginationControls = ({
   };
 
   return ( 
-    <div className="flex item-center space-x-4 mt-auto py-2 
+    <div className="flex items-center justify-center space-x-4 mt-4 py-2 
     ">
       <Button
         variant="secondary"

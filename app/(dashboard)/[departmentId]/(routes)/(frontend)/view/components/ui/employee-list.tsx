@@ -5,9 +5,10 @@ import { Employees } from "../../types";
 import EmployeeCard from "./employee-card";
 import NoResults from "./no-results";
 import PaginationControls from "@/components/ui/pagination-control";
+import { Separator } from "@/components/ui/separator";
 
 
-const EmployeePerPage = 10;
+const EmployeePerPage = 15;
 
 interface EmployeeListProps {
   title: string;
@@ -39,27 +40,26 @@ const EmployeeList = ({
   }, [currentPage, items]);
 
   return (
-    <div className="space-y-4 ">
-      <h3 className="font-bold text-3xls">{title}</h3>
-      {displayedEmployee.length === 0 && <NoResults/>}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 space-x-2">
-        {displayedEmployee.map((item) => (
-          <EmployeeCard key={item.id} data={item} />
-        ))}
-      
+    <div className="flex-row justify-center jusspace-y-4 ">
+    <h3 className="font-bold text-3xl">{title}</h3>
+    {displayedEmployee.length === 0 && <NoResults />}
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 space-x-2">
+      {displayedEmployee.map((item) => (
+        <EmployeeCard key={item.id} data={item} />
+      ))}
+    </div>
 
-      {items.length > EmployeePerPage && (
-        <>
-          <div className="flex justify-center items-center">
-          <PaginationControls 
+    {items.length > EmployeePerPage && (
+       
+          <PaginationControls
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={handlePageChange}
           />
-          </div>
-         </>
-      )}
-    </div></div>
+     
+    )}
+  </div>
+   
   );
 }
 
