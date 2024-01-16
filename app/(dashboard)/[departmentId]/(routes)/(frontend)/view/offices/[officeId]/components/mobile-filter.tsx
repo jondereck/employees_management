@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 
 
 
+
 interface MobileFilterProps {
   employeeType: EmployeeType[];
   eligibility: Eligibility[];
@@ -30,16 +31,22 @@ interface MobileFilterProps {
       _all: number;
     };
   }[];
+  totalEligibility: {
+    id: string;
+    count: {
+      _all: number;
+    };
+  }[];
 }
 
 
-const MobileFilter = ({
+const MobileFilter = async ({
   employeeType,
   eligibility,
   officeId,
-  total
+  total,
+  totalEligibility
 }: MobileFilterProps) => {
-
 
 
   return (
@@ -60,19 +67,27 @@ const MobileFilter = ({
 
           </SheetHeader>
           <Filter
-            total={total}
-            officeId={officeId}
-            valueKey="employeeTypeId"
-            name="Appointment"
-            data={employeeType}
-          />
-          <Filter
-          total={total}
-            officeId={officeId}
-            valueKey="employeeTypeId"
-            name="Eligibility"
-            data={eligibility}
-          />
+                officeId={officeId}
+                total={total}
+                valueKey="employeeTypeId"
+                name="Appointment"
+                data={employeeType}
+              />
+              <Filter
+                officeId={officeId}
+                total={totalEligibility}
+                valueKey="eligibilityId"
+                name="Eligibility"
+                data={eligibility}
+              />
+           {/* <Filter
+                officeId={officeId}
+                total={totalEligibility}
+                valueKey="eligibilityId"
+                name="Eligibility"
+                data={eligibility}
+              /> */}
+          
         </SheetContent>
       </Sheet>
     </div>

@@ -41,7 +41,9 @@ const OfficesPage = async ({
   const totalEmployeeCount = employeeCounts.find((count) => count.id === officeId)?.count || 0;
 
   const total = await getEmployeeTypeCountsByOffice(officeId);
-  const totalEligibility = await getEligibilityCountsByOffice(officeId)
+  const totalEligibility = await getEligibilityCountsByOffice(officeId);
+
+
   const employees = await getEmployees({
     officeId: params.officeId,
     employeeTypeId: searchParams.employeeTypeId,
@@ -78,10 +80,10 @@ const OfficesPage = async ({
               eligibility={eligibility}
               officeId={officeId}
               total={total}
+              totalEligibility={totalEligibility}
             />
 
             <div className="hidden lg:block">
-
               <Filter
                 officeId={officeId}
                 total={total}
