@@ -275,7 +275,7 @@ const Info = ({
           label="Executive Level"
           side="left"
         >
-          <div>
+          <div className="pt-1">
             {data.isHead && <IconButton icon={<StarFilledIcon className="text-yellow-600 " />}
             />}
           </div>
