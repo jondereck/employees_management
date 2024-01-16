@@ -119,7 +119,8 @@ model Employee {
   pagIbigNo         String
   salary            Float
   dateHired         DateTime
-  latestAppointment DateTime    
+  latestAppointment String @default("")    
+  terminateDate     String @default("")
   employeeTypeId    String
   employeeType      EmployeeType @relation(fields: [employeeTypeId], references: [id])
   eligibilityId     String

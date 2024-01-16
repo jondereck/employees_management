@@ -82,7 +82,8 @@ const formSchema = z.object({
   tinNo: z.string(),
   philHealthNo: z.string(),
   dateHired: z.date(),
-  latestAppointment: z.date().optional(),
+  latestAppointment: z.string(),
+  terminateDate: z.string(),
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
   isHead: z.boolean(),
@@ -150,7 +151,7 @@ export const EmployeesForm = ({
       barangay: initialData.barangay.toUpperCase(),
       street: initialData.street.toUpperCase(),
       salary: parseFloat(String(initialData?.salary)),
-      latestAppointment: initialData.latestAppointment || undefined,
+      
     }
 
       : {
@@ -170,7 +171,8 @@ export const EmployeesForm = ({
         philHealthNo: '',
         salary: 0.00,
         dateHired: undefined,
-        latestAppointment: undefined,
+        latestAppointment: '',
+        terminateDate: '',
         isFeatured: false,
         isArchived: false,
         isHead: false,
@@ -296,39 +298,51 @@ export const EmployeesForm = ({
 
   const genderOptions = Object.values(Gender);
 
- 
+
   const capitalizeWordsIgnoreSpecialChars = (input: string) => {
     return input.replace(/\b\w+\b/g, (word) => {
       // Check if the word is a Roman numeral (I, II, III, IV, V, etc.)
       if (/^(?=[MDCLXVI])M{0,3}(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})$/.test(word.toUpperCase())) {
         return word; // Return unchanged if it's a Roman numeral
       }
-  
+
       // Capitalize the word while ignoring special characters
       const wordWithoutSpecialChars = word.replace(/[^\w\s]/g, '');
       return wordWithoutSpecialChars.charAt(0).toUpperCase() +
         wordWithoutSpecialChars.slice(1).toLowerCase();
     });
   };
-  
+
 
   function formatNumber(input: string): string {
     // Remove non-numeric characters from the input
     const numericValue = input.replace(/\D/g, '');
-  
+
     // Determine the group size for formatting
     const groupSize = 3;
-  
+
     // Split the numeric value into groups of three digits
     const groups = numericValue.match(new RegExp(`\\d{1,${groupSize}}`, 'g'));
-  
+
     // Join the groups with a hyphen
     const formattedValue = groups ? groups.join('-') : '';
-  
+
     return formattedValue;
   }
+
+  const formatDate = (input: string) => {
+    // Remove non-numeric characters
+    const numericValue = input.replace(/\D/g, '');
   
+    // Format the date as "mm/dd/yyyy"
+    const formattedDate = numericValue
+      .replace(/(\d{2})(\d{2})(\d{4})/, '$1/$2/$3') // Format as "mm/dd/yyyy"
+      .substr(0, 10); // Limit to 10 characters (mm/dd/yyyy)
   
+    return formattedDate;
+  };
+  
+
 
   return (
     <>
@@ -807,14 +821,14 @@ export const EmployeesForm = ({
                       onChange={(e) => {
                         // Get the input value and remove commas and periods
                         const inputValue = e.target.value.replace(/[,\.]/g, '');
-            
+
                         // Update the field value with the modified input
                         field.onChange(inputValue);
                       }}
                     />
                   </FormControl>
                   <FormDescription>
-                  {field.value && `₱ ${Number(field.value).toLocaleString()}`}
+                    {field.value && `₱ ${Number(field.value).toLocaleString()}`}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1029,7 +1043,7 @@ export const EmployeesForm = ({
                         const formattedValue = formatNumber(inputValue);
                         field.onChange(formattedValue);
                       }}
-                      
+
                     />
 
                   </FormControl>
@@ -1135,40 +1149,52 @@ export const EmployeesForm = ({
               control={form.control}
               name="latestAppointment"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Latest Appointment</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn("w-auto justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className=" w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        captionLayout="dropdown-buttons"
-                        selected={undefined}
-                        onSelect={field.onChange}
-                        onClear={() => field.onChange(undefined)} 
-                        fromYear={fromYear}
-                        toYear={currentYear}
-                      />
-                    </PopoverContent>
-                  </Popover>
+                <FormItem>
+                  <FormLabel>Latest Appointment </FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="mm/dd/yyyy"
+                      {...field}
+                      onChange={(e) => {
+                        const formattedValue = formatDate(e.target.value);
+                        field.onChange(formattedValue);
+                      }}
+                    />
+                  </FormControl>
                   <FormDescription>
-                    It is used to calculate years of service from the date of latest appointment.
+                    This field is optional for employee with the most recent appointment.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+
+            />
+            <FormField
+              control={form.control}
+              name="terminateDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Termination Date </FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="mm/dd/yyyy"
+                      {...field}
+                      onChange={(e) => {
+                        const formattedValue = formatDate(e.target.value);
+                        field.onChange(formattedValue);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                  This field is optional for employee is terminated/retired.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
-          <Separator />
-
           <div className="grid lg:grid-cols-2  grid-cols-1 gap-8  space-y-0 ">
             <FormField
               control={form.control}
@@ -1183,7 +1209,7 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <div className="space-y-1 leading-none">
-                    <FormLabel>Is this employee a Department Head?</FormLabel>
+                    <FormLabel>Is this employee in Executive Level Position?</FormLabel>
                     <FormDescription>
                       Marking this option will ensure that this employee always appears at the top.
                     </FormDescription>

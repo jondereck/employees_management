@@ -153,14 +153,39 @@ const Info = ({
 
   const formatLatestAppointment = () => {
     const latestAppointment = new Date(data.latestAppointment);
+
+    if (isNaN(latestAppointment.getTime())) {
+      // Handle invalid date format or other errors
+      return 'No data';
+    }
     const options: Intl.DateTimeFormatOptions = {
       year: 'numeric',
       month: 'long',
-      day: '2-digit'
+      day: '2-digit',
     };
 
     return latestAppointment.toLocaleDateString('en-US', options);
-  }
+  };
+
+  const formatTerminateDate = () => {
+    const terminateDate = new Date(data.terminateDate);
+
+    if (isNaN(terminateDate.getTime())) {
+      // Handle invalid date format or other errors
+      return 'No data';
+    }
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'long',
+      day: '2-digit',
+    };
+
+    return terminateDate.toLocaleDateString('en-US', options);
+  };
+
+
+
+
 
   const formatContactNumber = () => {
     const rawNumber = data?.contactNumber || '';
@@ -226,23 +251,23 @@ const Info = ({
 
   const fullName = `${data.firstName.toUpperCase()} ${data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
 
-  const addressFormat = (data:any) => {
+  const addressFormat = (data: any) => {
     const { region, barangay, city, province, houseNo } = data;
-  
+
     // Create an array of non-empty address components
-    const addressComponents = [region, houseNo, barangay, city, province ].filter(Boolean);
-  
+    const addressComponents = [region, houseNo, barangay, city, province].filter(Boolean);
+
     // Convert the array elements to camel case
-    const formattedAddress = addressComponents.map(component => 
-      component.replace(/\w\S*/g, (word:string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    const formattedAddress = addressComponents.map(component =>
+      component.replace(/\w\S*/g, (word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     );
-  
+
     // Join the formatted components with a comma and space
     return formattedAddress.join(', ') || 'No data';
   };
-  
+
   return (
-    
+
     <div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `10px solid ${data?.employeeType?.value}` }}
     ><Separator />
       <h1 className=" flex items-justify text-3xl lg:text-4xl font-bold text-gray-900 gap-2">{fullName}
@@ -265,85 +290,100 @@ const Info = ({
       <div className="flex flex-col mt-4">
         <p className="text-xl lg:text-2xl  font-semibold ">Personal Details</p>
         <div className="grid grid-cols-2 gap-2 mt-4">
-        <div className="flex flex-col ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Gender</h3>
-          <p className="font-light text-sm md:text-xl lg:text-2xl">{data?.gender}</p>
-        </div>
-        <div className="flex flex-col ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Contact Number</h3>
-          <p className="font-light text-sm lg:text-2xl">{formatContactNumber()}</p>
-        </div>
-        <div className="flex flex-col ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl ">Birthday</h3>
-          <p className="font-light text-sm lg:text-2xl">{formatBirthday()}</p>
-        </div>
-        <div className="flex flex-col ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Age</h3>
-          {age !== null && <p className="font-light text-sm lg:text-2xl">{age} </p>}
-        </div>
-        <div className="flex flex-col ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Appointment</h3>
-          <p className="font-light text-sm lg:text-2xl">{data?.employeeType?.name}</p>
-        </div>
-        <div className="flex flex-col ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Eligibility</h3>
-          <p className="font-light text-sm lg:text-2xl">{data?.eligibility?.name}</p>
-        </div>
-        <div className="flex flex-col ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Monthly Salary</h3>
-          <p className="font-light text-sm lg:text-2xl">{formatSalary()}</p>
-        </div>
-        <div className="flex flex-col ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Annual Salary</h3>
-          <p className="font-light text-sm lg:text-2xl">{calculateAnnualSalary()}</p>
-        </div>
-        <div className="flex flex-col ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Address</h3>
-          <p className="font-light text-sm lg:text-2xl">{addressFormat(data)}</p>
-        </div>
-        <div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Gender</h3>
+            <p className="font-light text-sm md:text-xl lg:text-2xl">{data?.gender}</p>
+          </div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Contact Number</h3>
+            <p className="font-light text-sm lg:text-2xl">{formatContactNumber()}</p>
+          </div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl ">Birthday</h3>
+            <p className="font-light text-sm lg:text-2xl">{formatBirthday()}</p>
+          </div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Age</h3>
+            {age !== null && <p className="font-light text-sm lg:text-2xl">{age} </p>}
+          </div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Appointment</h3>
+            <p className="font-light text-sm lg:text-2xl">{data?.employeeType?.name}</p>
+          </div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Eligibility</h3>
+            <p className="font-light text-sm lg:text-2xl">{data?.eligibility?.name}</p>
+          </div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Monthly Salary</h3>
+            <p className="font-light text-sm lg:text-2xl">{formatSalary()}</p>
+          </div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Annual Salary</h3>
+            <p className="font-light text-sm lg:text-2xl">{calculateAnnualSalary()}</p>
+          </div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Address</h3>
+            <p className="font-light text-sm lg:text-2xl">{addressFormat(data)}</p>
+          </div>
+          <div>
+
+          </div>
+          <div className="flex flex-col  ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">GSIS Number</h3>
+            <p className="font-light text-sm lg:text-2xl">{data?.gsisNo || 'No Data'}</p>
+          </div>
+          <div className="flex flex-col  ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">TIN Number</h3>
+            <p className="font-light text-sm lg:text-2xl">{data?.tinNo || 'No Data'}</p>
+          </div>
+          <div className="flex flex-col  ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Pagibig Number</h3>
+            <p className="font-light text-sm lg:text-2xl">{data?.pagIbigNo || 'No Data'}</p>
+          </div>
+          <div className="flex flex-col  ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Philhealth Number</h3>
+            <p className="font-light text-sm lg:text-2xl">{data?.philHealthNo || 'No Data'}</p>
+          </div>
+          <div className="flex flex-col  ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Date Hired</h3>
+            <p className="font-light text-sm lg:text-2xl">{formatDateHired()}</p>
+          </div>
+          <div className="flex flex-col  ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Year(s) of Service</h3>
+            {yearService && (
+              <p className="font-light text-sm lg:text-2xl items-start">
+                {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
+              </p>
+            )}
+          </div>
+          {data.latestAppointment && (
+            <div className="flex flex-col">
+              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Latest Appointment</h3>
+              <p className="font-light text-sm lg:text-2xl">{formatLatestAppointment()}</p>
+            </div>
+          )}
+
+          {data.latestAppointment && (
+            <div className="flex flex-col">
+              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">YoS latest appoint</h3>
+              {latestAppointDate && (
+                <p className="font-light text-sm lg:text-2xl items-start">
+                  {latestAppointDate.years} Y/s, {latestAppointDate.months} Mon/s, {latestAppointDate.days} Day/s
+                </p>
+              )}
+            </div>
+          )}
+           {data.terminateDate && (
+            <div className="flex flex-col">
+              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Termination Date</h3>
+              <p className="font-light text-sm lg:text-2xl">{formatTerminateDate()}</p>
+            </div>
+          )}
+
           
-        </div>
-        <div className="flex flex-col  ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">GSIS Number</h3>
-          <p className="font-light text-sm lg:text-2xl">{data?.gsisNo || 'No Data'}</p>
-        </div>
-        <div className="flex flex-col  ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">TIN Number</h3>
-          <p className="font-light text-sm lg:text-2xl">{data?.tinNo  || 'No Data'}</p>
-        </div>
-        <div className="flex flex-col  ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Pagibig Number</h3>
-          <p className="font-light text-sm lg:text-2xl">{data?.pagIbigNo  || 'No Data'}</p>
-        </div>
-        <div className="flex flex-col  ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Philhealth Number</h3>
-          <p className="font-light text-sm lg:text-2xl">{data?.philHealthNo  || 'No Data'}</p>
-        </div>
-        <div className="flex flex-col  ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Date Hired</h3>
-          <p className="font-light text-sm lg:text-2xl">{formatDateHired()}</p>
-        </div>
-        <div className="flex flex-col  ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Year(s) of Service</h3>
-          {yearService && (
-            <p className="font-light text-sm lg:text-2xl items-start">
-              {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
-            </p>
-          )}
-        </div>
-        <div className="flex flex-col  ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Latest Appointment</h3>
-          <p className="font-light text-sm lg:text-2xl">{formatLatestAppointment()}</p>
-        </div>
-        <div className="flex flex-col  ">
-          <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">YoS latest appoint</h3>
-          {latestAppointDate && (
-            <p className="font-light text-sm lg:text-2xl items-start">
-              {latestAppointDate.years} Y/s, {latestAppointDate.months} Mon/s, {latestAppointDate.days} Day/s
-            </p>
-          )}
-        </div>
+
+
         </div>
       </div>
 
