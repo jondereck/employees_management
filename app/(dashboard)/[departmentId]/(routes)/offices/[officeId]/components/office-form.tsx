@@ -72,7 +72,7 @@ export const OfficeForm = ({
         await axios.post(`/api/${params.departmentId}/offices`, values);;
       }
 
-      router.refresh();
+      router.back();
       router.push(`/${params.departmentId}/offices`)
 
 

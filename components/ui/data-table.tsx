@@ -97,7 +97,10 @@ export function DataTable<TData, TValue>({
             className="max-w-sm  "
           />
         ))}
+        <div className="ml-auto">
         <DataTableViewOptions table={table} />
+        </div>
+        
 
 
       </div>
