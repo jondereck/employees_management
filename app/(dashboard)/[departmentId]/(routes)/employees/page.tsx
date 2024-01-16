@@ -42,6 +42,7 @@ const EmployeesPage = async ({
     salary: formatter.format(item.salary),
     dateHired: format(item.dateHired, "MMMM do, yyyy"),
     latestAppointment: format(item.dateHired, "MMMM do, yyyy"),
+    terminateDate: item.terminateDate,
     // employeeType: item.employeeType.name,
     // offices: item.offices.name,
     // eligibility: item.eligibility.name,
@@ -70,8 +71,6 @@ const EmployeesPage = async ({
   city: item.city,
   barangay: item.barangay,
   houseNo: item.houseNo,
-
-
   }));
 
   return ( 
