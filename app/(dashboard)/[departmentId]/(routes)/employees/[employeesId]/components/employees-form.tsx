@@ -87,6 +87,8 @@ const formSchema = z.object({
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
   isHead: z.boolean(),
+  salaryGrade: z.string(),
+  memberPolicyNo: z.string(),
 });
 
 
@@ -151,7 +153,7 @@ export const EmployeesForm = ({
       barangay: initialData.barangay.toUpperCase(),
       street: initialData.street.toUpperCase(),
       salary: parseFloat(String(initialData?.salary)),
-      
+
     }
 
       : {
@@ -186,7 +188,8 @@ export const EmployeesForm = ({
         city: '',
         barangay: '',
         street: '',
-
+        salaryGrade: '',
+        memberPolicyNo: '',
 
       }
   });
@@ -315,33 +318,25 @@ export const EmployeesForm = ({
 
 
   function formatNumber(input: string): string {
-    // Remove non-numeric characters from the input
     const numericValue = input.replace(/\D/g, '');
-
-    // Determine the group size for formatting
     const groupSize = 3;
-
-    // Split the numeric value into groups of three digits
     const groups = numericValue.match(new RegExp(`\\d{1,${groupSize}}`, 'g'));
+    return groups ? groups.join('-') : '';
+}
 
-    // Join the groups with a hyphen
-    const formattedValue = groups ? groups.join('-') : '';
-
-    return formattedValue;
-  }
 
   const formatDate = (input: string) => {
     // Remove non-numeric characters
     const numericValue = input.replace(/\D/g, '');
-  
+
     // Format the date as "mm/dd/yyyy"
     const formattedDate = numericValue
       .replace(/(\d{2})(\d{2})(\d{4})/, '$1/$2/$3') // Format as "mm/dd/yyyy"
       .substr(0, 10); // Limit to 10 characters (mm/dd/yyyy)
-  
+
     return formattedDate;
   };
-  
+
 
 
   return (
@@ -825,10 +820,32 @@ export const EmployeesForm = ({
                         // Update the field value with the modified input
                         field.onChange(inputValue);
                       }}
+                      className="w-auto h-auto"
                     />
                   </FormControl>
                   <FormDescription>
                     {field.value && `₱ ${Number(field.value).toLocaleString()}`}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="salaryGrade"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Salary Grade</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="12"
+                      {...field}
+                      className="w-auto h-auto"
+                    />
+                  </FormControl>
+                  <FormDescription>
+
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -997,6 +1014,40 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
+              <FormField
+              control={form.control}
+              name="dateHired"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Date hired</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn("w-auto  justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className=" w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        captionLayout="dropdown-buttons"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        fromYear={fromYear}
+                        toYear={currentYear}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormDescription>
+                    Date hired is used to calculate years of service.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
           <Separator />
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
@@ -1009,7 +1060,7 @@ export const EmployeesForm = ({
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Ex: 000-000-0000"
+                      placeholder="Ex: 000-000-000-0"
                       {...field}
                       onChange={(e) => {
                         const inputValue = e.target.value;
@@ -1082,7 +1133,29 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
+            <FormField
+              control={form.control}
+              name="memberPolicyNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Member Policy Number</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Member Policy Number"
+                      {...field}
+                      {...field}
+                      
+                    />
 
+                  </FormControl>
+                  <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="pagIbigNo"
@@ -1110,41 +1183,10 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-
-            <FormField
-              control={form.control}
-              name="dateHired"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Date hired</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn("w-auto  justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className=" w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        captionLayout="dropdown-buttons"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        fromYear={fromYear}
-                        toYear={currentYear}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormDescription>
-                    Date hired is used to calculate years of service.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            </div>
+        <Separator/>
+        <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
+          
             <FormField
               control={form.control}
               name="latestAppointment"
@@ -1188,12 +1230,13 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                  This field is optional for employee is terminated/retired.
+                    This field is optional for employee is terminated/retired.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+       
           </div>
           <div className="grid lg:grid-cols-2  grid-cols-1 gap-8  space-y-0 ">
             <FormField

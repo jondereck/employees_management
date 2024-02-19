@@ -77,7 +77,9 @@ export async function PATCH(
       isHead,
       employeeTypeId,
       officeId,
-      eligibilityId
+      eligibilityId,
+      salaryGrade,
+      memberPolicyNo,
     } = body;
 
     if (!firstName) {
@@ -156,7 +158,9 @@ export async function PATCH(
         isHead,
         employeeTypeId,
         officeId,
-        eligibilityId
+        eligibilityId,
+        salaryGrade,
+      memberPolicyNo,
       }
     });
 

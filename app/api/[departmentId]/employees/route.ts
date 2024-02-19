@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(
   req: Request,
-  { params }: { params: { departmentId: string} }
+  { params }: { params: { departmentId: string } }
 ) {
   try {
     const { userId } = auth();
@@ -42,9 +42,11 @@ export async function POST(
       isHead,
       employeeTypeId,
       officeId,
-      eligibilityId
+      eligibilityId,
+      salaryGrade,
+      memberPolicyNo,
     } = body;
-    
+
 
     if (!userId) {
       return new NextResponse("Unauthenticated", { status: 401 });
@@ -92,14 +94,14 @@ export async function POST(
 
     const alreadyExist = await prismadb.employee.findFirst({
       where: {
-        departmentId:params.departmentId,
+        departmentId: params.departmentId,
         lastName: lastName,
         firstName: firstName,
         middleName: middleName,
         contactNumber: contactNumber,
       },
     });
-    
+
     if (alreadyExist) {
       return new NextResponse(
         JSON.stringify({ error: " Employee already exists." }),
@@ -108,9 +110,9 @@ export async function POST(
     }
 
 
-    
 
-	
+
+
 
     const employee = await prismadb.employee.create({
       data: {
@@ -119,7 +121,7 @@ export async function POST(
         firstName,
         middleName,
         suffix,
-        images: { 
+        images: {
           createMany: {
             data: [
               ...images.map((image: { url: string }) => image)
@@ -151,6 +153,8 @@ export async function POST(
         employeeTypeId,
         officeId,
         eligibilityId,
+        salaryGrade,
+        memberPolicyNo,
       }
     })
 
@@ -167,7 +171,7 @@ export async function GET(
   req: Request,
   { params }: { params: { departmentId: string } }
 ) {
-  try {     
+  try {
     const { searchParams } = new URL(req.url);
     const officeId = searchParams.get("officeId") || undefined;
     const employeeTypeId = searchParams.get("employeeTypeId") || undefined;

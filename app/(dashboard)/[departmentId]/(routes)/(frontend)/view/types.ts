@@ -39,10 +39,10 @@ export interface Employees {
   position: string;
   birthday: string
   gsisNo: string;
-  tinNo: string; 
-  philHealthNo: string;  
-  pagIbigNo: string;  
-  salary:  string; 
+  tinNo: string;
+  philHealthNo: string;
+  pagIbigNo: string;
+  salary: string;
   dateHired: string;
   latestAppointment: string;
   terminateDate: string;
@@ -56,5 +56,8 @@ export interface Employees {
   city: string;
   barangay: string;
   houseNo: string;
+  salaryGrade: string;
+  memberPolicyNo: string;
+
 }
 

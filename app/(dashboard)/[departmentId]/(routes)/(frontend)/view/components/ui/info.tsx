@@ -283,7 +283,10 @@ const Info = ({
         </ActionTooltip>
       </h1>
       <div className="flex flex-col items-start font-sans font-light justify-between">
-        <p className="text-lg font-semibold">{data.position}</p>
+       <div className="flex justify-center items-center gap-2">
+         <p className="text-lg font-semibold">{data.position} </p> 
+         {data.salaryGrade ? <p className="text-xs">{`S.G. ${data.salaryGrade}`}</p> : null}
+       </div>
         <h3 className="text-sm font-light text-gray-700">({data?.offices?.name})</h3>
       </div>
       <Separator />
@@ -330,25 +333,31 @@ const Info = ({
 
           </div>
           <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">GSIS Number</h3>
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">GSIS #</h3>
             <p className="font-light text-sm lg:text-2xl">{data?.gsisNo || 'No Data'}</p>
           </div>
           <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">TIN Number</h3>
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">TIN #</h3>
             <p className="font-light text-sm lg:text-2xl">{data?.tinNo || 'No Data'}</p>
           </div>
           <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Pagibig Number</h3>
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Pagibig #</h3>
             <p className="font-light text-sm lg:text-2xl">{data?.pagIbigNo || 'No Data'}</p>
           </div>
           <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Philhealth Number</h3>
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Member Policy #</h3>
+            <p className="font-light text-sm lg:text-2xl">{data?.memberPolicyNo || 'No Data'}</p>
+          </div>
+          <div className="flex flex-col  ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Philhealth #</h3>
             <p className="font-light text-sm lg:text-2xl">{data?.philHealthNo || 'No Data'}</p>
           </div>
+          <br/>
           <div className="flex flex-col  ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Date Hired</h3>
             <p className="font-light text-sm lg:text-2xl">{formatDateHired()}</p>
           </div>
+          
           <div className="flex flex-col  ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Year(s) of Service</h3>
             {yearService && (
