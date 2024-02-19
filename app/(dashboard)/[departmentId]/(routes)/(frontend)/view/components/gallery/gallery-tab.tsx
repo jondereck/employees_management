@@ -18,7 +18,7 @@ const GalleryTab = ({
       <span className="absolute h-full w-full aspect-square inset-0 overflow-hidden rounded-md">
         <Image 
           fill
-          src={image.url}
+          src={image.url} 
           alt="test "
           className="object-cover object-center"
         />
