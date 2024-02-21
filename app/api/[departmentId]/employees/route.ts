@@ -97,7 +97,7 @@ export async function POST(
         departmentId: params.departmentId,
         lastName: lastName,
         firstName: firstName,
-        middleName: middleName,
+        // middleName: middleName,
         contactNumber: contactNumber,
       },
     });
