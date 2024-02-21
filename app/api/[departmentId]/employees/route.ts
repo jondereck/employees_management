@@ -95,27 +95,38 @@ export async function POST(
     const alreadyExist = await prismadb.employee.findFirst({
       where: {
         departmentId: params.departmentId,
-        OR: [
-          { lastName },
-          { firstName },
-          { middleName },
-          { contactNumber },
-          { gsisNo },
-          { tinNo },
-          { pagIbigNo },
-          { philHealthNo },
-          { memberPolicyNo }
-        ],
+        lastName: lastName,
+        firstName: firstName,
+        // middleName: middleName,
+        // contactNumber: contactNumber,
+        // gsisNo,
+        // tinNo,
+        // pagIbigNo,
+        // philHealthNo,
+        // memberPolicyNo,
       },
     });
-    
+
     if (alreadyExist) {
       return new NextResponse(
-        JSON.stringify({ error: "Employee already exists." }),
+        JSON.stringify({ error: " Employee already exists." }),
         { status: 400 }
       );
     }
-    
+
+    const numberExist = await prismadb.employee.findFirst({
+      where: {
+        departmentId: params.departmentId,
+        gsisNo,
+      }
+    })
+
+    if (numberExist) {
+      return new NextResponse(
+        JSON.stringify({ error: " Employee already exists." }),
+        { status: 400 }
+      );
+    }
 
 
 
