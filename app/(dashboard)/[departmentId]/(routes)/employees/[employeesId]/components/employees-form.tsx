@@ -163,7 +163,7 @@ export const EmployeesForm = ({
         suffix: '',
         images: [{ url: 'https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg' }],
         gender: '',
-        contactNumber: ' ',
+        contactNumber: '',
         position: '',
         birthday: undefined,
         // age: '',
