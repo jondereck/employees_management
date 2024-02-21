@@ -222,7 +222,7 @@ export async function GET(
         eligibility: true
       },
       orderBy: {
-        createdAt: 'desc'
+        createdAt: 'asc'
       }
     });
 

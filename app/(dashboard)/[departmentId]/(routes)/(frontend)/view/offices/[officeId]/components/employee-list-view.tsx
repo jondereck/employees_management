@@ -6,7 +6,7 @@ import NoResults from "../../../components/ui/no-results";
 import EmployeeCard from "../../../components/ui/employee-card";
 
 
-const EmployeePerPage = 10;
+const EmployeePerPage = 12;
 
 interface EmployeeListProps {
   items: Employees[];
