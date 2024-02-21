@@ -98,7 +98,12 @@ export async function POST(
         lastName: lastName,
         firstName: firstName,
         // middleName: middleName,
-        contactNumber: contactNumber,
+        // contactNumber: contactNumber,
+        // gsisNo,
+        // tinNo,
+        // pagIbigNo,
+        // philHealthNo,
+        // memberPolicyNo,
       },
     });
 
