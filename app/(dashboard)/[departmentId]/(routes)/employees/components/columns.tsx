@@ -79,6 +79,8 @@ export type EmployeesColumn = {
   memberPolicyNo: string;
 
 }
+const [copied, setCopied] = useState(false);
+
 
 const calculateAge = (birthdate: string) => {
   // Parse the birthdate using date-fns parse function
@@ -169,10 +171,17 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       }
 
       const suffix = capitalizeFirstLetter(row.original.suffix);
-      const position = row.original.position
-      const fullName = `${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
 
-      const [copied, setCopied] = useState(false);
+      const getTitle = (gender: string) => {
+        return gender === 'Male' ? 'Mr.' : 'Ms.';
+      };
+
+      const title = getTitle(row.original.gender);
+
+      
+      const position = row.original.position
+      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
+
 
       const handleCopyClick = () => {
         onCopy(fullName);
