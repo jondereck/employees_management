@@ -79,8 +79,6 @@ export type EmployeesColumn = {
   memberPolicyNo: string;
 
 }
-const [copied, setCopied] = useState(false);
-
 
 const calculateAge = (birthdate: string) => {
   // Parse the birthdate using date-fns parse function
@@ -106,6 +104,7 @@ const calculateAge = (birthdate: string) => {
 const onCopy = (text: string) => {
   navigator.clipboard.writeText(text);
 }
+
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
   {
@@ -148,6 +147,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Full Name" />
     ),
     cell: ({ row }) => {
+      const [copied, setCopied] = useState(false);
       const capitalizeFirstLetter = (str: string) => {
         return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
       };
@@ -182,6 +182,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       const position = row.original.position
       const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
 
+     
 
       const handleCopyClick = () => {
         onCopy(fullName);
