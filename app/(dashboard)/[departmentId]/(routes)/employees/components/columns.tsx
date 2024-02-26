@@ -3,13 +3,17 @@
 import { ColumnDef } from "@tanstack/react-table"
 
 import { Button } from "@/components/ui/button"
-import { ArrowUpDown } from "lucide-react"
+import { ArrowUpDown, Copy } from "lucide-react"
 import { CellAction } from "./cell-actions"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DataTableColumnHeader } from "@/components/ui/column-header"
 import PreviewModal from "../../(frontend)/view/components/preview"
 import { Eye } from "./eye"
 import { parse } from "date-fns"
+import { useState } from "react"
+import toast from "react-hot-toast"
+import { ActionTooltip } from "@/components/ui/action-tooltip"
+
 
 
 
@@ -97,6 +101,9 @@ const calculateAge = (birthdate: string) => {
   return age;
 };
 
+const onCopy = (text: string) => {
+  navigator.clipboard.writeText(text);
+}
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
   {
@@ -127,28 +134,94 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     id: "eye",
     cell: ({ row }) => <Eye data={row.original} />
   },
+  // {
+  //   accessorKey: "lastName",
+  //   header: ({ column }) => (
+  //     <DataTableColumnHeader column={column} title="Last Name" />
+  //   ),
+  // },
   {
-    accessorKey: "lastName",
+    accessorKey: "lastName", // Change this to a custom accessor key like "fullName"
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Last Name" />
+      <DataTableColumnHeader column={column} title="Full Name" />
+    ),
+    cell: ({ row }) => {
+      const capitalizeFirstLetter = (str: string) => {
+        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+      };
+
+      let firstName = '';
+      if (row.original.firstName) {
+        const firstNameWords = row.original.firstName.split(' ');
+        firstName = firstNameWords.map(word => capitalizeFirstLetter(word)).join(' ');
+      }
+
+      let middleNameInitials = '';
+      if (row.original.middleName) {
+        const middleNameWords = row.original.middleName.split(' ');
+        middleNameInitials = middleNameWords.map(word => word.charAt(0).toUpperCase()).join('');
+      }
+
+      let lastName = '';
+      if (row.original.lastName) {
+        const lastNameWords = row.original.lastName.split(' ');
+        lastName = lastNameWords.map(word => capitalizeFirstLetter(word)).join(' ');
+      }
+
+      const suffix = capitalizeFirstLetter(row.original.suffix);
+      const position = row.original.position
+      const fullName = `${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
+
+      const [copied, setCopied] = useState(false);
+
+      const handleCopyClick = () => {
+        onCopy(fullName);
+        setCopied(true);
+        toast.success("Copied")
+        setTimeout(() => setCopied(false), 2000); // Reset copied state after 2 seconds
+      };
+
+      return (
+        <ActionTooltip
+          label="Copy"
+          side="right"
+        >
+          <div 
+         className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center ${copied ? 'bg-green-100' : ''}`}
+        onClick={handleCopyClick}>
+          <span>{`${firstName} ${middleNameInitials}. ${lastName} ${suffix}`}</span>
+          
+        </div>
+        </ActionTooltip>
+        
+      );
+    },
+  },
+
+  {
+    accessorKey: "position",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Position" />
     ),
   },
-  {
-    accessorKey: "firstName",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="First Name" />
-    ),
-  }, {
-    accessorKey: "middleName",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Middle Name" />
-    ),
-  }, {
-    accessorKey: "suffix",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Suffix" />
-    ),
-  },
+  // {
+  //   accessorKey: "firstName",
+  //   header: ({ column }) => (
+  //     <DataTableColumnHeader column={column} title="First Name" />
+  //   ),
+  // }, 
+  // {
+  //   accessorKey: "middleName",
+  //   header: ({ column }) => (
+  //     <DataTableColumnHeader column={column} title="Middle Name" />
+  //   ),
+  // }, 
+  // {
+  //   accessorKey: "suffix",
+  //   header: ({ column }) => (
+  //     <DataTableColumnHeader column={column} title="Suffix" />
+  //   ),
+  // },
   {
     accessorKey: "birthday",
     header: ({ column }) => (
@@ -198,12 +271,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Contact Number" />
     ),
   },
-  {
-    accessorKey: "position",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Position" />
-    ),
-  },
+  
   // {
   //   accessorKey: "birthday",
   //   header: ({ column }) => (

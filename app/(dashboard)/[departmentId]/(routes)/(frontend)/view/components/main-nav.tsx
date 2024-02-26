@@ -9,11 +9,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 import {  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator  } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
-import useSearchModal from "@/hooks/user-search-modal";
+
 import { useEffect, useState } from "react";
 import { getEmployeeCountsByOffice } from "../actions/get-employee-counts-office";
 import { setTimeout } from "timers/promises";
 import Loading from "@/app/loading";
+import useSearchModal from "@/hooks/user-search-modal";
 
 type PopoverTriggerProps = React.ComponentPropsWithoutRef<typeof PopoverTrigger>
 
@@ -29,7 +30,7 @@ const MainNav = ({
 }: MainNav) => {
   const pathname = usePathname();
   const params = useParams();
-  const searchModal = useSearchModal();
+  const searchModal = useSearchModal;
   const router = useRouter();
 
   const formattedItems = data.map((item) => ({
