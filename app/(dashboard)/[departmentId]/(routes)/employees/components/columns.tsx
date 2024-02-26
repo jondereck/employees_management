@@ -106,6 +106,7 @@ const onCopy = (text: string) => {
 }
 
 
+
 export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     id: "select",
@@ -147,7 +148,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Full Name" />
     ),
     cell: ({ row }) => {
-      const [copied, setCopied] = useState(false);
+      
       const capitalizeFirstLetter = (str: string) => {
         return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
       };
@@ -186,9 +187,10 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
       const handleCopyClick = () => {
         onCopy(fullName);
-        setCopied(true);
+        
         toast.success("Copied")
-        setTimeout(() => setCopied(false), 2000); // Reset copied state after 2 seconds
+        // Reset copied state after 2 seconds
+        
       };
 
       return (
@@ -197,7 +199,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
           side="right"
         >
           <div 
-         className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center ${copied ? 'bg-green-100' : ''}`}
+         className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
         onClick={handleCopyClick}>
           <span>{`${firstName} ${middleNameInitials}. ${lastName} ${suffix}`}</span>
           
@@ -207,6 +209,8 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       );
     },
   },
+
+  
 
   {
     accessorKey: "position",
