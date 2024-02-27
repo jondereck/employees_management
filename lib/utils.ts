@@ -20,3 +20,19 @@ export const  formatTinNumber = (tin: string) =>  {
     return tin;
   }
 }
+
+
+// utils.ts
+// utils.ts
+
+export function calculateAge(birthDateString: string): number {
+  const birthDate = new Date(birthDateString);
+  const currentDate = new Date();
+  const diffInYears = currentDate.getFullYear() - birthDate.getFullYear();
+  const isBirthdayPassed = (
+    currentDate.getMonth() > birthDate.getMonth() ||
+    (currentDate.getMonth() === birthDate.getMonth() && currentDate.getDate() >= birthDate.getDate())
+  );
+  return isBirthdayPassed ? diffInYears : diffInYears - 1;
+}
+

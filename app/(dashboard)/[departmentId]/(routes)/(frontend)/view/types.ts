@@ -58,6 +58,7 @@ export interface Employees {
   houseNo: string;
   salaryGrade: string;
   memberPolicyNo: string;
+  age: string;
 
 }
 

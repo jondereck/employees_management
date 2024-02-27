@@ -9,11 +9,14 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DataTableColumnHeader } from "@/components/ui/column-header"
 import PreviewModal from "../../(frontend)/view/components/preview"
 import { Eye } from "./eye"
-import { parse } from "date-fns"
+
 import { useState } from "react"
 import toast from "react-hot-toast"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
+import getEmployees from "../../(frontend)/view/actions/get-employees"
 
+import { Employees } from "../../(frontend)/view/types";
+import AgeCell from "./age-cell"
 
 
 
@@ -42,9 +45,6 @@ export interface EmployeeType {
   name: string;
   value: string;
 }
-
-
-
 
 export type EmployeesColumn = {
   id: string;
@@ -77,33 +77,15 @@ export type EmployeesColumn = {
   houseNo: string;
   salaryGrade: string;
   memberPolicyNo: string;
-
+  age: string;
 }
 
-const calculateAge = (birthdate: string) => {
-  // Parse the birthdate using date-fns parse function
-  const parsedBirthdate = parse(birthdate, 'MMMM do, yyyy', new Date());
-
-  if (isNaN(parsedBirthdate.getTime())) {
-    console.log("Invalid birthdate:", birthdate);
-    return null;
-  }
-
-  const today = new Date();
-
-  const age = today.getFullYear() - parsedBirthdate.getFullYear();
-  const monthDiff = today.getMonth() - parsedBirthdate.getMonth();
-
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < parsedBirthdate.getDate())) {
-    return age - 1;
-  }
-
-  return age;
-};
 
 const onCopy = (text: string) => {
   navigator.clipboard.writeText(text);
 }
+
+
 
 
 
@@ -143,7 +125,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   //   ),
   // },
   {
-    accessorKey: "lastName", // Change this to a custom accessor key like "fullName"
+    accessorKey: "firstName", // Change this to a custom accessor key like "fullName"
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Full Name" />
     ),
@@ -184,15 +166,10 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
 
      
-
       const handleCopyClick = () => {
         onCopy(fullName);
-        
-        toast.success("Copied")
-        // Reset copied state after 2 seconds
-        
+        toast.success("Copied")  
       };
-
       return (
         <ActionTooltip
           label="Copy"
@@ -209,15 +186,18 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       );
     },
   },
-
-  
-
   {
     accessorKey: "position",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Position" />
     ),
   },
+  // {
+  //   accessorKey: "age",
+  //   header: ({ column }) => (
+  //     <DataTableColumnHeader column={column} title="Age2" />
+  //   ),
+  // },
   // {
   //   accessorKey: "firstName",
   //   header: ({ column }) => (
@@ -238,36 +218,28 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   // },
   {
     accessorKey: "birthday",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Age" />
-    ),
+    header: "Age",
     cell: ({ row }) => (
-      <span>{calculateAge(row.original.birthday)}</span>
+      <span><AgeCell birthday={row.original.birthday}/></span>
     ),
   },
   {
     accessorKey: "offices",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Department" />
-    ),
+    header: "Office",
     cell: ({ row }) => (
       row.original.offices ? row.original.offices.name : "N/A"
     ),
   },
   {
     accessorKey: "eligibility",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Eligibility" />
-    ),
+    header: "Eligibility",
     cell: ({ row }) => (
       row.original.eligibility ? row.original.eligibility.name : "N/A"
     ),
   },
   {
     accessorKey: "employeeType",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Appointment" />
-    ),
+    header: "Appointment",
     cell: ({ row }) => (
       row.original.employeeType ? row.original.employeeType.name : "N/A"
     ),
@@ -280,10 +252,14 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
   },
   {
-    accessorKey: "contactNumber",
+    accessorKey: "salary",
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Contact Number" />
+      <DataTableColumnHeader column={column} title="Salary" />
     ),
+  },
+  {
+    accessorKey: "contactNumber",
+    header: "Contact Number",
   },
   
   // {
@@ -294,34 +270,21 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   // },
   {
     accessorKey: "tinNo",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="TIN No." />
-    ),
+    header: "TIN No.",
   },
   {
     accessorKey: "gsisNo",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="GSIS No." />
-    ),
+    header: "GSIS No.",
   },
   {
     accessorKey: "philHealthNo",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Philhealth No." />
-    ),
+    header: "Philhealth No.",
   },
   {
     accessorKey: "pagIbigNo",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Pagibig No." />
-    ),
+    header: "Pagibig No.",
   },
-  {
-    accessorKey: "salary",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Salary" />
-    ),
-  },
+
   {
     accessorKey: "dateHired",
     header: ({ column }) => (
@@ -330,15 +293,11 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   },
   {
     accessorKey: "isFeatured",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Featured" />
-    ),
+    header:"Featured",
   },
   {
     accessorKey: "isArchived",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title=" Archived" />
-    ),
+    header: "Archived",
   },
   {
     accessorKey: "createdAt",

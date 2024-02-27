@@ -73,6 +73,7 @@ const EmployeesPage = async ({
   city: item.city,
   barangay: item.barangay,
   houseNo: item.houseNo,
+  age:item.age
   }));
 
   return ( 

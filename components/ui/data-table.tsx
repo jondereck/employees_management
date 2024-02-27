@@ -1,7 +1,7 @@
 "use client"
 
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import {
   ColumnDef,
@@ -59,7 +59,8 @@ export function DataTable<TData, TValue>({
   );
 
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  const [rowSelection, setRowSelection] = useState({})
+  const [rowSelection, setRowSelection] = useState({});
+
 
   const table = useReactTable({
     data,

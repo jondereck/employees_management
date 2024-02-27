@@ -89,6 +89,7 @@ const formSchema = z.object({
   isHead: z.boolean(),
   salaryGrade: z.string(),
   memberPolicyNo: z.string(),
+  age: z.string(),
 });
 
 
@@ -166,7 +167,7 @@ export const EmployeesForm = ({
         contactNumber: '',
         position: '',
         birthday: undefined,
-        // age: '',
+        age: '',
         gsisNo: '',
         tinNo: '',
         pagIbigNo: '',
@@ -195,7 +196,7 @@ export const EmployeesForm = ({
   });
 
 
-  const [calculatedAge, setCalculatedAge] = useState<number | null>(null);
+  const [calculatedAge, setCalculatedAge] = useState(0);
 
   // Function to calculate age
   const calculateAgeFromBirthday = (birthday: Date) => {
@@ -322,7 +323,7 @@ export const EmployeesForm = ({
     const groupSize = 3;
     const groups = numericValue.match(new RegExp(`\\d{1,${groupSize}}`, 'g'));
     return groups ? groups.join('-') : '';
-}
+  }
 
 
   const formatDate = (input: string) => {
@@ -531,6 +532,28 @@ export const EmployeesForm = ({
                         const formattedValue = e.target.value.replace(/^(\+63|63|0)/, '').replace(/\D/g, ''); // Remove non-numeric characters
                         field.onChange(formattedValue);
                       }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="age"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Age </FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Age"
+                       
+       
+                      {...field}
+                   
                     />
                   </FormControl>
                   <FormDescription>
@@ -1014,7 +1037,7 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-              <FormField
+            <FormField
               control={form.control}
               name="dateHired"
               render={({ field }) => (
@@ -1145,7 +1168,7 @@ export const EmployeesForm = ({
                       placeholder="Member Policy Number"
                       {...field}
                       {...field}
-                      
+
                     />
 
                   </FormControl>
@@ -1183,10 +1206,10 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-            </div>
-        <Separator/>
-        <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
-          
+          </div>
+          <Separator />
+          <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
+
             <FormField
               control={form.control}
               name="latestAppointment"
@@ -1236,7 +1259,7 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-       
+
           </div>
           <div className="grid lg:grid-cols-2  grid-cols-1 gap-8  space-y-0 ">
             <FormField

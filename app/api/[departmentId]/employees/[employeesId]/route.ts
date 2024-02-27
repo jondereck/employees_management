@@ -80,6 +80,7 @@ export async function PATCH(
       eligibilityId,
       salaryGrade,
       memberPolicyNo,
+      age
     } = body;
 
     if (!firstName) {
@@ -161,6 +162,7 @@ export async function PATCH(
         eligibilityId,
         salaryGrade,
       memberPolicyNo,
+      age,
       }
     });
 

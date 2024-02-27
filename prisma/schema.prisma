@@ -106,6 +106,7 @@ model Employee {
   position          String
   education         String
   birthday          DateTime
+  age               String       @default("")
   region            String       @default("")
   province          String       @default("")
   city              String       @default("")
@@ -123,7 +124,7 @@ model Employee {
   terminateDate     String       @default("")
   salaryGrade       String       @default("")
   memberPolicyNo    String       @default("")
-  employeeTypeId    String    
+  employeeTypeId    String
   employeeType      EmployeeType @relation(fields: [employeeTypeId], references: [id])
   eligibilityId     String
   eligibility       Eligibility  @relation(fields: [eligibilityId], references: [id])

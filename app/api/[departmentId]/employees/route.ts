@@ -45,6 +45,7 @@ export async function POST(
       eligibilityId,
       salaryGrade,
       memberPolicyNo,
+      age,
     } = body;
 
 
@@ -114,19 +115,19 @@ export async function POST(
       );
     }
 
-    const numberExist = await prismadb.employee.findFirst({
-      where: {
-        departmentId: params.departmentId,
-        gsisNo,
-      }
-    })
+    // const numberExist = await prismadb.employee.findFirst({
+    //   where: {
+    //     departmentId: params.departmentId,
+    //     gsisNo,
+    //   }
+    // })
 
-    if (numberExist) {
-      return new NextResponse(
-        JSON.stringify({ error: " Employee already exists." }),
-        { status: 400 }
-      );
-    }
+    // if (numberExist) {
+    //   return new NextResponse(
+    //     JSON.stringify({ error: " Employee already exists." }),
+    //     { status: 400 }
+    //   );
+    // }
 
 
 
@@ -174,6 +175,7 @@ export async function POST(
         eligibilityId,
         salaryGrade,
         memberPolicyNo,
+        age,
       }
     })
 
