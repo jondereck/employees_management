@@ -87,21 +87,30 @@ export function DataTable<TData, TValue>({
   return (
     <div>
       <div className="flex items-center gap-2 py-4">
-        {searchKeys?.map((key) => (
-          <Input
-            key={key}
-            placeholder={`Search ${key}...`}
-            value={(table.getColumn(key)?.getFilterValue() as string) ?? ""}
-            onChange={(event) =>
-              table.getColumn(key)?.setFilterValue(event.target.value)
-            }
-            className="max-w-sm  "
-          />
-        ))}
+        {searchKeys?.map((key) => {
+          // Function to format the key
+          const formattedKey = key
+            .split(/(?=[A-Z])/) // Split on capital letters
+            .map((part) => part.charAt(0).toLowerCase() + part.slice(1)) // Capitalize each part
+            .join(" "); // Join parts with space
+
+          return (
+            <Input
+              key={key}
+              placeholder={`Search ${formattedKey}`} // Use formatted key in placeholder
+              value={(table.getColumn(key)?.getFilterValue() as string) ?? ""}
+              onChange={(event) =>
+                table.getColumn(key)?.setFilterValue(event.target.value)
+              }
+              className="max-w-sm"
+            />
+          );
+        })}
+
         <div className="ml-auto">
-        <DataTableViewOptions table={table} />
+          <DataTableViewOptions table={table} />
         </div>
-        
+
 
 
       </div>

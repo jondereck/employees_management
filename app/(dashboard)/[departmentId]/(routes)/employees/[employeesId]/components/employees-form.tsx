@@ -1007,6 +1007,7 @@ export const EmployeesForm = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Eligibility </FormLabel>
+                  <div className="flex overflow-auto">
                   <Select
                     disabled={loading}
                     onValueChange={field.onChange}
@@ -1033,6 +1034,7 @@ export const EmployeesForm = ({
                     </SelectContent>
 
                   </Select>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}

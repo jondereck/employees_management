@@ -127,7 +127,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     accessorKey: "firstName", // Change this to a custom accessor key like "fullName"
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Full Name" />
+      <DataTableColumnHeader column={column} title="Name" />
     ),
     cell: ({ row }) => {
       
@@ -186,6 +186,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       );
     },
   },
+  
   {
     accessorKey: "position",
     header: ({ column }) => (
@@ -256,6 +257,14 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Salary" />
     ),
+  },
+  {
+    accessorKey: "salaryGrade",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column}
+        title="Grade"
+      />
+    )
   },
   {
     accessorKey: "contactNumber",
