@@ -541,7 +541,7 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-            <FormField
+            {/* <FormField
               control={form.control}
               name="age"
               render={({ field }) => (
@@ -562,7 +562,7 @@ export const EmployeesForm = ({
                   <FormMessage />
                 </FormItem>
               )}
-            />
+            /> */}
 
             <FormField
               control={form.control}
