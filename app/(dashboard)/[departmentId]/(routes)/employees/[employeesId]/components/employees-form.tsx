@@ -405,12 +405,12 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Prefix"
                       {...field}
-                      // onChange={(e) => {
-                      //   // Convert the input value to uppercase
-                      //   const uppercaseValue = e.target.value.toUpperCase();
-                      //   // Set the field value to the uppercase value
-                      //   field.onChange(uppercaseValue);
-                      // }}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
                     />
                   </FormControl>
                   <FormDescription>

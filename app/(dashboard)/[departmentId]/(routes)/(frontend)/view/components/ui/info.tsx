@@ -249,7 +249,7 @@ const Info = ({
 
   }
 
-  const fullName = `${data.firstName.toUpperCase()} ${data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
+  const fullName = `${data.prefix } ${data.firstName.toUpperCase()} ${data.middleName.toUpperCase()}. ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
 
   const addressFormat = (data: any) => {
     const { region, barangay, city, province, houseNo } = data;

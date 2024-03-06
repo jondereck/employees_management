@@ -198,7 +198,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
           <div
             className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
             onClick={handleCopyClick}>
-            <span>{`${title} ${firstName} ${middleNameInitials}. ${lastName} ${suffix}`}</span>
+            <span>{`${firstName} ${middleNameInitials}. ${lastName} ${suffix}`}</span>
 
           </div>
         </ActionTooltip>
