@@ -222,53 +222,55 @@ export const EmployeesForm = ({
   }, [form.getValues("birthday")]);
 
 
-  const onSubmit = async (values: EmployeesFormValues) => {
-    try {
-      setLoading(true);
+    const onSubmit = async (values: EmployeesFormValues) => {
+      try {
+        setLoading(true);
 
-      values.firstName = values.firstName.toUpperCase();
-      values.lastName = values.lastName.toUpperCase();
-      values.middleName = values.middleName.toUpperCase();
-      values.province = values.province.toUpperCase();
-      values.city = values.city.toUpperCase();
-      values.barangay = values.barangay.toUpperCase();
-      values.street = values.street.toUpperCase();
-      if (initialData) {
-        await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
+      
 
-      } else {
-        await axios.post(`/api/${params.departmentId}/employees`, values);;
-      }
+        values.firstName = values.firstName.toUpperCase();
+        values.lastName = values.lastName.toUpperCase();
+        values.middleName = values.middleName.toUpperCase();
+        values.province = values.province.toUpperCase();
+        values.city = values.city.toUpperCase();
+        values.barangay = values.barangay.toUpperCase();
+        values.street = values.street.toUpperCase();
+        if (initialData) {
+          await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
 
-      router.refresh();
-      router.back();
+        } else {
+          await axios.post(`/api/${params.departmentId}/employees`, values);;
+        }
+
+        router.refresh();
+        router.back();
 
 
-      toast({
-        title: "Success!",
-        description: toastMessage,
-      })
-    } catch (error: any) {
-      if (error.response && error.response.data && error.response.data.error) {
-        // Handle API error messages
-        const errorMessage = error.response.data.error;
         toast({
-          variant: "destructive",
-          title: "Uh oh! Something went wrong.",
-          description: errorMessage,
-        });
-      } else {
-        // Handle generic error
-        toast({
-          variant: "destructive",
-          title: "Uh oh! Something went wrong.",
-          description: "There was a problem with your request.",
-        });
+          title: "Success!",
+          description: toastMessage,
+        })
+      } catch (error: any) {
+        if (error.response && error.response.data && error.response.data.error) {
+          // Handle API error messages
+          const errorMessage = error.response.data.error;
+          toast({
+            variant: "destructive",
+            title: "Uh oh! Something went wrong.",
+            description: errorMessage,
+          });
+        } else {
+          // Handle generic error
+          toast({
+            variant: "destructive",
+            title: "Uh oh! Something went wrong.",
+            description: "There was a problem with your request.",
+          });
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
     }
-  }
 
 
   const onDelete = async () => {

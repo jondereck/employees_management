@@ -40,6 +40,21 @@ const EmployeeCard = ({
       router.push(`/${params.departmentId}/employees/${data.id}`)
     }
 
+  const middleInitials = () => {
+    let middleNameInitials = ''
+
+    if (data.middleName) {
+      const middleNameWords = data.middleName.split(' ');
+        middleNameInitials = middleNameWords.map(word => word.charAt(0).toUpperCase()).join('.') + '.';
+
+        
+    }
+
+    return middleNameInitials;
+  }
+
+  
+
 
   return (
     <div
@@ -76,7 +91,7 @@ const EmployeeCard = ({
       </div>
       {/* description */}
       <div>
-        <p className="font-semibold text-lg">{data.firstName} {data.lastName}</p>
+        <p className="font-semibold text-lg">{data.firstName} {middleInitials()} {data.lastName}</p>
         <p className="font-light text-sm text-gray-500">{data.position}</p>
         {/* {age !== null && (
         <p className="semi-bold text-lg">{`Age: ${age} years`}</p>

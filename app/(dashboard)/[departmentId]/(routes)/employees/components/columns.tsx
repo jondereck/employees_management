@@ -17,6 +17,7 @@ import getEmployees from "../../(frontend)/view/actions/get-employees"
 
 import { Employees } from "../../(frontend)/view/types";
 import AgeCell from "./age-cell"
+import YearsOfService from "./years_of_service_cell"
 
 
 
@@ -222,6 +223,13 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     header: "Age",
     cell: ({ row }) => (
       <span><AgeCell birthday={row.original.birthday}/></span>
+    ),
+  },
+  {
+    accessorKey: "dateHired",
+    header: "Service Tenure ",
+    cell: ({ row }) => (
+      <span><YearsOfService year_service={row.original.dateHired}/></span>
     ),
   },
   {
