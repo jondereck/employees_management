@@ -27,6 +27,7 @@ const EmployeesPage = async ({
 
   const formattedEmployees: EmployeesColumn[] = employees.map((item)=> ({
     id: item.id,
+    prefix: item.prefix,
     lastName: item.lastName,
     firstName: item.firstName,
     middleName: item.middleName,

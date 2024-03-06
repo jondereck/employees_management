@@ -165,23 +165,25 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
         lastName = lastNameWords.map(word => capitalizeFirstLetter(word)).join(' ');
       }
 
-      const suffix = capitalizeFirstLetter(row.original.prefix);
+      const suffix = capitalizeFirstLetter(row.original.suffix);
 
       const getTitle = (gender: string, prefix: string | undefined) => {
         if (prefix) {
-          // If prefix exists, use it as the title
+          const prefixWords = prefix.split(' ');
+          const capitalizedPrefix = prefixWords.map(word => capitalizeFirstLetter(word)).join(' ');
+          return capitalizedPrefix;
           return prefix;
         } else {
           // If prefix doesn't exist, determine title based on gender
           return gender === 'Male' ? 'Mr.' : 'Ms.';
         }
       };
-      
+
       const title = getTitle(row.original.gender, row.original.prefix);
 
 
       const position = row.original.position
-      const fullName = `${title}  ${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
+      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName} ${suffix}, ${position}`;
 
 
       const handleCopyClick = () => {
@@ -203,13 +205,6 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
       );
     },
-  },
-
-  {
-    accessorKey: "prefix",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Position" />
-    ),
   },
 
   {
