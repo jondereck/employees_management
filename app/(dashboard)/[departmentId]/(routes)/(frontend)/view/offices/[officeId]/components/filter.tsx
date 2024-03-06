@@ -23,7 +23,7 @@ interface FilterProps {
 
 }
 
-const Filter =  ({
+const Filter = ({
   data,
   name,
   valueKey,
@@ -34,7 +34,7 @@ const Filter =  ({
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  
+
   const selectedValues = searchParams.getAll(valueKey);
 
   const onClick = (id: string) => {
@@ -82,17 +82,19 @@ const Filter =  ({
       </h3>
       <Separator className="my-4" />
       <div className="flex flex-wrap gap-2">
-        {data.map((filter) => (
-          <div key={filter.id} className="flex items-center">
-            <Button2
-              onClick={() => onClick(filter.id)}
-              className={cn("rounded-md text-sm font-bold text-gray-800 p-2 bg-white border border-gray-300", selectedValues.includes(filter.id) && "bg-black text-white")}
-            >
-              {filter.name} ( {countMap[filter.id] || 0}  )
-            </Button2>
+        {data
+          .filter(filter => countMap[filter.id] > 0) // Filter out items with count 0
+          .map((filter) => (
+            <div key={filter.id} className="flex items-center">
+              <Button2
+                onClick={() => onClick(filter.id)}
+                className={cn("rounded-md text-sm font-bold text-gray-800 p-2 bg-white border border-gray-300", selectedValues.includes(filter.id) && "bg-black text-white")}
+              >
+                {filter.name} ( {countMap[filter.id] || 0}  )
+              </Button2>
 
-          </div>
-        ))}
+            </div>
+          ))}
       </div>
     </div>
   );
