@@ -79,6 +79,7 @@ export type EmployeesColumn = {
   salaryGrade: string;
   memberPolicyNo: string;
   age: string;
+  prefix: string;
 }
 
 
@@ -131,10 +132,20 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Name" />
     ),
     cell: ({ row }) => {
-      
+
       const capitalizeFirstLetter = (str: string) => {
-        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+        if (str) {
+          return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+        }
+        return '';
       };
+
+      // let prefix = '';
+      // if (row.original.prefix) {
+      //   const prefixWords = row.original.prefix.split(' ');
+      //   prefix = prefixWords.map(word => capitalizeFirstLetter(word)).join(' ');
+      // }
+
 
       let firstName = '';
       if (row.original.firstName) {
@@ -154,40 +165,53 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
         lastName = lastNameWords.map(word => capitalizeFirstLetter(word)).join(' ');
       }
 
-      const suffix = capitalizeFirstLetter(row.original.suffix);
+      const suffix = capitalizeFirstLetter(row.original.prefix);
 
-      const getTitle = (gender: string) => {
-        return gender === 'Male' ? 'Mr.' : 'Ms.';
+      const getTitle = (gender: string, prefix: string | undefined) => {
+        if (prefix) {
+          // If prefix exists, use it as the title
+          return prefix;
+        } else {
+          // If prefix doesn't exist, determine title based on gender
+          return gender === 'Male' ? 'Mr.' : 'Ms.';
+        }
       };
-
-      const title = getTitle(row.original.gender);
-
       
-      const position = row.original.position
-      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
+      const title = getTitle(row.original.gender, row.original.prefix);
 
-     
+
+      const position = row.original.position
+      const fullName = `${title}  ${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
+
+
       const handleCopyClick = () => {
         onCopy(fullName);
-        toast.success("Copied")  
+        toast.success("Copied")
       };
       return (
         <ActionTooltip
           label="Copy"
           side="right"
         >
-          <div 
-         className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
-        onClick={handleCopyClick}>
-          <span>{`${firstName} ${middleNameInitials}. ${lastName} ${suffix}`}</span>
-          
-        </div>
+          <div
+            className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
+            onClick={handleCopyClick}>
+            <span>{`${title} ${firstName} ${middleNameInitials}. ${lastName} ${suffix}`}</span>
+
+          </div>
         </ActionTooltip>
-        
+
       );
     },
   },
-  
+
+  {
+    accessorKey: "prefix",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Position" />
+    ),
+  },
+
   {
     accessorKey: "position",
     header: ({ column }) => (
@@ -222,14 +246,14 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     accessorKey: "birthday",
     header: "Age",
     cell: ({ row }) => (
-      <span><AgeCell birthday={row.original.birthday}/></span>
+      <span><AgeCell birthday={row.original.birthday} /></span>
     ),
   },
   {
     accessorKey: "dateHired",
     header: "Service Tenure ",
     cell: ({ row }) => (
-      <span><YearsOfService year_service={row.original.dateHired}/></span>
+      <span><YearsOfService year_service={row.original.dateHired} /></span>
     ),
   },
   {
@@ -278,7 +302,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     accessorKey: "contactNumber",
     header: "Contact Number",
   },
-  
+
   // {
   //   accessorKey: "birthday",
   //   header: ({ column }) => (
@@ -310,7 +334,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   },
   {
     accessorKey: "isFeatured",
-    header:"Featured",
+    header: "Featured",
   },
   {
     accessorKey: "isArchived",

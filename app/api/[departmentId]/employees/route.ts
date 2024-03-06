@@ -13,6 +13,7 @@ export async function POST(
     const body = await req.json()
 
     const {
+      prefix,
       lastName,
       firstName,
       middleName,
@@ -150,6 +151,7 @@ export async function POST(
     const employee = await prismadb.employee.create({
       data: {
         departmentId: params.departmentId,
+        prefix,
         lastName,
         firstName,
         middleName,

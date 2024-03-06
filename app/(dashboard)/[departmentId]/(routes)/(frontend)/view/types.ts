@@ -30,6 +30,7 @@ export interface EmployeeType {
 export interface Employees {
   id: string;
   offices: Offices;
+  prefix: string;
   firstName: string;
   middleName: string;
   lastName: string;

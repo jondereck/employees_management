@@ -48,6 +48,7 @@ export async function PATCH(
 
     const body = await req.json();
     const {
+      prefix,
       lastName,
       firstName,
       middleName,
@@ -128,6 +129,7 @@ export async function PATCH(
         id: params.employeesId,
       },
       data: {
+        prefix,
         lastName,
         firstName,
         middleName,

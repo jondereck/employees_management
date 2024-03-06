@@ -97,6 +97,7 @@ model Employee {
   department        Department   @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
   officeId          String
   offices           Offices      @relation("OfficesToEmployee", fields: [officeId], references: [id])
+  prefix            String       @default("")
   lastName          String       @db.Text()
   firstName         String       @db.Text()
   middleName        String
