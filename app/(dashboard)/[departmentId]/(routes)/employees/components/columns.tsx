@@ -88,7 +88,17 @@ const onCopy = (text: string) => {
 }
 
 
-
+// const renderHeader = (column:any) => {
+//   return (
+//     <Button
+//       variant="ghost"
+//       onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+//     >
+//       {column.header}
+//       <ArrowUpDown className="ml-2 h-4 w-4" />
+//     </Button>
+//   );
+// };
 
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
@@ -183,7 +193,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
 
       const position = row.original.position
-      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName} ${suffix}, ${position}`;
+      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
 
 
       const handleCopyClick = () => {
