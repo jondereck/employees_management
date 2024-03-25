@@ -159,7 +159,7 @@ export const EmployeesForm = ({
     }
 
       : {
-        prefix:'',
+        prefix: '',
         lastName: '',
         firstName: '',
         middleName: '',
@@ -224,55 +224,55 @@ export const EmployeesForm = ({
   }, [form.getValues("birthday")]);
 
 
-    const onSubmit = async (values: EmployeesFormValues) => {
-      try {
-        setLoading(true);
-
-      
-
-        values.firstName = values.firstName.toUpperCase();
-        values.lastName = values.lastName.toUpperCase();
-        values.middleName = values.middleName.toUpperCase();
-        values.province = values.province.toUpperCase();
-        values.city = values.city.toUpperCase();
-        values.barangay = values.barangay.toUpperCase();
-        values.street = values.street.toUpperCase();
-        if (initialData) {
-          await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
-
-        } else {
-          await axios.post(`/api/${params.departmentId}/employees`, values);;
-        }
-
-        router.refresh();
-        router.back();
+  const onSubmit = async (values: EmployeesFormValues) => {
+    try {
+      setLoading(true);
 
 
-        toast({
-          title: "Success!",
-          description: toastMessage,
-        })
-      } catch (error: any) {
-        if (error.response && error.response.data && error.response.data.error) {
-          // Handle API error messages
-          const errorMessage = error.response.data.error;
-          toast({
-            variant: "destructive",
-            title: "Uh oh! Something went wrong.",
-            description: errorMessage,
-          });
-        } else {
-          // Handle generic error
-          toast({
-            variant: "destructive",
-            title: "Uh oh! Something went wrong.",
-            description: "There was a problem with your request.",
-          });
-        }
-      } finally {
-        setLoading(false);
+
+      values.firstName = values.firstName.toUpperCase();
+      values.lastName = values.lastName.toUpperCase();
+      values.middleName = values.middleName.toUpperCase();
+      values.province = values.province.toUpperCase();
+      values.city = values.city.toUpperCase();
+      values.barangay = values.barangay.toUpperCase();
+      values.street = values.street.toUpperCase();
+      if (initialData) {
+        await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
+
+      } else {
+        await axios.post(`/api/${params.departmentId}/employees`, values);;
       }
+
+      router.refresh();
+      router.back();
+
+
+      toast({
+        title: "Success!",
+        description: toastMessage,
+      })
+    } catch (error: any) {
+      if (error.response && error.response.data && error.response.data.error) {
+        // Handle API error messages
+        const errorMessage = error.response.data.error;
+        toast({
+          variant: "destructive",
+          title: "Uh oh! Something went wrong.",
+          description: errorMessage,
+        });
+      } else {
+        // Handle generic error
+        toast({
+          variant: "destructive",
+          title: "Uh oh! Something went wrong.",
+          description: "There was a problem with your request.",
+        });
+      }
+    } finally {
+      setLoading(false);
     }
+  }
 
 
   const onDelete = async () => {
@@ -392,9 +392,9 @@ export const EmployeesForm = ({
               </FormItem>
             )}
           />
-              
+
           <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-3 gap-8">
-          <FormField
+            <FormField
               control={form.control}
               name="prefix"
               render={({ field }) => (
@@ -446,7 +446,7 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-       
+
             <FormField
               control={form.control}
               name="lastName"
@@ -726,41 +726,38 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             /> */}
+
             <FormField
               control={form.control}
-              name="province"
+              name="houseNo"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Province</FormLabel>
+                  <FormLabel>Unit/Number</FormLabel>
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Pangasinan"
+                      placeholder="Home Number"
                       {...field}
-                      onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
-                        field.onChange(uppercaseValue);
-                      }}
                     />
                   </FormControl>
                   <FormDescription>
+                    This is optional
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
-              name="city"
+              name="street"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>City/Municipal</FormLabel>
+                  <FormLabel>Street</FormLabel>
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Lingayen"
+                      placeholder="Mendoza Street"
                       {...field}
                       onChange={(e) => {
                         // Convert the input value to uppercase
@@ -771,6 +768,7 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
+                    This is optional
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -806,34 +804,14 @@ export const EmployeesForm = ({
 
             <FormField
               control={form.control}
-              name="houseNo"
+              name="city"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Unit/Number</FormLabel>
+                  <FormLabel>City/Municipal</FormLabel>
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Home Number"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    This is optional
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="street"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Street</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Mendoza Street"
+                      placeholder="Lingayen"
                       {...field}
                       onChange={(e) => {
                         // Convert the input value to uppercase
@@ -844,12 +822,39 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                    This is optional
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="province"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Province</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Pangasinan"
+                      {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+
 
 
           </div>
@@ -1040,32 +1045,32 @@ export const EmployeesForm = ({
                 <FormItem>
                   <FormLabel>Eligibility </FormLabel>
                   <div className="flex overflow-auto">
-                  <Select
-                    disabled={loading}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue
-                          defaultValue={field.value}
-                          placeholder="Select Eligibility "
-                        />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {eligibility.map((item) => (
-                        <SelectItem
-                          key={item.id}
-                          value={item.id}
-                        >
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
+                    <Select
+                      disabled={loading}
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue
+                            defaultValue={field.value}
+                            placeholder="Select Eligibility "
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {eligibility.map((item) => (
+                          <SelectItem
+                            key={item.id}
+                            value={item.id}
+                          >
+                            {item.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
 
-                  </Select>
+                    </Select>
                   </div>
                   <FormMessage />
                 </FormItem>
