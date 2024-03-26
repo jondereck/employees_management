@@ -116,33 +116,20 @@ export async function POST(
       );
     }
 
-    // const alreadyExistGsisNo = await prismadb.employee.findFirst({
-    //   where: {
-    //     gsisNo,
-    //   },
-    // });
+    if (contactNumber) {
+      const contactNumberExists = await prismadb.employee.findFirst({
+        where: {
+          contactNumber: contactNumber,
+        },
+      });
 
-    // if (alreadyExistGsisNo) {
-    //   return new NextResponse(
-    //     JSON.stringify({ error: " Employee already exists." }),
-    //     { status: 400 }
-    //   );
-    // }
-
-    // const numberExist = await prismadb.employee.findFirst({
-    //   where: {
-    //     departmentId: params.departmentId,
-    //     gsisNo,
-    //   }
-    // })
-
-    // if (numberExist) {
-    //   return new NextResponse(
-    //     JSON.stringify({ error: " Employee already exists." }),
-    //     { status: 400 }
-    //   );
-    // }
-
+      if (contactNumberExists) {
+        return new NextResponse(
+          JSON.stringify({ error: "Contact number already exists." }),
+          { status: 400 }
+        );
+      }
+    }
 
 
 
