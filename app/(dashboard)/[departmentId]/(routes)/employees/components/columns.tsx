@@ -197,8 +197,12 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
 
       const handleCopyClick = () => {
-        onCopy(fullName);
-        toast.success("Copied")
+        let copiedText = fullName;
+        if (row.original.employeeType && row.original.employeeType.name === 'Job Order') {
+          copiedText += ' (Job Order)';
+        }
+        onCopy(copiedText);
+        toast.success("Copied");
       };
       return (
         <ActionTooltip
