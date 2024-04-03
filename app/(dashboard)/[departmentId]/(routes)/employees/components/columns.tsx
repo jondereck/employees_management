@@ -253,6 +253,35 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   // },
   {
     accessorKey: "birthday",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Birthday" />
+    ),
+    cell: ({ row }) => {
+      const rawBirthday = row.original.birthday;
+      // Split the raw date into its components (month, day, year)
+      const parts = rawBirthday.split(" ");
+      const month = parts[0];
+      const day = parseInt(parts[1], 10); // Parse the day as an integer
+      const year = parseInt(parts[2], 10); // Parse the year as an integer
+      // Construct the date object
+      const formattedBirthday = new Date(`${month} ${day}, ${year}`).toLocaleDateString("en-US");
+      const handleCopyClick = () => {
+        onCopy(formattedBirthday);2/12/1999
+        toast.success("Copied");
+      };
+      return (
+        <ActionTooltip label="Copy" side="right">
+          <div
+            className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
+            onClick={handleCopyClick}>
+            <span>{rawBirthday}</span>
+          </div>
+        </ActionTooltip>
+      );
+    },
+  },
+  {
+    accessorKey: "birthday",
     header: "Age",
     cell: ({ row }) => (
       <span><AgeCell birthday={row.original.birthday} /></span>
