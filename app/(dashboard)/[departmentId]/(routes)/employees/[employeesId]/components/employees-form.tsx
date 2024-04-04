@@ -1122,18 +1122,22 @@ export const EmployeesForm = ({
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Ex: 000-000-000-0"
+                      placeholder="000-000-000-0"
                       {...field}
                       onChange={(e) => {
                         const inputValue = e.target.value;
-                        const formattedValue = formatNumber(inputValue);
-                        field.onChange(formattedValue);
+                        if (inputValue.length <= 12) {
+                          // If the input length is 10 or less, update the field value
+                          const formattedValue = formatNumber(inputValue);
+                          field.onChange(formattedValue);
+                        }
+                        // If input length exceeds 10 characters, do not update the field value
                       }}
                     />
 
                   </FormControl>
                   <FormDescription>
-
+                  {field.value && field.value.length !== 13 && <span className="text-red-600">GSIS number must be 10 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1148,20 +1152,21 @@ export const EmployeesForm = ({
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="TIN Number"
-                      {...field}
+                      placeholder="000-000-000"
                       {...field}
                       onChange={(e) => {
                         const inputValue = e.target.value;
-                        const formattedValue = formatNumber(inputValue);
-                        field.onChange(formattedValue);
+                        if (inputValue.length <= 11) {
+                          const formattedValue = formatNumber(inputValue);
+                          field.onChange(formattedValue);
+                        }
                       }}
 
                     />
 
                   </FormControl>
                   <FormDescription>
-
+                  {field.value && field.value.length !== 11 && <span className="text-red-600">TIN number must be 9 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1177,19 +1182,19 @@ export const EmployeesForm = ({
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Philhealth Number"
-                      {...field}
+                      placeholder="000-000-000-000"
                       {...field}
                       onChange={(e) => {
                         const inputValue = e.target.value;
-                        const formattedValue = formatNumber(inputValue);
+                        if(inputValue.length <= 15) {
+                          const formattedValue = formatNumber(inputValue);
                         field.onChange(formattedValue);
+                        }
                       }}
                     />
-
                   </FormControl>
                   <FormDescription>
-
+                  {field.value && field.value.length !== 15 && <span className="text-red-600">TIN number must be 12 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1206,13 +1211,16 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Member Policy Number"
                       {...field}
-                      {...field}
-
+                      onChange={(e) => {
+                        const inputValue = e.target.value;
+                        if(inputValue.length <= 13) {
+                        field.onChange(inputValue);
+                        }
+                      }}
                     />
-
                   </FormControl>
                   <FormDescription>
-
+                  {field.value && field.value.length !== 13 && <span className="text-red-600">Member Policy number must be 13 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1227,19 +1235,21 @@ export const EmployeesForm = ({
                   <FormControl>
                     <Input
                       disabled={loading}
-                      placeholder="Pagibig Number"
+                      placeholder="000-000-000-000"
                       {...field}
                       {...field}
                       onChange={(e) => {
                         const inputValue = e.target.value;
-                        const formattedValue = formatNumber(inputValue);
-                        field.onChange(formattedValue);
+                        if (inputValue.length <= 15) {
+                          const formattedValue = formatNumber(inputValue);
+                          field.onChange(formattedValue);
+                        }
                       }}
                     />
 
                   </FormControl>
                   <FormDescription>
-
+                  {field.value && field.value.length !== 15 && <span className="text-red-600">Pagibig Policy number must be 12 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

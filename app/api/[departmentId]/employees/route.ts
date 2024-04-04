@@ -48,7 +48,7 @@ export async function POST(
       memberPolicyNo,
       age,
     } = body;
-
+    
 
     if (!userId) {
       return new NextResponse("Unauthenticated", { status: 401 });
@@ -78,6 +78,38 @@ export async function POST(
     }
     if (!eligibilityId) {
       return new NextResponse("Eligibility Id is required", { status: 400 })
+    }
+
+    if (gsisNo && gsisNo.length !== 10) {
+      return new NextResponse(
+        JSON.stringify({ error: " GSIS number must be exactly 10 characters long" }),
+        { status: 400 }
+      );
+    }
+    if (tinNo && tinNo.length !== 9) {
+      return new NextResponse(
+        JSON.stringify({ error: " TIN number must be exactly 9 characters long" }),
+        { status: 400 }
+      );
+    }
+
+    if (philHealthNo && philHealthNo.length !== 12) {
+      return new NextResponse(
+        JSON.stringify({ error: " PhilHealth number must be exactly 12 characters long" }),
+        { status: 400 }
+      );
+    }
+    if (memberPolicyNo && memberPolicyNo.length !== 13) {
+      return new NextResponse(
+        JSON.stringify({ error: " Member Policy number must be exactly 13 characters long" }),
+        { status: 400 }
+      );
+    }
+    if (pagIbigNo && pagIbigNo.length !== 12) {
+      return new NextResponse(
+        JSON.stringify({ error: " Pagibig number must be exactly 12 characters long" }),
+        { status: 400 }
+      );
     }
 
     if (!params.departmentId) {
