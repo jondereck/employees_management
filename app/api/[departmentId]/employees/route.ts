@@ -99,7 +99,7 @@ export async function POST(
         { status: 400 }
       );
     }
-    if (memberPolicyNo && memberPolicyNo.length !== 15) {
+    if (memberPolicyNo && memberPolicyNo.length !== 13) {
       return new NextResponse(
         JSON.stringify({ error: " Member Policy number must be exactly 13 characters long" }),
         { status: 400 }
