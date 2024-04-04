@@ -105,7 +105,7 @@ export async function POST(
         { status: 400 }
       );
     }
-    if (pagIbigNo && pagIbigNo.length !== 12) {
+    if (pagIbigNo && pagIbigNo.length !== 15) {
       return new NextResponse(
         JSON.stringify({ error: " Pagibig number must be exactly 12 characters long" }),
         { status: 400 }
