@@ -130,16 +130,11 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     id: "eye",
     cell: ({ row }) => <Eye data={row.original} />
   },
-  // {
-  //   accessorKey: "lastName",
-  //   header: ({ column }) => (
-  //     <DataTableColumnHeader column={column} title="Last Name" />
-  //   ),
-  // },
+
   {
     accessorKey: "firstName", // Change this to a custom accessor key like "fullName"
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Name" />
+      <DataTableColumnHeader column={column} title="First Name" />
     ),
     cell: ({ row }) => {
 
@@ -155,7 +150,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       //   const prefixWords = row.original.prefix.split(' ');
       //   prefix = prefixWords.map(word => capitalizeFirstLetter(word)).join(' ');
       // }
-
+      const firstName2 = row.original.firstName
 
       let firstName = '';
       if (row.original.firstName) {
@@ -212,13 +207,24 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
           <div
             className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
             onClick={handleCopyClick}>
-            <span>{`${firstName} ${middleNameInitials}. ${lastName} ${suffix}`}</span>
+            <span>{`${firstName2} 
+        `
+            
+            }</span>
 
           </div>
         </ActionTooltip>
-
+    // ${middleNameInitials}. 
+    // ${lastName} 
+    // ${suffix}
       );
     },
+  },
+  {
+    accessorKey: "lastName",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Last Name" />
+    ),
   },
 
   {
