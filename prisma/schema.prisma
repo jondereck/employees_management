@@ -15,7 +15,7 @@ datasource db {
 
 
 model Department {
-  id           String         @id @default(cuid())
+  id           String         @id @default(uuid())
   name         String
   userId       String
   billboards   Billboard[]    @relation("DepartmentToBillboard")
@@ -28,7 +28,7 @@ model Department {
 }
 
 model Billboard {
-  id           String     @id @default(cuid())
+  id           String     @id @default(uuid())
   departmentId String
   department   Department @relation("DepartmentToBillboard", fields: [departmentId], references: [id])
   label        String
@@ -41,7 +41,7 @@ model Billboard {
 }
 
 model Offices {
-  id           String     @id @default(cuid())
+  id           String     @id @default(uuid())
   departmentId String
   department   Department @relation("DepartmentToOffices", fields: [departmentId], references: [id])
   billboardId  String
@@ -56,7 +56,7 @@ model Offices {
 }
 
 model EmployeeType {
-  id           String     @id @default(cuid())
+  id           String     @id @default(uuid())
   departmentId String
   department   Department @relation("DepartmentToEmployeeType", fields: [departmentId], references: [id])
   employee     Employee[] @relation()
@@ -75,7 +75,7 @@ enum EligibilityTypes {
 }
 
 model Eligibility {
-  id               String           @id @default(cuid())
+  id               String           @id @default(uuid())
   departmentId     String
   department       Department       @relation("DepartmentToEligibility", fields: [departmentId], references: [id])
   employee         Employee[]
@@ -94,7 +94,7 @@ enum Gender {
 }
 
 model Employee {
-  id                String       @id @default(cuid())
+  id                String       @id @default(uuid())
   departmentId      String
   department        Department   @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
   officeId          String
@@ -158,3 +158,4 @@ model Image {
 
   @@index([employeeId])
 }
+
