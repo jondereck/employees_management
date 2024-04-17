@@ -20,7 +20,7 @@ const EmployeesPage = async ({
       eligibility: true,
     },
     orderBy: {
-      createdAt: 'desc'
+      updatedAt: 'desc'
     }
   });
 
