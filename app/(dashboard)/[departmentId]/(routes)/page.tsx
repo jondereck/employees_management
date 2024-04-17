@@ -7,6 +7,8 @@ import { Separator } from "@/components/ui/separator";
 import { Shield, ShieldCheck, ShieldOff, Star, Users } from "lucide-react";
 import { PersonIcon } from "@radix-ui/react-icons";
 import { EmployeeType } from "./(frontend)/view/types";
+import Overview from "@/components/overview";
+import { getGraph } from "@/actions/get-graph";
 
 
 
@@ -44,6 +46,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
   ];
 
   const totalEmployee = await getTotalEmployees(params.departmentId);
+  const graphEmployee = await getGraph(params.departmentId)
 
   const totals = await Promise.all(
     employeeTypes.map(async (employeeType) => {
@@ -82,6 +85,15 @@ const DashboardPage = async ({ params }: DashboardProps) => {
             </Card>
           ))}
         </div>
+        <Card className="col-span-4">
+          <CardHeader>
+            <CardTitle>Overview</CardTitle>
+          </CardHeader>
+          <CardContent className="pl-2">
+            <Overview data={graphEmployee}/>
+          </CardContent>
+
+        </Card>
       </div>
     </div>
   );
