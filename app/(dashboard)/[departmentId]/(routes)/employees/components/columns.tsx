@@ -209,16 +209,23 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
             onClick={handleCopyClick}>
             <span>{`${firstName2} 
         `
-            
+
             }</span>
 
           </div>
         </ActionTooltip>
-    // ${middleNameInitials}. 
-    // ${lastName} 
-    // ${suffix}
+        // ${middleNameInitials}. 
+        // ${lastName} 
+        // ${suffix}
       );
     },
+  },
+  {
+    accessorKey: "middleName",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column}
+        title="Middle Name/Initial" />
+    )
   },
   {
     accessorKey: "lastName",
@@ -272,7 +279,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       // Construct the date object
       const formattedBirthday = new Date(`${month} ${day}, ${year}`).toLocaleDateString("en-US");
       const handleCopyClick = () => {
-        onCopy(formattedBirthday);2/12/1999
+        onCopy(formattedBirthday); 2 / 12 / 1999
         toast.success("Copied");
       };
       return (
@@ -382,7 +389,9 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   },
   {
     accessorKey: "isArchived",
-    header: "Archived",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Archived" />
+    )
   },
   {
     accessorKey: "createdAt",

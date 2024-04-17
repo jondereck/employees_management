@@ -560,14 +560,19 @@ export const EmployeesForm = ({
                       placeholder="Contact Number"
                       {...field}
                       onChange={(e) => {
-                        // Remove the "+63" prefix and any non-numeric characters
-                        const formattedValue = e.target.value.replace(/^(\+63|63|0)/, '').replace(/\D/g, ''); // Remove non-numeric characters
-                        field.onChange(formattedValue);
-                      }}
+                        const inputValue = e.target.value;
+                        if (inputValue.length <= 10) {
+                          const formattedValue = inputValue.replace(/^(\+63|63|0)/, '').replace(/\D/g, ''); // Remove non-numeric characters
+                          field.onChange(formattedValue);
+                        }
+                      }
+                      }
+                    // Remove the "+63" prefix and any non-numeric characters
+
                     />
                   </FormControl>
                   <FormDescription>
-
+                        { field.value && field.value.length != 10 && <span className="text-red-600">Please check the contact number</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1137,7 +1142,7 @@ export const EmployeesForm = ({
 
                   </FormControl>
                   <FormDescription>
-                  {field.value && field.value.length !== 13 && <span className="text-red-600">GSIS number must be 10 characters long.</span>}
+                    {field.value && field.value.length !== 13 && <span className="text-red-600">GSIS number must be 10 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1166,7 +1171,7 @@ export const EmployeesForm = ({
 
                   </FormControl>
                   <FormDescription>
-                  {field.value && field.value.length !== 11 && <span className="text-red-600">TIN number must be 9 characters long.</span>}
+                    {field.value && field.value.length !== 11 && <span className="text-red-600">TIN number must be 9 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1186,15 +1191,15 @@ export const EmployeesForm = ({
                       {...field}
                       onChange={(e) => {
                         const inputValue = e.target.value;
-                        if(inputValue.length <= 15) {
+                        if (inputValue.length <= 15) {
                           const formattedValue = formatNumber(inputValue);
-                        field.onChange(formattedValue);
+                          field.onChange(formattedValue);
                         }
                       }}
                     />
                   </FormControl>
                   <FormDescription>
-                  {field.value && field.value.length !== 15 && <span className="text-red-600">TIN number must be 12 characters long.</span>}
+                    {field.value && field.value.length !== 15 && <span className="text-red-600">TIN number must be 12 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1213,14 +1218,14 @@ export const EmployeesForm = ({
                       {...field}
                       onChange={(e) => {
                         const inputValue = e.target.value;
-                        if(inputValue.length <= 13) {
-                        field.onChange(inputValue);
+                        if (inputValue.length <= 13) {
+                          field.onChange(inputValue);
                         }
                       }}
                     />
                   </FormControl>
                   <FormDescription>
-                  {field.value && field.value.length !== 13 && <span className="text-red-600">Member Policy number must be 13 characters long.</span>}
+                    {field.value && field.value.length !== 13 && <span className="text-red-600">Member Policy number must be 13 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1249,7 +1254,7 @@ export const EmployeesForm = ({
 
                   </FormControl>
                   <FormDescription>
-                  {field.value && field.value.length !== 15 && <span className="text-red-600">Pagibig Policy number must be 12 characters long.</span>}
+                    {field.value && field.value.length !== 15 && <span className="text-red-600">Pagibig Policy number must be 12 characters long.</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
