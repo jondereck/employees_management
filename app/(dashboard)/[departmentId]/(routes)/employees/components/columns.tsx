@@ -277,9 +277,11 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       const day = parseInt(parts[1], 10); // Parse the day as an integer
       const year = parseInt(parts[2], 10); // Parse the year as an integer
       // Construct the date object
-      const formattedBirthday = new Date(`${month} ${day}, ${year}`).toLocaleDateString("en-US");
+      const birthdayDate = new Date(`${month} ${day}, ${year}`);
+      birthdayDate.setDate(birthdayDate.getDate() + 1); // Advance the date by one day
+      const formattedBirthday = birthdayDate.toLocaleDateString("en-US");
       const handleCopyClick = () => {
-        onCopy(formattedBirthday); 2 / 12 / 1999
+        onCopy(formattedBirthday);
         toast.success("Copied");
       };
       return (
@@ -287,7 +289,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
           <div
             className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
             onClick={handleCopyClick}>
-            <span>{rawBirthday}</span>
+            <span>{formattedBirthday}</span>
           </div>
         </ActionTooltip>
       );
@@ -300,6 +302,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <span><AgeCell birthday={row.original.birthday} /></span>
     ),
   },
+  
   {
     accessorKey: "dateHired",
     header: "Service Tenure ",
