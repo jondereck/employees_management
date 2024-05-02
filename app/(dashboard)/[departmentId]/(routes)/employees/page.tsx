@@ -36,6 +36,7 @@ const EmployeesPage = async ({
     contactNumber: item.contactNumber,
     position: item.position,
     birthday: format(item.birthday, "MMMM do, yyyy"),
+    education: item.education,
     gsisNo: item.gsisNo,
     tinNo: item.tinNo,
     philHealthNo: item.philHealthNo,
