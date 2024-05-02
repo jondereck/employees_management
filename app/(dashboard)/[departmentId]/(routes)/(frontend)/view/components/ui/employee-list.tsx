@@ -40,10 +40,10 @@ const EmployeeList = ({
   }, [currentPage, items]);
 
   return (
-    <div className="flex-row justify-center jusspace-y-4 ">
+    <div className="flex-row justify-center space-y-4 ">
     <h3 className="font-bold text-3xl">{title}</h3>
     {displayedEmployee.length === 0 && <NoResults />}
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 space-x-2 space-y-2">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
       {displayedEmployee.map((item) => (
         <EmployeeCard key={item.id} data={item} />
       ))}
