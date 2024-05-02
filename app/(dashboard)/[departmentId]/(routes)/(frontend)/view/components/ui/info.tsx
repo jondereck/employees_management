@@ -318,6 +318,14 @@ const Info = ({
             <p className="font-light text-sm lg:text-2xl">{data?.eligibility?.name}</p>
           </div>
           <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Educational Background</h3>
+            <p className="font-light text-sm lg:text-2xl">{data?.education}</p>
+          </div>
+          <div className="flex flex-col ">
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Address</h3>
+            <p className="font-light text-sm lg:text-2xl">{addressFormat(data)}</p>
+          </div>
+          <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Monthly Salary</h3>
             <p className="font-light text-sm lg:text-2xl">{formatSalary()}</p>
           </div>
@@ -325,10 +333,7 @@ const Info = ({
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Annual Salary</h3>
             <p className="font-light text-sm lg:text-2xl">{calculateAnnualSalary()}</p>
           </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Address</h3>
-            <p className="font-light text-sm lg:text-2xl">{addressFormat(data)}</p>
-          </div>
+         
           <div>
 
           </div>

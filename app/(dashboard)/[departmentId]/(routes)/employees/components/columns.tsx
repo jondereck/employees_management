@@ -58,6 +58,7 @@ export type EmployeesColumn = {
   contactNumber: string;
   position: string;
   birthday: string;
+  education:string;
   gsisNo: string;
   tinNo: string;
   philHealthNo: string;
@@ -295,6 +296,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       );
     },
   },
+  
   {
     accessorKey: "birthday",
     header: "Age",
@@ -302,6 +304,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <span><AgeCell birthday={row.original.birthday} /></span>
     ),
   },
+
   
   {
     accessorKey: "dateHired",
