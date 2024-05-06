@@ -2,6 +2,8 @@ import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import { SettingsForm } from "./components/settings-form";
+import SettingsFooter from "./components/settings-footer";
+import { Separator } from "@/components/ui/separator";
 
 interface settingsPageProps {
   params: {
@@ -30,11 +32,16 @@ const SettingsPage = async ({
   }
 
   return (
-    <div className="flex-col">
-      <div className="flex-1 space-y-4  p-8 pt-6">
-        <SettingsForm initialData={department}/>
-      </div>
-    </div>);
+    <div className="flex flex-col min-h-screen">
+    <div className="flex-1 space-y-4 p-8 pt-6">
+      <SettingsForm initialData={department} />
+    </div>
+    <Separator/>
+    <div className="flex justify-center p-2 ">
+      <SettingsFooter />
+    </div>
+  </div>
+  );
 }
 
 export default SettingsPage;
