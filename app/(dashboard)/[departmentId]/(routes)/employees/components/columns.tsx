@@ -321,6 +321,13 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
   },
   {
+    accessorKey: "education",
+    header: "Education",
+    cell: ({ row }) => (
+      row.original.education ? row.original.education : "N/A"
+    ),
+  },
+  {
     accessorKey: "eligibility",
     header: "Eligibility",
     cell: ({ row }) => (

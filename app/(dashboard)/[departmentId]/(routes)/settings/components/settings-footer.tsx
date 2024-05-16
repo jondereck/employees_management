@@ -28,7 +28,7 @@ const SettingsFooter = () => {
           <div className="flex justify-between space-x-4">
             <Avatar>
               <AvatarImage src="https://res.cloudinary.com/ddzjzrqrj/image/upload/v1714969016/Screenshot_20240506_121613_Facebook_wpodco.png" />
-              <AvatarFallback>VC</AvatarFallback>
+              <AvatarFallback>JD</AvatarFallback>
             </Avatar>
             <div className="space-y-1  ">
               <h4 className="text-sm font-semibold">@jonderecknifas</h4>
@@ -70,7 +70,7 @@ const SettingsFooter = () => {
           <div className="flex justify-between space-x-4">
             <Avatar>
               <AvatarImage src="https://res.cloudinary.com/ddzjzrqrj/image/upload/v1714968174/FB_IMG_1714967966149_pevqao_yes_b6gi6y.jpg" />
-              <AvatarFallback>VC</AvatarFallback>
+              <AvatarFallback>K</AvatarFallback>
             </Avatar>
             <div className="space-y-1">
               <h4 className="text-sm font-semibold">@kristheljadeocde</h4>
