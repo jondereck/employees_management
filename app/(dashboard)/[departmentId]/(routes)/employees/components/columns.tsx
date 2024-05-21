@@ -226,7 +226,8 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column}
         title="Middle Name/Initial" />
-    )
+    ),
+    cell: ({ row }) => row.getValue("middleName") || "N/A"
   },
   {
     accessorKey: "lastName",
@@ -290,7 +291,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
           <div
             className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
             onClick={handleCopyClick}>
-            <span>{formattedBirthday}</span>
+            <span>{rawBirthday}</span>
           </div>
         </ActionTooltip>
       );
@@ -360,11 +361,15 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column}
         title="Grade"
       />
-    )
+    ),
+    cell: ({ row }) => row.getValue("salaryGrade") || "N/A"
   },
   {
     accessorKey: "contactNumber",
     header: "Contact Number",
+    cell: ({ row }) => (
+      row.original.contactNumber ? row.original.contactNumber : "N/A"
+    )
   },
 
   // {
@@ -373,21 +378,34 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   //     <DataTableColumnHeader column={column} title="Birthday" />
   //   ),
   // },
+
   {
     accessorKey: "tinNo",
     header: "TIN No.",
+    cell: ({ row }) => (
+      row.original.tinNo ? row.original.tinNo : "N/A"
+    )
   },
   {
     accessorKey: "gsisNo",
     header: "GSIS No.",
+    cell: ({ row }) => (
+      row.original.gsisNo ? row.original.gsisNo : "N/A"
+    )
   },
   {
     accessorKey: "philHealthNo",
     header: "Philhealth No.",
+    cell: ({ row }) => (
+      row.original.philHealthNo ? row.original.philHealthNo : "N/A"
+    )
   },
   {
     accessorKey: "pagIbigNo",
     header: "Pagibig No.",
+    cell: ({ row }) => (
+      row.original.pagIbigNo ? row.original.pagIbigNo : "N/A"
+    )
   },
 
   {
