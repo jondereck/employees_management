@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client"
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eligibility, EmployeeType } from "../../../types";
+import { Eligibility, EmployeeType, Employee } from "../../../types";
 import qs from "query-string";
 import { Separator } from "@/components/ui/separator";
 
@@ -10,7 +10,7 @@ import Button2 from "../../../components/ui/button";
 
 
 interface FilterProps {
-  data: (EmployeeType | Eligibility)[];
+  data: (EmployeeType | Eligibility | Employee)[];
   name: string;
   valueKey: string;
   officeId: string;
@@ -68,6 +68,10 @@ const Filter = ({
 
 
   const countMap = total.reduce((acc, item) => {
+       // Check if isArchived is false (only include if not archived)
+       if (!isArchived || (isArchived && !item.isArchived)) {
+        acc[item.id] = item.count._all;
+      }
     acc[item.id] = item.count._all;
     return acc;
   }, {} as { [key: string]: number });
