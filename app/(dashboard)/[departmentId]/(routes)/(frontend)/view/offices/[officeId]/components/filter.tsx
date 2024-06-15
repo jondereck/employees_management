@@ -70,16 +70,14 @@ const Filter = ({
   }
 
 
-  const countMap = total.reduce((acc, item) => {
-       // Check if isArchived is false (only include if not archived)
-       if (!isArchived || (isArchived && !item.isArchived)) {
-        acc[item.id] = item.count._all;
-      }
+ // Calculate countMap considering isArchived flag
+ const countMap = total.reduce((acc, item) => {
+  // Check if isArchived is false (only include if not archived)
+  if (!isArchived || (isArchived && !item.isArchived)) {
     acc[item.id] = item.count._all;
-    return acc;
-  }, {} as { [key: string]: number });
-
-
+  }
+  return acc;
+}, {} as { [key: string]: number });
 
 
   return (

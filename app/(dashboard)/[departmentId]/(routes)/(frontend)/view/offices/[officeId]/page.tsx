@@ -56,7 +56,7 @@ const OfficesPage = async ({
   const eligibility = await getEligibility();
   const office = await getOffice(params.officeId);
 
-  const isArchived = searchParams.isArchived || false; 
+  const isArchived = searchParams.isArchived; 
 
 
   return (
