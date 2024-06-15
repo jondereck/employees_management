@@ -66,13 +66,12 @@ const MobileFilter = async ({
             <Separator className="h-2" />
 
           </SheetHeader>
-          {/* <Filter
+          <Filter
                 officeId={officeId}
                 total={total}
                 valueKey="employeeTypeId"
                 name="Appointment"
                 data={employeeType}
-                isArchived={isArchived}
               />
               <Filter
                 officeId={officeId}
@@ -80,8 +79,7 @@ const MobileFilter = async ({
                 valueKey="eligibilityId"
                 name="Eligibility"
                 data={eligibility}
-                isArchived={isArchived}
-              /> */}
+              />
            {/* <Filter
                 officeId={officeId}
                 total={totalEligibility}

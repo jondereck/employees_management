@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client"
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eligibility, EmployeeType, Employee } from "../../../types";
+import { Eligibility, EmployeeType } from "../../../types";
 import qs from "query-string";
 import { Separator } from "@/components/ui/separator";
 
@@ -10,7 +10,7 @@ import Button2 from "../../../components/ui/button";
 
 
 interface FilterProps {
-  data: (EmployeeType | Eligibility | Employee)[];
+  data: (EmployeeType | Eligibility)[];
   name: string;
   valueKey: string;
   officeId: string;
@@ -21,8 +21,6 @@ interface FilterProps {
     };
   }[];
 
-  isArchived: boolean;
-
 }
 
 const Filter = ({
@@ -30,8 +28,7 @@ const Filter = ({
   name,
   valueKey,
   officeId,
-  total,
-  isArchived
+  total
 
 }: FilterProps) => {
   const searchParams = useSearchParams();
@@ -70,14 +67,12 @@ const Filter = ({
   }
 
 
- // Calculate countMap considering isArchived flag
- const countMap = total.reduce((acc, item) => {
-  // Check if isArchived is false (only include if not archived)
-  if (!isArchived || (isArchived && !item.isArchived)) {
+  const countMap = total.reduce((acc, item) => {
     acc[item.id] = item.count._all;
-  }
-  return acc;
-}, {} as { [key: string]: number });
+    return acc;
+  }, {} as { [key: string]: number });
+
+
 
 
   return (

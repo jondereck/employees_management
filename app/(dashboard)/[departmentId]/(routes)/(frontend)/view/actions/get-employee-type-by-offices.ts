@@ -8,7 +8,8 @@ export const getEmployeeTypeCountsByOffice = async (officeId: string) => {
       _all: true,
     },
     where: {
-       officeId: officeId
+       officeId: officeId,
+       isArchived:false,
     },
   });
 
