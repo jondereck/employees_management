@@ -72,7 +72,7 @@ const Info = ({
 
   const calculateYearService = () => {
     const dateHired = new Date(data.dateHired);
-    const currentDate = new Date();
+    const currentDate = data.terminateDate ? new Date(data.terminateDate) : new Date();
 
     let serviceYears = currentDate.getFullYear() - dateHired.getFullYear();
     let serviceMonths = currentDate.getMonth() - dateHired.getMonth();
@@ -362,7 +362,7 @@ const Info = ({
           </div>
           
           <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Year(s) of Service</h3>
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl"> Service Rendered</h3>
             {yearService && (
               <p className="font-light text-sm lg:text-2xl items-start">
                 {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s

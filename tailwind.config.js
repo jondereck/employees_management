@@ -55,7 +55,8 @@ module.exports = {
         }),
       },
       fontFamily: {
-        alex: ['Alex Brush']
+        alex: ['Alex Brush'],
+        arizona:['Arizonia']
       },
       borderRadius: {
         lg: "var(--radius)",

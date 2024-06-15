@@ -29,10 +29,11 @@ const formSchema = z.object({
   prefix: z.string(),
   lastName: z.string().min(1, {
     message: "Last Name is required"
-  }).transform((value) => value.toUpperCase(),),
+  }),
+
   firstName: z.string().min(1, {
     message: "First Name is required"
-  }).transform((value) => value.toUpperCase(),),
+  }),
   middleName: z.string(),
   gender: z.string().min(1, {
     message: "Gender is required"
@@ -56,12 +57,12 @@ const formSchema = z.object({
       message: "Position is required",
     })
     .transform((value) => {
-      // Function to remove Roman numerals within parentheses, excluding at the end
+      // Function to convert text within parentheses to uppercase
       const cleanPosition = (position: string) =>
         position.replace(/\(([^)]*)\)/, (match, p1) => {
           if (p1) {
-            const cleanedText = p1.replace(/\b[IVXLCDM]+\b(?![\s\S]*\b[IVXLCDM]+\b)/g, '').trim();
-            return `(${cleanedText})`;
+            const uppercasedText = p1.toUpperCase();
+            return `(${uppercasedText})`;
           }
           return match;
         });
@@ -92,7 +93,6 @@ const formSchema = z.object({
   memberPolicyNo: z.string(),
   age: z.string(),
 });
-
 
 type EmployeesFormValues = z.infer<typeof formSchema>;
 
@@ -174,7 +174,7 @@ export const EmployeesForm = ({
         tinNo: '',
         pagIbigNo: '',
         philHealthNo: '',
-        salary: 0.00,
+        salary: 0,
         dateHired: undefined,
         latestAppointment: '',
         terminateDate: '',
@@ -228,15 +228,13 @@ export const EmployeesForm = ({
     try {
       setLoading(true);
 
-
-
-      values.firstName = values.firstName.toUpperCase();
-      values.lastName = values.lastName.toUpperCase();
-      values.middleName = values.middleName.toUpperCase();
-      values.province = values.province.toUpperCase();
-      values.city = values.city.toUpperCase();
-      values.barangay = values.barangay.toUpperCase();
-      values.street = values.street.toUpperCase();
+      values.firstName = values.firstName.trim().toUpperCase();
+      values.lastName = values.lastName.trim().toUpperCase();
+      values.middleName = values.middleName.trim().toUpperCase();
+      values.province = values.province.trim().toUpperCase();
+      values.city = values.city.trim().toUpperCase();
+      values.barangay = values.barangay.trim().toUpperCase();
+      values.street = values.street.trim().toUpperCase();
       if (initialData) {
         await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
 
@@ -246,8 +244,6 @@ export const EmployeesForm = ({
 
       router.refresh();
       router.back();
-
-
       toast({
         title: "Success!",
         description: toastMessage,
@@ -561,8 +557,8 @@ export const EmployeesForm = ({
                       {...field}
                       onChange={(e) => {
                         const inputValue = e.target.value;
-                        if (inputValue.length <= 10) {
-                          const formattedValue = inputValue.replace(/^(\+63|63|0)/, '').replace(/\D/g, ''); // Remove non-numeric characters
+                        if (inputValue.length <= 11) {
+                          const formattedValue = inputValue.replace(/^(\+63|63|)/, '').replace(/\D/g, ''); // Remove non-numeric characters
                           field.onChange(formattedValue);
                         }
                       }
@@ -572,7 +568,7 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                        { field.value && field.value.length != 10 && <span className="text-red-600">Please check the contact number</span>}
+                    {field.value && field.value.length != 11 && <span className="text-red-600">Please check the contact number</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -870,6 +866,12 @@ export const EmployeesForm = ({
             <FormField
               control={form.control}
               name="salary"
+              rules={{
+                validate: {
+                  notZero: value => value !== 0 || "Salary should not be 0",
+                  above5000: value => value >= 5000 || "Salary should be at least 5000"
+                }
+              }}
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Salary </FormLabel>
@@ -879,17 +881,14 @@ export const EmployeesForm = ({
                       placeholder="Salary"
                       {...field}
                       onChange={(e) => {
-                        // Get the input value and remove commas and periods
                         const inputValue = e.target.value.replace(/[,\.]/g, '');
-
-                        // Update the field value with the modified input
                         field.onChange(inputValue);
                       }}
                       className="w-auto h-auto"
                     />
                   </FormControl>
                   <FormDescription>
-                    {field.value && `₱ ${Number(field.value).toLocaleString()}`}
+                    {field.value && field.value <= 5000 && <span className="text-red-600">Salary cannot be lower than ₱ 6,000</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
