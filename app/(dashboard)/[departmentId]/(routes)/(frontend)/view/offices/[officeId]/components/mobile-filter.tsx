@@ -72,6 +72,7 @@ const MobileFilter = async ({
                 valueKey="employeeTypeId"
                 name="Appointment"
                 data={employeeType}
+                isArchived={isArchived}
               />
               <Filter
                 officeId={officeId}
@@ -79,6 +80,7 @@ const MobileFilter = async ({
                 valueKey="eligibilityId"
                 name="Eligibility"
                 data={eligibility}
+                isArchived={isArchived}
               />
            {/* <Filter
                 officeId={officeId}

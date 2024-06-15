@@ -8,6 +8,7 @@ interface Query {
   employeeTypeId?: string;
   eligibilityId?: string;
   isFeatured?: boolean;
+  isArchived?: boolean;
 }
 
 const getEmployees = async (query: Query): Promise<Employees[]> => {
@@ -18,6 +19,7 @@ const getEmployees = async (query: Query): Promise<Employees[]> => {
       employeeTypeId: query.employeeTypeId,
       eligibilityId: query.eligibilityId,
       isFeatured: query.isFeatured,
+      isArchived: query.isArchived
     },
   });
   const res = await fetch(url);

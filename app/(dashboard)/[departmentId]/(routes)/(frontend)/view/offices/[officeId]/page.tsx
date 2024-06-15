@@ -28,6 +28,7 @@ interface OfficesPageProps {
   searchParams: {
     employeeTypeId: string;
     eligibilityId: string;
+    isArchived: boolean;
 
   }
 }
@@ -48,11 +49,14 @@ const OfficesPage = async ({
     officeId: params.officeId,
     employeeTypeId: searchParams.employeeTypeId,
     eligibilityId: searchParams.eligibilityId,
+    isArchived: searchParams.isArchived,
   });
 
   const employeeType = await getEmployeeType();
   const eligibility = await getEligibility();
   const office = await getOffice(params.officeId);
+
+  const isArchived = searchParams.isArchived || false; 
 
 
   return (
@@ -75,13 +79,13 @@ const OfficesPage = async ({
           <div className="lg:grid lg:grid-cols-5 lg:gap-x-8">
 
 
-            <MobileFilter
+            {/* <MobileFilter
               employeeType={employeeType}
               eligibility={eligibility}
               officeId={officeId}
               total={total}
               totalEligibility={totalEligibility}
-            />
+            /> */}
 
             <div className="hidden lg:block">
               <Filter
@@ -90,6 +94,7 @@ const OfficesPage = async ({
                 valueKey="employeeTypeId"
                 name="Appointment"
                 data={employeeType}
+                isArchived={isArchived}
               />
               <Filter
                 officeId={officeId}
@@ -97,6 +102,7 @@ const OfficesPage = async ({
                 valueKey="eligibilityId"
                 name="Eligibility"
                 data={eligibility}
+                isArchived={isArchived}
               />
             </div>
             <div className="mt-6 lg:col-span-4 lg:mt-0">

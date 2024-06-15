@@ -21,6 +21,8 @@ interface FilterProps {
     };
   }[];
 
+  isArchived: boolean;
+
 }
 
 const Filter = ({
@@ -28,7 +30,8 @@ const Filter = ({
   name,
   valueKey,
   officeId,
-  total
+  total,
+  isArchived
 
 }: FilterProps) => {
   const searchParams = useSearchParams();
