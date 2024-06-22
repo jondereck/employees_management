@@ -2,17 +2,15 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider     = "postgresql"
   url          = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL_UNPOOLED")
+  directUrl    = env("DATABASE_URL_UNPOOLED")
   relationMode = "prisma"
 }
-
-
 
 model Department {
   id           String         @id @default(uuid())
@@ -94,47 +92,51 @@ enum Gender {
 }
 
 model Employee {
-  id                String       @id @default(uuid())
-  departmentId      String
-  department        Department   @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
-  officeId          String
-  offices           Offices      @relation("OfficesToEmployee", fields: [officeId], references: [id])
-  prefix            String       @default("")
-  lastName          String       @db.Text()
-  firstName         String       @db.Text()
-  middleName        String
-  suffix            String
-  gender            Gender
-  contactNumber     String
-  position          String
-  education         String
-  birthday          DateTime
-  age               String       @default("")
-  region            String       @default("")
-  province          String       @default("")
-  city              String       @default("")
-  barangay          String       @default("")
-  houseNo           String       @default("")
-  street            String       @default("")
+  id                     String       @id @default(uuid())
+  departmentId           String
+  department             Department   @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
+  officeId               String
+  offices                Offices      @relation("OfficesToEmployee", fields: [officeId], references: [id])
+  prefix                 String       @default("")
+  lastName               String       @db.Text()
+  firstName              String       @db.Text()
+  middleName             String
+  suffix                 String
+  gender                 Gender
+  contactNumber          String
+  position               String
+  education              String
+  birthday               DateTime
+  age                    String       @default("")
+  region                 String       @default("")
+  province               String       @default("")
+  city                   String       @default("")
+  barangay               String       @default("")
+  houseNo                String       @default("")
+  street                 String       @default("")
   // zipCode        String
-  gsisNo            String
-  tinNo             String
-  philHealthNo      String
-  pagIbigNo         String
-  salary            Float
-  dateHired         DateTime
-  latestAppointment String       @default("")
-  terminateDate     String       @default("")
-  salaryGrade       String       @default("")
-  memberPolicyNo    String       @default("")
-  employeeTypeId    String
-  employeeType      EmployeeType @relation(fields: [employeeTypeId], references: [id])
-  eligibilityId     String
-  eligibility       Eligibility  @relation(fields: [eligibilityId], references: [id])
+  gsisNo                 String
+  tinNo                  String
+  philHealthNo           String
+  pagIbigNo              String
+  salary                 Float
+  dateHired              DateTime
+  latestAppointment      String       @default("")
+  terminateDate          String       @default("")
+  salaryGrade            String       @default("")
+  memberPolicyNo         String       @default("")
+  nickname               String       @default("")
+  emergencyContactName   String       @default("")
+  emergencyContactNumber String       @default("")
+  employeeTypeId         String
+  employeeType           EmployeeType @relation(fields: [employeeTypeId], references: [id])
+  eligibilityId          String
+  eligibility            Eligibility  @relation(fields: [eligibilityId], references: [id])
 
   isFeatured Boolean @default(false)
   isArchived Boolean @default(false)
   isHead     Boolean @default(false)
+  isAwardee    Boolean @default(false)
 
   images Image[]
 
@@ -145,7 +147,6 @@ model Employee {
   @@index([officeId])
   @@index([employeeTypeId])
   @@index([eligibilityId])
-
 }
 
 model Image {
@@ -158,4 +159,3 @@ model Image {
 
   @@index([employeeId])
 }
-

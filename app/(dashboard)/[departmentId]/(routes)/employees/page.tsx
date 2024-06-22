@@ -75,7 +75,10 @@ const EmployeesPage = async ({
   city: item.city,
   barangay: item.barangay,
   houseNo: item.houseNo,
-  age:item.age
+  age:item.age,
+  nickname: item.nickname,
+  emergencyContactName: item.emergencyContactName,
+  emergencyContactNumber: item.emergencyContactNumber
   }));
 
   return ( 

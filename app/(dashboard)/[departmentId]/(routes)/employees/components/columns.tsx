@@ -81,6 +81,9 @@ export type EmployeesColumn = {
   memberPolicyNo: string;
   age: string;
   prefix: string;
+  nickname: string;
+  emergencyContactName: string;
+  emergencyContactNumber: string;
 }
 
 

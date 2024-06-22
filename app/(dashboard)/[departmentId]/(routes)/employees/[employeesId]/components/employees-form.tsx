@@ -22,6 +22,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
+import eachDayOfInterval from "date-fns/eachDayOfInterval/index";
 
 
 
@@ -92,6 +93,9 @@ const formSchema = z.object({
   salaryGrade: z.string(),
   memberPolicyNo: z.string(),
   age: z.string(),
+  nickname: z.string(),
+  emergencyContactName: z.string(),
+  emergencyContactNumber: z.string(),
 });
 
 type EmployeesFormValues = z.infer<typeof formSchema>;
@@ -193,6 +197,9 @@ export const EmployeesForm = ({
         street: '',
         salaryGrade: '',
         memberPolicyNo: '',
+        nickname: '',
+        emergencyContactName: '',
+        emergencyContactNumber: '',
 
       }
   });
@@ -232,6 +239,8 @@ export const EmployeesForm = ({
       values.lastName = values.lastName.trim().toUpperCase();
       values.middleName = values.middleName.trim().toUpperCase();
       values.province = values.province.trim().toUpperCase();
+      values.nickname = values.nickname.trim().toUpperCase();
+      values.emergencyContactName = values.emergencyContactName.trim().toUpperCase();
       values.city = values.city.trim().toUpperCase();
       values.barangay = values.barangay.trim().toUpperCase();
       values.street = values.street.trim().toUpperCase();
@@ -411,6 +420,32 @@ export const EmployeesForm = ({
                   </FormControl>
                   <FormDescription>
                     Ex: Hon., Engr., Dr., etc.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="nickname"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nickname</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Nickname"
+                      {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Ex: JD
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -727,6 +762,62 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             /> */}
+            <FormField
+              control={form.control}
+              name="emergencyContactName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Emergency Contact Name</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Emergency Contact Name"
+                      {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Contact when emergecy
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+         <FormField
+              control={form.control}
+              name="emergencyContactNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Emergency Contact Number </FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Emergency Contact Number"
+                      {...field}
+                      onChange={(e) => {
+                        const inputValue = e.target.value;
+                        if (inputValue.length <= 11) {
+                          const formattedValue = inputValue.replace(/^(\+63|63|)/, '').replace(/\D/g, ''); // Remove non-numeric characters
+                          field.onChange(formattedValue);
+                        }
+                      }
+                      }
+                    // Remove the "+63" prefix and any non-numeric characters
+
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {field.value && field.value.length != 11 && <span className="text-red-600">Please check the contact number</span>}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -866,12 +957,7 @@ export const EmployeesForm = ({
             <FormField
               control={form.control}
               name="salary"
-              rules={{
-                validate: {
-                  notZero: value => value !== 0 || "Salary should not be 0",
-                  above5000: value => value >= 5000 || "Salary should be at least 5000"
-                }
-              }}
+
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Salary </FormLabel>
@@ -880,15 +966,17 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Salary"
                       {...field}
+                      value={field.value ? `₱ ${new Intl.NumberFormat().format(field.value)}` : ''}
                       onChange={(e) => {
-                        const inputValue = e.target.value.replace(/[,\.]/g, '');
-                        field.onChange(inputValue);
+                        const inputValue = e.target.value.replace(/[₱,]/g, '').trim();
+                        const numericValue = Number(inputValue);
+                        field.onChange(numericValue);
                       }}
                       className="w-auto h-auto"
                     />
                   </FormControl>
                   <FormDescription>
-                    {field.value && field.value <= 5000 && <span className="text-red-600">Salary cannot be lower than ₱ 6,000</span>}
+                    {field.value <= 5000 && <span className="text-red-600">Salary cannot be lower than ₱ 6,000</span>}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -1259,10 +1347,6 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-          </div>
-          <Separator />
-          <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
-
             <FormField
               control={form.control}
               name="latestAppointment"
@@ -1314,6 +1398,8 @@ export const EmployeesForm = ({
             />
 
           </div>
+          <Separator />
+
           <div className="grid lg:grid-cols-2  grid-cols-1 gap-8  space-y-0 ">
             <FormField
               control={form.control}

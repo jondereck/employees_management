@@ -249,7 +249,7 @@ const Info = ({
 
   }
 
-  const fullName = `${data.prefix } ${data.firstName.toUpperCase()} ${data.middleName.toUpperCase()}. ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
+  const fullName = `${data.prefix} ${data.firstName.toUpperCase()} "${data.nickname}" ${data.middleName.length === 1 ? data.middleName.toUpperCase() + '.' : data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
 
   const addressFormat = (data: any) => {
     const { region, barangay, city, province, houseNo } = data;
@@ -283,10 +283,10 @@ const Info = ({
         </ActionTooltip>
       </h1>
       <div className="flex flex-col items-start font-sans font-light justify-between">
-       <div className="flex justify-center items-center gap-2">
-         <p className="text-lg font-semibold">{data.position} </p> 
-         {data.salaryGrade ? <p className="text-xs">{`S.G. ${data.salaryGrade}`}</p> : null}
-       </div>
+        <div className="flex justify-center items-center gap-2">
+          <p className="text-lg font-semibold">{data.position} </p>
+          {data.salaryGrade ? <p className="text-xs">{`S.G. ${data.salaryGrade}`}</p> : null}
+        </div>
         <h3 className="text-sm font-light text-gray-700">({data?.offices?.name})</h3>
       </div>
       <Separator />
@@ -318,12 +318,12 @@ const Info = ({
             <p className="font-light text-sm lg:text-2xl">{data?.eligibility?.name}</p>
           </div>
           <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl"> Educational History</h3>
-            <p className="font-light text-sm lg:text-2xl">{data?.education}</p>
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl"> Highest Educational Attaintment </h3>
+            <p className="font-light text-sm lg:text-2xl">{data?.education || "No Data"}</p>
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Address</h3>
-            <p className="font-light text-sm lg:text-2xl">{addressFormat(data)}</p>
+            <p className="font-light text-sm lg:text-2xl">{addressFormat(data) || "No Data"}</p>
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Monthly Salary</h3>
@@ -333,8 +333,8 @@ const Info = ({
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Annual Salary</h3>
             <p className="font-light text-sm lg:text-2xl">{calculateAnnualSalary()}</p>
           </div>
-         
-        
+
+
           <div className="flex flex-col  ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">GSIS #</h3>
             <p className="font-light text-sm lg:text-2xl">{data?.gsisNo || 'No Data'}</p>
@@ -355,12 +355,12 @@ const Info = ({
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Philhealth #</h3>
             <p className="font-light text-sm lg:text-2xl">{data?.philHealthNo || 'No Data'}</p>
           </div>
-          <br/>
+          <br />
           <div className="flex flex-col  ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Date Hired</h3>
             <p className="font-light text-sm lg:text-2xl">{formatDateHired()}</p>
           </div>
-          
+
           <div className="flex flex-col  ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl"> Service Rendered</h3>
             {yearService && (
@@ -386,15 +386,29 @@ const Info = ({
               )}
             </div>
           )}
-           {data.terminateDate && (
+          {data.terminateDate && (
             <div className="flex flex-col">
               <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Termination Date</h3>
               <p className="font-light text-sm lg:text-2xl">{formatTerminateDate()}</p>
             </div>
           )}
 
-          
-
+          {data.emergencyContactName && (
+            <div className="flex flex-col">
+              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Contact Person</h3>
+              <p className="font-light text-sm lg:text-2xl items-start">
+                {data.emergencyContactName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ')}
+              </p>
+            </div>
+          )}
+          {data.emergencyContactNumber && (
+            <div className="flex flex-col  ">
+              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Emerg. Contact #</h3>
+              <p className="font-light text-sm lg:text-2xl items-start">
+                {data.emergencyContactNumber}
+              </p>
+            </div>
+          )}
 
         </div>
       </div>

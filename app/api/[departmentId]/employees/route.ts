@@ -47,6 +47,9 @@ export async function POST(
       salaryGrade,
       memberPolicyNo,
       age,
+      nickname,
+      emergencyContactName,
+      emergencyContactNumber
     } = body;
     
 
@@ -80,7 +83,7 @@ export async function POST(
       return new NextResponse("Eligibility Id is required", { status: 400 })
     }
 
-    if (contactNumber && contactNumber.length !== 11) {
+    if (contactNumber && contactNumber.length !== 11 || emergencyContactNumber && emergencyContactNumber.length !== 11) {
       return new NextResponse(
         JSON.stringify({ error: " Contact number must be exactly 11 characters long" }),
         { status: 400 }
@@ -217,6 +220,9 @@ export async function POST(
         salaryGrade,
         memberPolicyNo,
         age,
+        nickname,
+        emergencyContactName,
+        emergencyContactNumber
       }
     })
 

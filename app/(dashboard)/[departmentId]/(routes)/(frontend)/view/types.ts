@@ -61,6 +61,9 @@ export interface Employees {
   salaryGrade: string;
   memberPolicyNo: string;
   age: string;
+  nickname: string,
+  emergencyContactName: string,
+  emergencyContactNumber: string,
 
 }
 
