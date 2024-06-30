@@ -249,7 +249,7 @@ const Info = ({
 
   }
 
-  const fullName = `${data.prefix} ${data.firstName.toUpperCase()} "${data.nickname}" ${data.middleName.length === 1 ? data.middleName.toUpperCase() + '.' : data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
+  const fullName = `${data.prefix} ${data.firstName.toUpperCase()} ${data.nickname  ? `"${data.nickname}"` :  ""} ${data.middleName.length === 1 ? data.middleName.toUpperCase() + '.' : data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
 
   const addressFormat = (data: any) => {
     const { region, barangay, city, province, houseNo } = data;
