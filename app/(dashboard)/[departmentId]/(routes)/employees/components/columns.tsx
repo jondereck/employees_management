@@ -58,7 +58,7 @@ export type EmployeesColumn = {
   contactNumber: string;
   position: string;
   birthday: string;
-  education:string;
+  education: string;
   gsisNo: string;
   tinNo: string;
   philHealthNo: string;
@@ -245,6 +245,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Position" />
     ),
   },
+
   // {
   //   accessorKey: "age",
   //   header: ({ column }) => (
@@ -270,37 +271,68 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   //   ),
   // },
   {
-    accessorKey: "birthday",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Birthday" />
-    ),
+    accessorKey: "contactNumber",
+    header: "Contact Number",
     cell: ({ row }) => {
-      const rawBirthday = row.original.birthday;
-      // Split the raw date into its components (month, day, year)
-      const parts = rawBirthday.split(" ");
-      const month = parts[0];
-      const day = parseInt(parts[1], 10); // Parse the day as an integer
-      const year = parseInt(parts[2], 10); // Parse the year as an integer
-      // Construct the date object
-      const birthdayDate = new Date(`${month} ${day}, ${year}`);
-      birthdayDate.setDate(birthdayDate.getDate() + 1); // Advance the date by one day
-      const formattedBirthday = birthdayDate.toLocaleDateString("en-US");
+     
+      const number =  row.original.contactNumber ? row.original.contactNumber : "N/A"
+
       const handleCopyClick = () => {
-        onCopy(formattedBirthday);
+        onCopy(number);
         toast.success("Copied");
       };
+
       return (
         <ActionTooltip label="Copy" side="right">
           <div
             className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
             onClick={handleCopyClick}>
-            <span>{rawBirthday}</span>
+            <span>{number}</span>
           </div>
         </ActionTooltip>
       );
-    },
+    }
   },
   
+  {
+    accessorKey: "birthday",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Birthday" />
+    ),
+  },
+
+  // {
+  //   accessorKey: "birthday",
+  //   header: ({ column }) => (
+  //     <DataTableColumnHeader column={column} title="Birthday" />
+  //   ),
+  //   cell: ({ row }) => {
+  //     const rawBirthday = row.original.birthday;
+  //     // Split the raw date into its components (month, day, year)
+  //     const parts = rawBirthday.split(" ");
+  //     const month = parts[0];
+  //     const day = parseInt(parts[1], 10); // Parse the day as an integer
+  //     const year = parseInt(parts[2], 10); // Parse the year as an integer
+  //     // Construct the date object
+  //     const birthdayDate = new Date(`${month} ${day}, ${year}`);
+  //     birthdayDate.setDate(birthdayDate.getDate() + 1); // Advance the date by one day
+  //     const formattedBirthday = birthdayDate.toLocaleDateString("en-US");
+  //     const handleCopyClick = () => {
+  //       onCopy(formattedBirthday);
+  //       toast.success("Copied");
+  //     };
+  //     return (
+  //       <ActionTooltip label="Copy" side="right">
+  //         <div
+  //           className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
+  //           onClick={handleCopyClick}>
+  //           <span>{rawBirthday}</span>
+  //         </div>
+  //       </ActionTooltip>
+  //     );
+  //   },
+  // },
+
   {
     accessorKey: "birthday",
     header: "Age",
@@ -309,7 +341,8 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
   },
 
-  
+
+
   {
     accessorKey: "dateHired",
     header: "Service Tenure ",
@@ -367,13 +400,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
     cell: ({ row }) => row.getValue("salaryGrade") || "N/A"
   },
-  {
-    accessorKey: "contactNumber",
-    header: "Contact Number",
-    cell: ({ row }) => (
-      row.original.contactNumber ? row.original.contactNumber : "N/A"
-    )
-  },
+
 
   // {
   //   accessorKey: "birthday",
