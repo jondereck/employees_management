@@ -28,6 +28,7 @@ import eachDayOfInterval from "date-fns/eachDayOfInterval/index";
 
 const formSchema = z.object({
   prefix: z.string(),
+  employeeNo: z.string(),
   lastName: z.string().min(1, {
     message: "Last Name is required"
   }),
@@ -164,6 +165,7 @@ export const EmployeesForm = ({
 
       : {
         prefix: '',
+        employeeNo: '',
         lastName: '',
         firstName: '',
         middleName: '',
@@ -398,7 +400,33 @@ export const EmployeesForm = ({
             )}
           />
 
-          <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-3 gap-8">
+          <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-4 gap-8">
+          <FormField
+              control={form.control}
+              name="employeeNo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Employee No.</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Employee No."
+                      {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase
+                        const uppercaseValue = e.target.value.toUpperCase();
+                        // Set the field value to the uppercase value
+                        field.onChange(uppercaseValue);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Ex: T-3
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="prefix"

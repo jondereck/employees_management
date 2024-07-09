@@ -93,6 +93,7 @@ enum Gender {
 
 model Employee {
   id                     String       @id @default(uuid())
+  employeeNo             String       @default("")
   departmentId           String
   department             Department   @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
   officeId               String
@@ -136,7 +137,7 @@ model Employee {
   isFeatured Boolean @default(false)
   isArchived Boolean @default(false)
   isHead     Boolean @default(false)
-  isAwardee    Boolean @default(false)
+  isAwardee  Boolean @default(false)
 
   images Image[]
 

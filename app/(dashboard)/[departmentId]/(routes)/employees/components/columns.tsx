@@ -49,6 +49,7 @@ export interface EmployeeType {
 
 export type EmployeesColumn = {
   id: string;
+  employeeNo: string;
   offices: Offices;
   firstName: string;
   middleName: string;
@@ -133,6 +134,15 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     id: "eye",
     cell: ({ row }) => <Eye data={row.original} />
+  },
+
+  {
+    accessorKey: "employeeNo",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column}
+        title="Emp No." />
+    ),
+    cell: ({ row }) => row.getValue("employeeNo") || "N/A"
   },
 
   {

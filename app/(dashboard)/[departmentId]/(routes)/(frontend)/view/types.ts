@@ -29,6 +29,7 @@ export interface EmployeeType {
 
 export interface Employees {
   id: string;
+  employeeNo: string;
   offices: Offices;
   prefix: string;
   firstName: string;
