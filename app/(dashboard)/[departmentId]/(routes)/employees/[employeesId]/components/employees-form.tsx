@@ -57,19 +57,6 @@ const formSchema = z.object({
     .string()
     .min(1, {
       message: "Position is required",
-    })
-    .transform((value) => {
-      // Function to convert text within parentheses to uppercase
-      const cleanPosition = (position: string) =>
-        position.replace(/\(([^)]*)\)/, (match, p1) => {
-          if (p1) {
-            const uppercasedText = p1.toUpperCase();
-            return `(${uppercasedText})`;
-          }
-          return match;
-        });
-
-      return cleanPosition(value);
     }),
   education: z.string(),
   region: z.string(),
@@ -327,6 +314,7 @@ export const EmployeesForm = ({
         wordWithoutSpecialChars.slice(1).toLowerCase();
     });
   };
+  
 
 
   function formatNumber(input: string): string {
