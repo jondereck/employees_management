@@ -237,50 +237,50 @@ export async function POST(
 }
 
 
-// export async function GET(
-//   req: Request,
-//   { params }: { params: { departmentId: string } }
-// ) {
-//   try {
-//     const { searchParams } = new URL(req.url);
-//     const officeId = searchParams.get("officeId") || undefined;
-//     const employeeTypeId = searchParams.get("employeeTypeId") || undefined;
-//     const eligibilityId = searchParams.get("eligibilityId") || undefined;
-//     const isFeatured = searchParams.get('isFeatured');
-//     const isHead = searchParams.get('isHead');
+export async function GET(
+  req: Request,
+  { params }: { params: { departmentId: string } }
+) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const officeId = searchParams.get("officeId") || undefined;
+    const employeeTypeId = searchParams.get("employeeTypeId") || undefined;
+    const eligibilityId = searchParams.get("eligibilityId") || undefined;
+    const isFeatured = searchParams.get('isFeatured');
+    const isHead = searchParams.get('isHead');
 
 
 
-//     if (!params.departmentId) {
-//       return new NextResponse("Department Id is required", { status: 400 });
-//     }
+    if (!params.departmentId) {
+      return new NextResponse("Department Id is required", { status: 400 });
+    }
 
-//     const employee = await prismadb.employee.findMany({
-//       where: {
-//         departmentId: params.departmentId,
-//         officeId,
-//         employeeTypeId,
-//         eligibilityId,
-//         isFeatured: isFeatured ? true : undefined,
-//         isArchived: false,
-//         isHead: isHead ? true : undefined,
+    const employee = await prismadb.employee.findMany({
+      where: {
+        departmentId: params.departmentId,
+        officeId,
+        employeeTypeId,
+        eligibilityId,
+        isFeatured: isFeatured ? true : undefined,
+        isArchived: false,
+        isHead: isHead ? true : undefined,
 
-//       },
-//       include: {
-//         images: true,
-//         offices: true,
-//         employeeType: true,
-//         eligibility: true
-//       },
-//       orderBy: {
-//         createdAt: 'asc'
-//       }
-//     });
+      },
+      include: {
+        images: true,
+        offices: true,
+        employeeType: true,
+        eligibility: true
+      },
+      orderBy: {
+        createdAt: 'asc'
+      }
+    });
 
-//     return NextResponse.json(employee)
+    return NextResponse.json(employee)
 
-//   } catch (error) {
-//     console.log('[EMPLOYEES_GET]', error);
-//     return new NextResponse("Internal error", { status: 500 })
-//   }
-// }
+  } catch (error) {
+    console.log('[EMPLOYEES_GET]', error);
+    return new NextResponse("Internal error", { status: 500 })
+  }
+}
