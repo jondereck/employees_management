@@ -8,6 +8,7 @@ import ModalProvider from '@/components/provider/modal-provider'
 import prismadb from '@/lib/prismadb'
 import { ToastProvider } from '@/components/provider/toast-provider'
 import { ToastProvider2 } from '@/components/provider/toast-provider2'
+import ServiceWorkerProvider from '@/components/provider/serviceworker-provider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -39,6 +40,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
 
+
   return (
     <ClerkProvider>
     <html lang="en">
@@ -46,6 +48,7 @@ export default function RootLayout({
       <ModalProvider/>
         <ToastProvider/>
         <ToastProvider2/>
+        <ServiceWorkerProvider />
         {children}
         </body>
     </html>
