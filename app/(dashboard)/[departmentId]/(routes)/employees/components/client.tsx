@@ -36,7 +36,7 @@ export const  EmployeesClient = ({
     </Button>
     </div>
     <Separator/>
-    <DataTable  searchKeys={['firstName','lastName','contactNumber  ']} columns={columns} data={data}/>
+    <DataTable  searchKeys={['firstName','lastName','contactNumber']} columns={columns} data={data}/>
     <ApiHeading
     title="API"
     description="API calls for employees"

@@ -4,6 +4,7 @@ import DepartmentSwitcher from "./department-switcher";
 import { redirect } from "next/navigation";
 import prismadb from "@/lib/prismadb";
 import MobileNavbar from "./mobile-sidebar";
+import Back from "./back";
 
 
 
@@ -24,7 +25,9 @@ export const Navbar = async () => {
     <div className="border-b ">
       <div className="flex items-center lg:justify-between px-4 my-5 md:my-2 h-16 "> 
       <MobileNavbar />
+      <Back />
         <div>
+         
           <DepartmentSwitcher items={department} className="hidden md:flex px-2"/>
         </div>
         <MainNav  className="hidden md:flex px-2"/>
