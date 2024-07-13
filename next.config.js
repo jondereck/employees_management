@@ -22,5 +22,5 @@ const nextConfig = {
     ]
   }
 }
-// Export the combined configuration for Next.js with PWA support
+
 module.exports = withPWA(nextConfig);
