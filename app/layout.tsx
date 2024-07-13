@@ -43,9 +43,8 @@ export default function RootLayout({
     <ClerkProvider>
     <html lang="en">
       <body className={inter.className}>
-
+      <ModalProvider/>
         <ToastProvider/>
-        <ModalProvider/>
         <ToastProvider2/>
         {children}
         </body>
