@@ -14,13 +14,16 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   console.log('Service worker fetching...');
   event.respondWith(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.match(event.request).then((response) => {
-        const fetchPromise = fetch(event.request).then((networkResponse) => {
-          cache.put(event.request, networkResponse.clone());
-          return networkResponse;
-        });
-        return response || fetchPromise;
+    fetch(event.request).then((networkResponse) => {
+      // Update the cache with the latest network response
+      return caches.open(CACHE_NAME).then((cache) => {
+        cache.put(event.request, networkResponse.clone());
+        return networkResponse;
+      });
+    }).catch(() => {
+      // If the network is unavailable, fall back to the cache
+      return caches.match(event.request).then((response) => {
+        return response || fetch(event.request);
       });
     })
   );
