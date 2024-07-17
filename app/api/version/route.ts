@@ -7,6 +7,11 @@ const versionInfo = {
   lastUpdated: Date.now(), // Example timestamp
 };
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  res.status(200).json(versionInfo);
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === 'GET') {
+    res.status(200).json(versionInfo);
+  } else {
+    res.setHeader('Allow', ['GET']);
+    res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
 }
