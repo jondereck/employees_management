@@ -127,7 +127,7 @@ export const EmployeesForm = ({
   const title = initialData ? "Edit Employee" : "Create Employee";
   const description = initialData ? "Edit a Employee" : "Add new Employee";
   const toastMessage = initialData ? "Employee updated." : "Employee created.";
-  const action = initialData ? "Save changes." : "Create";
+  const action = initialData ? "Save changes" : "Create";
 
   const params = useParams();
   const router = useRouter();

@@ -47,7 +47,7 @@ export const OfficeForm = ({
   const title = initialData ? "Edit Office" : "Create Office";
   const description = initialData ? "Edit a Office" : "Add new Office";
   const toastMessage = initialData ? "Office updated." : "Office created.";
-  const action = initialData ? "Save changes." : "Create";
+  const action = initialData ? "Save changes" : "Create";
 
   const params = useParams();
   const router = useRouter();

@@ -42,7 +42,7 @@ export const EmployeeTypeForm = ({
   const title = initialData ? "Edit Employee Type" : "Create Employee Type";
   const description = initialData ? "Edit a Employee Type" : "Add new Employee Type";
   const toastMessage = initialData ? "Employee Type updated." : "Employee Type created.";
-  const action = initialData ? "Save changes." : "Create";
+  const action = initialData ? "Save changes" : "Create";
 
   const params = useParams();
   const router = useRouter();

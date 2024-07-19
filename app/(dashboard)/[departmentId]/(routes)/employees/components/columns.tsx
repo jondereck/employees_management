@@ -18,6 +18,7 @@ import getEmployees from "../../(frontend)/view/actions/get-employees"
 import { Employees } from "../../(frontend)/view/types";
 import AgeCell from "./age-cell"
 import YearsOfService from "./years_of_service_cell"
+import moment from 'moment';
 
 
 
@@ -92,6 +93,27 @@ const onCopy = (text: string) => {
   navigator.clipboard.writeText(text);
 }
 
+
+// Function to remove ordinal indicators from the date string
+const removeOrdinal = (dateString: string): string => {
+  return dateString.replace(/(\d+)(th|st|nd|rd)/, '$1');
+};
+
+const dateFormats = [
+  'MMMM D, YYYY', // e.g., March 28, 2000
+];
+
+
+const parseDate = (dateString: string) => {
+  const cleanedDateString = removeOrdinal(dateString);
+  for (const format of dateFormats) {
+    const date = moment(cleanedDateString, format, true);
+    if (date.isValid()) {
+      return date;
+    }
+  }
+  return null;
+};
 
 // const renderHeader = (column:any) => {
 //   return (
@@ -303,45 +325,29 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       );
     }
   },
-  
   {
     accessorKey: "birthday",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Birthday" />
     ),
+    cell: ({ row }) => {
+      const birthdayString: string = row.original.birthday;
+      console.log('Original birthday string:', birthdayString);
+  
+      const birthday = parseDate(birthdayString);
+      console.log('Parsed birthday:', birthday);
+  
+      if (!birthday) {
+        console.log('Invalid date detected');
+        return 'Invalid date';
+      }
+  
+      const nextDayBirthday = birthday.add(1, 'day');
+      console.log('Next day birthday:', nextDayBirthday);
+  
+      return nextDayBirthday.format('MMMM DD, YYYY'); // or any desired format
+    },
   },
-
-  // {
-  //   accessorKey: "birthday",
-  //   header: ({ column }) => (
-  //     <DataTableColumnHeader column={column} title="Birthday" />
-  //   ),
-  //   cell: ({ row }) => {
-  //     const rawBirthday = row.original.birthday;
-  //     // Split the raw date into its components (month, day, year)
-  //     const parts = rawBirthday.split(" ");
-  //     const month = parts[0];
-  //     const day = parseInt(parts[1], 10); // Parse the day as an integer
-  //     const year = parseInt(parts[2], 10); // Parse the year as an integer
-  //     // Construct the date object
-  //     const birthdayDate = new Date(`${month} ${day}, ${year}`);
-  //     birthdayDate.setDate(birthdayDate.getDate() + 1); // Advance the date by one day
-  //     const formattedBirthday = birthdayDate.toLocaleDateString("en-US");
-  //     const handleCopyClick = () => {
-  //       onCopy(formattedBirthday);
-  //       toast.success("Copied");
-  //     };
-  //     return (
-  //       <ActionTooltip label="Copy" side="right">
-  //         <div
-  //           className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
-  //           onClick={handleCopyClick}>
-  //           <span>{rawBirthday}</span>
-  //         </div>
-  //       </ActionTooltip>
-  //     );
-  //   },
-  // },
 
   {
     accessorKey: "birthday",

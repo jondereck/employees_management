@@ -42,7 +42,7 @@ export const BillboardForm = ({
   const title = initialData ? "Edit billboard" : "Create billboard";
   const description = initialData ? "Edit a billboard" : "Add new billboard";
   const toastMessage = initialData ? "Billboard updated." : "Billboard created.";
-  const action = initialData ? "Save changes." : "Create";
+  const action = initialData ? "Save changes" : "Create";
 
   const params = useParams();
   const router = useRouter();

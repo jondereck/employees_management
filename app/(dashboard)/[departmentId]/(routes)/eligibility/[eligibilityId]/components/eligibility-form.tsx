@@ -49,7 +49,7 @@ export const EligibilityForm = ({
   const title = initialData ? "Edit Eligibility Type" : "Create Eligibility Type";
   const description = initialData ? "Edit a Eligibility Type" : "Add new Eligibility Type";
   const toastMessage = initialData ? "Eligibility Type updated." : "Eligibility Type created.";
-  const action = initialData ? "Save changes." : "Create";
+  const action = initialData ? "Save changes" : "Create";
 
   const params = useParams();
   const router = useRouter();
