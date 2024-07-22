@@ -162,7 +162,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     accessorKey: "employeeNo",
     header: ({ column }) => (
       <DataTableColumnHeader column={column}
-        title="Emp No." />
+        title="EmpNo." />
     ),
     cell: ({ row }) => row.getValue("employeeNo") || "N/A"
   },
@@ -170,7 +170,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     accessorKey: "firstName", // Change this to a custom accessor key like "fullName"
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="First Name" />
+      <DataTableColumnHeader column={column} title="FirstName" />
     ),
     cell: ({ row }) => {
 
@@ -260,15 +260,23 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     accessorKey: "middleName",
     header: ({ column }) => (
       <DataTableColumnHeader column={column}
-        title="Middle Name/Initial" />
+        title="MiddleName" />
     ),
     cell: ({ row }) => row.getValue("middleName") || "N/A"
   },
   {
     accessorKey: "lastName",
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Last Name" />
+      <DataTableColumnHeader column={column} title="LastName" />
     ),
+  },
+
+  {
+    accessorKey: "nickname",
+    header: ({column}) => (
+      <DataTableColumnHeader column={column} title="Nickname" />
+    ),
+     cell: ({ row }) => row.getValue("nickname") || "N/A"
   },
 
   {
@@ -304,10 +312,15 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   // },
   {
     accessorKey: "contactNumber",
-    header: "Contact Number",
+    header: "ContactNumber",
     cell: ({ row }) => {
-     
-      const number =  row.original.contactNumber ? row.original.contactNumber : "N/A"
+
+      const formatNumber = (number:string) => {
+        if (!number || number.length !== 11) return number;
+        return `${number.slice(0,4)} ${number.slice(4,7)} ${number.slice(7)}`;
+      };
+      
+      const number =  row.original.contactNumber ? formatNumber(row.original.contactNumber) : "N/A"
 
       const handleCopyClick = () => {
         onCopy(number);
@@ -317,7 +330,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       return (
         <ActionTooltip label="Copy" side="right">
           <div
-            className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
+            className={`flex border  rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
             onClick={handleCopyClick}>
             <span>{number}</span>
           </div>
@@ -351,8 +364,10 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
   {
     accessorKey: "birthday",
-    header: "Age",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Age" />),
     cell: ({ row }) => (
+      
       <span><AgeCell birthday={row.original.birthday} /></span>
     ),
   },
@@ -361,7 +376,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
   {
     accessorKey: "dateHired",
-    header: "Service Tenure ",
+    header: "Year(s)of Service ",
     cell: ({ row }) => (
       <span><YearsOfService year_service={row.original.dateHired} /></span>
     ),
@@ -427,28 +442,28 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
   {
     accessorKey: "tinNo",
-    header: "TIN No.",
+    header: "TaxpayerIdentificationNo",
     cell: ({ row }) => (
       row.original.tinNo ? row.original.tinNo : "N/A"
     )
   },
   {
     accessorKey: "gsisNo",
-    header: "GSIS No.",
+    header: "GSISNumber ",
     cell: ({ row }) => (
       row.original.gsisNo ? row.original.gsisNo : "N/A"
     )
   },
   {
     accessorKey: "philHealthNo",
-    header: "Philhealth No.",
+    header: "PhilhealthNumber",
     cell: ({ row }) => (
       row.original.philHealthNo ? row.original.philHealthNo : "N/A"
     )
   },
   {
     accessorKey: "pagIbigNo",
-    header: "Pagibig No.",
+    header: "PagibigNumber",
     cell: ({ row }) => (
       row.original.pagIbigNo ? row.original.pagIbigNo : "N/A"
     )
@@ -457,7 +472,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     accessorKey: "dateHired",
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Date Hired" />
+      <DataTableColumnHeader column={column} title="DateHired" />
     ),
   },
   {
@@ -473,7 +488,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     accessorKey: "createdAt",
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title=" Created at" />
+      <DataTableColumnHeader column={column} title=" CreatedAt" />
     ),
   },
 

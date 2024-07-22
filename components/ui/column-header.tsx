@@ -31,6 +31,7 @@ export function DataTableColumnHeader<TData, TValue>({
   if (!column.getCanSort()) {
     return <div className={cn(className)}>{title}</div>
   }
+  
 
   return (
     <div className={cn("flex items-center space-x-2", className)}>

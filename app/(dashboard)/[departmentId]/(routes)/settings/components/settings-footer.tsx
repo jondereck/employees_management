@@ -102,7 +102,7 @@ const SettingsFooter = () => {
       <div className="flex-col justify-between items-center gap-2">
       {/* Your existing hover card components */}
       <footer className="flex justify-center items-center ">
-        <p className="text-xs text-gray-600">© 2024 JDN Systems. All rights reserved.</p>
+        <p className="text-xs text-gray-600">© 2023 JDN Systems. All rights reserved.</p>
       </footer>
     </div>
 
