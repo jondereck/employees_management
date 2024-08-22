@@ -50,9 +50,11 @@ export async function POST(
       age,
       nickname,
       emergencyContactName,
-      emergencyContactNumber
+      emergencyContactNumber,
+      employeeLink,
     } = body;
     
+    const urlRegex = /^(https?:\/\/)?([a-zA-Z0-9.-]+)(\.[a-zA-Z]{2,})([\/\w .-]*)*\/?$/;
 
     if (!userId) {
       return new NextResponse("Unauthenticated", { status: 401 });
@@ -119,6 +121,13 @@ export async function POST(
     if (pagIbigNo && pagIbigNo.length !== 15) {
       return new NextResponse(
         JSON.stringify({ error: " Pagibig number must be exactly 12 characters long" }),
+        { status: 400 }
+      );
+    }
+
+    if (employeeLink && !urlRegex.test(employeeLink)) {
+      return new NextResponse(
+        JSON.stringify({ error: "Invalid URL format for employee link" }),
         { status: 400 }
       );
     }
@@ -224,7 +233,8 @@ export async function POST(
         age,
         nickname,
         emergencyContactName,
-        emergencyContactNumber
+        emergencyContactNumber,
+        employeeLink
       }
     })
 

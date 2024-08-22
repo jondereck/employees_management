@@ -91,6 +91,8 @@ enum Gender {
   Female
 }
 
+
+
 model Employee {
   id                     String       @id @default(uuid())
   employeeNo             String       @default("")
@@ -130,6 +132,7 @@ model Employee {
   emergencyContactName   String       @default("")
   emergencyContactNumber String       @default("")
   employeeTypeId         String
+  employeeLink           String       @default("")
   employeeType           EmployeeType @relation(fields: [employeeTypeId], references: [id])
   eligibilityId          String
   eligibility            Eligibility  @relation(fields: [eligibilityId], references: [id])

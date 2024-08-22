@@ -85,9 +85,12 @@ export async function PATCH(
       age,
       nickname,
       emergencyContactName,
-      emergencyContactNumber
+      emergencyContactNumber,
+      employeeLink
       
     } = body;
+
+    const urlRegex = /^(https?:\/\/)?([a-zA-Z0-9.-]+)(\.[a-zA-Z]{2,})([\/\w .-]*)*\/?$/;
 
     if (!firstName) {
       return new NextResponse("First Name is required", { status: 400 })
@@ -153,6 +156,14 @@ export async function PATCH(
       );
     }
 
+    
+    if (employeeLink && !urlRegex.test(employeeLink)) {
+      return new NextResponse(
+        JSON.stringify({ error: "Invalid URL format for employee link" }),
+        { status: 400 }
+      );
+    }
+
     const departmentByUserId = await prismadb.department.findFirst({
       where: {
         id: params.departmentId,
@@ -211,7 +222,8 @@ export async function PATCH(
       age,
       nickname,
       emergencyContactName,
-      emergencyContactNumber
+      emergencyContactNumber,
+      employeeLink
       }
     });
 

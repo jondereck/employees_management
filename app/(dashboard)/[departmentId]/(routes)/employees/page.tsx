@@ -79,7 +79,8 @@ const EmployeesPage = async ({
   age:item.age,
   nickname: item.nickname,
   emergencyContactName: item.emergencyContactName,
-  emergencyContactNumber: item.emergencyContactNumber
+  emergencyContactNumber: item.emergencyContactNumber,
+  employeeLink: item.employeeLink,
   }));
 
   return ( 

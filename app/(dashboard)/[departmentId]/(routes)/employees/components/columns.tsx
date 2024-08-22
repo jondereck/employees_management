@@ -224,7 +224,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
 
       const position = row.original.position
-      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName}${suffix}, ${position}`;
+      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName} ${suffix ? `${suffix}` : ` `}, ${position}`;
 
 
       const handleCopyClick = () => {
@@ -269,6 +269,15 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="LastName" />
     ),
+  },
+
+  {
+    accessorKey: "suffix",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Suffix" />
+    ),
+    cell: ({ row }) => row.getValue("suffix") || "N/A"
+    
   },
 
   {

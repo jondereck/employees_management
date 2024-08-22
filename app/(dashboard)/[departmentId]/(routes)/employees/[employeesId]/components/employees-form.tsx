@@ -84,6 +84,7 @@ const formSchema = z.object({
   nickname: z.string(),
   emergencyContactName: z.string(),
   emergencyContactNumber: z.string(),
+  employeeLink: z.string(),
 });
 
 type EmployeesFormValues = z.infer<typeof formSchema>;
@@ -189,7 +190,7 @@ export const EmployeesForm = ({
         nickname: '',
         emergencyContactName: '',
         emergencyContactNumber: '',
-
+        employeeLink: '',
       }
   });
 
@@ -314,7 +315,7 @@ export const EmployeesForm = ({
         wordWithoutSpecialChars.slice(1).toLowerCase();
     });
   };
-  
+
 
 
   function formatNumber(input: string): string {
@@ -389,7 +390,7 @@ export const EmployeesForm = ({
           />
 
           <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-4 gap-8">
-          <FormField
+            <FormField
               control={form.control}
               name="employeeNo"
               render={({ field }) => (
@@ -804,7 +805,7 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-         <FormField
+            <FormField
               control={form.control}
               name="emergencyContactNumber"
               render={({ field }) => (
@@ -1387,6 +1388,27 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
 
+            />
+
+            <FormField
+              control={form.control}
+              name="employeeLink"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Employee's File</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="https:// "
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                  Please provide the URL link to the employee's file. Ensure it is accessible and correctly formatted (if applicable).
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
             <FormField
               control={form.control}

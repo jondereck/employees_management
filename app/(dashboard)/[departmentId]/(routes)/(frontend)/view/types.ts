@@ -65,6 +65,6 @@ export interface Employees {
   nickname: string,
   emergencyContactName: string,
   emergencyContactNumber: string,
-
+  employeeLink: string,
 }
 
