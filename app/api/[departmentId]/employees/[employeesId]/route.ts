@@ -90,7 +90,7 @@ export async function PATCH(
       
     } = body;
 
-    const urlRegex = /^(https?:\/\/)?([a-zA-Z0-9.-]+)(\.[a-zA-Z]{2,})([\/\w .-]*)*\/?$/;
+    const urlRegex = /^https:\/\/drive\.google\.com\/.*$/;
 
     if (!firstName) {
       return new NextResponse("First Name is required", { status: 400 })

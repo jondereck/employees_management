@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { MouseEventHandler, useEffect, useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Archive, Copy, Edit, MoreHorizontal, Trash, View } from "lucide-react";
+import { Archive, Copy, Edit, FileIcon, MoreHorizontal, Trash, View } from "lucide-react";
 import toasts from "react-hot-toast";
 import { toast } from "@/components/ui/use-toast";
 import { ApiAlert } from "@/components/api-alert";
@@ -39,20 +39,22 @@ export const CellAction = ({
   }
 
 
-  const onView = async () => {
-    try {
-      setLoading(true);
-      router.push(`/${params.departmentId}/view/employee/${data?.id}`)
 
-    } catch (error) {
-      toast({
-        title: "Error!",
-        description: "Failed to archive employee."
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+
+  // const onView = async () => {
+  //   try {
+  //     setLoading(true);
+  //     router.push(`/${params.departmentId}/view/employee/${data?.id}`)
+
+  //   } catch (error) {
+  //     toast({
+  //       title: "Error!",
+  //       description: "Failed to archive employee."
+  //     });
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const onConfirm = async () => {
     try {
@@ -122,11 +124,14 @@ export const CellAction = ({
             <Copy className="mr-2 h-4 w-4" />
             Copy Id
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onView}>
-            <View
+          {data.employeeLink && (
+            <DropdownMenuItem  onClick={() => window.open(data?.employeeLink, '_blank')}>
+            <FileIcon
               className="mr-2 h-4 w-4" />
-            View
+            View File
           </DropdownMenuItem>
+          )}
+          
           <DropdownMenuItem
             onClick={() => router.push(`/${params.departmentId}/employees/${data.id}`)}
           >

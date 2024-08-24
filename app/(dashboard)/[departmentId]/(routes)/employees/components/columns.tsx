@@ -225,7 +225,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
 
 
       const position = row.original.position
-      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName} ${suffix ? `${suffix}` : ` `}, ${position}`;
+      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName}${suffix ? ` ${suffix}` : ``}, ${position}`;
 
 
       const handleCopyClick = () => {
