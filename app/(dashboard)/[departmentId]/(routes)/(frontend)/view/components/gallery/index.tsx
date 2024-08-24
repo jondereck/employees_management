@@ -44,7 +44,7 @@ const Gallery = ({
 />
               {/* Company Logo */}
               <div className="absolute top-0 left-0 m-4">
-                <img
+                <Image
                   src="https://res.cloudinary.com/ddzjzrqrj/image/upload/v1702523620/Lingayen-3-removebg-preview_lmhivo.png"
                   alt="Company Logo"
                   className="w-16 h-16"

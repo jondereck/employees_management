@@ -214,12 +214,6 @@ export const EmployeesForm = ({
     }
   };
 
-  // Update the age whenever the birthday field changes
-  useEffect(() => {
-    const age = calculateAgeFromBirthday(form.getValues("birthday"));
-    setCalculatedAge(age);
-  }, [form.getValues("birthday")]);
-
 
   const onSubmit = async (values: EmployeesFormValues) => {
     try {
@@ -1395,7 +1389,7 @@ export const EmployeesForm = ({
               name="employeeLink"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Employee's File</FormLabel>
+                  <FormLabel>Employee&rsquo;s File</FormLabel>
                   <FormControl>
                     <Input
                       disabled={loading}
@@ -1404,7 +1398,7 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                  Please provide the URL link to the employee's file. Ensure it is accessible and correctly formatted (if applicable).
+                  Please provide the URL link to the employee&rsquo;s file. Ensure it is accessible and correctly formatted (if applicable).
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
