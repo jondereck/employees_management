@@ -7,8 +7,9 @@ import { EmployeesColumn } from "../../../../employees/components/columns";
 import IconButton from "./icon-button";
 import { StarFilledIcon } from "@radix-ui/react-icons";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
-import { ArchiveRestore, File, PackageOpen } from "lucide-react";
+import { FolderMinus, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 
 
@@ -29,13 +30,13 @@ const Info = ({
 
 
 
-  useEffect(() => {
-    console.log("Data changed:", data);
-    // Calculate age when component mounts or when data.birthday changes
-    calculateAge();
-    calculateYearService();
-    calculateYearServiceLatestAppointment();
-  }, [data.birthday, data.dateHired, data.latestAppointment],)
+  // useEffect(() => {
+  //   console.log("Data changed:", data);
+  //   // Calculate age when component mounts or when data.birthday changes
+  //   calculateAge();
+  //   calculateYearService();
+  //   calculateYearServiceLatestAppointment();
+  // }, [data.birthday, data.dateHired, data.latestAppointment],)
 
   const calculateAge = () => {
     const birthdate = new Date(data.birthday);
@@ -284,46 +285,47 @@ const Info = ({
           </div>
 
         </ActionTooltip>
-
       </h1>
-
 
       <div className="flex flex-col items-start font-sans font-light justify-between">
         <div className="flex justify-center items-center gap-2">
           <p className="text-lg font-semibold">{data.position} </p>
           {data.salaryGrade ? <p className="text-xs">{`S.G. ${data.salaryGrade}`}</p> : null}
         </div>
-        <h3 className="text-sm font-light text-gray-700">({data?.offices?.name})</h3>
       </div>
+      <h3 className="text-sm font-light text-gray-700">({data?.offices?.name})</h3>
+      <div className="flex items-center justify-between my-2">
+        
+       {data.employeeLink && (
+         <Button
+         onClick={() => window.open(data?.employeeLink, '_blank')}
+         variant="outline"
+         className= " text-white font-bold p-2 rounded flex items-center group"
+         style={{ backgroundColor: data.employeeType.value }}
+        
+       >
+         <div className="relative flex items-center md:mr-7 mr-7">
+           {/* The ArchiveRestore icon */}
+           <FolderMinus className="absolute transition-opacity duration-300 ease-in-out group-hover:opacity-0" />
+           {/* The PackageOpen icon */}
+           <FolderOpen className="absolute transition-opacity duration-300 ease-in-out opacity-0 group-hover:opacity-100" />
+         </div>
+         <p className="text-sm sm:text-base md:text-lg leading-tight">
+        Employee Files
+         </p>
+       
+       </Button>
+       )}
+      </div>
+
+
       <Separator />
       <div className="flex flex-col mt-4">
-       
-       {data.employeeLink && (
-        
-         <div className="flex items-center">
-          <div>
-            
-          </div>
-           <p className="text-xl lg:text-3xl  font-semibold ">Personal Details</p>
-         <Button
-           onClick={() => window.open(data?.employeeLink, '_blank')}
-           variant="outline"
-           className="bg-blue-500 hover:bg-green-500 text-white font-bold py-2 px-2 rounded flex items-center group"
-         >
-           <div className="relative flex items-center md:mr-7 mr-7">
-             {/* The ArchiveRestore icon */}
-             <ArchiveRestore className="absolute transition-opacity duration-300 ease-in-out group-hover:opacity-0" />
-             {/* The PackageOpen icon */}
-             <PackageOpen className="absolute transition-opacity duration-300 ease-in-out opacity-0 group-hover:opacity-100" />
-           </div>
-           View Employee Files
-         </Button>
-       </div>
-       )}
+      <p className="text-xl lg:text-3xl  font-semibold ">Personal Details</p>
         <div className="grid grid-cols-2 gap-2 mt-4">
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Gender</h3>
-            <p className="font-light text-sm md:text-xl lg:text-2xl">{data?.gender}</p>
+            <p className="font-light text-sm lg:text-2xl">{data?.gender}</p>
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Contact Number</h3>

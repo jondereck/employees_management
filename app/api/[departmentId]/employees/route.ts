@@ -54,7 +54,7 @@ export async function POST(
       employeeLink,
     } = body;
     
-    const urlRegex = /^(https?:\/\/)?([a-zA-Z0-9.-]+)(\.[a-zA-Z]{2,})([\/\w .-]*)*\/?$/;
+    const urlRegex = /^https:\/\/drive\.google\.com\/.*$/;
 
     if (!userId) {
       return new NextResponse("Unauthenticated", { status: 401 });

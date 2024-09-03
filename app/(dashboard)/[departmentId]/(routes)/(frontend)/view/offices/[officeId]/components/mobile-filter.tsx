@@ -12,19 +12,13 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet"
+} from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-
-
-
-
-
-
 
 interface MobileFilterProps {
   employeeType: EmployeeType[];
   eligibility: Eligibility[];
-  officeId: string
+  officeId: string;
   total: {
     id: string;
     count: {
@@ -39,59 +33,47 @@ interface MobileFilterProps {
   }[];
 }
 
-
-const MobileFilter = async ({
+const MobileFilter = ({
   employeeType,
   eligibility,
   officeId,
   total,
   totalEligibility
 }: MobileFilterProps) => {
-
-
   return (
     <div className="lg:hidden">
       <Sheet>
         <SheetTrigger asChild>
           <Button2
             className="flex items-center gap-x-2 lg:hidden"
-
           >
             Filter
             <Plus size={20} />
-          </Button2></SheetTrigger>
+          </Button2>
+        </SheetTrigger>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle className="text-2xl ">Filters</SheetTitle>
+            <SheetTitle className="text-2xl">Filters</SheetTitle>
             <Separator className="h-2" />
-
           </SheetHeader>
           <Filter
-                officeId={officeId}
-                total={total}
-                valueKey="employeeTypeId"
-                name="Appointment"
-                data={employeeType}
-              />
-              <Filter
-                officeId={officeId}
-                total={totalEligibility}
-                valueKey="eligibilityId"
-                name="Eligibility"
-                data={eligibility}
-              />
-           {/* <Filter
-                officeId={officeId}
-                total={totalEligibility}
-                valueKey="eligibilityId"
-                name="Eligibility"
-                data={eligibility}
-              /> */}
-          
+            officeId={officeId}
+            total={total}
+            valueKey="employeeTypeId"
+            name="Appointment"
+            data={employeeType}
+          />
+          <Filter
+            officeId={officeId}
+            total={totalEligibility}
+            valueKey="eligibilityId"
+            name="Eligibility"
+            data={eligibility}
+          />
         </SheetContent>
       </Sheet>
     </div>
   );
-}
+};
 
 export default MobileFilter;
