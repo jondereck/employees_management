@@ -48,6 +48,8 @@ const Gallery = ({
                   src="https://res.cloudinary.com/ddzjzrqrj/image/upload/v1702523620/Lingayen-3-removebg-preview_lmhivo.png"
                   alt="Company Logo"
                   className="w-16 h-16"
+                  width="20"
+                  height="20"
                 />
               </div>
             </div>

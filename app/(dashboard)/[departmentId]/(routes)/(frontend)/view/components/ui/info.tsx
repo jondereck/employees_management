@@ -30,13 +30,13 @@ const Info = ({
 
 
 
-  // useEffect(() => {
-  //   console.log("Data changed:", data);
-  //   // Calculate age when component mounts or when data.birthday changes
-  //   calculateAge();
-  //   calculateYearService();
-  //   calculateYearServiceLatestAppointment();
-  // }, [data.birthday, data.dateHired, data.latestAppointment],)
+  useEffect(() => {
+    console.log("Data changed:", data);
+    // Calculate age when component mounts or when data.birthday changes
+    calculateAge();
+    calculateYearService();
+    calculateYearServiceLatestAppointment();
+  }, [data.birthday, data.dateHired, data.latestAppointment],)
 
   const calculateAge = () => {
     const birthdate = new Date(data.birthday);
