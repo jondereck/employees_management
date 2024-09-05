@@ -29,20 +29,20 @@ export const Eye = ({
   const previewModal = usePreviewModal2();
 
   const [loading, setLoading] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+  // const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
-    setIsMounted(true);
-  },[]);
+  // useEffect(() => {
+  //   setIsMounted(true);
+  // },[]);
 
-  if(!isMounted) {
-    return null;
-  }
-
-  // const onPreview: MouseEventHandler<HTMLButtonElement> = (event) => {
-  //   event.stopPropagation();
-  //   previewModal.onOpen(data);
+  // if(!isMounted) {
+  //   return null;
   // }
+
+  const onPreview: MouseEventHandler<HTMLButtonElement> = (event) => {
+    event.stopPropagation();
+    previewModal.onOpen(data);
+  }
 
   const onView = async () => {
     try {
@@ -66,7 +66,7 @@ export const Eye = ({
     >
       <Button
         variant="ghost"
-        onClick={onView}
+        onClick={onPreview}
         disabled={loading}
       >
         <EyeIcon />

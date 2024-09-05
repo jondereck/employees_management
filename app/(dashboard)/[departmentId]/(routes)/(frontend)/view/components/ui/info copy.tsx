@@ -10,7 +10,6 @@ import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { FolderMinus, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { calculateAnnualSalary, formatContactNumber, formatSalary } from "../../utils/utils";
 
 
 
@@ -22,10 +21,6 @@ interface InfoProps {
 const Info = ({
   data,
 }: InfoProps) => {
-
-  const formattedSalary = formatSalary(data.salary);
-  const annualSalary = calculateAnnualSalary(data.salary);
-  const formattedContactNumber = formatContactNumber(data.contactNumber);
 
   const [age, setAge] = useState<number | null>(null);
   const [yearService, setYearService] = useState<{ years: number; months: number; days: number; } | null>(null);
@@ -196,9 +191,65 @@ const Info = ({
 
 
 
+  const formatContactNumber = () => {
+    const rawNumber = data?.contactNumber || '';
+
+    // If rawNumber is empty, return an empty string
+    if (!rawNumber.trim()) {
+      return 'No data';
+    }
+
+    const numericOnly = rawNumber.replace(/\D/g, ''); // Remove non-numeric characters
+
+    // Remove '+63' or '63' from the beginning
+    const formattedNumber = numericOnly.replace(/^(\+63|63)/, '');
+
+    // Add a leading '0' if it's missing
+    const finalNumber = formattedNumber.startsWith('0') ? formattedNumber : `0${formattedNumber}`;
+
+    // Format the number with spaces
+    const formattedWithSpaces = `${finalNumber.slice(0, 4)}-${finalNumber.slice(4, 7)}-${finalNumber.slice(7)}`;
+
+    return formattedWithSpaces;
+  };
+
+
+
+
+
+
+
+  const formatSalary = (data: Employees) => {
+    const salary = parseFloat(data.salary);
+    if (isNaN(salary)) {
+      return 'Invalid Salary';
+    }
   
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      minimumFractionDigits: 0,
+    }).format(salary);
+  };
   
 
+  const calculateAnnualSalary = () => {
+    const monthlySalary = parseFloat(data.salary);
+    if (isNaN(monthlySalary)) {
+      // Handle the case where the conversion to a number fails
+      return 'Invalid Salary';
+    }
+
+    const annualSalary = monthlySalary * 12
+    const formattedSalary = new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP',
+      minimumFractionDigits: 0,
+    }).format(annualSalary);
+
+    return `${formattedSalary}`
+
+  }
 
   const fullName = `${data.prefix} ${data.firstName.toUpperCase()} ${data.nickname ? `"${data.nickname}"` : ""} ${data.middleName.length === 1 ? data.middleName.toUpperCase() + '.' : data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
 
@@ -276,7 +327,7 @@ const Info = ({
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Contact Number</h3>
-            <p className="font-light text-sm lg:text-2xl">{formattedContactNumber}</p>
+            <p className="font-light text-sm lg:text-2xl">{formatContactNumber()}</p>
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl ">Birthday</h3>
@@ -303,13 +354,15 @@ const Info = ({
             <p className="font-light text-sm lg:text-2xl">{addressFormat(data) || "No Data"}</p>
           </div>
           <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Monthly Salary</h3>
-            <p className="font-light text-sm lg:text-2xl"> {formattedSalary}</p>
+            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Monthly Salarys</h3>
+            <p className="font-light text-sm lg:text-2xl">{formatSalary(data) || "No Data"}</p>
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Annual Salary</h3>
-            <p className="font-light text-sm lg:text-2xl">{annualSalary}</p>
+            <p className="font-light text-sm lg:text-2xl">{calculateAnnualSalary()}</p>
           </div>
+
+
           <div className="flex flex-col  ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">GSIS #</h3>
             <p className="font-light text-sm lg:text-2xl">{data?.gsisNo || 'No Data'}</p>

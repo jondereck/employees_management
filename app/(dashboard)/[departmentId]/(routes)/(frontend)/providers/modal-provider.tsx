@@ -5,7 +5,7 @@ import PreviewModal from "../view/components/preview";
 import PreviewModal2 from "../../employees/components/preview-admin";
 
 
-
+  
 const ModalProvider = () => {
   const [isMounted, setIsMounted] = useState(false);
 

@@ -25,7 +25,6 @@ const EmployeeCard = ({
 
   const onPreview: MouseEventHandler<HTMLButtonElement> = (event) => {
     event.stopPropagation();
-
     previewModal.onOpen(data);
 
   }
@@ -46,8 +45,6 @@ const EmployeeCard = ({
     if (data.middleName) {
       const middleNameWords = data.middleName.split(' ');
         middleNameInitials = middleNameWords.map(word => word.charAt(0).toUpperCase()).join('.') + '.';
-
-        
     }
 
     return middleNameInitials;
