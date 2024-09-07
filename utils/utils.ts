@@ -43,7 +43,6 @@ export const formatDate = (dateString: string): string => {
 
 
 export const getBirthday = (birthdayString: string): string => {
-  console.log('Original birthday string:', birthdayString);
 
   // Parse the birthday string into a Date object
   const birthday = new Date(birthdayString);

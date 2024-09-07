@@ -37,7 +37,7 @@ export interface Offices {
 export interface Image {
   id: string;
   url: string;
-  value: EmployeeType;
+  value: string;
 }
 
 export interface Eligibility {
@@ -64,7 +64,7 @@ export type EmployeesColumn = {
   gender: string;
   contactNumber: string;
   position: string;
-  birthday: string
+  birthday: string;
   education: string;
   gsisNo: string;
   tinNo: string;
@@ -78,7 +78,7 @@ export type EmployeesColumn = {
   isHead: boolean;
   eligibility: Eligibility;
   employeeType: EmployeeType;
-  images: Image[];
+  images: Image[]; // Array of Image
   region: string;
   province: string;
   city: string;
@@ -87,10 +87,10 @@ export type EmployeesColumn = {
   salaryGrade: string;
   memberPolicyNo: string;
   age: string;
-  nickname: string,
-  emergencyContactName: string,
-  emergencyContactNumber: string,
-  employeeLink: string,
+  nickname: string;
+  emergencyContactName: string;
+  emergencyContactNumber: string;
+  employeeLink: string;
 }
 
 

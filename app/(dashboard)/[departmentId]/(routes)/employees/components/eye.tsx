@@ -29,15 +29,15 @@ export const Eye = ({
   const previewModal = usePreviewModal();
 
   const [loading, setLoading] = useState(false);
-  // const [isMounted, setIsMounted] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // useEffect(() => {
-  //   setIsMounted(true);
-  // },[]);
+  useEffect(() => {
+    setIsMounted(true);
+  },[]);
 
-  // if(!isMounted) {
-  //   return null;
-  // }
+  if(!isMounted) {
+    return null;
+  }
 
   const onPreview: MouseEventHandler<HTMLButtonElement> = (event) => {
     event.stopPropagation();

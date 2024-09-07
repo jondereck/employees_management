@@ -1,7 +1,7 @@
 import prismadb from "@/lib/prismadb";
 import { format  } from "date-fns";
 import { EmployeesClient } from "./components/client";
-import { EmployeesColumn } from "./components/columns";
+import { EmployeesColumn, Image } from "./components/columns";
 import { formatTinNumber, formatter } from "@/lib/utils";
 
 
@@ -18,6 +18,7 @@ const EmployeesPage = async ({
       offices: true,
       employeeType: true,
       eligibility: true,
+      images: true,  
     },
     orderBy: {
       updatedAt: 'desc'
@@ -70,7 +71,11 @@ const EmployeesPage = async ({
       id: item.offices.id,
       name: item.offices.name,
     },
-    images:[],
+    images: item.images.map((image) => ({
+      id: image.id,
+      url: image.url,
+      value: '',
+    })),
     region: item.region,
   province: item.province,
   city: item.city,
