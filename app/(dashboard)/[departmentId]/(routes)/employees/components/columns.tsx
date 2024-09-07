@@ -19,6 +19,10 @@ import { Employees } from "../../(frontend)/view/types";
 import AgeCell from "./age-cell"
 import YearsOfService from "./years_of_service_cell"
 import moment from 'moment';
+import { format, isValid } from "date-fns"
+import { formatContactNumber, formatDate, formatFullName, formatGsisNumber, formatPagIbigNumber, formatPhilHealthNumber, formatSalary } from "@/utils/utils"
+
+
 
 
 
@@ -52,6 +56,7 @@ export type EmployeesColumn = {
   id: string;
   employeeNo: string;
   offices: Offices;
+  prefix: string;
   firstName: string;
   middleName: string;
   lastName: string;
@@ -59,7 +64,7 @@ export type EmployeesColumn = {
   gender: string;
   contactNumber: string;
   position: string;
-  birthday: string;
+  birthday: string
   education: string;
   gsisNo: string;
   tinNo: string;
@@ -82,11 +87,10 @@ export type EmployeesColumn = {
   salaryGrade: string;
   memberPolicyNo: string;
   age: string;
-  prefix: string;
-  nickname: string;
-  emergencyContactName: string;
-  emergencyContactNumber: string;
-  employeeLink: string;
+  nickname: string,
+  emergencyContactName: string,
+  emergencyContactNumber: string,
+  employeeLink: string,
 }
 
 
@@ -115,18 +119,6 @@ const parseDate = (dateString: string) => {
   }
   return null;
 };
-
-// const renderHeader = (column:any) => {
-//   return (
-//     <Button
-//       variant="ghost"
-//       onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-//     >
-//       {column.header}
-//       <ArrowUpDown className="ml-2 h-4 w-4" />
-//     </Button>
-//   );
-// };
 
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
@@ -167,66 +159,22 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
     cell: ({ row }) => row.getValue("employeeNo") || "N/A"
   },
-
   {
-    accessorKey: "firstName", // Change this to a custom accessor key like "fullName"
+    accessorKey: "firstName",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="FirstName" />
     ),
     cell: ({ row }) => {
+      const firstName = row.original.firstName;
+      const middleName = row.original.middleName || '';
+      const lastName = row.original.lastName || '';
+      const suffix = row.original.suffix || '';
+      const gender = row.original.gender || '';
+      const prefix = row.original.prefix || '';
+      const position = row.original.position || '';
 
-      const capitalizeFirstLetter = (str: string) => {
-        if (str) {
-          return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-        }
-        return '';
-      };
-
-      // let prefix = '';
-      // if (row.original.prefix) {
-      //   const prefixWords = row.original.prefix.split(' ');
-      //   prefix = prefixWords.map(word => capitalizeFirstLetter(word)).join(' ');
-      // }
-      const firstName2 = row.original.firstName
-
-      let firstName = '';
-      if (row.original.firstName) {
-        const firstNameWords = row.original.firstName.split(' ');
-        firstName = firstNameWords.map(word => capitalizeFirstLetter(word)).join(' ');
-      }
-
-      let middleNameInitials = '';
-      if (row.original.middleName) {
-        const middleNameWords = row.original.middleName.split(' ');
-        middleNameInitials = middleNameWords.map(word => word.charAt(0).toUpperCase()).join('');
-      }
-
-      let lastName = '';
-      if (row.original.lastName) {
-        const lastNameWords = row.original.lastName.split(' ');
-        lastName = lastNameWords.map(word => capitalizeFirstLetter(word)).join(' ');
-      }
-
-      const suffix = capitalizeFirstLetter(row.original.suffix);
-
-      const getTitle = (gender: string, prefix: string | undefined) => {
-        if (prefix) {
-          const prefixWords = prefix.split(' ');
-          const capitalizedPrefix = prefixWords.map(word => capitalizeFirstLetter(word)).join(' ');
-          return capitalizedPrefix;
-          return prefix;
-        } else {
-          // If prefix doesn't exist, determine title based on gender
-          return gender === 'Male' ? 'Mr.' : 'Ms.';
-        }
-      };
-
-      const title = getTitle(row.original.gender, row.original.prefix);
-
-
-      const position = row.original.position
-      const fullName = `${title} ${firstName} ${middleNameInitials}. ${lastName}${suffix ? ` ${suffix}` : ``}, ${position}`;
-
+      const fullName = formatFullName(firstName, middleName, lastName, suffix,
+        gender, prefix, position);
 
       const handleCopyClick = () => {
         let copiedText = fullName;
@@ -237,23 +185,14 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
         toast.success("Copied");
       };
       return (
-        <ActionTooltip
-          label="Copy"
-          side="right"
-        >
+        <ActionTooltip label="Copy" side="right">
           <div
             className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
-            onClick={handleCopyClick}>
-            <span>{`${firstName2} 
-        `
-
-            }</span>
-
+            onClick={handleCopyClick}
+          >
+            <span>{`${firstName} `}</span>
           </div>
         </ActionTooltip>
-        // ${middleNameInitials}. 
-        // ${lastName} 
-        // ${suffix}
       );
     },
   },
@@ -278,15 +217,15 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Suffix" />
     ),
     cell: ({ row }) => row.getValue("suffix") || "N/A"
-    
+
   },
 
   {
     accessorKey: "nickname",
-    header: ({column}) => (
+    header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Nickname" />
     ),
-     cell: ({ row }) => row.getValue("nickname") || "N/A"
+    cell: ({ row }) => row.getValue("nickname") || "N/A"
   },
 
   {
@@ -296,44 +235,15 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
   },
 
-  // {
-  //   accessorKey: "age",
-  //   header: ({ column }) => (
-  //     <DataTableColumnHeader column={column} title="Age2" />
-  //   ),
-  // },
-  // {
-  //   accessorKey: "firstName",
-  //   header: ({ column }) => (
-  //     <DataTableColumnHeader column={column} title="First Name" />
-  //   ),
-  // }, 
-  // {
-  //   accessorKey: "middleName",
-  //   header: ({ column }) => (
-  //     <DataTableColumnHeader column={column} title="Middle Name" />
-  //   ),
-  // }, 
-  // {
-  //   accessorKey: "suffix",
-  //   header: ({ column }) => (
-  //     <DataTableColumnHeader column={column} title="Suffix" />
-  //   ),
-  // },
   {
     accessorKey: "contactNumber",
-    header: "ContactNumber",
+    header: "ContactNumber_",
     cell: ({ row }) => {
-
-      const formatNumber = (number:string) => {
-        if (!number || number.length !== 11) return number;
-        return `${number.slice(0,4)} ${number.slice(4,7)} ${number.slice(7)}`;
-      };
-      
-      const number =  row.original.contactNumber ? formatNumber(row.original.contactNumber) : "N/A"
+      const contactNumber = row.getValue('contactNumber') as string;
+      const formattedNumber = formatContactNumber(contactNumber);
 
       const handleCopyClick = () => {
-        onCopy(number);
+        onCopy(formattedNumber);
         toast.success("Copied");
       };
 
@@ -342,7 +252,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
           <div
             className={`flex border  rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
             onClick={handleCopyClick}>
-            <span>{number}</span>
+            <span>{formattedNumber}</span>
           </div>
         </ActionTooltip>
       );
@@ -354,22 +264,9 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Birthday" />
     ),
     cell: ({ row }) => {
-      const birthdayString: string = row.original.birthday;
-      console.log('Original birthday string:', birthdayString);
-  
-      const birthday = parseDate(birthdayString);
-      console.log('Parsed birthday:', birthday);
-  
-      if (!birthday) {
-        console.log('Invalid date detected');
-        return 'Invalid date';
-      }
-  
-      const nextDayBirthday = birthday.add(1, 'day');
-      console.log('Next day birthday:', nextDayBirthday);
-  
-      return nextDayBirthday.format('MMMM DD, YYYY'); // or any desired format
-    },
+      const birthday = row.getValue('birthday') as string; // Ensure the type is correct
+      return formatDate(birthday); // Format date as needed
+    }
   },
 
   {
@@ -377,12 +274,10 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Age" />),
     cell: ({ row }) => (
-      
+
       <span><AgeCell birthday={row.original.birthday} /></span>
     ),
   },
-
-
 
   {
     accessorKey: "dateHired",
@@ -431,6 +326,10 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Salary" />
     ),
+    cell: ({ row }) => {
+      const salary = row.getValue('salary') as string;
+      return formatSalary(salary);
+    }
   },
   {
     accessorKey: "salaryGrade",
@@ -442,14 +341,6 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     cell: ({ row }) => row.getValue("salaryGrade") || "N/A"
   },
 
-
-  // {
-  //   accessorKey: "birthday",
-  //   header: ({ column }) => (
-  //     <DataTableColumnHeader column={column} title="Birthday" />
-  //   ),
-  // },
-
   {
     accessorKey: "tinNo",
     header: "TaxpayerIdentificationNo",
@@ -460,23 +351,26 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     accessorKey: "gsisNo",
     header: "GSISNumber ",
-    cell: ({ row }) => (
-      row.original.gsisNo ? row.original.gsisNo : "N/A"
-    )
+    cell: ({ row }) => {
+      const gsisNumber = row.getValue('gsisNo') as string; 
+      return formatGsisNumber(gsisNumber); 
+    }
   },
   {
     accessorKey: "philHealthNo",
     header: "PhilhealthNumber",
-    cell: ({ row }) => (
-      row.original.philHealthNo ? row.original.philHealthNo : "N/A"
-    )
+    cell: ({ row }) => {
+      const PhilhealthNumber = row.getValue('philHealthNo') as string; 
+      return formatPhilHealthNumber(PhilhealthNumber); 
+    }
   },
   {
     accessorKey: "pagIbigNo",
-    header: "PagibigNumber",
-    cell: ({ row }) => (
-      row.original.pagIbigNo ? row.original.pagIbigNo : "N/A"
-    )
+    header: "PagibigNumber__",
+    cell: ({ row }) => {
+      const PagibigNumber = row.getValue('pagIbigNo') as string; 
+      return formatPagIbigNumber(PagibigNumber); 
+    }
   },
 
   {
@@ -484,6 +378,10 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="DateHired" />
     ),
+    cell: ({ row }) => {
+      const dateHired = row.getValue('dateHired') as string; // Ensure the type is correct
+      return formatDate(dateHired); // Format date as needed
+    }
   },
   {
     accessorKey: "isFeatured",
