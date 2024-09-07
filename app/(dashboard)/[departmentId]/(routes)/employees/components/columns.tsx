@@ -20,7 +20,7 @@ import AgeCell from "./age-cell"
 import YearsOfService from "./years_of_service_cell"
 import moment from 'moment';
 import { format, isValid } from "date-fns"
-import { formatContactNumber, formatDate, formatFullName, formatGsisNumber, formatPagIbigNumber, formatPhilHealthNumber, formatSalary } from "@/utils/utils"
+import { formatContactNumber, formatDate, formatFullName, formatGsisNumber, formatPagIbigNumber, formatPhilHealthNumber, formatSalary, getBirthday } from "@/utils/utils"
 
 
 
@@ -265,7 +265,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
     cell: ({ row }) => {
       const birthday = row.getValue('birthday') as string; // Ensure the type is correct
-      return formatDate(birthday); // Format date as needed
+      return getBirthday(birthday); // Format date as needed
     }
   },
 
