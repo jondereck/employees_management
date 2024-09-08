@@ -253,7 +253,7 @@ export const formatFullName = (
 };
 
 
-/*----------------------------s ------------------------------*/
+/*----------------------------Numbers ------------------------------*/
 
 export const formatGsisNumber = (gsisNumber: string): string => {
 
@@ -298,4 +298,47 @@ export const formatPagIbigNumber = (pagIbigNo?: string): string => {
   }
 
   return 'Invalid Number';
+};
+
+
+
+/*---------------------------- Forms Formatting ------------------------------*/
+
+
+// Utility function to convert a string to uppercase
+export const formatToUpperCase = (value: string): string => {
+  return value.toUpperCase();
+};
+
+export const formatToProperCase = (value: string): string => {
+  // Replace "BS" with "Bachelor of Science" with "of" in lowercase
+  const replacedValue = value.replace(/\bBs\b/g, 'Bachelor of Science in');
+
+  // Capitalize the first letter of each word, except for specific words like "of"
+  return replacedValue
+    .split(' ')
+    .map(word => {
+      // Convert "of" to lowercase and capitalize other words
+      if (['of', 'the', 'and', 'in'].includes(word.toLowerCase())) {
+        return word.toLowerCase();
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+};
+
+
+
+export const capitalizeWordsIgnoreSpecialChars = (input: string) => {
+  return input.replace(/\b\w+\b/g, (word) => {
+    // Check if the word is a Roman numeral (I, II, III, IV, V, etc.)
+    if (/^(?=[MDCLXVI])M{0,3}(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})$/.test(word.toUpperCase())) {
+      return word; // Return unchanged if it's a Roman numeral
+    }
+
+    // Capitalize the word while ignoring special characters
+    const wordWithoutSpecialChars = word.replace(/[^\w\s]/g, '');
+    return wordWithoutSpecialChars.charAt(0).toUpperCase() +
+      wordWithoutSpecialChars.slice(1).toLowerCase();
+  });
 };

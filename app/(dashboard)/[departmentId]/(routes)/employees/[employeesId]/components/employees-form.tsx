@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import eachDayOfInterval from "date-fns/eachDayOfInterval/index";
+import { capitalizeWordsIgnoreSpecialChars, formatToProperCase, formatToUpperCase } from "@/utils/utils";
 
 
 
@@ -296,19 +297,6 @@ export const EmployeesForm = ({
   const genderOptions = Object.values(Gender);
 
 
-  const capitalizeWordsIgnoreSpecialChars = (input: string) => {
-    return input.replace(/\b\w+\b/g, (word) => {
-      // Check if the word is a Roman numeral (I, II, III, IV, V, etc.)
-      if (/^(?=[MDCLXVI])M{0,3}(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})$/.test(word.toUpperCase())) {
-        return word; // Return unchanged if it's a Roman numeral
-      }
-
-      // Capitalize the word while ignoring special characters
-      const wordWithoutSpecialChars = word.replace(/[^\w\s]/g, '');
-      return wordWithoutSpecialChars.charAt(0).toUpperCase() +
-        wordWithoutSpecialChars.slice(1).toLowerCase();
-    });
-  };
 
 
 
@@ -474,9 +462,7 @@ export const EmployeesForm = ({
                       placeholder="First Name"
                       {...field}
                       onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
+                        const uppercaseValue = formatToUpperCase(e.target.value);
                         field.onChange(uppercaseValue);
                       }}
                     />
@@ -488,7 +474,6 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-
             <FormField
               control={form.control}
               name="lastName"
@@ -501,9 +486,7 @@ export const EmployeesForm = ({
                       placeholder="Last Name"
                       {...field}
                       onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
+                        const uppercaseValue = formatToUpperCase(e.target.value);
                         field.onChange(uppercaseValue);
                       }}
                     />
@@ -527,9 +510,7 @@ export const EmployeesForm = ({
                       placeholder="Middle Name"
                       {...field}
                       onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
+                        const uppercaseValue = formatToUpperCase(e.target.value);
                         field.onChange(uppercaseValue);
                       }}
                     />
@@ -552,6 +533,10 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Suffix"
                       {...field}
+                      onChange={(e) => {
+                        const uppercaseValue = formatToUpperCase(e.target.value);
+                        field.onChange(uppercaseValue);
+                      }}
                     />
                   </FormControl>
                   <FormDescription>
@@ -574,12 +559,8 @@ export const EmployeesForm = ({
                       {...field}
                       onChange={(e) => {
                         // Convert the input value to uppercase for every word
-                        const capitalizedValue = capitalizeWordsIgnoreSpecialChars(
-                          e.target.value
-                        );
-
-                        // Set the field value to the capitalized value
-                        field.onChange(capitalizedValue);
+                        const properCaseValue = capitalizeWordsIgnoreSpecialChars(e.target.value);
+                        field.onChange(properCaseValue);
                       }}
                     />
                   </FormControl>
@@ -739,6 +720,11 @@ export const EmployeesForm = ({
                       disabled={loading}
                       placeholder="Education"
                       {...field}
+                      onChange={(e) => {
+                        // Convert the input value to uppercase for every word
+                        const properCaseValue = formatToProperCase(e.target.value);
+                        field.onChange(properCaseValue);
+                      }}
                     />
                   </FormControl>
                   <FormDescription>
@@ -748,8 +734,6 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-
-
           </div>
           <Separator />
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
@@ -1398,9 +1382,13 @@ export const EmployeesForm = ({
                     />
                   </FormControl>
                   <FormDescription>
-                  Please provide the URL link to the employee&rsquo;s file. Ensure it is accessible and correctly formatted (if applicable).
+                    Please provide the URL link to the employee&rsquo;s file. Ensure it is accessible and correctly formatted (if applicable).
                   </FormDescription>
-                  <FormMessage />
+                  <FormMessage>
+                    {field.value && !/^https?:\/\/[^\s/$.?#].[^\s]*$/.test(field.value) && (
+                      <span className="text-red-600">Please provide a valid URL.</span>
+                    )}
+                  </FormMessage>
                 </FormItem>
               )}
             />
