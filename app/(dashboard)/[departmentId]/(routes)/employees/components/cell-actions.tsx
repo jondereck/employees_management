@@ -4,14 +4,15 @@ import { useParams, useRouter } from "next/navigation";
 import { MouseEventHandler, useEffect, useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Archive, Copy, Edit, FileIcon, MoreHorizontal, Trash, View } from "lucide-react";
+import { Archive, Copy, Edit, Eye, FileIcon, MoreHorizontal, Trash, View } from "lucide-react";
 import toasts from "react-hot-toast";
 import { toast } from "@/components/ui/use-toast";
 import { ApiAlert } from "@/components/api-alert";
 import { AlertModal } from "@/components/modals/alert-modal";
-import { EmployeesColumn } from "./columns";
+
 import usePreviewModal from "../../(frontend)/view/hooks/use-preview-modal";
 import { Employees } from "../../(frontend)/view/types";
+import { EmployeesColumn } from "./columns";
 
 
 
@@ -41,20 +42,20 @@ export const CellAction = ({
 
 
 
-  // const onView = async () => {
-  //   try {
-  //     setLoading(true);
-  //     router.push(`/${params.departmentId}/view/employee/${data?.id}`)
+  const onView = async () => {
+    try {
+      setLoading(true);
+      router.push(`/${params.departmentId}/view/employee/${data?.id}`)
 
-  //   } catch (error) {
-  //     toast({
-  //       title: "Error!",
-  //       description: "Failed to archive employee."
-  //     });
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+    } catch (error) {
+      toast({
+        title: "Error!",
+        description: "Failed to archive employee."
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const onConfirm = async () => {
     try {
@@ -132,6 +133,13 @@ export const CellAction = ({
           </DropdownMenuItem>
           )}
           
+          <DropdownMenuItem
+            onClick={onView}
+          >
+            <Eye className="mr-2 h-4 w-4" />
+            View
+          </DropdownMenuItem>
+
           <DropdownMenuItem
             onClick={() => router.push(`/${params.departmentId}/employees/${data.id}`)}
           >

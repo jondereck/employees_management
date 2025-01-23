@@ -13,7 +13,7 @@ export interface Offices {
 export interface Image {
   id: string;
   url: string;
-  value: EmployeeType;
+  value:string;
 }
 
 export interface Eligibility {

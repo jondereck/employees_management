@@ -8,7 +8,7 @@ interface YearsOfServiceProps {
 const YearsOfService: React.FC<YearsOfServiceProps> = ({ year_service }) => {
   const calculateService = (birthdate: string) => {
     // Parse the birthdate using date-fns parse function
-    const parsedBirthdate = parse(birthdate, 'MMMM do, yyyy', new Date());
+    const parsedBirthdate = parse(birthdate, 'M d, yyyy', new Date());
   
     if (isNaN(parsedBirthdate.getTime())) {
       console.log("Invalid YOS:", birthdate);

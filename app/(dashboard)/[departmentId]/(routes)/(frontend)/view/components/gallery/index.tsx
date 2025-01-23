@@ -1,6 +1,8 @@
 "use client"
 
-import { EmployeeType, Image as ImageType } from "../../../view/types";
+
+import { Image as ImageType } from "../../../../employees/components/columns";
+
 import { Tab } from "@headlessui/react";
 import GalleryTab from "./gallery-tab";
 import Image from "next/image";

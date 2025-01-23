@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import PreviewModal from "../view/components/preview";
-import PreviewModal2 from "../../employees/components/preview-admin";
 
 
   
@@ -20,7 +19,6 @@ const ModalProvider = () => {
   return (  
     <>
     <PreviewModal/>
-    <PreviewModal2/>
     </>
   );
 }

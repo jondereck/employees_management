@@ -1,6 +1,6 @@
 
 import { Tab } from "@headlessui/react";
-import { Image as ImageType } from "../../../view/types";
+import { Image as ImageType } from "../../types";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 

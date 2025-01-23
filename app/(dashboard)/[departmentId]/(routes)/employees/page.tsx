@@ -1,7 +1,7 @@
 import prismadb from "@/lib/prismadb";
 import { format  } from "date-fns";
 import { EmployeesClient } from "./components/client";
-import { EmployeesColumn } from "./components/columns";
+import { EmployeesColumn, Image } from "./components/columns";
 import { formatTinNumber, formatter } from "@/lib/utils";
 
 
@@ -18,6 +18,7 @@ const EmployeesPage = async ({
       offices: true,
       employeeType: true,
       eligibility: true,
+      images: true,  
     },
     orderBy: {
       updatedAt: 'desc'
@@ -36,17 +37,17 @@ const EmployeesPage = async ({
     gender: item.gender,
     contactNumber: item.contactNumber,
     position: item.position,
-    birthday: format(item.birthday, "MMMM do, yyyy"),
+    birthday: item.birthday ? format(new Date(item.birthday), "M d, yyyy") : '',
     education: item.education,
     gsisNo: item.gsisNo,
     tinNo: item.tinNo,
     philHealthNo: item.philHealthNo,
     pagIbigNo: item.pagIbigNo,
     memberPolicyNo: item.memberPolicyNo,
-    salary: formatter.format(item.salary),
+    salary: typeof item.salary === 'number' ? item.salary.toString() : item.salary,
     salaryGrade:item.salaryGrade,
-    dateHired: format(item.dateHired, "MMMM do, yyyy"),
-    latestAppointment: format(item.dateHired, "MMMM do, yyyy"),
+    dateHired: item.dateHired ? format(new Date(item.dateHired), "M d, yyyy") : '',
+    latestAppointment:item.latestAppointment,
     terminateDate: item.terminateDate,
     // employeeType: item.employeeType.name,
     // offices: item.offices.name,
@@ -55,7 +56,7 @@ const EmployeesPage = async ({
     isArchived: item.isArchived,
     isHead: item.isHead,
     createdAt: format(item.createdAt, "MMMM do, yyyy"),
-    // images: [],
+
     eligibility: {
       id: item.eligibility.id,
       name: item.eligibility.name,
@@ -70,7 +71,11 @@ const EmployeesPage = async ({
       id: item.offices.id,
       name: item.offices.name,
     },
-    images:[],
+    images: item.images.map((image) => ({
+      id: image.id,
+      url: image.url,
+      value: '',
+    })),
     region: item.region,
   province: item.province,
   city: item.city,
