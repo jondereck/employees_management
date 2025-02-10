@@ -115,7 +115,7 @@ const Info = ({
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Contact Number</h3>
-            <p className="font-light text-sm lg:text-2xl">{formattedContactNumber}</p>
+            <p className="font-light text-sm lg:text-2xl">{data?.contactNumber}</p>
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl ">Birthday</h3>
