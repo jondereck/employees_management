@@ -1,41 +1,47 @@
-"use client";
+'use client';
 
-import { Bar, BarChart, LabelList, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from 'recharts';
 
 interface OverviewProps {
-  data: any[];
-};
+  data: {
+    name: string;   // Month name
+    total: number;  // Employee count
+  }[];
+}
 
-const Overview = ({
-  data,
-}: OverviewProps) => {
+const Overview = ({ data }: OverviewProps) => {
   return (
-    <ResponsiveContainer width="100%" height={350} >
-      <BarChart data={data}>
-        <XAxis
-          dataKey="name"
-          stroke="#888888"
-          fontSize={12}
-          tickLine={false}
-          axisLine={false}
+    <ResponsiveContainer width="100%" height={350}>
+      <LineChart
+        data={data}
+        margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="name" stroke="#888888" />
+        <YAxis stroke="#888888" allowDecimals={false} />
+        <Tooltip
+          contentStyle={{ backgroundColor: 'white', borderRadius: '8px' }}
+          cursor={{ stroke: '#6366f1', strokeWidth: 2 }}
         />
-        <YAxis
-          dataKey="total"
-          stroke="#888888"
-          fontSize={12}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={(value) => `${value}`}
+        <Line
+          type="monotone"
+          dataKey="total" // ✅ Matches your `getGraph` return type
+          stroke="#4f46e5" // Tailwind Indigo-600
+          strokeWidth={3}
+          dot={{ r: 4 }}
+          activeDot={{ r: 6 }}
         />
-       
-         <Tooltip />
-        <Bar dataKey="total" fill="#3498db" radius={[4, 4, 0, 0]} />
-        <LabelList dataKey="total" position="top"/>
-      </BarChart>
-
+      </LineChart>
     </ResponsiveContainer>
   );
-}
+};
 
 export default Overview;

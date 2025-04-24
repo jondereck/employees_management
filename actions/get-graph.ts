@@ -1,7 +1,7 @@
 import prismadb from "@/lib/prismadb";
 
 interface GraphData {
-  name: string;
+  name: string; // e.g., "Jan 2024"
   total: number;
 }
 
@@ -9,40 +9,31 @@ export const getGraph = async (departmentId: string) => {
   const totalEmployees = await prismadb.employee.findMany({
     where: {
       departmentId: departmentId,
-      isArchived: false
+      isArchived: false,
     },
   });
 
-  const monthlyEmployee: { [key: number]: number } = {};
+  const monthlyData: { [key: string]: number } = {}; // key format: "Jan 2024"
 
-  // Iterate through each employee to count their addition month
   for (const employee of totalEmployees) {
-    const month = employee.createdAt.getMonth();
-    monthlyEmployee[month] = (monthlyEmployee[month] || 0) + 1; // Increment the count for the month
-    
-  }
-  
+    const date = employee.createdAt;
+    const month = date.toLocaleString("default", { month: "short" }); // "Jan"
+    const year = date.getFullYear(); // e.g., 2024
+    const label = `${month} ${year}`; // e.g., "Jan 2024"
 
-  const graphData: GraphData[] = [
-    { name: "Jan", total: 0 },
-    { name: "Feb", total: 0 },
-    { name: "Mar", total: 0 },
-    { name: "Apr", total: 0 },
-    { name: "May", total: 0 },
-    { name: "Jun", total: 0 },
-    { name: "Jul", total: 0 },
-    { name: "Aug", total: 0 },
-    { name: "Sep", total: 0 },
-    { name: "Oct", total: 0 },
-    { name: "Nov", total: 0 },
-    { name: "Dec", total: 0 },
-  ];
-
-  // Update the graph data with the total employees added for each month
-  for (const month in monthlyEmployee) {
-    graphData[parseInt(month)].total = monthlyEmployee[parseInt(month)];
+    monthlyData[label] = (monthlyData[label] || 0) + 1;
   }
-  console.log(graphData);
+
+  // Convert to array and sort chronologically
+  const graphData: GraphData[] = Object.entries(monthlyData)
+    .map(([name, total]) => ({ name, total }))
+    .sort((a, b) => {
+      const [monthA, yearA] = a.name.split(" ");
+      const [monthB, yearB] = b.name.split(" ");
+      const dateA = new Date(`${monthA} 1, ${yearA}`);
+      const dateB = new Date(`${monthB} 1, ${yearB}`);
+      return dateA.getTime() - dateB.getTime();
+    });
 
   return graphData;
 };

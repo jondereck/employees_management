@@ -20,7 +20,8 @@ import {
   formatDate,
   formatPagIbigNumber,
   formatPhilHealthNumber,
-  formatGsisNumber
+  formatGsisNumber,
+  getBirthday
 } from "../../../../../../../../utils/utils";
 import { EmployeesColumn } from "../../../../employees/components/columns";
 
@@ -47,11 +48,11 @@ const Info = ({
   const latestAppointmentService = calculateYearServiceLatestAppointment(data.latestAppointment);
 
   // Format dates
-  const formattedDateHired = formatDate(data.dateHired);
+  const formattedDateHired = getBirthday(data.dateHired);
   const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment);
   const formattedTerminateDate = formatTerminateDate(data.terminateDate);
   const calculatedAge = calculateAge(data.birthday);
-  const formattedBirthday = formatDate(data.birthday);
+  const formattedBirthday = getBirthday(data.birthday);
 
 
   const fullName = `${data.prefix} ${data.firstName.toUpperCase()} ${data.nickname ? `"${data.nickname}"` : ""} ${data.middleName.length === 1 ? data.middleName.toUpperCase() + '.' : data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
@@ -115,7 +116,7 @@ const Info = ({
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Contact Number</h3>
-            <p className="font-light text-sm lg:text-2xl">{data?.contactNumber}</p>
+            <p className="font-light text-sm lg:text-2xl">{formattedContactNumber}</p>
           </div>
           <div className="flex flex-col ">
             <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl ">Birthday</h3>

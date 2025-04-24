@@ -4,7 +4,7 @@ import { getTotal } from "@/actions/get-total";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
-import { Shield, ShieldCheck, ShieldOff, Star, Users } from "lucide-react";
+import { Award, Shield, ShieldCheck, ShieldOff, Star, Users } from "lucide-react";
 import { PersonIcon } from "@radix-ui/react-icons";
 import { EmployeeType } from "./(frontend)/view/types";
 import Overview from "@/components/overview";
@@ -42,6 +42,12 @@ const DashboardPage = async ({ params }: DashboardProps) => {
       name: 'Coterminous',
       icon: Star,
       color: 'text-yellow-600'
+    },
+    {
+      id: '02f35663-5a8e-4dd9-a9f2-492bae41155e',
+      name: 'Elected',
+      icon: Award,
+      color: 'text-red-600'
     },
   ];
 
