@@ -65,7 +65,6 @@ const DashboardPage = async ({ params }: DashboardProps) => {
     return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
   });
   
-  console.log("Dynamic names from API:", totals.map(t => t.name));
 
   
   return (
