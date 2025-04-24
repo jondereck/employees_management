@@ -10,7 +10,7 @@ import EmployeeList from "./components/ui/employee-list";
 import SearchInput from "./components/search-bar";
 
 
-export const revalidate = 0;
+export const revalidate = 60;
 
 
 
