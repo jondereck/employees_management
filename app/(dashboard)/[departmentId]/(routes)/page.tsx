@@ -1,70 +1,76 @@
-
 import { getTotalEmployees } from "@/actions/get-total-employee";
 import { getTotal } from "@/actions/get-total";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
 import { Award, Shield, ShieldCheck, ShieldOff, Star, Users } from "lucide-react";
-import { PersonIcon } from "@radix-ui/react-icons";
-import { EmployeeType } from "./(frontend)/view/types";
 import Overview from "@/components/overview";
 import { getGraph } from "@/actions/get-graph";
-
-
 
 interface DashboardProps {
   params: { departmentId: string; officeId: string };
 }
 
+// Map icon names from DB to actual components
+const iconMap: Record<string, any> = {
+  ShieldCheck,
+  Shield,
+  ShieldOff,
+  Star,
+  Award,
+};
+
+const colorMap: Record<string, string> = {
+  Permanent: "text-green-500",
+  Casual: "text-blue-500",
+  "Job Order": "text-violet-500",
+  Coterminous: "text-yellow-600",
+  Elected: "text-red-600",
+};
+
+
+
 const DashboardPage = async ({ params }: DashboardProps) => {
+  const { departmentId } = params;
 
-  const employeeTypes = [
-    {
-      id: 'aeaf6a42-2586-46c3-bb2a-0464be2e5ba7',
-      name: 'Permanent',
-      icon: ShieldCheck,
-      color: 'text-green-500'
-    },
-    {
-      id: '07eb3541-f2c8-4482-843e-0aacc0197992',
-      name: 'Casual',
-      icon: Shield,
-      color: 'text-blue-500'
-    },
-    {
-      id: 'd5c55388-fd2b-4bc5-817a-c2a987e97be8',
-      name: 'Job Order',
-      icon: ShieldOff,
-      color: 'text-violet-500'
-    },
-    {
-      id: '10f6c11b-a1b4-4664-947b-5474380a7fbb',
-      name: 'Coterminous',
-      icon: Star,
-      color: 'text-yellow-600'
-    },
-    {
-      id: '02f35663-5a8e-4dd9-a9f2-492bae41155e',
-      name: 'Elected',
-      icon: Award,
-      color: 'text-red-600'
-    },
-  ];
+  // 🔄 Dynamically fetch employee types from API route
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/${departmentId}/employee_type`, {
+    cache: "no-store",
+  });
+  
 
-  const totalEmployee = await getTotalEmployees(params.departmentId);
-  const graphEmployee = await getGraph(params.departmentId)
+  const dynamicEmployeeTypes = await res.json();
 
+  // 🧮 Fetch total employee count
+  const totalEmployee = await getTotalEmployees(departmentId);
+  const graphEmployee = await getGraph(departmentId);
+
+  // 🧠 Map employeeTypes and get totals
   const totals = await Promise.all(
-    employeeTypes.map(async (employeeType) => {
+    dynamicEmployeeTypes.map(async (employeeType: any) => {
       const total = await getTotal(employeeType.id);
-      return { ...employeeType, total };
+      return {
+        ...employeeType,
+        total,
+        icon: iconMap[employeeType.icon || "Shield"], // fallback
+        color: colorMap[employeeType.name] || "text-gray-500", // fallback
+      };
     })
   );
+  const customOrder = ["permanent", "casual", "job order", "elected", "coterminous"];
 
+  const sortedTotals = totals.sort((a, b) => {
+    const aIndex = customOrder.indexOf(a.name.trim().toLowerCase());
+    const bIndex = customOrder.indexOf(b.name.trim().toLowerCase());
+    return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+  });
+  
+  console.log("Dynamic names from API:", totals.map(t => t.name));
+
+  
   return (
     <div className="flex-col">
       <div className="flex-1 space-y-4 p-4 lg:p-8 pt-6">
-
         <Heading title="Dashboard" description="Overview of your Employees" />
         <Separator />
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
@@ -77,12 +83,11 @@ const DashboardPage = async ({ params }: DashboardProps) => {
               <div className="text-2xl font-bold">{totalEmployee}</div>
             </CardContent>
           </Card>
-          {totals.map((employeeType) => (
+           {/* Render sorted employee types */}
+           {sortedTotals.map((employeeType) => (
             <Card key={employeeType.id}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className={`text-sm font-medium `}>
-                  {employeeType.name}
-                </CardTitle>
+                <CardTitle className="text-sm font-medium">{employeeType.name}</CardTitle>
                 {employeeType.icon && <employeeType.icon className={employeeType.color} />}
               </CardHeader>
               <CardContent>
@@ -96,9 +101,8 @@ const DashboardPage = async ({ params }: DashboardProps) => {
             <CardTitle>Overview</CardTitle>
           </CardHeader>
           <CardContent className="pl-2">
-            <Overview data={graphEmployee}/>
+            <Overview data={graphEmployee} />
           </CardContent>
-
         </Card>
       </div>
     </div>
