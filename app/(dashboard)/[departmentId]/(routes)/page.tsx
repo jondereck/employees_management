@@ -34,7 +34,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
   const { departmentId } = params;
 
   // 🔄 Dynamically fetch employee types from API route
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/${departmentId}/employee_type`, {
+  const res = await fetch(`${process.env.NEXT_PRIVATE_API_URL}/${departmentId}/employee_type`, {
     cache: "no-store",
   });
   
