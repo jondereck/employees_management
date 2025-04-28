@@ -3,7 +3,7 @@ import { getTotal } from "@/actions/get-total";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
-import { Award, Shield, ShieldCheck, ShieldOff, Star, Users } from "lucide-react";
+import { Award, Shield, ShieldCheck, ShieldEllipsis, ShieldOff, Star, Users } from "lucide-react";
 import Overview from "@/components/overview";
 import { getGraph } from "@/actions/get-graph";
 
@@ -18,16 +18,17 @@ const iconMap: Record<string, any> = {
   ShieldOff,
   Star,
   Award,
+  ShieldEllipsis
 };
 
-const colorMap: Record<string, string> = {
-  Permanent: "text-green-500",
-  Casual: "text-blue-500",
-  "Job Order": "text-violet-500",
-  Coterminous: "text-yellow-600",
-  Elected: "text-red-600",
+const iconNameMap: Record<string, keyof typeof iconMap> = {
+  Permanent: "ShieldCheck",
+  Casual: "Shield",
+  "Job Order": "ShieldOff",
+  Coterminous: "Star",
+  Elected: "Award",
+  "Contract of Service": "ShieldEllipsis",
 };
-
 
 
 const DashboardPage = async ({ params }: DashboardProps) => {
@@ -49,16 +50,19 @@ const DashboardPage = async ({ params }: DashboardProps) => {
   const totals = await Promise.all(
     dynamicEmployeeTypes.map(async (employeeType: any) => {
       const total = await getTotal(employeeType.id);
+
+      const iconKey = iconNameMap[employeeType.name.trim()] || "Shield";
+      const icon = iconMap[iconKey];
+
       return {
         ...employeeType,
         total,
-        icon: iconMap[employeeType.icon || "Shield"], // fallback
-        color: colorMap[employeeType.name] || "text-gray-500", // fallback
+        icon,
+       
       };
     })
   );
   const customOrder = ["permanent", "casual", "job order", "elected", "coterminous"];
-
   const sortedTotals = totals.sort((a, b) => {
     const aIndex = customOrder.indexOf(a.name.trim().toLowerCase());
     const bIndex = customOrder.indexOf(b.name.trim().toLowerCase());
@@ -66,13 +70,13 @@ const DashboardPage = async ({ params }: DashboardProps) => {
   });
   
 
-  
   return (
     <div className="flex-col">
       <div className="flex-1 space-y-4 p-4 lg:p-8 pt-6">
         <Heading title="Dashboard" description="Overview of your Employees" />
         <Separator />
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
+          {/* TOTAL EMPLOYEE CARD */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Employee</CardTitle>
@@ -82,12 +86,18 @@ const DashboardPage = async ({ params }: DashboardProps) => {
               <div className="text-2xl font-bold">{totalEmployee}</div>
             </CardContent>
           </Card>
-           {/* Render sorted employee types */}
-           {sortedTotals.map((employeeType) => (
+
+          {/* INDIVIDUAL EMPLOYEE TYPE CARDS */}
+          {sortedTotals.map((employeeType) => (
             <Card key={employeeType.id}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">{employeeType.name}</CardTitle>
-                {employeeType.icon && <employeeType.icon className={employeeType.color} />}
+                {employeeType.icon && (
+                  <employeeType.icon
+                    size={24}
+                    style={{ color: employeeType.value }} // 🔥 USE COLOR FROM API VALUE
+                  />
+                )}
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{employeeType.total}</div>
@@ -95,6 +105,8 @@ const DashboardPage = async ({ params }: DashboardProps) => {
             </Card>
           ))}
         </div>
+
+        {/* OVERVIEW CHART */}
         <Card className="col-span-4">
           <CardHeader>
             <CardTitle>Overview</CardTitle>
