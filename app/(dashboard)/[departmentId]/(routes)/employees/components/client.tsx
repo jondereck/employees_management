@@ -11,6 +11,8 @@ import { DataTable } from "@/components/ui/data-table";
 import ApiList from "@/components/ui/api-list";
 import ApiHeading from "@/components/ui/api-heading";
 import Footer from "../../(frontend)/view/components/footer";
+import DownloadEmployeeBackup from "@/components/download-button";
+
 
 
 interface EmployeesClientProps {
@@ -38,6 +40,7 @@ export const  EmployeesClient = ({
     </div>
     <Separator/>
     <DataTable  searchKeys={['firstName','lastName','contactNumber']} columns={columns} data={data}/>
+  
     {/* <ApiHeading
     title="API"
     description="API calls for employees"
@@ -48,3 +51,4 @@ export const  EmployeesClient = ({
     
    );
 }
+

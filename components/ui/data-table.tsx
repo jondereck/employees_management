@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select"
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
 import { DataTableViewOptions } from "./column-toggle"
+import DownloadEmployeeBackup from "../download-button"
 
 
 
@@ -110,7 +111,7 @@ export function DataTable<TData, TValue>({
         <div className="ml-auto">
           <DataTableViewOptions table={table} />
         </div>
-
+        <DownloadEmployeeBackup />
 
 
       </div>

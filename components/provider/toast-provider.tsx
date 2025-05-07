@@ -1,6 +1,6 @@
 "use client";
 
-import { Toaster } from "../ui/toaster";
+import { Toaster } from "sonner";
 
 export const ToastProvider = () => {
   return <Toaster/>;
