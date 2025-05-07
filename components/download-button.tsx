@@ -174,7 +174,7 @@ export default function DownloadStyledExcel() {
       if (data.length === 0) throw new Error('No employee data found.');
 
       // Step 1: Map officeId to office name
-      const updatedData = data.map((row) => {
+      const updatedData = data.map((row:any) => {
         // Replace Office ID with Name
         if (row.officeId && officeMapping[row.officeId]) {
           row.officeId = officeMapping[row.officeId];
@@ -218,7 +218,7 @@ export default function DownloadStyledExcel() {
       const headers = visibleColumns.map(col => col.name);
 
       // Step 3: Map data using display names as keys
-      const filteredData = updatedData.map((row) => {
+      const filteredData = updatedData.map((row:any) => {
         const newRow: Record<string, any> = {};
         visibleColumns.forEach((col) => {
           newRow[col.name] = row[col.key]; // Consistent keys
@@ -229,6 +229,10 @@ export default function DownloadStyledExcel() {
 
       // Convert to worksheet
       const worksheet = XLSX.utils.json_to_sheet(filteredData, { header: headers, skipHeader: false });
+
+      // Freeze the top row
+      worksheet['!freeze'] = { xSplit: 1, ySplit: 1 };
+
 
       headers.forEach((header, colIdx) => {
         const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIdx });
@@ -265,10 +269,83 @@ export default function DownloadStyledExcel() {
         });
       });
 
+      for (let i = 0; i < filteredData.length; i++) {
+        const rowNumber = i + 2; // Excel rows start at 1, plus 1 for header
+
+        const birthdateCell = `N${rowNumber}`;
+        const ageCell = `O${rowNumber}`;
+        const hiredDateCell = `Q${rowNumber}`;
+        const serviceCell = `R${rowNumber}`;
+        const terminateDateCell = `AE${rowNumber}`;
+
+        // Formula for Age
+        worksheet[ageCell] = {
+          t: 'n',
+          f: `IF(${birthdateCell}="", "", DATEDIF(${birthdateCell}, IF(${terminateDateCell}="", TODAY(), ${terminateDateCell}), "Y"))`,
+          s: {
+            font: { sz: 11, color: { rgb: '000000' } },
+            alignment: { vertical: 'center', horizontal: 'center' },
+            border: {
+              top: { style: 'thin', color: { rgb: 'CCCCCC' } },
+              bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
+              left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+              right: { style: 'thin', color: { rgb: 'CCCCCC' } },
+            },
+          }
+        };
+
+        // Formula for Years of Service
+        worksheet[serviceCell] = {
+          t: 'n',
+          f: `IF(${hiredDateCell}="", "", DATEDIF(${hiredDateCell}, IF(${terminateDateCell}="", TODAY(), ${terminateDateCell}), "Y"))`,
+          s: {
+            font: { sz: 11, color: { rgb: '000000' } },
+            alignment: { vertical: 'center', horizontal: 'center' },
+            border: {
+              top: { style: 'thin', color: { rgb: 'CCCCCC' } },
+              bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
+              left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+              right: { style: 'thin', color: { rgb: 'CCCCCC' } },
+            },
+          }
+        };
+      }
+      filteredData.forEach((row: any, rowIndex: number) => {
+        const isRetired = row['Retired'] === true || String(row['Retired']).toLowerCase() === 'true';
+
+        headers.forEach((header, colIndex) => {
+          const cellAddress = XLSX.utils.encode_cell({ r: rowIndex + 1, c: colIndex });
+          const cell = worksheet[cellAddress];
+
+          if (cell) {
+            const baseStyle: any = {
+              font: { sz: 11, color: { rgb: '000000' } },
+              alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+              border: {
+                top: { style: 'thin', color: { rgb: 'CCCCCC' } },
+                bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
+                left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+                right: { style: 'thin', color: { rgb: 'CCCCCC' } },
+              },
+            };
+
+            // If retired, apply red highlighting
+            if (isRetired) {
+              baseStyle.fill = { fgColor: { rgb: 'FFCCCC' } }; // Light red background
+              baseStyle.font = { sz: 11, color: { rgb: '990000' }, bold: true };
+            }
+
+            cell.s = baseStyle;
+          }
+        });
+      });
+
+
+
       // Step 4: Auto-size columns
       const columnWidths = headers.map((header) => {
         let maxLength = header.length;
-        filteredData.forEach((row) => {
+        filteredData.forEach((row:any) => {
           const cellValue = row[header] ?? '';
           const cellLength = String(cellValue).length;
           if (cellLength > maxLength) {
@@ -310,7 +387,7 @@ export default function DownloadStyledExcel() {
       <button
         onClick={handleDownload}
         disabled={loading}
-        className={`px-4 py-3 ${loading ? 'bg-gray-500' : 'bg-green-700'} text-white rounded-md`}
+        className={`px-4 py-2 ${loading ? 'bg-gray-500' : 'bg-green-700'} text-white rounded-md`}
       >
         {loading ? 'Generating...' : 'Download Excel'}
       </button>
