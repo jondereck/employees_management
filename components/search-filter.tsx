@@ -28,7 +28,7 @@ const SearchFilter: FC<SearchFilterProps> = ({ searchTerm, setSearchTerm }) => {
 
   useEffect(() => {
     setSearchTerm(debouncedSearchTerm);
-  }, [debouncedSearchTerm, setSearchTerm]);
+  }, [debouncedSearchTerm, setSearchTerm]); 
 
   return (
     <div className="py-4">

@@ -33,9 +33,12 @@ export const EmployeesClient = ({ data
   const filteredData = data.filter((employee) => {
     const { firstName, lastName, contactNumber,nickname} = employee;
     const lowercasedSearchTerm = searchTerm.toLowerCase();
+
+    const fullName = `${firstName} ${lastName}`.toLocaleLowerCase();
+    const reversedFullName = `${lastName} ${firstName}`.toLocaleLowerCase();
     return (
-      firstName.toLowerCase().includes(lowercasedSearchTerm) ||
-      lastName.toLowerCase().includes(lowercasedSearchTerm) ||
+      fullName.includes(lowercasedSearchTerm) ||
+      reversedFullName.includes(lowercasedSearchTerm) ||
       contactNumber.toLowerCase().includes(lowercasedSearchTerm) ||
       nickname.toLowerCase().includes(lowercasedSearchTerm)
     );

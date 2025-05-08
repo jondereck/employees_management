@@ -381,25 +381,25 @@ export default function DownloadStyledExcel() {
 
 
 
-     // Trigger download
-const link = document.createElement('a');
+      // Trigger download
+      const link = document.createElement('a');
 
-// Create a new Date object for the current date and time
-const now = new Date();
+      // Create a new Date object for the current date and time
+      const now = new Date();
 
-// Manually format the date and time into a valid string for the filename
-const formattedDate = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
-const formattedTime = `${now.getHours().toString().padStart(2, '0')}-${now.getMinutes().toString().padStart(2, '0')}-${now.getSeconds().toString().padStart(2, '0')}`;
+      // Manually format the date and time into a valid string for the filename
+      const formattedDate = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+      const formattedTime = `${now.getHours().toString().padStart(2, '0')}-${now.getMinutes().toString().padStart(2, '0')}-${now.getSeconds().toString().padStart(2, '0')}`;
 
-// Construct the filename with the current date and time
-const filename = `employee_list_${formattedDate}_${formattedTime}.xlsx`;
+      // Construct the filename with the current date and time
+      const filename = `employee_list_${formattedDate}_${formattedTime}.xlsx`;
 
-link.href = window.URL.createObjectURL(blob);
-link.download = filename; // Set the dynamically generated filename
-document.body.appendChild(link);
-link.click();
-link.remove();
-window.URL.revokeObjectURL(link.href);
+      link.href = window.URL.createObjectURL(blob);
+      link.download = filename; // Set the dynamically generated filename
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(link.href);
 
 
 
