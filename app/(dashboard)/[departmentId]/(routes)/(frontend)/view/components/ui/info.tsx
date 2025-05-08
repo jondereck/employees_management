@@ -61,17 +61,27 @@ const Info = ({
 
 
   const DetailItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
-    <div>
-      <h3 className="text-sm text-muted-foreground">{label}</h3>
-      <p className="text-base font-medium text-gray-900">{value}</p>
+    <div className="mb-1">
+      <h3 className="text-xs sm:text-sm text-muted-foreground">{label}</h3>
+      <p className="text-sm sm:text-base font-medium text-gray-900">{value}</p>
     </div>
+
   );
 
   return (
 
     <div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `10px solid ${data?.employeeType?.value}` }}
-    >
+    >{data?.isArchived && (
+      <div className="relative -mx-6 -mt-6 mb-6 rounded-t-lg bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white text-center py-2 px-4 shadow-inner">
+        <span className="text-sm sm:text-base font-semibold tracking-wide uppercase">
+          ⚠️ This employee is no longer active / Retired
+        </span>
+      </div>
+    )}
+    
       <Separator />
+     
+
       <div className="flex items-center gap-2 mt-4">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 leading-tight">
           {fullName}
@@ -125,8 +135,6 @@ const Info = ({
         )}
 
       </div>
-
-
       <Separator />
       <Card className="mb-6">
         <CardHeader>
@@ -156,52 +164,27 @@ const Info = ({
           <CardTitle className="text-lg font-semibold">Employment Information</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <h3 className="text-sm text-muted-foreground">Appointment Type</h3>
-            <Badge
-              style={{
-                backgroundColor: data?.employeeType?.value,
-                color: 'white', // optional, override for contrast
-              }}
-            >
-              {data?.employeeType?.name}
-            </Badge>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">Eligibility</h3>
-            <p className="text-base font-medium text-gray-900">{data?.eligibility?.name || "—"}</p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">Date Hired</h3>
-            <p className="text-base font-medium text-gray-900">{formattedDateHired || "—"}</p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">Service Rendered</h3>
-            <p className="text-base font-medium text-gray-900"> {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s</p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">Monthly Salary</h3>
-            <p className="text-base font-medium text-gray-900">{formattedSalary || "—"}</p>
-          </div>
-
-          <div>
-            <h3 className="text-sm text-muted-foreground">Annual Salary</h3>
-            <p className="text-base font-medium text-gray-900">{annualSalary || "—"}</p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">Latest Appointment</h3>
-            <p className="text-base font-medium text-gray-900">{formattedLatestAppointment || "_"}</p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">Years of Service (Latest Appointment)</h3>
-            <p className="text-base font-medium text-gray-900">  {latestAppointmentService?.years || latestAppointmentService?.months || latestAppointmentService?.days
+          <DetailItem label="Appointment Type" value={<Badge
+            style={{
+              backgroundColor: data?.employeeType?.value,
+              color: 'white', // optional, override for contrast
+            }}
+          >
+            {data?.employeeType?.name}
+          </Badge>} />
+          <DetailItem label="Eligibility" value={data?.eligibility?.name || "—"} />
+          <DetailItem label="Date Hired" value={formattedDateHired || "—"} />
+          <DetailItem
+            label="Service Rendered"
+            value={`${yearService.years} Y/s, ${yearService.months} Mon/s, ${yearService.days} Day/s`}
+          />
+          <DetailItem label="Monthly Salary" value={formattedSalary || "—"} />
+          <DetailItem label="Annual Salary" value={annualSalary || "—"} />
+          <DetailItem label="Latest Appointment" value={formattedLatestAppointment } />
+          <DetailItem label="Years of Service (Latest Appointment)" value={latestAppointmentService?.years || latestAppointmentService?.months || latestAppointmentService?.days
               ? `${latestAppointmentService.years} Y/s, ${latestAppointmentService.months} Mon/s, ${latestAppointmentService.days} Day/s`
-              : '—'}</p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">Termination Date</h3>
-            <p className="text-base font-medium text-gray-900">{formattedTerminateDate || "—"}</p>
-          </div>
+              : '—'} />
+          <DetailItem label="Termination Date" value={formattedTerminateDate || "—"} /> 
 
         </CardContent>
       </Card>
@@ -210,28 +193,18 @@ const Info = ({
           <CardTitle className="text-lg font-semibold">Government Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <h3 className="text-sm text-muted-foreground">GSIS No</h3>
-            <p className="text-base font-medium text-gray-900">{formatGsisNumber(data?.gsisNo) || "_"}</p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">TIN</h3>
-            <p className="text-base font-medium text-gray-900">{data?.tinNo || 'N/A'}</p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">Pag-IBIG No</h3>
-            <p className="text-base font-medium text-gray-900">{formatPagIbigNumber(data?.pagIbigNo)}</p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">PhilHealth No</h3>
-            <p className="text-base font-medium text-gray-900">{formatPhilHealthNumber(data?.philHealthNo)} </p>
-          </div>
-          <div>
-            <h3 className="text-sm text-muted-foreground">Member Policy No</h3>
-            <p className="text-base font-medium text-gray-900">{data?.memberPolicyNo || "—"}</p>
-          </div>
+
+        <DetailItem label="GSIS No" value={formatGsisNumber(data?.gsisNo) || "_"} /> 
+        <DetailItem label="TIN" value={data?.tinNo || 'N/A'} /> 
+        <DetailItem label="Pag-IBIG No" value={formatPagIbigNumber(data?.pagIbigNo)} /> 
+        <DetailItem label="PhilHealth No" value={formatPhilHealthNumber(data?.philHealthNo)} /> 
+        <DetailItem label="GSIS No" value={formatGsisNumber(data?.gsisNo) || "_"} /> 
+        <DetailItem label="Member Policy No" value={data?.memberPolicyNo || "—"} /> 
         </CardContent>
       </Card>
+
+
+      
     </div>);
 }
 

@@ -76,6 +76,7 @@ export type EmployeesColumn = {
   terminateDate: string;
   isFeatured: boolean;
   isHead: boolean;
+  isArchived: boolean;
   eligibility: Eligibility;
   employeeType: EmployeeType;
   images: Image[]; // Array of Image

@@ -33,7 +33,7 @@ export const formatDate = (dateString: string): string => {
 
   // Check if the date is valid, return 'No Data' if invalid
   if (isNaN(date.getTime())) {
-    return '_';
+    return '—';
   }
 
   // Format the date
@@ -67,7 +67,7 @@ export const formatContactNumber = (contactNumber: string) => {
   const rawNumber = contactNumber || '';
   // If rawNumber is empty, return an empty string
   if (!rawNumber.trim()) {
-    return '_';
+    return '—';
   }
   const numericOnly = rawNumber.replace(/\D/g, ''); // Remove non-numeric characters
 
@@ -148,7 +148,7 @@ export const formatLatestAppointment = (latestAppointment: string): string => {
   const appointmentDate = new Date(latestAppointment);
 
   if (isNaN(appointmentDate.getTime())) {
-    return '_';
+    return '—';
   }
 
   const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: '2-digit' };
