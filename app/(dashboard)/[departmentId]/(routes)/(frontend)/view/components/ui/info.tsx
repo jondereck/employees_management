@@ -78,10 +78,8 @@ const Info = ({
         </span>
       </div>
     )}
-    
-      <Separator />
-     
 
+      <Separator />
       <div className="flex items-center gap-2 mt-4">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 leading-tight">
           {fullName}
@@ -96,7 +94,12 @@ const Info = ({
         )}
       </div>
 
+      
+
+
       {/* Position & Salary Grade */}
+
+
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-3">
         <p className="text-base sm:text-lg font-medium text-gray-800">
           {data.position}
@@ -107,7 +110,21 @@ const Info = ({
           </Badge>
         )}
       </div>
-
+      <div>
+        <DetailItem
+          label=""
+          value={
+            <Badge
+              style={{
+                backgroundColor: data?.employeeType?.value,
+                color: 'white',
+              }}
+            >
+              {data?.employeeType?.name}
+            </Badge>
+          }
+        />
+      </div>
       {/* Office */}
       {data?.offices?.name && (
         <p className="text-sm text-muted-foreground mt-1">
@@ -164,14 +181,8 @@ const Info = ({
           <CardTitle className="text-lg font-semibold">Employment Information</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <DetailItem label="Appointment Type" value={<Badge
-            style={{
-              backgroundColor: data?.employeeType?.value,
-              color: 'white', // optional, override for contrast
-            }}
-          >
-            {data?.employeeType?.name}
-          </Badge>} />
+          <DetailItem label="Appointment Type" value={data?.employeeType?.name}/>
+   
           <DetailItem label="Eligibility" value={data?.eligibility?.name || "—"} />
           <DetailItem label="Date Hired" value={formattedDateHired || "—"} />
           <DetailItem
@@ -180,11 +191,11 @@ const Info = ({
           />
           <DetailItem label="Monthly Salary" value={formattedSalary || "—"} />
           <DetailItem label="Annual Salary" value={annualSalary || "—"} />
-          <DetailItem label="Latest Appointment" value={formattedLatestAppointment } />
+          <DetailItem label="Latest Appointment" value={formattedLatestAppointment} />
           <DetailItem label="Years of Service (Latest Appointment)" value={latestAppointmentService?.years || latestAppointmentService?.months || latestAppointmentService?.days
-              ? `${latestAppointmentService.years} Y/s, ${latestAppointmentService.months} Mon/s, ${latestAppointmentService.days} Day/s`
-              : '—'} />
-          <DetailItem label="Termination Date" value={formattedTerminateDate || "—"} /> 
+            ? `${latestAppointmentService.years} Y/s, ${latestAppointmentService.months} Mon/s, ${latestAppointmentService.days} Day/s`
+            : '—'} />
+          <DetailItem label="Termination Date" value={formattedTerminateDate || "—"} />
 
         </CardContent>
       </Card>
@@ -194,17 +205,17 @@ const Info = ({
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
-        <DetailItem label="GSIS No" value={formatGsisNumber(data?.gsisNo) || "_"} /> 
-        <DetailItem label="TIN" value={data?.tinNo || 'N/A'} /> 
-        <DetailItem label="Pag-IBIG No" value={formatPagIbigNumber(data?.pagIbigNo)} /> 
-        <DetailItem label="PhilHealth No" value={formatPhilHealthNumber(data?.philHealthNo)} /> 
-        <DetailItem label="GSIS No" value={formatGsisNumber(data?.gsisNo) || "_"} /> 
-        <DetailItem label="Member Policy No" value={data?.memberPolicyNo || "—"} /> 
+          <DetailItem label="GSIS No" value={formatGsisNumber(data?.gsisNo) || "_"} />
+          <DetailItem label="TIN" value={data?.tinNo || 'N/A'} />
+          <DetailItem label="Pag-IBIG No" value={formatPagIbigNumber(data?.pagIbigNo)} />
+          <DetailItem label="PhilHealth No" value={formatPhilHealthNumber(data?.philHealthNo)} />
+          <DetailItem label="GSIS No" value={formatGsisNumber(data?.gsisNo) || "_"} />
+          <DetailItem label="Member Policy No" value={data?.memberPolicyNo || "—"} />
         </CardContent>
       </Card>
 
 
-      
+
     </div>);
 }
 
