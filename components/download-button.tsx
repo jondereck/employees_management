@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx-js-style';
+import { FaFileExcel } from 'react-icons/fa';
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
@@ -173,8 +174,8 @@ export default function DownloadStyledExcel() {
       const data = await response.json();
       if (data.length === 0) throw new Error('No employee data found.');
 
-      // Step 1: Map officeId to office name
-      const updatedData = data.map((row:any) => {
+      // Map officeId to office name
+      const updatedData = data.map((row: any) => {
         // Replace Office ID with Name
         if (row.officeId && officeMapping[row.officeId]) {
           row.officeId = officeMapping[row.officeId];
@@ -211,14 +212,14 @@ export default function DownloadStyledExcel() {
 
 
 
-      // Step 1: Filter out hidden columns
+      //Filter out hidden columns
       const visibleColumns = columnOrder.filter(col => !hiddenFields.includes(col.key));
 
-      // ✅ Step 2: Use display names for headers (important)
+      //Use display names for headers (important)
       const headers = visibleColumns.map(col => col.name);
 
-      // Step 3: Map data using display names as keys
-      const filteredData = updatedData.map((row:any) => {
+      //Map data using display names as keys
+      const filteredData = updatedData.map((row: any) => {
         const newRow: Record<string, any> = {};
         visibleColumns.forEach((col) => {
           newRow[col.name] = row[col.key]; // Consistent keys
@@ -227,8 +228,21 @@ export default function DownloadStyledExcel() {
       });
 
 
+      //Sort the data by 'Office' and 'Last Name'
+      const sortedData = filteredData.sort((a: any, b: any) => {
+        // First, sort by 'Office' (alphabetically)
+        if (a['Office'] < b['Office']) return -1;
+        if (a['Office'] > b['Office']) return 1;
+
+        // If 'Office' is the same, sort by 'Last Name' (alphabetically)
+        if (a['Last Name'] < b['Last Name']) return -1;
+        if (a['Last Name'] > b['Last Name']) return 1;
+
+        return 0;
+      });
+
       // Convert to worksheet
-      const worksheet = XLSX.utils.json_to_sheet(filteredData, { header: headers, skipHeader: false });
+      const worksheet = XLSX.utils.json_to_sheet(sortedData, { header: headers, skipHeader: false });
 
       // Freeze the top row
       worksheet['!freeze'] = { xSplit: 1, ySplit: 1 };
@@ -341,56 +355,84 @@ export default function DownloadStyledExcel() {
       });
 
 
-
-      // Step 4: Auto-size columns
+      // Auto-size columns
       const columnWidths = headers.map((header) => {
         let maxLength = header.length;
-        filteredData.forEach((row:any) => {
+        filteredData.forEach((row: any) => {
           const cellValue = row[header] ?? '';
           const cellLength = String(cellValue).length;
           if (cellLength > maxLength) {
             maxLength = cellLength;
           }
         });
-        return { wch: maxLength + 2 };
+        return { wch: maxLength + 1 };
       });
       worksheet['!cols'] = columnWidths;
 
-      // Step 5: Create workbook and write file
+      //Create workbook and write file
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
-      XLSX.writeFile(workbook, 'ExportedFile.xlsx'); // from xlsx-js-style
 
 
 
-      // Step 8: Write to file
+      // Write to file
       const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
 
-      // Trigger download
-      const link = document.createElement('a');
-      link.href = window.URL.createObjectURL(blob);
-      link.download = 'Employee_Backup.xlsx';
-      link.click();
-      window.URL.revokeObjectURL(link.href);
 
-      toast.success('Excel file generated successfully!');
+
+     // Trigger download
+const link = document.createElement('a');
+
+// Create a new Date object for the current date and time
+const now = new Date();
+
+// Manually format the date and time into a valid string for the filename
+const formattedDate = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+const formattedTime = `${now.getHours().toString().padStart(2, '0')}-${now.getMinutes().toString().padStart(2, '0')}-${now.getSeconds().toString().padStart(2, '0')}`;
+
+// Construct the filename with the current date and time
+const filename = `employee_list_${formattedDate}_${formattedTime}.xlsx`;
+
+link.href = window.URL.createObjectURL(blob);
+link.download = filename; // Set the dynamically generated filename
+document.body.appendChild(link);
+link.click();
+link.remove();
+window.URL.revokeObjectURL(link.href);
+
+
+
+
+      toast.success('Excel file generated successfully!', { id: toastId });
     } catch (error) {
-      toast.error(`Error: ${error}`);
+      toast.error(`Error: ${error}`, { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div>
+
+    <div className="w-full flex justify-center sm:justify-start">
       <button
         onClick={handleDownload}
         disabled={loading}
-        className={`px-4 py-2 ${loading ? 'bg-gray-500' : 'bg-green-700'} text-white rounded-md`}
+        className={`w-full sm:w-auto px-4 py-2 text-sm sm:text-base rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${loading
+          ? 'bg-gray-500 cursor-not-allowed'
+          : 'bg-green-700 hover:bg-green-800 focus:ring-green-600'
+          } text-white flex items-center justify-center space-x-2`}
       >
-        {loading ? 'Generating...' : 'Download Excel'}
+        {loading ? (
+          'Generating...'
+        ) : (
+          <>
+            <FaFileExcel className="text-base sm:text-lg" />
+            <span>Download</span>
+          </>
+        )}
       </button>
     </div>
+
   );
 }

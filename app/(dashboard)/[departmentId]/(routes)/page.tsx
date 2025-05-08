@@ -106,42 +106,50 @@ const DashboardPage = async ({ params }: DashboardProps) => {
           {/* INDIVIDUAL EMPLOYEE TYPE CARDS */}
           {sortedTotals.map((employeeType) => (
             <Card key={employeeType.id}>
-              <CardHeader className="group flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{employeeType.name}
-                  <span className="text-xs">
-                    {employeeType.trend === "↑" && <span className="text-green-600">{employeeType.trend}</span>}
-                    {employeeType.trend === "↓" && <span className="text-red-600">{employeeType.trend}</span>}
-                    {employeeType.trend === "→" && <span className="text-gray-500">{employeeType.trend}</span>}
-                  </span>
-                </CardTitle>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between items-start space-y-2 sm:space-y-0 pb-2">
+                <div className="flex-1">
+                  <CardTitle className="text-sm font-medium">
+                    {employeeType.name}
+                    <span className="text-xs ml-1">
+                      {employeeType.trend === "↑" && <span className="text-green-600">{employeeType.trend}</span>}
+                      {employeeType.trend === "↓" && <span className="text-red-600">{employeeType.trend}</span>}
+                      {employeeType.trend === "→" && <span className="text-gray-500">{employeeType.trend}</span>}
+                    </span>
+                  </CardTitle>
+                </div>
+
                 {employeeType.icon && (
                   <ActionTooltip
                     label={`${employeeType.name} - ${employeeType.total} employees`}
                     side="top"
                     align="center"
                   >
-                    <div className="p-2 rounded-full" style={{ backgroundColor: `${employeeType.value}30` }}>
+                    <div
+                      className="p-2 sm:p-2 rounded-full self-start sm:self-center"
+                      style={{ backgroundColor: `${employeeType.value}30` }}
+                    >
                       <employeeType.icon
                         size={24}
+                        className={`w-5 h-5 sm:w-6 sm:h-6 ${employeeType.color} group-hover:animate-bounce transition-transform duration-300`}
                         style={{ color: employeeType.value }}
-                        className={`${employeeType.color} group-hover:animate-bounce transition-transform duration-300`}
                         strokeWidth={2}
                       />
                     </div>
-
                   </ActionTooltip>
                 )}
               </CardHeader>
+
               <CardContent>
                 <div className="text-2xl font-bold">{employeeType.total}</div>
                 <p className="text-xs text-muted-foreground">{employeeType.percent}% of total employees</p>
               </CardContent>
             </Card>
+
           ))}
         </div>
-         <div>
-      {/* <CardListClient totals={sortedTotals} /> */}
-    </div>
+        <div>
+          {/* <CardListClient totals={sortedTotals} /> */}
+        </div>
 
         {/* OVERVIEW CHART */}
         <Card className="col-span-4">

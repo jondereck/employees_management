@@ -86,36 +86,9 @@ export function DataTable<TData, TValue>({
 
 
   return (
-    <div>
-      <div className="flex items-center gap-2 py-4">
-        {searchKeys?.map((key) => {
-          // Function to format the key
-          const formattedKey = key
-            .split(/(?=[A-Z])/) // Split on capital letters
-            .map((part) => part.charAt(0).toLowerCase() + part.slice(1)) // Capitalize each part
-            .join(" "); // Join parts with space
-
-          return (
-            <Input
-              key={key}
-              placeholder={`Search ${formattedKey}`} // Use formatted key in placeholder
-              value={(table.getColumn(key)?.getFilterValue() as string) ?? ""}
-              onChange={(event) =>
-                table.getColumn(key)?.setFilterValue(event.target.value)
-              }
-              className="max-w-sm"
-            />
-          );
-        })}
-
-        <div className="ml-auto">
-          <DataTableViewOptions table={table} />
-        </div>
-        <DownloadEmployeeBackup />
-
-
-      </div>
-      <div className="rounded-md border">
+    <div className="space-y-4">
+      {/* <DataTableViewOptions table={table} /> */}
+      <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -125,12 +98,9 @@ export function DataTable<TData, TValue>({
                     <TableHead key={header.id}>
                       {header.isPlaceholder
                         ? null
-                        : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                        : flexRender(header.column.columnDef.header, header.getContext())}
                     </TableHead>
-                  )
+                  );
                 })}
               </TableRow>
             ))}
@@ -138,10 +108,7 @@ export function DataTable<TData, TValue>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
+                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -159,18 +126,20 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex  items-center justify-between py-4">
-        <div className="hidden md:block flex-1 text-sm text-muted-foreground">
+
+      <div className="flex items-center justify-between py-4 flex-wrap gap-4">
+        <div className="text-sm text-muted-foreground flex-1">
           {table.getFilteredSelectedRowModel().rows.length} of{" "}
           {table.getFilteredRowModel().rows.length} row(s) selected.
         </div>
-        <div className="flex items-center space-x-6 lg:space-x-8">
+
+        <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             <p className="hidden md:block text-sm font-medium">Rows per page</p>
             <Select
               value={`${table.getState().pagination.pageSize}`}
               onValueChange={(value) => {
-                table.setPageSize(Number(value))
+                table.setPageSize(Number(value));
               }}
             >
               <SelectTrigger className="h-8 w-[70px]">
@@ -185,14 +154,11 @@ export function DataTable<TData, TValue>({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-            Page {table.getState().pagination.pageIndex + 1} of{" "}
-            {table.getPageCount()}
-          </div>
+
           <div className="flex items-center space-x-2">
             <Button
               variant="outline"
-              className="hidden h-8 w-8 p-0 lg:flex"
+              className="h-8 w-8 p-0"
               onClick={() => table.setPageIndex(0)}
               disabled={!table.getCanPreviousPage()}
             >
@@ -219,7 +185,7 @@ export function DataTable<TData, TValue>({
             </Button>
             <Button
               variant="outline"
-              className="hidden h-8 w-8 p-0 lg:flex"
+              className="h-8 w-8 p-0"
               onClick={() => table.setPageIndex(table.getPageCount() - 1)}
               disabled={!table.getCanNextPage()}
             >
@@ -230,5 +196,6 @@ export function DataTable<TData, TValue>({
         </div>
       </div>
     </div>
+
   )
 }
