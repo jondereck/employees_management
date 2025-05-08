@@ -7,6 +7,7 @@ import { StarFilledIcon } from "@radix-ui/react-icons";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { FolderMinus, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   calculateAnnualSalary,
@@ -24,6 +25,7 @@ import {
   getBirthday
 } from "../../../../../../../../utils/utils";
 import { EmployeesColumn } from "../../../../employees/components/columns";
+import { Badge } from "@/components/ui/badge";
 
 
 
@@ -57,177 +59,179 @@ const Info = ({
 
   const fullName = `${data.prefix} ${data.firstName.toUpperCase()} ${data.nickname ? `"${data.nickname}"` : ""} ${data.middleName.length === 1 ? data.middleName.toUpperCase() + '.' : data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
 
+
+  const DetailItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
+    <div>
+      <h3 className="text-sm text-muted-foreground">{label}</h3>
+      <p className="text-base font-medium text-gray-900">{value}</p>
+    </div>
+  );
+
   return (
 
     <div className="bg-white p-6 rounded-lg shadow-md " style={{ border: `10px solid ${data?.employeeType?.value}` }}
-    ><Separator />
-      <h1 className=" flex items-justify text-3xl lg:text-4xl font-bold text-gray-900 gap-2">{fullName}
-        <ActionTooltip
-          label="Executive Level"
-          side="left"
-        >
-          <div className="pt-1">
-            {data.isHead && <IconButton icon={<StarFilledIcon className="text-yellow-600 " />}
-            />}
-          </div>
+    >
+      <Separator />
+      <div className="flex items-center gap-2 mt-4">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 leading-tight">
+          {fullName}
+        </h1>
 
-        </ActionTooltip>
-      </h1>
-
-      <div className="flex flex-col items-start font-sans font-light justify-between">
-        <div className="flex justify-center items-center gap-2">
-          <p className="text-lg font-semibold">{data.position} </p>
-          {data.salaryGrade ? <p className="text-xs">{`S.G. ${data.salaryGrade}`}</p> : null}
-        </div>
+        {data.isHead && (
+          <ActionTooltip label="Executive Level" side="right">
+            <span className="inline-flex items-center justify-center rounded-full p-1 bg-yellow-100">
+              <StarFilledIcon className="h-5 w-5 text-yellow-600" />
+            </span>
+          </ActionTooltip>
+        )}
       </div>
-      <h3 className="text-sm font-light text-gray-700">({data?.offices?.name})</h3>
+
+      {/* Position & Salary Grade */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-3">
+        <p className="text-base sm:text-lg font-medium text-gray-800">
+          {data.position}
+        </p>
+        {data.salaryGrade && (
+          <Badge variant="secondary" className="text-xs px-2 py-0.5">
+            S.G. {data.salaryGrade}
+          </Badge>
+        )}
+      </div>
+
+      {/* Office */}
+      {data?.offices?.name && (
+        <p className="text-sm text-muted-foreground mt-1">
+          ({data.offices.name})
+        </p>
+      )}
+
       <div className="flex items-center justify-between my-2">
 
+        {/* Employee Files Button */}
         {data.employeeLink && (
-          <Button
-            onClick={() => window.open(data?.employeeLink, '_blank')}
-            variant="outline"
-            className=" text-white font-bold p-2 rounded flex items-center group"
-            style={{ backgroundColor: data.employeeType.value }}
-
-          >
-            <div className="relative flex items-center md:mr-7 mr-7">
-              {/* The ArchiveRestore icon */}
-              <FolderMinus className="absolute transition-opacity duration-300 ease-in-out group-hover:opacity-0" />
-              {/* The PackageOpen icon */}
-              <FolderOpen className="absolute transition-opacity duration-300 ease-in-out opacity-0 group-hover:opacity-100" />
-            </div>
-            <p className="text-sm sm:text-base md:text-lg leading-tight">
-              Employee Files
-            </p>
-
-          </Button>
+          <div className="mt-4">
+            <Button
+              onClick={() => window.open(data.employeeLink, '_blank')}
+              className="group px-4 py-2 font-semibold text-white flex items-center gap-3 rounded-md shadow transition-colors"
+              style={{ backgroundColor: data.employeeType.value }}
+            >
+              <span className="relative w-5 h-5">
+                <FolderMinus className="absolute inset-0 transition-opacity duration-200 group-hover:opacity-0" />
+                <FolderOpen className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+              </span>
+              <span className="text-sm sm:text-base">Employee Files</span>
+            </Button>
+          </div>
         )}
+
       </div>
 
 
       <Separator />
-      <div className="flex flex-col mt-4">
-        <p className="text-xl lg:text-3xl  font-semibold ">Personal Details</p>
-        <div className="grid grid-cols-2 gap-2 mt-4">
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Gender</h3>
-            <p className="font-light text-sm lg:text-2xl">{data?.gender}</p>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Personal Details</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <DetailItem label="Bio/Employee No." value={data?.employeeNo} />
+          <DetailItem label="Gender" value={data?.gender} />
+          <DetailItem label="Birthday" value={formattedBirthday} />
+          <DetailItem label="Age" value={calculatedAge} />
+          <DetailItem label="Educational Attainment" value={data?.education || "—"} />
+          <DetailItem label="Contact Number" value={formattedContactNumber || "—"} />
+          <DetailItem label="Address" value={formattedAddress || "—"} />
+          <DetailItem label="Emergency Contact Person" value={data.emergencyContactName
+            ? data.emergencyContactName
+              .split(' ')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join(' ')
+            : '—'}
+          />
+          <DetailItem label="Emergency Contact Number" value={data.emergencyContactNumber || "—"} />
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Employment Information</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <h3 className="text-sm text-muted-foreground">Appointment Type</h3>
+            <Badge
+              style={{
+                backgroundColor: data?.employeeType?.value,
+                color: 'white', // optional, override for contrast
+              }}
+            >
+              {data?.employeeType?.name}
+            </Badge>
           </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Contact Number</h3>
-            <p className="font-light text-sm lg:text-2xl">{formattedContactNumber}</p>
+          <div>
+            <h3 className="text-sm text-muted-foreground">Eligibility</h3>
+            <p className="text-base font-medium text-gray-900">{data?.eligibility?.name || "—"}</p>
           </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl ">Birthday</h3>
-            <p className="font-light text-sm lg:text-2xl">{formattedBirthday}</p>
+          <div>
+            <h3 className="text-sm text-muted-foreground">Date Hired</h3>
+            <p className="text-base font-medium text-gray-900">{formattedDateHired || "—"}</p>
           </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Age</h3>
-            <p className="font-light text-sm lg:text-2xl">{calculatedAge} </p>
+          <div>
+            <h3 className="text-sm text-muted-foreground">Service Rendered</h3>
+            <p className="text-base font-medium text-gray-900"> {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s</p>
           </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Appointment</h3>
-            <p className="font-light text-sm lg:text-2xl">{data?.employeeType?.name}</p>
-          </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Eligibility</h3>
-            <p className="font-light text-sm lg:text-2xl">{data?.eligibility?.name}</p>
-          </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl"> Highest Educational Attaintment </h3>
-            <p className="font-light text-sm lg:text-2xl">{data?.education || "No Data"}</p>
-          </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Address</h3>
-            <p className="font-light text-sm lg:text-2xl">{formattedAddress}</p>
-          </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Monthly Salary</h3>
-            <p className="font-light text-sm lg:text-2xl"> {formattedSalary}</p>
-          </div>
-          <div className="flex flex-col ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Annual Salary</h3>
-            <p className="font-light text-sm lg:text-2xl">{annualSalary}</p>
-          </div>
-          <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">GSIS #</h3>
-            <p className="font-light text-sm lg:text-2xl">{formatGsisNumber(data?.gsisNo)}</p>
-          </div>
-          <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">TIN #</h3>
-            <p className="font-light text-sm lg:text-2xl">{data?.tinNo || 'No Data'}</p>
-          </div>
-          <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Pagibig #</h3>
-            <p className="font-light text-sm lg:text-2xl">{formatPagIbigNumber(data?.pagIbigNo)}</p>
-          </div>
-          <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Member Policy #</h3>
-            <p className="font-light text-sm lg:text-2xl">{data?.memberPolicyNo || 'No Data'}</p>
-          </div>
-          <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Philhealth #</h3>
-            <p className="font-light text-sm lg:text-2xl">{formatPhilHealthNumber(data?.philHealthNo)}</p>
-          </div>
-          <br />
-          <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Date Hired</h3>
-            <p className="font-light text-sm lg:text-2xl">{formattedDateHired}</p>
+          <div>
+            <h3 className="text-sm text-muted-foreground">Monthly Salary</h3>
+            <p className="text-base font-medium text-gray-900">{formattedSalary || "—"}</p>
           </div>
 
-          <div className="flex flex-col  ">
-            <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl"> Service Rendered</h3>
-            {yearService && (
-              <p className="font-light text-sm lg:text-2xl items-start">
-                {yearService.years} Y/s, {yearService.months} Mon/s, {yearService.days} Day/s
-              </p>
-            )}
+          <div>
+            <h3 className="text-sm text-muted-foreground">Annual Salary</h3>
+            <p className="text-base font-medium text-gray-900">{annualSalary || "—"}</p>
           </div>
-          {data.latestAppointment && (
-            <div className="flex flex-col">
-              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Latest Appointment</h3>
-              <p className="font-light text-sm lg:text-2xl">{formattedLatestAppointment}</p>
-            </div>
-          )}
+          <div>
+            <h3 className="text-sm text-muted-foreground">Latest Appointment</h3>
+            <p className="text-base font-medium text-gray-900">{formattedLatestAppointment || "_"}</p>
+          </div>
+          <div>
+            <h3 className="text-sm text-muted-foreground">Years of Service (Latest Appointment)</h3>
+            <p className="text-base font-medium text-gray-900">  {latestAppointmentService?.years || latestAppointmentService?.months || latestAppointmentService?.days
+              ? `${latestAppointmentService.years} Y/s, ${latestAppointmentService.months} Mon/s, ${latestAppointmentService.days} Day/s`
+              : '—'}</p>
+          </div>
+          <div>
+            <h3 className="text-sm text-muted-foreground">Termination Date</h3>
+            <p className="text-base font-medium text-gray-900">{formattedTerminateDate || "—"}</p>
+          </div>
 
-          {data.latestAppointment && (
-            <div className="flex flex-col">
-              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">YoS latest appoint</h3>
-              {latestAppointmentService && (
-                <p className="font-light text-sm lg:text-2xl items-start">
-                  {latestAppointmentService.years} Y/s, {latestAppointmentService.months} Mon/s, {latestAppointmentService.days} Day/s
-                </p>
-              )}
-            </div>
-          )}
-          {data.terminateDate && (
-            <div className="flex flex-col">
-              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Termination Date</h3>
-              <p className="font-light text-sm lg:text-2xl">{formattedTerminateDate}</p>
-            </div>
-          )}
-
-          {data.emergencyContactName && (
-            <div className="flex flex-col">
-              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Contact Person</h3>
-              <p className="font-light text-sm lg:text-2xl items-start">
-                {data.emergencyContactName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ')}
-              </p>
-            </div>
-          )}
-          {data.emergencyContactNumber && (
-            <div className="flex flex-col  ">
-              <h3 className="font-semibold lg:mr-2 text-sm lg:text-2xl">Emerg. Contact #</h3>
-              <p className="font-light text-sm lg:text-2xl items-start">
-                {data.emergencyContactNumber}
-              </p>
-            </div>
-          )}
-
-        </div>
-      </div>
-
+        </CardContent>
+      </Card>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Government Details</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <h3 className="text-sm text-muted-foreground">GSIS No</h3>
+            <p className="text-base font-medium text-gray-900">{formatGsisNumber(data?.gsisNo) || "_"}</p>
+          </div>
+          <div>
+            <h3 className="text-sm text-muted-foreground">TIN</h3>
+            <p className="text-base font-medium text-gray-900">{data?.tinNo || 'N/A'}</p>
+          </div>
+          <div>
+            <h3 className="text-sm text-muted-foreground">Pag-IBIG No</h3>
+            <p className="text-base font-medium text-gray-900">{formatPagIbigNumber(data?.pagIbigNo)}</p>
+          </div>
+          <div>
+            <h3 className="text-sm text-muted-foreground">PhilHealth No</h3>
+            <p className="text-base font-medium text-gray-900">{formatPhilHealthNumber(data?.philHealthNo)} </p>
+          </div>
+          <div>
+            <h3 className="text-sm text-muted-foreground">Member Policy No</h3>
+            <p className="text-base font-medium text-gray-900">{data?.memberPolicyNo || "—"}</p>
+          </div>
+        </CardContent>
+      </Card>
     </div>);
 }
 

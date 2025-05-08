@@ -18,47 +18,65 @@ const Gallery = ({
 }: GalleryProps) => {
 
   return (
-    <Tab.Group as="div" className="flex flex-col-reverse">
-      <div className="mx-auto mt-6 hidden w-full max-w-2xl sm:block lg:max-w-none">
-        <Tab.List className="grid grid-cols-4 gap-6">
-          {images.map((image) => (
-            <GalleryTab
-              key={image.id}
-              image={image}
-            />
-          ))}
-        </Tab.List>
-      </div>
-      <Tab.Panels className="aspect-square w-full" >
-        {images.map((image, appointment) => (
-          <Tab.Panel key={image.id}>
+<Tab.Group as="div" className="flex flex-col-reverse">
+  {/* Tab List - Horizontal scroll on small screens */}
+  <div className="mt-2 mb-4 px-2 overflow-x-auto">
+    <Tab.List className="flex gap-2 min-w-max">
+      {images.map((image) => (
+        <Tab key={image.id} className="focus:outline-none shrink-0">
+          {({ selected }) => (
             <div
-              className="aspect-square relative h-full w-full sm:rounded-lg overflow-hidden">
-              <Image 
-                    fill 
-                    src={image.url}
-                    alt="Image"
-                    // style={{ width: '100%', height: '100%' }}
-                     className={cn(
-                "object-cover object-center rounded-xl border-2 bg-gray-100",
-                image.value   && "border-4",
+              className={cn(
+                "rounded-md overflow-hidden border transition-all duration-200 cursor-pointer w-16 h-16",
+                selected
+                  ? "ring-2 ring-primary border-primary"
+                  : "border-muted hover:border-primary/50"
               )}
-/>
-              {/* Company Logo */}
-              <div className="absolute top-0 left-0 m-4">
-                <Image
-                  src="https://res.cloudinary.com/ddzjzrqrj/image/upload/v1702523620/Lingayen-3-removebg-preview_lmhivo.png"
-                  alt="Company Logo"
-                  className="w-16 h-16"
-                  width="20"
-                  height="20"
-                />
-              </div>
+            >
+              <Image
+                src={image.url}
+                alt="Thumbnail"
+                width={64}
+                height={64}
+                className="object-cover w-full h-full"
+              />
             </div>
-          </Tab.Panel>
-        ))}
-      </Tab.Panels>
-    </Tab.Group>
+          )}
+        </Tab>
+      ))}
+    </Tab.List>
+  </div>
+
+  {/* Tab Panels */}
+  <Tab.Panels className="w-full p-4">
+    {images.map((image) => (
+      <Tab.Panel key={image.id}>
+        <div className="relative w-full max-w-sm mx-auto aspect-square overflow-hidden rounded-lg border bg-gray-100">
+          <Image
+            fill
+            src={image.url}
+            alt="Main Image"
+            className="object-cover object-center"
+          />
+          {/* Logo */}
+          <div className="absolute top-2 left-2 z-10">
+            <Image
+              src="https://res.cloudinary.com/ddzjzrqrj/image/upload/v1702523620/Lingayen-3-removebg-preview_lmhivo.png"
+              alt="Company Logo"
+              width={32}
+              height={32}
+              className="w-8 h-8"
+            />
+          </div>
+        </div>
+      </Tab.Panel>
+    ))}
+  </Tab.Panels>
+</Tab.Group>
+
+
+
+
   );
 }
 
