@@ -43,8 +43,8 @@ export const formatDate = (dateString: string): string => {
 
 
 export const getBirthday = (birthdayString: string): string => {
-  // Parse the birthday string into a Date object in UTC (ignore time zone offsets)
-  const birthday = new Date(birthdayString + 'Z');  // The 'Z' forces UTC parsing
+  // Parse the birthday string into a Date object in UTC
+  const birthday = new Date(birthdayString + 'Z'); // Force UTC parsing
 
   // Check if the parsed date is valid
   if (isNaN(birthday.getTime())) {
@@ -52,16 +52,20 @@ export const getBirthday = (birthdayString: string): string => {
     return 'Invalid date';
   }
 
-  // Format the date as 'MMMM DD, YYYY' (UTC)
+  // Adjust the date based on the local time zone
+  const localTime = new Date(birthday.getTime() - birthday.getTimezoneOffset() * 60000);
+
+  // Format the date as 'MMMM DD, YYYY'
   const options: Intl.DateTimeFormatOptions = {
     year: 'numeric',
     month: 'long',
     day: '2-digit',
   };
 
-  // Output the birthday formatted in the local timezone
-  return birthday.toLocaleDateString('en-US', options);
+  // Return the formatted date as per the local time
+  return localTime.toLocaleDateString('en-US', options);
 };
+
 
 
 export const getTodayBirthday = (birthdayString: string): string => {
