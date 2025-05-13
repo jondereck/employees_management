@@ -27,6 +27,7 @@ interface NotificationsProps {
 }
 
 const Notifications = ({ data }: NotificationsProps) => {
+  const today = useMemo(() => new Date(), []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showAllAnniversaries, setShowAllAnniversaries] = useState(false);
@@ -39,7 +40,6 @@ const Notifications = ({ data }: NotificationsProps) => {
     setIsModalOpen(false);
   };
 
-  const today = new Date();
   const currentYear = today.getFullYear();
 
    // Retirement notifications - employees turning 65 this year
@@ -65,7 +65,9 @@ const Notifications = ({ data }: NotificationsProps) => {
   const celebrantsToday = useMemo(() => {
     const todayMonthDay = `${today.getMonth() + 1}-${today.getDate()}`;
     return data.filter((emp) => {
+      if (!emp.birthday) return false;
       const dob = new Date(emp.birthday);
+      if (isNaN(dob.getTime())) return false; // catch invalid date
       const empMonthDay = `${dob.getMonth() + 1}-${dob.getDate()}`;
       return empMonthDay === todayMonthDay && !emp.isArchived;
     });
@@ -75,7 +77,8 @@ const Notifications = ({ data }: NotificationsProps) => {
 
 
   const upcomingBirthdays = useMemo(() => {
-    const today = new Date();
+
+
 
     return data.filter((employee) => {
       if (!employee.birthday || employee.isArchived) return false;
@@ -93,7 +96,7 @@ const Notifications = ({ data }: NotificationsProps) => {
 
       return diffDays > 0 && diffDays <= 7;
     });
-  }, [data, today]);
+  }, [data]);
 
  
  
@@ -123,7 +126,7 @@ const Notifications = ({ data }: NotificationsProps) => {
                 {/* Today's Birthdays Header with Icon */}
                 <h3 className="text-lg font-semibold text-center flex items-center justify-start gap-2 mb-6">
   <Cake className="h-6 w-6 text-gray-700" />
-  Today's Birthdays
+  Todays Birthdays
 </h3>
 
 {celebrantsToday.length > 0 ? (
