@@ -3,6 +3,7 @@ import { format  } from "date-fns";
 import { EmployeesClient } from "./components/client";
 import { EmployeesColumn, Image } from "./components/columns";
 import { formatTinNumber, formatter } from "@/lib/utils";
+import ApiList from "@/components/ui/api-list";
 
 
 const EmployeesPage = async ({
@@ -29,6 +30,7 @@ const EmployeesPage = async ({
   const formattedEmployees: EmployeesColumn[] = employees.map((item)=> ({
     id: item.id,
     employeeNo: item.employeeNo,
+    department: item.departmentId,
     prefix: item.prefix,
     lastName: item.lastName,
     firstName: item.firstName,
@@ -68,7 +70,7 @@ const EmployeesPage = async ({
       value: item.employeeType.value,
     },
     offices: {
-      id: item.offices.id,
+      id: item.offices.name,
       name: item.offices.name,
     },
     images: item.images.map((image) => ({
@@ -92,7 +94,7 @@ const EmployeesPage = async ({
   <div className="flex-col">
     <div className="flex-1 space-y-4 p-4  pt-6">
     <EmployeesClient data={formattedEmployees}/>
-
+  
     </div>
   </div> );
 }

@@ -27,8 +27,10 @@ export interface EmployeeType {
   value: string;
 }
 
+
 export interface Employees {
   id: string;
+  department: string;
   employeeNo: string;
   offices: Offices;
   prefix: string;

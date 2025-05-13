@@ -75,7 +75,7 @@ export const EmployeesClient = ({ data
   
     {/* DataTable with filtered data */}
     <DataTable columns={columns} data={filteredData} />
-  
+    <ApiList entityIdName="employeesId" entityName="employees"/>
     <Footer />
   </div>
   

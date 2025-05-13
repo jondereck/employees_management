@@ -54,6 +54,7 @@ export interface EmployeeType {
 
 export type EmployeesColumn = {
   id: string;
+  department:string
   employeeNo: string;
   offices: Offices;
   prefix: string;
