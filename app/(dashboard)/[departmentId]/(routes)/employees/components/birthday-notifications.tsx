@@ -13,7 +13,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs"
 import Modal from "@/components/ui/modal";
-import { getBirthday, getTodayBirthday, getUpcomingBirthday } from "@/utils/utils";
+import { getBirthday, getTodayBirthday } from "@/utils/utils";
 
 interface EmployeesColumn {
   firstName: string;
@@ -69,10 +69,16 @@ const Notifications = ({ data }: NotificationsProps) => {
     return data.filter((emp) => {
       if (!emp.birthday || emp.isArchived) return false;
   
-      const adjustedBirthday = getTodayBirthday(emp.birthday);
+      const adjustedBirthday = getBirthday(emp.birthday);
+      
+  console.log(emp.birthday);
       return adjustedBirthday === todayMonthDay;
+      
     });
   }, [data]);
+
+
+
 
 
   const hasNotifications = celebrantsToday.length > 0 || retireesThisYear.length > 0 || milestoneAnniversaries.length > 0;
@@ -81,25 +87,18 @@ const Notifications = ({ data }: NotificationsProps) => {
   const upcomingBirthdays = useMemo(() => {
     return data.filter((employee) => {
       if (!employee.birthday || employee.isArchived) return false;
-  
-      const birthdayPlusOneStr = getUpcomingBirthday(employee.birthday);
-      const adjustedBirthday = new Date(birthdayPlusOneStr);
-  
-      if (isNaN(adjustedBirthday.getTime())) return false;
-  
-      const thisYearBirthday = new Date(
-        today.getFullYear(),
-        adjustedBirthday.getMonth(),
-        adjustedBirthday.getDate()
-      );
-  
+
+      const birthday = new Date(employee.birthday);
+      const thisYearBirthday = new Date(today.getFullYear(), birthday.getMonth(), birthday.getDate());
+
+      // If birthday has already passed this year, shift to next year
       if (thisYearBirthday < today) {
         thisYearBirthday.setFullYear(today.getFullYear() + 1);
       }
-  
+
       const diffTime = thisYearBirthday.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
+
       return diffDays > 0 && diffDays <= 7;
     });
   }, [data]);

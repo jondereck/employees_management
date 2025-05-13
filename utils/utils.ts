@@ -43,24 +43,26 @@ export const formatDate = (dateString: string): string => {
 
 
 export const getBirthday = (birthdayString: string): string => {
-
-  // Parse the birthday string into a Date object
-  const birthday = new Date(birthdayString);
+  // Parse the birthday string into a Date object in UTC (ignore time zone offsets)
+  const birthday = new Date(birthdayString + 'Z');  // The 'Z' forces UTC parsing
 
   // Check if the parsed date is valid
   if (isNaN(birthday.getTime())) {
-    console.log('Invalid date detected');
+    console.log('Invalid date detected:', birthdayString);
     return 'Invalid date';
   }
 
-  // Add one day to the parsed birthday
-  const nextDayBirthday = new Date(birthday);
-  nextDayBirthday.setDate(birthday.getDate() + 1);
+  // Format the date as 'MMMM DD, YYYY' (UTC)
+  const options: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'long',
+    day: '2-digit',
+  };
 
-  // Format the date as 'MMMM DD, YYYY'
-  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: '2-digit' };
-  return nextDayBirthday.toLocaleDateString('en-US', options);
+  // Output the birthday formatted in the local timezone
+  return birthday.toLocaleDateString('en-US', options);
 };
+
 
 export const getTodayBirthday = (birthdayString: string): string => {
 
@@ -75,7 +77,7 @@ export const getTodayBirthday = (birthdayString: string): string => {
 
   // Add one day to the parsed birthday
   const nextDayBirthday = new Date(birthday);
-  nextDayBirthday.setDate(birthday.getDate() - 1);
+  nextDayBirthday.setDate(birthday.getDate() + 1);
 
   // Format the date as 'MMMM DD, YYYY'
   const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: '2-digit' };
