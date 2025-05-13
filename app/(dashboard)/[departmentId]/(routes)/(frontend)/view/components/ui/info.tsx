@@ -75,11 +75,11 @@ const Info = ({
   const handleDownloadQr = () => {
     const canvas = document.querySelector("canvas") as HTMLCanvasElement;
     if (!canvas) return;
-  
+
     const pngUrl = canvas
       .toDataURL("image/png")
       .replace("image/png", "image/octet-stream");
-  
+
     const downloadLink = document.createElement("a");
     downloadLink.href = pngUrl;
     downloadLink.download = `qr-${data?.employeeNo || data?.id}.png`;
@@ -90,92 +90,90 @@ const Info = ({
 
   const [showQrModal, setShowQrModal] = useState(false);
 
-  
+
   return (
-<div
-  className="bg-white p-6 rounded-xl shadow-lg border-4"
-  style={{ borderColor: data?.employeeType?.value }}
->
-  {/* Archived Banner */}
-  {data?.isArchived && (
-    <div className="relative -mx-6 -mt-6 mb-6 rounded-t-xl bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white text-center py-2 shadow-inner">
-      <span className="text-sm sm:text-base font-semibold tracking-wide uppercase">
-        ⚠️ This employee is no longer active / Retired
-      </span>
-    </div>
-  )}
+    <div
+      className="bg-white p-6 rounded-xl shadow-lg border-4"
+      style={{ borderColor: data?.employeeType?.value }}
+    >
+      {/* Archived Banner */}
+      {data?.isArchived && (
+        <div className="relative -mx-6 -mt-6 mb-6 rounded-t-xl bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white text-center py-2 shadow-inner">
+          <span className="text-sm sm:text-base font-semibold tracking-wide uppercase">
+          ⚠️ This employee is no longer in active service
+          </span>
+        </div>
+      )}
 
-  {/* Header Section */}
-  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
-    {/* Employee Info */}
-    <div className="flex-1 space-y-2">
-      <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 leading-tight flex items-center gap-2">
-        {fullName}
-        {data.isHead && (
-          <ActionTooltip label="Executive Level" side="right">
-            <span className="inline-flex items-center justify-center rounded-full p-1 bg-yellow-100">
-              <StarFilledIcon className="h-5 w-5 text-yellow-600" />
-            </span>
-          </ActionTooltip>
-        )}
-      </h1>
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+        {/* Employee Info */}
+        <div className="flex-1 space-y-2">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 leading-tight flex items-center gap-2">
+            {fullName}
+            {data.isHead && (
+              <ActionTooltip label="Executive Level" side="right">
+                <span className="inline-flex items-center justify-center rounded-full p-1 bg-yellow-100">
+                  <StarFilledIcon className="h-5 w-5 text-yellow-600" />
+                </span>
+              </ActionTooltip>
+            )}
+          </h1>
 
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <p className="text-base sm:text-lg font-medium text-gray-800">
-          {data.position}
-        </p>
-        {data.salaryGrade && (
-          <Badge variant="secondary" className="text-xs px-2 py-0.5">
-            S.G. {data.salaryGrade}
-          </Badge>
-        )}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-base sm:text-lg font-medium text-gray-800">
+              {data.position}
+            </p>
+            {data.salaryGrade && (
+              <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                S.G. {data.salaryGrade}
+              </Badge>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-600">Employee Type:</span>
+              <Badge
+                style={{
+                  backgroundColor: data?.employeeType?.value,
+                  color: 'white',
+                }}
+              >
+                {data?.employeeType?.name}
+              </Badge>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-600">Office:</span>
+              <span className="text-sm text-muted-foreground">{data?.offices?.name}</span>
+            </div>
+
+            {/* Add more fields as needed here */}
+          </div>
+        </div>
+
+        {/* QR Code */}
+        <div className="hidden sm:block flex-shrink-0 sm:mt-1">
+          <div className="sm:mt-0 flex flex-col items-center sm:items-end gap-2">
+            <div onClick={() => setShowQrModal(true)} className="cursor-pointer group">
+              <div className="flex transition transform group-hover:scale-105">
+                <QrCodeGenerator departmentId={data.department} employeeId={data.id} />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => window.print()}
+                className="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded shadow"
+              >
+                Print Profile
+              </button>
+            </div>
+          </div>
+        </div>
+
       </div>
-
-   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-  <div className="flex items-center gap-2">
-    <span className="text-sm font-medium text-gray-600">Employee Type:</span>
-    <Badge
-      style={{
-        backgroundColor: data?.employeeType?.value,
-        color: 'white',
-      }}
-    >
-      {data?.employeeType?.name}
-    </Badge>
-  </div>
-
-  <div className="flex items-center gap-2">
-    <span className="text-sm font-medium text-gray-600">Office:</span>
-    <span className="text-sm text-muted-foreground">{data?.offices?.name}</span>
-  </div>
-
-  {/* Add more fields as needed here */}
-</div>
-
-
- 
-    </div>
-
-    {/* QR Code */}
-    <div className="flex-shrink-0 sm:mt-1 mt-4">
-    <div className="sm:mt-0 mt-4 flex flex-col items-start sm:items-end gap-2">
-    <div onClick={() => setShowQrModal(true)} className="cursor-pointer group">
-  <div className="flex transition transform group-hover:scale-105">
-    <QrCodeGenerator departmentId={data.department} employeeId={data.id} />
-  </div>
-</div>
-
-  <div className="flex gap-2">
-    <button
-      onClick={() => window.print()}
-      className="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded shadow"
-    >
-      Print Profile
-    </button>
-  </div>
-</div>
-    </div>
-  </div>
 
       <div className="flex items-center justify-between my-2">
 
@@ -226,8 +224,8 @@ const Info = ({
           <CardTitle className="text-lg font-semibold">Employment Information</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <DetailItem label="Appointment Type" value={data?.employeeType?.name}/>
-   
+          <DetailItem label="Appointment Type" value={data?.employeeType?.name} />
+
           <DetailItem label="Eligibility" value={data?.eligibility?.name || "—"} />
           <DetailItem label="Date Hired" value={formattedDateHired || "—"} />
           <DetailItem

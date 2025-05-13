@@ -30,7 +30,7 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   const qrRef = useRef<HTMLCanvasElement | null>(null);
   // Handle modal toggle
   const handleOpen = () => setIsOpen(true);
-  const handleClose = () => setIsOpen(false);
+
 
   // Handle Download
   const handleDownload = () => {
