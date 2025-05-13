@@ -62,6 +62,48 @@ export const getBirthday = (birthdayString: string): string => {
   return nextDayBirthday.toLocaleDateString('en-US', options);
 };
 
+export const getTodayBirthday = (birthdayString: string): string => {
+
+  // Parse the birthday string into a Date object
+  const birthday = new Date(birthdayString);
+
+  // Check if the parsed date is valid
+  if (isNaN(birthday.getTime())) {
+    console.log('Invalid date detected');
+    return 'Invalid date';
+  }
+
+  // Add one day to the parsed birthday
+  const nextDayBirthday = new Date(birthday);
+  nextDayBirthday.setDate(birthday.getDate() - 1);
+
+  // Format the date as 'MMMM DD, YYYY'
+  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: '2-digit' };
+  return nextDayBirthday.toLocaleDateString('en-US', options);
+};
+
+
+
+export const getUpcomingBirthday = (birthdayString: string): string => {
+
+  // Parse the birthday string into a Date object
+  const birthday = new Date(birthdayString);
+
+  // Check if the parsed date is valid
+  if (isNaN(birthday.getTime())) {
+    console.log('Invalid date detected');
+    return 'Invalid date';
+  }
+
+  // Add one day to the parsed birthday
+  const nextDayBirthday = new Date(birthday);
+  nextDayBirthday.setDate(birthday.getDate() + 1);
+
+  // Format the date as 'MMMM DD, YYYY'
+  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: '2-digit' };
+  return nextDayBirthday.toLocaleDateString('en-US', options);
+};
+
 
 export const formatContactNumber = (contactNumber: string) => {
   const rawNumber = contactNumber || '';
