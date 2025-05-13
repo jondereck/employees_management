@@ -14,6 +14,9 @@ import Footer from "../../(frontend)/view/components/footer";
 import DownloadEmployeeBackup from "@/components/download-button";
 import React, { useState, useMemo } from 'react';
 import SearchFilter from "@/components/search-filter";
+import BirthdayNotifications from "./birthday-notifications";
+
+
 
 
 
@@ -44,20 +47,27 @@ export const EmployeesClient = ({ data
     );
   });
 
+
+
   return (
     <div className="flex flex-col min-h-screen">
     {/* Header Section */}
     <div className="flex items-center justify-between">
-      <Heading
-        title={`Employees (${filteredData.length})`}
-        description="This count includes retirees/terminated."
-      />
-      <Button onClick={() => router.push(`/${params.departmentId}/employees/new`)} className="flex items-center gap-2">
-        <Plus className="mr-2 h-4 w-4" />
-        Add
-      </Button>
-    </div>
-  
+  <Heading
+    title={`Employees (${filteredData.length})`}
+    description="This count includes retirees/terminated."
+  />
+ 
+   
+  <div className="flex items-center gap-4">
+    <Button onClick={() => router.push(`/${params.departmentId}/employees/new`)} className="flex items-center gap-2">
+      <Plus className="mr-2 h-4 w-4" />
+      Add
+    </Button>
+      {/* Birthday Notification Bell */}
+  <BirthdayNotifications data={data} />  
+  </div>
+</div>
     <Separator />
   
     {/* Search Input and Download Excel Button */}

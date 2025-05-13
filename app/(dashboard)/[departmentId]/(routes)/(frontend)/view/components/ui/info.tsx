@@ -72,35 +72,20 @@ const Info = ({
   );
 
 
-  const handleDownloadQr = () => {
-    const canvas = document.querySelector("canvas") as HTMLCanvasElement;
-    if (!canvas) return;
-
-    const pngUrl = canvas
-      .toDataURL("image/png")
-      .replace("image/png", "image/octet-stream");
-
-    const downloadLink = document.createElement("a");
-    downloadLink.href = pngUrl;
-    downloadLink.download = `qr-${data?.employeeNo || data?.id}.png`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-  };
 
   const [showQrModal, setShowQrModal] = useState(false);
 
 
   return (
     <div
-      className="bg-white p-6 rounded-xl shadow-lg border-4"
+      className="bg-white p-6 rounded-xl shadow-lg border-4 print:border-0 print:shadow-none print:p-0 print:rounded-none"
       style={{ borderColor: data?.employeeType?.value }}
     >
       {/* Archived Banner */}
       {data?.isArchived && (
-        <div className="relative -mx-6 -mt-6 mb-6 rounded-t-xl bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white text-center py-2 shadow-inner">
+        <div className="relative -mx-6 -mt-6 mb-6 rounded-t-xl bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white text-center py-2 bg-opacity-90 print:shadow-none">
           <span className="text-sm sm:text-base font-semibold tracking-wide uppercase">
-          ⚠️ This employee is no longer in active service
+            ⚠️ This employee is no longer in active service
           </span>
         </div>
       )}
@@ -156,16 +141,16 @@ const Info = ({
         {/* QR Code */}
         <div className="hidden sm:block flex-shrink-0 sm:mt-1">
           <div className="sm:mt-0 flex flex-col items-center sm:items-end gap-2">
-            <div onClick={() => setShowQrModal(true)} className="cursor-pointer group">
+           <div className="hidden sm:block flex-shrink-0 sm:mt-1 print:hidden">
               <div className="flex transition transform group-hover:scale-105">
                 <QrCodeGenerator departmentId={data.department} employeeId={data.id} />
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex justify- gap-2 print:hidden">
               <button
                 onClick={() => window.print()}
-                className="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded shadow"
+                className="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded shadow print:hidden text-center items-center" 
               >
                 Print Profile
               </button>
