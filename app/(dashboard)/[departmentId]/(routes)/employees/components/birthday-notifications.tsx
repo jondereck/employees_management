@@ -93,21 +93,13 @@ const Notifications = ({ data }: NotificationsProps) => {
 
       return diffDays > 0 && diffDays <= 7;
     });
-  }, [data]);
+  }, [data, today]);
 
  
-  const anniversariesThisMonth = useMemo(() => {
-    return data.filter((emp) => {
-      if (!emp.dateHired || emp.isArchived) return false;
-      const hire = new Date(emp.dateHired);
-      const years = currentYear - hire.getFullYear();
-      const isMilestone = [5, 10, 15, 20, 25, 30, 35, 40].includes(years);
-      return isMilestone && hire.getMonth() === today.getMonth();
-    });
-  }, [data]);
+ 
 
-  const totalNotifs =
-    celebrantsToday.length + retireesThisYear.length + anniversariesThisMonth.length;
+  // const totalNotifs =
+  //   celebrantsToday.length + retireesThisYear.length + anniversariesThisMonth.length;
 
   return (
     <div className="relative flex items-center">
