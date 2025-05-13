@@ -78,6 +78,7 @@ const Notifications = ({ data }: NotificationsProps) => {
   }, [data]);
 
 
+  console.log(getBirthday("2000-03-28T00:00:00.000Z")); // Expected: "March 28, 2000"
 
 
 

@@ -43,26 +43,21 @@ export const formatDate = (dateString: string): string => {
 
 
 export const getBirthday = (birthdayString: string): string => {
-  // Parse the birthday string into a Date object in UTC
-  const birthday = new Date(birthdayString + 'Z'); // Force UTC parsing
-
+  // Manually handle the UTC parsing
+  const birthday = new Date(Date.parse(birthdayString));
+  console.log('Parsed birthday:', birthday);
+  
   // Check if the parsed date is valid
   if (isNaN(birthday.getTime())) {
     console.log('Invalid date detected:', birthdayString);
     return 'Invalid date';
   }
-
-  // Adjust the date based on the local time zone
+  
+  // Adjust for local timezone
   const localTime = new Date(birthday.getTime() - birthday.getTimezoneOffset() * 60000);
-
-  // Format the date as 'MMMM DD, YYYY'
-  const options: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'long',
-    day: '2-digit',
-  };
-
-  // Return the formatted date as per the local time
+  
+  // Format the date
+  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: '2-digit' };
   return localTime.toLocaleDateString('en-US', options);
 };
 
