@@ -61,17 +61,24 @@ const Notifications = ({ data }: NotificationsProps) => {
 
 
 
-
   const celebrantsToday = useMemo(() => {
     const todayMonthDay = `${today.getMonth() + 1}-${today.getDate()}`;
+  
     return data.filter((emp) => {
       if (!emp.birthday) return false;
+  
       const dob = new Date(emp.birthday);
-      if (isNaN(dob.getTime())) return false; // catch invalid date
+      if (isNaN(dob.getTime())) return false;
+  
+      // ✅ Add 1 day to the birthday before extracting month and day
+      dob.setDate(dob.getDate() + 1);
+  
       const empMonthDay = `${dob.getMonth() + 1}-${dob.getDate()}`;
+  
       return empMonthDay === todayMonthDay && !emp.isArchived;
     });
   }, [data]);
+  
 
   const hasNotifications = celebrantsToday.length > 0 || retireesThisYear.length > 0 || milestoneAnniversaries.length > 0;
 
@@ -101,8 +108,7 @@ const Notifications = ({ data }: NotificationsProps) => {
  
  
 
-  // const totalNotifs =
-  //   celebrantsToday.length + retireesThisYear.length + anniversariesThisMonth.length;
+
 
   return (
     <div className="relative flex items-center">
