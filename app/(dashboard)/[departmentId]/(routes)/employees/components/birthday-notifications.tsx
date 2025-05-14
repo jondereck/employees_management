@@ -133,7 +133,7 @@ const Notifications = ({ data }: NotificationsProps) => {
   <ul className="space-y-2">
     {celebrantsToday.map((emp, index) => {
       const birthday = new Date(emp.birthday);
-      birthday.setDate(birthday.getDate() + 1); // Add 1 day
+      birthday.setDate(birthday.getDate() - 1); // Add 1 day
 
       const formatted = birthday.toLocaleDateString("en-US", {
         month: "short",
