@@ -133,7 +133,13 @@ const Notifications = ({ data }: NotificationsProps) => {
   <ul className="space-y-2">
     {celebrantsToday.map((emp, index) => {
       const birthday = new Date(emp.birthday);
-      birthday.setDate(birthday.getDate() - 1); // Add 1 day
+      birthday.setDate(birthday.getDate() + 1); // Add 1 day
+
+      const formatted = birthday.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+
       return (
         <li
           key={index}
@@ -142,6 +148,7 @@ const Notifications = ({ data }: NotificationsProps) => {
           <span className="text-sm text-gray-800 font-medium">
             {emp.firstName} {emp.lastName}
           </span>
+          <span className="text-xs text-gray-500">{formatted}</span>
         </li>
       );
     })}
@@ -149,6 +156,7 @@ const Notifications = ({ data }: NotificationsProps) => {
 ) : (
   <p className="text-sm text-gray-500 text-center">No birthdays today</p>
 )}
+
 
 
 <div className="p-2">
