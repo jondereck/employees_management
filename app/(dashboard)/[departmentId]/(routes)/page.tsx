@@ -9,6 +9,7 @@ import { getGraph } from "@/actions/get-graph";
 import ClientEmployeeChange from "@/components/client-employee-change";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { CardListClient } from "@/components/ui/card-list-client";
+import CameraScanner from "@/components/camera";
 
 interface DashboardProps {
   params: { departmentId: string; officeId: string };
@@ -160,6 +161,8 @@ const DashboardPage = async ({ params }: DashboardProps) => {
             <Overview data={graphEmployee} />
           </CardContent>
         </Card>
+
+        <CameraScanner />
       </div>
     </div>
   );

@@ -72,23 +72,25 @@ const Info = ({
   );
 
 
-
-  const [showQrModal, setShowQrModal] = useState(false);
-
-
   return (
     <div
       className="bg-white p-6 rounded-xl shadow-lg border-4 print:border-0 print:shadow-none print:p-0 print:rounded-none"
       style={{ borderColor: data?.employeeType?.value }}
     >
-      {/* Archived Banner */}
-      {data?.isArchived && (
-        <div className="relative -mx-6 -mt-6 mb-6 rounded-t-xl bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white text-center py-2 bg-opacity-90 print:shadow-none">
-          <span className="text-sm sm:text-base font-semibold tracking-wide uppercase">
-            ⚠️ This employee is no longer in active service
-          </span>
-        </div>
-      )}
+    {data?.isArchived ? (
+  <div className=" -mx-6 -mt-6 mb-6 rounded-t-xl bg-gradient-to-r from-red-500 via-red-600 to-red-700 text-white text-center py-2 bg-opacity-90 print:shadow-none">
+    <span className="text-sm sm:text-base font-semibold tracking-wide uppercase">
+      ⚠️ This employee is no longer in active service
+    </span>
+  </div>
+) : (
+  <div className=" -mx-6 -mt-6 mb-6 rounded-t-xl bg-gradient-to-r from-green-500 via-green-600 to-green-700 text-white text-center py-2 bg-opacity-90 print:shadow-none">
+    <span className="text-sm sm:text-base font-semibold tracking-wide uppercase">
+      This employee is currently active
+    </span>
+  </div>
+)}
+
 
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
