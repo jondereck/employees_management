@@ -133,7 +133,7 @@ const Notifications = ({ data }: NotificationsProps) => {
   <ul className="space-y-2">
     {celebrantsToday.map((emp, index) => {
       const birthday = new Date(emp.birthday);
-      birthday.setDate(birthday.getDate() + 1); // Add 1 day
+      birthday.setDate(birthday.getDate() - 1); // Add 1 day
       return (
         <li
           key={index}
@@ -151,51 +151,52 @@ const Notifications = ({ data }: NotificationsProps) => {
 )}
 
 
-                {/* Upcoming Birthdays Header with Icon */}
-                <div className="p-2">
-                  {/* Upcoming Birthdays Title */}
-                  <h3 className="text-md font-semibold text-center flex items-center justify-start gap-2 mb-6">
-                    <Calendar className="h-6 w-6 text-gray-700" />
-                    Upcoming Birthdays (7 days)
-                  </h3>
+<div className="p-2">
+  {/* Upcoming Birthdays Title */}
+  <h3 className="text-md font-semibold text-center flex items-center justify-start gap-2 mb-6">
+    <Calendar className="h-6 w-6 text-gray-700" />
+    Upcoming Birthdays (7 days)
+  </h3>
 
-                  {/* List of Upcoming Birthdays */}
-                  {upcomingBirthdays.length > 0 ? (
-                    <ul className="space-y-2">
-                      {upcomingBirthdays
-                        .sort((a, b) => {
-                          const dateA = new Date(a.birthday);
-                          const dateB = new Date(b.birthday);
-                          const aMonthDay = dateA.getMonth() * 100 + dateA.getDate();
-                          const bMonthDay = dateB.getMonth() * 100 + dateB.getDate();
-                          return aMonthDay - bMonthDay;
-                        })
-                        .map((emp, index) => {
-                          const date = new Date(emp.birthday);
-                          const formatted = date.toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          });
+  {/* List of Upcoming Birthdays */}
+  {upcomingBirthdays.length > 0 ? (
+    <ul className="space-y-2">
+      {upcomingBirthdays
+        .sort((a, b) => {
+          const dateA = new Date(a.birthday);
+          const dateB = new Date(b.birthday);
+          const aMonthDay = dateA.getMonth() * 100 + dateA.getDate();
+          const bMonthDay = dateB.getMonth() * 100 + dateB.getDate();
+          return aMonthDay - bMonthDay;
+        })
+        .map((emp, index) => {
+          const date = new Date(emp.birthday);
+          date.setDate(date.getDate() + 1); // 🔹 Add 1 day here
+          const formatted = date.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          });
 
-                          return (
-                            <li
-                              key={index}
-                              className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
-                            >
-                              <span className="text-sm text-gray-800 font-medium">
-                                {emp.firstName} {emp.lastName}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {formatted}
-                              </span>
-                            </li>
-                          );
-                        })}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center">No upcoming birthdays</p>
-                  )}
-                </div>
+          return (
+            <li
+              key={index}
+              className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
+            >
+              <span className="text-sm text-gray-800 font-medium">
+                {emp.firstName} {emp.lastName}
+              </span>
+              <span className="text-xs text-gray-500">
+                {formatted}
+              </span>
+            </li>
+          );
+        })}
+    </ul>
+  ) : (
+    <p className="text-sm text-gray-500 text-center">No upcoming birthdays</p>
+  )}
+</div>
+
               </div>
             </TabsContent>
 
