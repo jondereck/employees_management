@@ -43,22 +43,36 @@ export const formatDate = (dateString: string): string => {
 
 
 export const getBirthday = (birthdayString: string): string => {
-  // Manually handle the UTC parsing
-  const birthday = new Date(Date.parse(birthdayString));
-  console.log('Parsed birthday:', birthday);
+  console.log('Birthday string passed:', birthdayString); // Log the input
+
+  // Split the string into month, day, and year
+  const [monthDay, year] = birthdayString.split(','); // ["7 1", " 2024"]
+  const [month, day] = monthDay.trim().split(' '); // ["7", "1"]
+
+  // Format the month and day to be two digits, ensuring proper format
+  const formattedDateString = `${month.padStart(2, '0')}-${day.padStart(2, '0')}-${year.trim()}`;
+
+  // Parse the formatted date string
+  const birthday = new Date(formattedDateString);
+
+  console.log('Parsed birthday object:', birthday); // Log the result of parsing
   
   // Check if the parsed date is valid
   if (isNaN(birthday.getTime())) {
     console.log('Invalid date detected:', birthdayString);
     return 'Invalid date';
   }
-  
-  // Adjust for local timezone
+
+  // Adjust for local timezone if necessary
   const localTime = new Date(birthday.getTime() - birthday.getTimezoneOffset() * 60000);
-  
+
   // Format the date
   const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: '2-digit' };
-  return localTime.toLocaleDateString('en-US', options);
+  const formattedDate = localTime.toLocaleDateString('en-US', options);
+
+  console.log('Formatted birthday:', formattedDate); // Log the final formatted date
+
+  return formattedDate;
 };
 
 
