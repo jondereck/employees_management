@@ -17,14 +17,10 @@ import {
 import Modal from "@/components/ui/modal";
 import NotificationBell from "./notification-bell";
 import { addOneDay, getFormattedDate, getSortedMilestones, getSortedRetirees, isNextYearAnniversary, isRetirementNextYear, sortByMonthDay } from "@/utils/notification-utils";
+import Link from "next/link";
+import usePreviewModal from "../../(frontend)/view/hooks/use-preview-modal";
+import { EmployeesColumn } from "./columns";
 
-interface EmployeesColumn {
-  firstName: string;
-  lastName: string;
-  birthday: string;
-  dateHired: string;
-  isArchived: boolean;
-}
 
 interface NotificationsProps {
   data: EmployeesColumn[];
@@ -111,7 +107,7 @@ const Notifications = ({ data }: NotificationsProps) => {
     });
   }, [data]);
 
-
+  const baseUrl = process.env.NEXT_PUBLIC_URL;
 
   return (
     <div className="relative flex items-center">
@@ -134,18 +130,52 @@ const Notifications = ({ data }: NotificationsProps) => {
             </TabsList>
 
             <TabsContent value="birthdays">
-              <div className="p-2 space-y-4">
+              <div className="p-2">
                 {/* Today's Birthdays */}
                 <h3 className="text-lg font-semibold text-center flex items-center justify-start gap-2 mb-6">
-                  <Cake className="h-6 w-6 text-gray-700" />
+                  <Cake className="h-6 w-6 text-yellow-700" />
                   Todays Birthdays
                 </h3>
 
                 {celebrantsToday.length > 0 ? (
+  <ul className="space-y-2">
+    {celebrantsToday.map((emp, index) => {
+      const birthday = addOneDay(new Date(emp.birthday));
+      const formatted = getFormattedDate(birthday);
+      const handleOpenPreview = () => usePreviewModal.getState().onOpen(emp);
+
+      return (
+        <li
+          key={index}
+          className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
+        >
+          <button
+            onClick={handleOpenPreview}
+            className="text-sm text-blue-600 font-medium hover:underline focus:outline-none"
+          >
+            {emp.firstName} {emp.lastName}
+          </button>
+        </li>
+      );
+    })}
+  </ul>
+) : (
+  <p className="text-sm text-gray-500 text-center">No birthdays today</p>
+)}
+
+              </div>
+              {/* Upcoming Birthdays */}
+              <div className="p-2">
+                <h3 className="text-md font-semibold text-center flex items-center justify-start gap-2 mb-6">
+                  <Calendar className="h-6 w-6 text-red-700" />
+                  Upcoming Birthdays (7 days)
+                </h3>
+
+                {upcomingBirthdays.length > 0 ? (
                   <ul className="space-y-2">
-                    {celebrantsToday.map((emp, index) => {
-                      const birthday = addOneDay(new Date(emp.birthday));
-                      const formatted = getFormattedDate(birthday);
+                    {sortByMonthDay(upcomingBirthdays).map((emp, index) => {
+                      const date = addOneDay(new Date(emp.birthday));
+                      const formatted = getFormattedDate(date);
 
                       return (
                         <li
@@ -155,46 +185,16 @@ const Notifications = ({ data }: NotificationsProps) => {
                           <span className="text-sm text-gray-800 font-medium">
                             {emp.firstName} {emp.lastName}
                           </span>
-                          {/* <span className="text-xs text-gray-500">{formatted}</span> */}
+                          <span className="text-xs text-gray-500">{formatted}</span>
                         </li>
                       );
                     })}
                   </ul>
                 ) : (
-                  <p className="text-sm text-gray-500 text-center">No birthdays today</p>
+                  <p className="text-sm text-gray-500 text-center">No upcoming birthdays</p>
                 )}
-
-                {/* Upcoming Birthdays */}
-                <div className="p-2">
-                  <h3 className="text-md font-semibold text-center flex items-center justify-start gap-2 mb-6">
-                    <Calendar className="h-6 w-6 text-gray-700" />
-                    Upcoming Birthdays (7 days)
-                  </h3>
-
-                  {upcomingBirthdays.length > 0 ? (
-                    <ul className="space-y-2">
-                      {sortByMonthDay(upcomingBirthdays).map((emp, index) => {
-                        const date = addOneDay(new Date(emp.birthday));
-                        const formatted = getFormattedDate(date);
-
-                        return (
-                          <li
-                            key={index}
-                            className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
-                          >
-                            <span className="text-sm text-gray-800 font-medium">
-                              {emp.firstName} {emp.lastName}
-                            </span>
-                            <span className="text-xs text-gray-500">{formatted}</span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center">No upcoming birthdays</p>
-                  )}
-                </div>
               </div>
+
             </TabsContent>
 
             <div>

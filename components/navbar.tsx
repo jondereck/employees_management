@@ -6,16 +6,9 @@ import prismadb from "@/lib/prismadb";
 import MobileNavbar from "./mobile-sidebar";
 import Back from "./back";
 import Notifications from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/notifications";
+import { Employees } from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/types";
 
 
-interface Employee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  birthday: string;
-  dateHired: string;
-  isArchived: boolean;
-}
 
 export const Navbar = async () => {
   const { userId } = auth();
@@ -34,7 +27,7 @@ export const Navbar = async () => {
 
   // Fetch employee data on the server
   const res = await fetch(`${apiUrl}/employees`);
-  const employees: Employee[] = await res.json();
+  const employees: Employees[] = await res.json();
 
   return (
     <div className="border-b ">
