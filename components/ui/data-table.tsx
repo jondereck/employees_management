@@ -25,19 +25,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 import { Button } from "./button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select"
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
 import { DataTableViewOptions } from "./column-toggle"
-import DownloadEmployeeBackup from "../download-button"
 
 
 
@@ -46,13 +39,20 @@ import DownloadEmployeeBackup from "../download-button"
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
-  searchKeys?: string[]
+  offices: { id: string; name: string }[] 
+  eligibilities: { id: string; name: string }[] 
+  employeeTypes: { id: string; name: string}[] 
+  
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
-  searchKeys
+  offices,
+  eligibilities,
+  employeeTypes
+
+
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(
@@ -87,7 +87,89 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-4">
-      {/* <DataTableViewOptions table={table} /> */}
+      {/* <div className="flex justify-end items-end">
+        <DataTableViewOptions table={table} />
+      </div> */}
+
+      <div className="flex items-center space-x-4 mb-4">
+  <Select
+    value={(table.getColumn("isArchived")?.getFilterValue() as string) ?? "all"}
+    onValueChange={(value) => {
+      table.getColumn("isArchived")?.setFilterValue(
+        value === "all" ? undefined : value
+      );
+    }}
+  >
+    <SelectTrigger className="w-[120px]">
+      <SelectValue placeholder="Filter status" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="all">All</SelectItem>
+      <SelectItem value="Active">Active</SelectItem>
+      <SelectItem value="Inactive">Inactive</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
+
+<Select
+  value={(table.getColumn("officeName")?.getFilterValue() as string) ?? "all"}
+  onValueChange={(value) => {
+    table.getColumn("officeName")?.setFilterValue(value === "all" ? undefined : value);
+  }}
+>
+  <SelectTrigger className="w-[150px]">
+    <SelectValue placeholder="Filter by office" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="all">All Offices</SelectItem>
+    {offices.map((office) => (
+      <SelectItem key={office.id} value={office.name}>
+        {office.name}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
+<Select
+  value={(table.getColumn("eligibility")?.getFilterValue() as string) ?? "all"}
+  onValueChange={(value) => {
+    table.getColumn("eligibility")?.setFilterValue(value === "all" ? undefined : value);
+  }}
+>
+  <SelectTrigger className="w-[150px]">
+    <SelectValue placeholder="Filter by Eligibility" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="all">All</SelectItem>
+    {eligibilities.map((elig) => (
+      <SelectItem key={elig.id} value={elig.name}>
+        {elig.name}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
+<Select
+  value={(table.getColumn("employeeType")?.getFilterValue() as string) ?? "all"}
+  onValueChange={(value) => {
+    table.getColumn("employeeType")?.setFilterValue(value === "all" ? undefined : value);
+  }}
+>
+  <SelectTrigger className="w-[150px]">
+    <SelectValue placeholder="Filter by Appointment" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="all">All</SelectItem>
+    {employeeTypes.map((type) => (
+      <SelectItem key={type.id} value={type.name}>
+        {type.name}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
+
+
       <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>

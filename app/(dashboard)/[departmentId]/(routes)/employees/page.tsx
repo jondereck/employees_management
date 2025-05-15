@@ -4,6 +4,8 @@ import { EmployeesClient } from "./components/client";
 import { EmployeesColumn, Image } from "./components/columns";
 import { formatTinNumber, formatter } from "@/lib/utils";
 import ApiList from "@/components/ui/api-list";
+import { Suspense } from "react";
+import EmployeesLoadingSkeleton from "@/components/skeleteon/employees-loading-skeleton";
 
 
 const EmployeesPage = async ({
@@ -11,6 +13,28 @@ const EmployeesPage = async ({
 }: { 
   params: { departmentId: string}
 }) => {
+
+  const offices = await prismadb.offices.findMany({
+    orderBy: {
+      name: 'asc',
+    }
+  });
+
+  
+  const eligibilities = await prismadb.eligibility
+  .findMany({
+    orderBy: {
+      name: 'asc',
+    }
+  });
+
+  
+  const employeeTypes = await prismadb.employeeType.findMany({
+    orderBy: {
+      name: 'asc',
+    }
+  });
+  
   const employees = await prismadb.employee.findMany({
     where: {
       departmentId: params.departmentId
@@ -70,7 +94,7 @@ const EmployeesPage = async ({
       value: item.employeeType.value,
     },
     offices: {
-      id: item.offices.name,
+      id: item.offices.id,
       name: item.offices.name,
     },
     images: item.images.map((image) => ({
@@ -91,12 +115,15 @@ const EmployeesPage = async ({
   }));
 
   return ( 
-  <div className="flex-col">
-    <div className="flex-1 space-y-4 p-4  pt-6">
-    <EmployeesClient data={formattedEmployees}/>
-  
+    <div className="flex-col">
+    <div className="flex-1 space-y-4 p-4 pt-6">
+      <Suspense fallback={<EmployeesLoadingSkeleton />}>
+        <EmployeesClient data={formattedEmployees} offices={offices} eligibilities={eligibilities} employeeTypes={employeeTypes} />
+      </Suspense>
     </div>
-  </div> );
+  </div>
+  
+);
 }
  
 export default EmployeesPage;

@@ -10,7 +10,7 @@ const CameraScanner = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setVisible(false);
-    }, 10000);
+    }, 100000);
 
     return () => clearTimeout(timer);
   },[]);

@@ -22,6 +22,10 @@ import moment from 'moment';
 import { format, isValid } from "date-fns"
 import { formatContactNumber, formatDate, formatFullName, formatGsisNumber, formatPagIbigNumber, formatPhilHealthNumber, formatSalary, getBirthday } from "@/utils/utils"
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
+
 
 
 
@@ -43,18 +47,18 @@ export interface Image {
 export interface Eligibility {
   id: string;
   name: string;
-  value: string;
+
 }
 
 export interface EmployeeType {
   id: string;
   name: string;
-  value: string;
+
 }
 
 export type EmployeesColumn = {
   id: string;
-  department:string
+  department: string
   employeeNo: string;
   offices: Offices;
   prefix: string;
@@ -124,6 +128,9 @@ const parseDate = (dateString: string) => {
 
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
+ 
+
+
   {
     id: "select",
     header: ({ table }) => (
@@ -288,13 +295,9 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <span><YearsOfService year_service={row.original.dateHired} /></span>
     ),
   },
-  {
-    accessorKey: "offices",
-    header: "Office",
-    cell: ({ row }) => (
-      row.original.offices ? row.original.offices.name : "N/A"
-    ),
-  },
+
+
+ 
   {
     accessorKey: "education",
     header: "Education",
@@ -302,20 +305,42 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       row.original.education ? row.original.education : "N/A"
     ),
   },
+  // {
+  //   accessorKey: "eligibility",
+  //   header: "Eligibility",
+  //   cell: ({ row }) => (
+  //     row.original.eligibility ? row.original.eligibility.name : "N/A"
+  //   ),
+  // },
+  // {
+  //   accessorKey: "employeeType",
+  //   header: "Appointment",
+  //   cell: ({ row }) => (
+  //     row.original.employeeType ? row.original.employeeType.name : "N/A"
+  //   ),
+  // },
   {
     accessorKey: "eligibility",
     header: "Eligibility",
-    cell: ({ row }) => (
-      row.original.eligibility ? row.original.eligibility.name : "N/A"
-    ),
+    cell: ({ row }) => (row.original.eligibility ? row.original.eligibility.name : "N/A"),
+    filterFn: (row, columnId, filterValue) => {
+      if (!filterValue || filterValue === "all") return true;
+      const eligibilityName = row.original.eligibility?.name ?? "";
+      return eligibilityName === filterValue;
+    },
   },
+  
   {
     accessorKey: "employeeType",
     header: "Appointment",
-    cell: ({ row }) => (
-      row.original.employeeType ? row.original.employeeType.name : "N/A"
-    ),
+    cell: ({ row }) => (row.original.employeeType ? row.original.employeeType.name : "N/A"),
+    filterFn: (row, columnId, filterValue) => {
+      if (!filterValue || filterValue === "all") return true;
+      const employeeTypeName = row.original.employeeType?.name ?? "";
+      return employeeTypeName === filterValue;
+    },
   },
+  
 
   {
     accessorKey: "gender",
@@ -354,24 +379,24 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     accessorKey: "gsisNo",
     header: "GSISNumber ",
     cell: ({ row }) => {
-      const gsisNumber = row.getValue('gsisNo') as string; 
-      return formatGsisNumber(gsisNumber); 
+      const gsisNumber = row.getValue('gsisNo') as string;
+      return formatGsisNumber(gsisNumber);
     }
   },
   {
     accessorKey: "philHealthNo",
     header: "PhilhealthNumber",
     cell: ({ row }) => {
-      const PhilhealthNumber = row.getValue('philHealthNo') as string; 
-      return formatPhilHealthNumber(PhilhealthNumber); 
+      const PhilhealthNumber = row.getValue('philHealthNo') as string;
+      return formatPhilHealthNumber(PhilhealthNumber);
     }
   },
   {
     accessorKey: "pagIbigNo",
     header: "PagibigNumber__",
     cell: ({ row }) => {
-      const PagibigNumber = row.getValue('pagIbigNo') as string; 
-      return formatPagIbigNumber(PagibigNumber); 
+      const PagibigNumber = row.getValue('pagIbigNo') as string;
+      return formatPagIbigNumber(PagibigNumber);
     }
   },
 
@@ -391,10 +416,43 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   },
   {
     accessorKey: "isArchived",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Archived" />
-    )
+    header: "Status",
+    cell: ({ row }) => {
+      const status = row.original.isArchived ? "Inactive" : "Active";
+      return (
+        <span
+          className={cn("rounded px-2 py-1 text-xs font-medium", {
+            "bg-green-100 text-green-800": status === "Active",
+            "bg-red-100 text-red-800": status === "Inactive",
+          })}
+        >
+          {status}
+        </span>
+      );
+    },
+    filterFn: (row, columnId, filterValue) => {
+      // filterValue will be one of "all", "Active", "Inactive"
+      if (!filterValue || filterValue === "all") return true;
+      if (filterValue === "Active") return row.getValue(columnId) === false;  // isArchived === false
+      if (filterValue === "Inactive") return row.getValue(columnId) === true; // isArchived === true
+      return true;
+    },
+
   },
+
+  {
+    id: "officeName", // 👈 new ID (more descriptive)
+    header: "Office",
+    accessorFn: row => row.offices?.name ?? "", // 👈 returns office name for filtering
+    cell: ({ row }) => row.original.offices?.name ?? "N/A",
+    filterFn: (row, columnId, filterValue) => {
+      const value = row.getValue(columnId);
+      return filterValue === "all" || value === filterValue;
+    },
+  },
+  
+  
+  
   {
     accessorKey: "createdAt",
     header: ({ column }) => (

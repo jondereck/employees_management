@@ -1,7 +1,7 @@
 "use client";
 import { Plus } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { EmployeesColumn, columns } from "./columns";
+import { Eligibility, EmployeeType, EmployeesColumn, Offices, columns } from "./columns";
 
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import React, { useState, useMemo } from 'react';
 import SearchFilter from "@/components/search-filter";
 import BirthdayNotifications from "./notifications";
 import Notifications from "./notifications";
+import { OfficesColumn } from "../../offices/components/columns";
+import EmployeeFilters from "./employee-filters";
 
 
 
@@ -23,31 +25,63 @@ import Notifications from "./notifications";
 
 interface EmployeesClientProps {
   data: EmployeesColumn[];
+  offices: { id: string; name: string }[];
+  eligibilities: { id: string; name: string }[];
+  employeeTypes: { id: string; name: string }[];
 }
 
-export const EmployeesClient = ({ data
+export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
 }: EmployeesClientProps) => {
   const router = useRouter();
   const params = useParams();
+
+  const [filters, setFilters] = useState({
+    offices: [] as string[],
+    eligibilities: [] as string[],
+    employeeTypes: [] as string[],
+    status: "all",
+  });
+
+
+  const filteredEmployees = useMemo(() => {
+    return data.filter((employee) => {
+      const officeMatch =
+        filters.offices.length === 0 || filters.offices.includes(employee.offices.name);
+      const eligMatch =
+        filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.name);
+      const typeMatch =
+        filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.name);
+      const statusMatch =
+        filters.status === "all" ||
+        (filters.status === "Active" && !employee.isArchived) ||
+        (filters.status === "Inactive" && employee.isArchived);
+
+      return officeMatch && eligMatch && typeMatch && statusMatch;
+    });
+  }, [data, filters]);
+
+
+
 
   // State for search input
   const [searchTerm, setSearchTerm] = useState("");
 
   // Filter data based on the search term
-  const filteredData = data.filter((employee) => {
-    const { firstName, lastName, contactNumber, nickname } = employee;
+  const filteredData = useMemo(() => {
     const lowercasedSearchTerm = searchTerm.toLowerCase();
-
-    const fullName = `${firstName} ${lastName}`.toLocaleLowerCase();
-    const reversedFullName = `${lastName} ${firstName}`.toLocaleLowerCase();
-    return (
-      fullName.includes(lowercasedSearchTerm) ||
-      reversedFullName.includes(lowercasedSearchTerm) ||
-      contactNumber.toLowerCase().includes(lowercasedSearchTerm) ||
-      nickname.toLowerCase().includes(lowercasedSearchTerm)
-    );
-  });
-
+    return filteredEmployees.filter((employee) => {
+      const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
+      const reversedName = `${employee.lastName} ${employee.firstName}`.toLowerCase();
+  
+      return (
+        fullName.includes(lowercasedSearchTerm) ||
+        reversedName.includes(lowercasedSearchTerm) ||
+        employee.contactNumber.toLowerCase().includes(lowercasedSearchTerm) ||
+        employee.nickname.toLowerCase().includes(lowercasedSearchTerm)
+      );
+    });
+  }, [filteredEmployees, searchTerm]);
+  
 
 
   return (
@@ -58,8 +92,7 @@ export const EmployeesClient = ({ data
           title={`Employees (${filteredData.length})`}
           description="This count includes retirees/terminated."
         />
-
-
+  
         <div className="flex items-center gap-4">
           <Button onClick={() => router.push(`/${params.departmentId}/employees/new`)} className="flex items-center gap-2">
             <Plus className="mr-2 h-4 w-4" />
@@ -69,6 +102,14 @@ export const EmployeesClient = ({ data
         </div>
       </div>
       <Separator />
+     {/* FILTER CONTROLS */}
+     {/* <EmployeeFilters
+        offices={offices}
+        eligibilities={eligibilities}
+        employeeTypes={employeeTypes}
+        onFilterChange={setFilters}
+      /> */}
+
 
       {/* Search Input and Download Excel Button */}
       <div className="flex items-center gap-4 py-4">
@@ -84,7 +125,7 @@ export const EmployeesClient = ({ data
       </div>
 
       {/* DataTable with filtered data */}
-      <DataTable columns={columns} data={filteredData} />
+      <DataTable columns={columns} data={filteredData} offices={offices} eligibilities={eligibilities} employeeTypes={employeeTypes} />
       <ApiList entityIdName="employeesId" entityName="employees" />
       <Footer />
     </div>
