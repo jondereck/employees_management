@@ -39,9 +39,10 @@ import { DataTableViewOptions } from "./column-toggle"
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
-  offices: { id: string; name: string }[]
-  eligibilities: { id: string; name: string }[]
-  employeeTypes: { id: string; name: string }[]
+  offices?: { id: string; name: string }[]
+  eligibilities?: { id: string; name: string }[]
+  employeeTypes?: { id: string; name: string }[]
+  searchKeys?: string[]
 
 }
 
@@ -50,7 +51,8 @@ export function DataTable<TData, TValue>({
   data,
   offices,
   eligibilities,
-  employeeTypes
+  employeeTypes,
+  searchKeys
 
 
 }: DataTableProps<TData, TValue>) {

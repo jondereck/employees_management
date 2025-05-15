@@ -82,7 +82,7 @@ const Notifications = ({ data }: NotificationsProps) => {
 
       return empMonthDay === todayMonthDay && !emp.isArchived;
     });
-  }, [data]);
+  }, [data, today]);
 
 
   // const hasNotifications = celebrantsToday.length > 0 || retireesThisYear.length > 0 || milestoneAnniversaries.length > 0;
@@ -105,7 +105,7 @@ const Notifications = ({ data }: NotificationsProps) => {
 
       return diffDays > 0 && diffDays <= 7;
     });
-  }, [data]);
+  }, [data, today]);
 
   const baseUrl = process.env.NEXT_PUBLIC_URL;
 

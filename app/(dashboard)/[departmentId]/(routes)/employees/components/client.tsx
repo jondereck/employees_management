@@ -26,8 +26,8 @@ import EmployeeFilters from "./employee-filters";
 interface EmployeesClientProps {
   data: EmployeesColumn[];
   offices: { id: string; name: string }[];
-  eligibilities: { id: string; name: string }[];
-  employeeTypes: { id: string; name: string }[];
+  eligibilities: { id: string; name: string, value: string  }[];
+  employeeTypes: { id: string; name: string, value: string  }[];
 }
 
 export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
