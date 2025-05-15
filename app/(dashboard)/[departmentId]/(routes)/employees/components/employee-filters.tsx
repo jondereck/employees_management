@@ -45,14 +45,35 @@ export default function EmployeeFilters({
   };
 
   const clearAll = () => {
-    setSelectedOffices([]);
-    setSelectedEligibilities([]);
-    setSelectedEmployeeTypes([]);
-    setStatus("all");
+    updateFilters({
+      offices: [],
+      eligibilities: [],
+      employeeTypes: [],
+      status: "all",
+    });
+    setIsOpen(false); // optional: close modal
   };
 
-  // Simple multi-select implementation using checkboxes
-  // Replace with your own MultiSelect UI if you want
+  const updateFilters = ({
+    offices,
+    eligibilities,
+    employeeTypes,
+    status,
+  }: {
+    offices: string[];
+    eligibilities: string[];
+    employeeTypes: string[];
+    status: string;
+  }) => {
+    setSelectedOffices(offices);
+    setSelectedEligibilities(eligibilities);
+    setSelectedEmployeeTypes(employeeTypes);
+    setStatus(status);
+    onFilterChange({ offices, eligibilities, employeeTypes, status }); // <- notify parent
+  };
+  
+
+  // MultiSelect component: checkbox multi-select list
   const MultiSelect = ({
     options,
     selected,
@@ -69,6 +90,25 @@ export default function EmployeeFilters({
         onChange([...selected, id]);
       }
     };
+
+    const updateFilters = ({
+      offices,
+      eligibilities,
+      employeeTypes,
+      status,
+    }: {
+      offices: string[];
+      eligibilities: string[];
+      employeeTypes: string[];
+      status: string;
+    }) => {
+      setSelectedOffices(offices);
+      setSelectedEligibilities(eligibilities);
+      setSelectedEmployeeTypes(employeeTypes);
+      setStatus(status);
+      onFilterChange({ offices, eligibilities, employeeTypes, status }); // <- notify parent
+    };
+    
 
     return (
       <div className="max-h-40 overflow-auto border rounded p-2">
@@ -88,110 +128,149 @@ export default function EmployeeFilters({
 
   return (
     <>
-      <Button onClick={() => setIsOpen(true)}>Filter</Button>
-
-      {/* Show active filters as chips */}
-      <div className="flex gap-2 mt-2 flex-wrap">
-        {selectedOffices.map((id) => {
-          const office = offices.find((o) => o.id === id);
-          return office ? (
-            <Chip
-              key={id}
-              onRemove={() =>
-                setSelectedOffices(selectedOffices.filter((i) => i !== id))
-              }
-              label={`Office: ${office.name}`}
-            />
-          ) : null;
-        })}
-        {selectedEligibilities.map((id) => {
-          const elig = eligibilities.find((e) => e.id === id);
-          return elig ? (
-            <Chip
-              key={id}
-              onRemove={() =>
-                setSelectedEligibilities(selectedEligibilities.filter((i) => i !== id))
-              }
-              label={`Eligibility: ${elig.name}`}
-            />
-          ) : null;
-        })}
-        {selectedEmployeeTypes.map((id) => {
-          const type = employeeTypes.find((t) => t.id === id);
-          return type ? (
-            <Chip
-              key={id}
-              onRemove={() =>
-                setSelectedEmployeeTypes(selectedEmployeeTypes.filter((i) => i !== id))
-              }
-              label={`Appointment: ${type.name}`}
-            />
-          ) : null;
-        })}
-        {status !== "all" && (
+    {/* Trigger Button (shown inline and mobile floating button will also use this) */}
+    <Button
+      onClick={() => setIsOpen(true)}
+      id="open-filters"
+      className="md:w-auto w-full"
+    >
+      Filter
+    </Button>
+  
+    {/* Active Filters as Chips */}
+    <div className="flex gap-2 mt-2 flex-wrap">
+      {selectedOffices.map((id) => {
+        const office = offices.find((o) => o.id === id);
+        return office ? (
           <Chip
-            onRemove={() => setStatus("all")}
-            label={status === "Active" ? "Status: Active" : "Status: Inactive"}
+            key={id}
+            onRemove={() =>
+              updateFilters({
+                offices: selectedOffices.filter((i) => i !== id),
+                eligibilities: selectedEligibilities,
+                employeeTypes: selectedEmployeeTypes,
+                status,
+              })
+            }
+            label={`Office: ${office.name}`}
           />
-        )}
-      </div>
-
-      {/* Filter Modal */}
-      <Modal
-        title="Filter Employees"
-        description="Select filters to narrow down employees"
-        isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="font-semibold block mb-1">Office</label>
-            <MultiSelect
-              options={offices}
-              selected={selectedOffices}
-              onChange={setSelectedOffices}
-            />
-          </div>
-
-          <div>
-            <label className="font-semibold block mb-1">Eligibility</label>
-            <MultiSelect
-              options={eligibilities}
-              selected={selectedEligibilities}
-              onChange={setSelectedEligibilities}
-            />
-          </div>
-
-          <div>
-            <label className="font-semibold block mb-1">Appointment</label>
-            <MultiSelect
-              options={employeeTypes}
-              selected={selectedEmployeeTypes}
-              onChange={setSelectedEmployeeTypes}
-            />
-          </div>
-
-          <div>
-            <label className="font-semibold block mb-1">Status</label>
-            <select
-              className="border rounded p-2 w-full"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="all">All</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={clearAll}>
-              Clear All
-            </Button>
-            <Button onClick={handleApply}>Apply</Button>
-          </div>
+        ) : null;
+      })}
+      {selectedEligibilities.map((id) => {
+        const elig = eligibilities.find((e) => e.id === id);
+        return elig ? (
+          <Chip
+            key={id}
+            onRemove={() =>
+              updateFilters({
+                offices: selectedOffices,
+                eligibilities: selectedEligibilities.filter((i) => i !== id),
+                employeeTypes: selectedEmployeeTypes,
+                status,
+              })
+            }
+            
+            label={`Eligibility: ${elig.name}`}
+          />
+        ) : null;
+      })}
+      {selectedEmployeeTypes.map((id) => {
+        const type = employeeTypes.find((t) => t.id === id);
+        return type ? (
+          <Chip
+            key={id}
+            onRemove={() =>
+              updateFilters({
+                offices: selectedOffices,
+                eligibilities: selectedEligibilities,
+                employeeTypes: selectedEmployeeTypes.filter((i) => i !== id),
+                status,
+              })
+            }
+            
+            label={`Appointment: ${type.name}`}
+          />
+        ) : null;
+      })}
+      {status !== "all" && (
+        <Chip
+        onRemove={() =>
+          updateFilters({
+            offices: selectedOffices,
+            eligibilities: selectedEligibilities,
+            employeeTypes: selectedEmployeeTypes,
+            status: "all",
+          })
+        }
+        
+          label={status === "Active" ? "Status: Active" : "Status: Inactive"}
+        />
+      )}
+    </div>
+  
+    {/* Filter Modal */}
+    <Modal
+      title="Filter Employees"
+      description="Select filters to narrow down employees"
+      isOpen={isOpen}
+      onClose={() => setIsOpen(false)}
+    >
+      <div className="space-y-4 max-h-[80vh] overflow-y-auto">
+        <div>
+          <label className="font-semibold block mb-1">Office</label>
+          <MultiSelect
+            options={offices}
+            selected={selectedOffices}
+            onChange={setSelectedOffices}
+          />
         </div>
-      </Modal>
-    </>
+  
+        <div>
+          <label className="font-semibold block mb-1">Eligibility</label>
+          <MultiSelect
+            options={eligibilities}
+            selected={selectedEligibilities}
+            onChange={setSelectedEligibilities}
+          />
+        </div>
+  
+        <div>
+          <label className="font-semibold block mb-1">Appointment</label>
+          <MultiSelect
+            options={employeeTypes}
+            selected={selectedEmployeeTypes}
+            onChange={setSelectedEmployeeTypes}
+          />
+        </div>
+  
+        <div>
+          <label className="font-semibold block mb-1">Status</label>
+          <select
+            className="border rounded p-2 w-full"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value="all">All</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+  
+        <div className="flex flex-col-reverse md:flex-row justify-end gap-2 pt-4">
+          <Button
+            variant="outline"
+            onClick={clearAll}
+            className="w-full md:w-auto"
+          >
+            Clear All
+          </Button>
+          <Button onClick={handleApply} className="w-full md:w-auto">
+            Apply
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  </>
+  
   );
 }

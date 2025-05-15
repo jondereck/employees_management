@@ -47,7 +47,7 @@ export interface Image {
 export interface Eligibility {
   id: string;
   name: string;
-
+  value: string;
 }
 
 export interface EmployeeType {
@@ -129,8 +129,6 @@ const parseDate = (dateString: string) => {
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
  
-
-
   {
     id: "select",
     header: ({ table }) => (
@@ -320,27 +318,27 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   //   ),
   // },
   {
-    accessorKey: "eligibility",
-    header: "Eligibility",
-    cell: ({ row }) => (row.original.eligibility ? row.original.eligibility.name : "N/A"),
-    filterFn: (row, columnId, filterValue) => {
-      if (!filterValue || filterValue === "all") return true;
-      const eligibilityName = row.original.eligibility?.name ?? "";
-      return eligibilityName === filterValue;
-    },
+  accessorKey: "eligibility",
+  header: "Eligibility",
+  cell: ({ row }) => (row.original.eligibility ? row.original.eligibility.name : "N/A"),
+  filterFn: (row, columnId, filterValue) => {
+    if (!filterValue || filterValue === "all") return true;
+    const eligibilityName = row.original.eligibility?.name ?? "";
+    return eligibilityName === filterValue;
   },
-  
-  {
-    accessorKey: "employeeType",
-    header: "Appointment",
-    cell: ({ row }) => (row.original.employeeType ? row.original.employeeType.name : "N/A"),
-    filterFn: (row, columnId, filterValue) => {
-      if (!filterValue || filterValue === "all") return true;
-      const employeeTypeName = row.original.employeeType?.name ?? "";
-      return employeeTypeName === filterValue;
-    },
+},
+
+{
+  accessorKey: "employeeType",
+  header: "Appointment",
+  cell: ({ row }) => (row.original.employeeType ? row.original.employeeType.name : "N/A"),
+  filterFn: (row, columnId, filterValue) => {
+    if (!filterValue || filterValue === "all") return true;
+    const employeeTypeName = row.original.employeeType?.name ?? "";
+    return employeeTypeName === filterValue;
   },
-  
+},
+
 
   {
     accessorKey: "gender",

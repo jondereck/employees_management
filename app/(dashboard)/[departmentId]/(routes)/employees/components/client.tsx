@@ -41,16 +41,15 @@ export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
     employeeTypes: [] as string[],
     status: "all",
   });
-
-
+  // Filter employees by IDs
   const filteredEmployees = useMemo(() => {
     return data.filter((employee) => {
       const officeMatch =
-        filters.offices.length === 0 || filters.offices.includes(employee.offices.name);
+        filters.offices.length === 0 || filters.offices.includes(employee.offices.id);
       const eligMatch =
-        filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.name);
+        filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.id);
       const typeMatch =
-        filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.name);
+        filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.id);
       const statusMatch =
         filters.status === "all" ||
         (filters.status === "Active" && !employee.isArchived) ||
@@ -59,8 +58,6 @@ export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
       return officeMatch && eligMatch && typeMatch && statusMatch;
     });
   }, [data, filters]);
-
-
 
 
   // State for search input
@@ -72,7 +69,7 @@ export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
     return filteredEmployees.filter((employee) => {
       const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
       const reversedName = `${employee.lastName} ${employee.firstName}`.toLowerCase();
-  
+
       return (
         fullName.includes(lowercasedSearchTerm) ||
         reversedName.includes(lowercasedSearchTerm) ||
@@ -81,54 +78,80 @@ export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
       );
     });
   }, [filteredEmployees, searchTerm]);
-  
+
 
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen px-4 sm:px-6 lg:px-8 py-6 gap-6 bg-gray-50">
       {/* Header Section */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <Heading
           title={`Employees (${filteredData.length})`}
           description="This count includes retirees/terminated."
         />
-  
-        <div className="flex items-center gap-4">
-          <Button onClick={() => router.push(`/${params.departmentId}/employees/new`)} className="flex items-center gap-2">
-            <Plus className="mr-2 h-4 w-4" />
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => router.push(`/${params.departmentId}/employees/new`)}
+            className="flex items-center gap-2 px-4 py-2"
+          >
+            <Plus className="h-4 w-4" />
             Add
           </Button>
-          {/* Birthday Notification Bell */}
+          {/* Optional: Notification bell or badge here */}
         </div>
       </div>
+
       <Separator />
-     {/* FILTER CONTROLS */}
-     {/* <EmployeeFilters
-        offices={offices}
-        eligibilities={eligibilities}
-        employeeTypes={employeeTypes}
-        onFilterChange={setFilters}
-      /> */}
 
+      {/* FILTER CONTROLS */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border">
+    
+ 
 
-      {/* Search Input and Download Excel Button */}
-      <div className="flex items-center gap-4 py-4">
-        {/* Search Filter */}
-        <div className="flex-1 w-full sm:w-auto">
+      {/* Search & Download Controls */}
+      <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+        <div className="w-full md:flex-1">
           <SearchFilter searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
         </div>
-
-        {/* Download Excel Button - pushed to the right */}
-        <div className="ml-auto w-auto">
+        <EmployeeFilters
+          offices={offices}
+          eligibilities={eligibilities}
+          employeeTypes={employeeTypes}
+          onFilterChange={setFilters}
+        />
+        <div className="w-full md:w-auto ml-auto">
           <DownloadEmployeeBackup />
         </div>
       </div>
+      </div>
+      {/* Data Table */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border">
+      {filteredData.length === 0 ? (
+  <div className="text-center text-gray-500 py-12">
+    No employees match your filters or search.
+  </div>
+) : (
+  <div className="bg-white p-4 rounded-2xl shadow-sm border">
+    <DataTable
+      columns={columns}
+      data={filteredData}
+      offices={offices}
+      eligibilities={eligibilities}
+      employeeTypes={employeeTypes}
+    />
+  </div>
+)}
+      </div>
 
-      {/* DataTable with filtered data */}
-      <DataTable columns={columns} data={filteredData} offices={offices} eligibilities={eligibilities} employeeTypes={employeeTypes} />
       <ApiList entityIdName="employeesId" entityName="employees" />
+      <div className="fixed bottom-6 right-6 z-50 md:hidden">
+        <Button onClick={() => document.getElementById("open-filters")?.click()} className="rounded-full shadow-lg px-4 py-3">
+          Filter
+        </Button>
+      </div>
       <Footer />
     </div>
+
 
 
   );

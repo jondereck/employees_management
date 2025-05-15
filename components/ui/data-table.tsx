@@ -39,10 +39,10 @@ import { DataTableViewOptions } from "./column-toggle"
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
-  offices: { id: string; name: string }[] 
-  eligibilities: { id: string; name: string }[] 
-  employeeTypes: { id: string; name: string}[] 
-  
+  offices: { id: string; name: string }[]
+  eligibilities: { id: string; name: string }[]
+  employeeTypes: { id: string; name: string }[]
+
 }
 
 export function DataTable<TData, TValue>({
@@ -87,89 +87,9 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-4">
-      {/* <div className="flex justify-end items-end">
+      <div className="flex justify-end items-end">
         <DataTableViewOptions table={table} />
-      </div> */}
-
-      <div className="flex items-center space-x-4 mb-4">
-  <Select
-    value={(table.getColumn("isArchived")?.getFilterValue() as string) ?? "all"}
-    onValueChange={(value) => {
-      table.getColumn("isArchived")?.setFilterValue(
-        value === "all" ? undefined : value
-      );
-    }}
-  >
-    <SelectTrigger className="w-[120px]">
-      <SelectValue placeholder="Filter status" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="all">All</SelectItem>
-      <SelectItem value="Active">Active</SelectItem>
-      <SelectItem value="Inactive">Inactive</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
-
-<Select
-  value={(table.getColumn("officeName")?.getFilterValue() as string) ?? "all"}
-  onValueChange={(value) => {
-    table.getColumn("officeName")?.setFilterValue(value === "all" ? undefined : value);
-  }}
->
-  <SelectTrigger className="w-[150px]">
-    <SelectValue placeholder="Filter by office" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="all">All Offices</SelectItem>
-    {offices.map((office) => (
-      <SelectItem key={office.id} value={office.name}>
-        {office.name}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-
-<Select
-  value={(table.getColumn("eligibility")?.getFilterValue() as string) ?? "all"}
-  onValueChange={(value) => {
-    table.getColumn("eligibility")?.setFilterValue(value === "all" ? undefined : value);
-  }}
->
-  <SelectTrigger className="w-[150px]">
-    <SelectValue placeholder="Filter by Eligibility" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="all">All</SelectItem>
-    {eligibilities.map((elig) => (
-      <SelectItem key={elig.id} value={elig.name}>
-        {elig.name}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-
-<Select
-  value={(table.getColumn("employeeType")?.getFilterValue() as string) ?? "all"}
-  onValueChange={(value) => {
-    table.getColumn("employeeType")?.setFilterValue(value === "all" ? undefined : value);
-  }}
->
-  <SelectTrigger className="w-[150px]">
-    <SelectValue placeholder="Filter by Appointment" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="all">All</SelectItem>
-    {employeeTypes.map((type) => (
-      <SelectItem key={type.id} value={type.name}>
-        {type.name}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-
-
-
+      </div>
       <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
