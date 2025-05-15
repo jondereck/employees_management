@@ -71,7 +71,7 @@ const Info = ({
 
   );
 
-
+ 
   return (
     <div
       className="bg-white p-6 rounded-xl shadow-lg border-4 print:border-0 print:shadow-none print:p-0 print:rounded-none"
