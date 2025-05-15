@@ -53,7 +53,7 @@ export interface Eligibility {
 export interface EmployeeType {
   id: string;
   name: string;
-
+  value: string;
 }
 
 export type EmployeesColumn = {
