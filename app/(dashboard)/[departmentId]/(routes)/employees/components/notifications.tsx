@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Bell, Cake, Calendar } from "lucide-react";
 
 import {
@@ -30,20 +30,25 @@ const Notifications = ({ data }: NotificationsProps) => {
   const today = useMemo(() => new Date(), []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [showAllAnniversaries, setShowAllAnniversaries] = useState(false);
-  // const [hasNotification, setHasNotification] = useState(true);
+  const [isAnniversaryModalOpen, setIsAnniversaryModalOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile)
+  }, []);
 
   const handleViewAllClick = () => {
-    setIsModalOpen(true);
+    setIsAnniversaryModalOpen((prev) => !prev);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
   };
 
-  // const handleClick = () => {
-  //   setHasNotification((prev) => !prev);
-  // };
 
   const currentYear = today.getFullYear();
 
@@ -84,10 +89,6 @@ const Notifications = ({ data }: NotificationsProps) => {
     });
   }, [data, today]);
 
-
-  // const hasNotifications = celebrantsToday.length > 0 || retireesThisYear.length > 0 || milestoneAnniversaries.length > 0;
-
-
   const upcomingBirthdays = useMemo(() => {
     return data.filter((employee) => {
       if (!employee.birthday || employee.isArchived) return false;
@@ -97,7 +98,7 @@ const Notifications = ({ data }: NotificationsProps) => {
 
       // If birthday has already passed this year, shift to next year
       if (thisYearBirthday < today) {
-        thisYearBirthday.setFullYear(today.getFullYear() + 1);
+        thisYearBirthday.setFullYear(today.getFullYear() + 0.5);
       }
 
       const diffTime = thisYearBirthday.getTime() - today.getTime();
@@ -111,230 +112,448 @@ const Notifications = ({ data }: NotificationsProps) => {
 
   return (
     <div className="relative flex items-center">
-      <Popover>
-        <PopoverTrigger>
-          <NotificationBell hasBirthdaysToday={celebrantsToday.length > 0} />
-          {/* {hasNotification && (
-        <span
-          className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"
-          onClick={handleClick}
-        ></span>
-      )} */}
-        </PopoverTrigger>
-        <PopoverContent className="w-80 p-0" align="end">
-          <Tabs defaultValue="birthdays" className="w-full">
-            <TabsList className="grid grid-cols-3">
-              <TabsTrigger value="birthdays">Birthdays</TabsTrigger>
-              <TabsTrigger value="retirement">Retirements</TabsTrigger>
-              <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="birthdays">
-              <div className="p-2">
-                {/* Today's Birthdays */}
-                <h3 className="text-lg font-semibold text-center flex items-center justify-start gap-2 mb-6">
-                  <Cake className="h-6 w-6 text-yellow-700" />
-                  Todays Birthdays
-                </h3>
-
-                {celebrantsToday.length > 0 ? (
-  <ul className="space-y-2">
-    {celebrantsToday.map((emp, index) => {
-      const birthday = addOneDay(new Date(emp.birthday));
-      const formatted = getFormattedDate(birthday);
-      const handleOpenPreview = () => usePreviewModal.getState().onOpen(emp);
-
-      return (
-        <li
-          key={index}
-          className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
-        >
-          <button
-            onClick={handleOpenPreview}
-            className="text-sm text-blue-600 font-medium hover:underline focus:outline-none"
-          >
-            {emp.firstName} {emp.lastName}
+      {isMobile ? (
+        <>
+          <button onClick={() => setIsModalOpen(true)}>
+            <NotificationBell hasBirthdaysToday={celebrantsToday.length > 0} />
           </button>
-        </li>
-      );
-    })}
-  </ul>
-) : (
-  <p className="text-sm text-gray-500 text-center">No birthdays today</p>
-)}
 
-              </div>
-              {/* Upcoming Birthdays */}
-              <div className="p-2">
-                <h3 className="text-md font-semibold text-center flex items-center justify-start gap-2 mb-6">
-                  <Calendar className="h-6 w-6 text-red-700" />
-                  Upcoming Birthdays (7 days)
-                </h3>
+          <Modal
+            title="Notifications"
+            description="Birthday, Retirements, Anniversaries"
+            isOpen={isModalOpen}
+            onClose={closeModal}
+          >
+            <div className="w-full">
+              <Tabs defaultValue="birthdays" className="w-full">
+                <TabsList className="grid grid-cols-3">
+                  <TabsTrigger value="birthdays">Birthdays</TabsTrigger>
+                  <TabsTrigger value="retirement">Retirements</TabsTrigger>
+                  <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
 
-                {upcomingBirthdays.length > 0 ? (
-                  <ul className="space-y-2">
-                    {sortByMonthDay(upcomingBirthdays).map((emp, index) => {
-                      const date = addOneDay(new Date(emp.birthday));
-                      const formatted = getFormattedDate(date);
+                </TabsList>
 
-                      return (
-                        <li
-                          key={index}
-                          className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
-                        >
-                          <span className="text-sm text-gray-800 font-medium">
-                            {emp.firstName} {emp.lastName}
-                          </span>
-                          <span className="text-xs text-gray-500">{formatted}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-gray-500 text-center">No upcoming birthdays</p>
-                )}
-              </div>
+                <TabsContent value="birthdays">
+                <div className="p-2">
+                  {/* Today's Birthdays */}
+                  <h3 className="text-lg font-semibold text-center flex items-center justify-start gap-2 mb-6">
+                    <Cake className="h-6 w-6 text-yellow-700" />
+                    Todays Birthdays
+                  </h3>
 
-            </TabsContent>
-
-            <div>
-
-              {/* Retirees Tab */}
-              <TabsContent value="retirement">
-                {retireesThisYear.length > 0 ? (
-                  <>
+                  {celebrantsToday.length > 0 ? (
                     <ul className="space-y-2">
-                      {getSortedRetirees(retireesThisYear).map((emp, index) => {
-                        const birthDate = new Date(emp.birthday);
-                        const formatted = birthDate.toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        });
+                      {celebrantsToday.map((emp, index) => {
+                        const birthday = addOneDay(new Date(emp.birthday));
+                        const formatted = getFormattedDate(birthday);
+                        const handleOpenPreview = () => usePreviewModal.getState().onOpen(emp);
 
                         return (
                           <li
                             key={index}
                             className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
                           >
-                            <span
-                              className={`text-sm font-medium ${isRetirementNextYear(emp.birthday) ? "text-green-600" : "text-gray-800"
-                                }`}
+                            <button
+                              onClick={handleOpenPreview}
+                              className="text-sm text-blue-600 font-medium hover:underline focus:outline-none"
                             >
                               {emp.firstName} {emp.lastName}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              Turns 65 on {formatted}
-                            </span>
+                            </button>
                           </li>
                         );
                       })}
                     </ul>
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-500 text-center">No retirees this year</p>
-                )}
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">No birthdays today</p>
+                  )}
+
+                </div>
+                {/* Upcoming Birthdays */}
+                <div className="p-2">
+                  <h3 className="text-md font-semibold text-center flex items-center justify-start gap-2 mb-6">
+                    <Calendar className="h-6 w-6 text-red-700" />
+                    Upcoming Birthdays (7 days)
+                  </h3>
+
+                  {upcomingBirthdays.length > 0 ? (
+                    <ul className="space-y-2">
+                      {sortByMonthDay(upcomingBirthdays).map((emp, index) => {
+                        const date = addOneDay(new Date(emp.birthday));
+                        const formatted = getFormattedDate(date);
+
+                        return (
+                          <li
+                            key={index}
+                            className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
+                          >
+                            <span className="text-sm text-gray-800 font-medium">
+                              {emp.firstName} {emp.lastName}
+                            </span>
+                            <span className="text-xs text-gray-500">{formatted}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">No upcoming birthdays</p>
+                  )}
+                </div>
+
               </TabsContent>
 
-              {/* Anniversaries Tab */}
-              <TabsContent value="anniversaries">
-                {milestoneAnniversaries ? (
-                  <>
-                    <ul className="space-y-2">
-                      {(showAllAnniversaries
-                        ? getSortedMilestones(milestoneAnniversaries)
-                        : getSortedMilestones(milestoneAnniversaries).slice(0, 5)
-                      )
+              <div>
 
-                        .map((emp, index) => {
-                          const hireDate = new Date(emp.dateHired);
-                          const years = currentYear - hireDate.getFullYear();
-                          const formatted = hireDate.toLocaleDateString("en-US", {
+                {/* Retirees Tab */}
+                <TabsContent value="retirement">
+                  {retireesThisYear.length > 0 ? (
+                    <>
+                      <ul className="space-y-2">
+                        {getSortedRetirees(retireesThisYear).map((emp, index) => {
+                          const birthDate = new Date(emp.birthday);
+                          const formatted = birthDate.toLocaleDateString("en-US", {
                             month: "short",
                             day: "numeric",
                           });
+
                           return (
                             <li
                               key={index}
                               className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
                             >
                               <span
-                                className={`text-sm font-medium ${isNextYearAnniversary(emp.dateHired) ? "text-green-600" : "text-gray-800"
+                                className={`text-sm font-medium ${isRetirementNextYear(emp.birthday) ? "text-green-600" : "text-gray-800"
                                   }`}
                               >
                                 {emp.firstName} {emp.lastName}
                               </span>
                               <span className="text-xs text-gray-500">
-                                {years} years on {formatted}
+                                Turns 65 on {formatted}
                               </span>
                             </li>
                           );
                         })}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">No retirees this year</p>
+                  )}
+                </TabsContent>
+
+                {/* Anniversaries Tab */}
+                <TabsContent value="anniversaries">
+                  {milestoneAnniversaries ? (
+                    <>
+                      <ul className="space-y-2">
+                        {(isAnniversaryModalOpen
+                          ? getSortedMilestones(milestoneAnniversaries)
+                          : getSortedMilestones(milestoneAnniversaries).slice(0, 5)
+                        )
+
+                          .map((emp, index) => {
+                            const hireDate = new Date(emp.dateHired);
+                            const years = currentYear - hireDate.getFullYear();
+                            const formatted = hireDate.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            });
+                            return (
+                              <li
+                                key={index}
+                                className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
+                              >
+                                <span
+                                  className={`text-sm font-medium ${isNextYearAnniversary(emp.dateHired) ? "text-green-600" : "text-gray-800"
+                                    }`}
+                                >
+                                  {emp.firstName} {emp.lastName}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {years} years on {formatted}
+                                </span>
+                              </li>
+                            );
+                          })}
+                      </ul>
+
+                      {/* Toggle Button */}
+                      {milestoneAnniversaries.length > 5 && (
+                        <div className="mt-4 text-center">
+                          <button
+                            className="text-xs font-semibold text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50"
+                            onClick={handleViewAllClick}
+                          >
+                            {isAnniversaryModalOpen ? 'Show Less' : 'View All'}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">No milestone anniversaries</p>
+                  )}
+                </TabsContent>
+
+                {/* Fullscreen Modal for Anniversaries */}
+                <Modal
+                  title="All Milestone Anniversaries"
+                  description="Here are all employees celebrating milestone years of service."
+                  isOpen={isAnniversaryModalOpen}
+                  onClose={() => setIsAnniversaryModalOpen(false)}
+                >
+                  <div className="space-y-2 max-h-[70vh] overflow-y-auto">
+                    {getSortedMilestones(milestoneAnniversaries).map((emp, index) => {
+                      const hireDate = new Date(emp.dateHired);
+                      const years = currentYear - hireDate.getFullYear();
+                      const formatted = hireDate.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      });
+
+                      return (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-2 border-b border-gray-200"
+                        >
+                          <span
+                            className={`text-sm font-medium ${isNextYearAnniversary(emp.dateHired) ? "text-green-600" : "text-gray-800"
+                              }`}
+                          >
+                            {emp.firstName} {emp.lastName}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {years} years on {formatted}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                  </div>
+                </Modal>
+
+              </div>
+              </Tabs>
+            </div>
+
+          </Modal>
+
+        </>
+      ) : (
+        <Popover>
+          <PopoverTrigger>
+            <NotificationBell hasBirthdaysToday={celebrantsToday.length > 0} />
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-0" align="end">
+            <Tabs defaultValue="birthdays" className="w-full">
+              <TabsList className="grid grid-cols-3">
+                <TabsTrigger value="birthdays">Birthdays</TabsTrigger>
+                <TabsTrigger value="retirement">Retirements</TabsTrigger>
+                <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="birthdays">
+                <div className="p-2">
+                  {/* Today's Birthdays */}
+                  <h3 className="text-lg font-semibold text-center flex items-center justify-start gap-2 mb-6">
+                    <Cake className="h-6 w-6 text-yellow-700" />
+                    Todays Birthdays
+                  </h3>
+
+                  {celebrantsToday.length > 0 ? (
+                    <ul className="space-y-2">
+                      {celebrantsToday.map((emp, index) => {
+                        const birthday = addOneDay(new Date(emp.birthday));
+                        const formatted = getFormattedDate(birthday);
+                        const handleOpenPreview = () => usePreviewModal.getState().onOpen(emp);
+
+                        return (
+                          <li
+                            key={index}
+                            className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
+                          >
+                            <button
+                              onClick={handleOpenPreview}
+                              className="text-sm text-blue-600 font-medium hover:underline focus:outline-none"
+                            >
+                              {emp.firstName} {emp.lastName}
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
-
-                    {/* Toggle Button */}
-                    {milestoneAnniversaries.length > 5 && (
-                      <div className="mt-4 text-center">
-                        <button
-                          className="text-xs font-semibold text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50"
-                          onClick={handleViewAllClick}
-                        >
-                          {showAllAnniversaries ? 'Show Less' : 'View All'}
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-500 text-center">No milestone anniversaries</p>
-                )}
-              </TabsContent>
-
-              {/* Fullscreen Modal for Anniversaries */}
-              <Modal
-                title="All Milestone Anniversaries"
-                description="Here are all employees celebrating milestone years of service."
-                isOpen={isModalOpen}
-                onClose={closeModal}
-              >
-                <div className="space-y-2 max-h-[70vh] overflow-y-auto">
-                  {getSortedMilestones(milestoneAnniversaries).map((emp, index) => {
-                    const hireDate = new Date(emp.dateHired);
-                    const years = currentYear - hireDate.getFullYear();
-                    const formatted = hireDate.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    });
-
-                    return (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-2 border-b border-gray-200"
-                      >
-                        <span
-                          className={`text-sm font-medium ${isNextYearAnniversary(emp.dateHired) ? "text-green-600" : "text-gray-800"
-                            }`}
-                        >
-                          {emp.firstName} {emp.lastName}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {years} years on {formatted}
-                        </span>
-                      </div>
-                    );
-                  })}
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">No birthdays today</p>
+                  )}
 
                 </div>
-              </Modal>
+                {/* Upcoming Birthdays */}
+                <div className="p-2">
+                  <h3 className="text-md font-semibold text-center flex items-center justify-start gap-2 mb-6">
+                    <Calendar className="h-6 w-6 text-red-700" />
+                    Upcoming Birthdays (7 days)
+                  </h3>
 
-            </div>
-          </Tabs>
-        </PopoverContent>
-      </Popover>
+                  {upcomingBirthdays.length > 0 ? (
+                    <ul className="space-y-2">
+                      {sortByMonthDay(upcomingBirthdays).map((emp, index) => {
+                        const date = addOneDay(new Date(emp.birthday));
+                        const formatted = getFormattedDate(date);
 
+                        return (
+                          <li
+                            key={index}
+                            className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
+                          >
+                            <span className="text-sm text-gray-800 font-medium">
+                              {emp.firstName} {emp.lastName}
+                            </span>
+                            <span className="text-xs text-gray-500">{formatted}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">No upcoming birthdays</p>
+                  )}
+                </div>
 
+              </TabsContent>
 
+              <div>
+
+                {/* Retirees Tab */}
+                <TabsContent value="retirement">
+                  {retireesThisYear.length > 0 ? (
+                    <>
+                      <ul className="space-y-2">
+                        {getSortedRetirees(retireesThisYear).map((emp, index) => {
+                          const birthDate = new Date(emp.birthday);
+                          const formatted = birthDate.toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          });
+
+                          return (
+                            <li
+                              key={index}
+                              className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
+                            >
+                              <span
+                                className={`text-sm font-medium ${isRetirementNextYear(emp.birthday) ? "text-green-600" : "text-gray-800"
+                                  }`}
+                              >
+                                {emp.firstName} {emp.lastName}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                Turns 65 on {formatted}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">No retirees this year</p>
+                  )}
+                </TabsContent>
+
+                {/* Anniversaries Tab */}
+                <TabsContent value="anniversaries">
+                  {milestoneAnniversaries ? (
+                    <>
+                      <ul className="space-y-2">
+                        {(isAnniversaryModalOpen
+                          ? getSortedMilestones(milestoneAnniversaries)
+                          : getSortedMilestones(milestoneAnniversaries).slice(0, 5)
+                        )
+
+                          .map((emp, index) => {
+                            const hireDate = new Date(emp.dateHired);
+                            const years = currentYear - hireDate.getFullYear();
+                            const formatted = hireDate.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            });
+                            return (
+                              <li
+                                key={index}
+                                className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
+                              >
+                                <span
+                                  className={`text-sm font-medium ${isNextYearAnniversary(emp.dateHired) ? "text-green-600" : "text-gray-800"
+                                    }`}
+                                >
+                                  {emp.firstName} {emp.lastName}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {years} years on {formatted}
+                                </span>
+                              </li>
+                            );
+                          })}
+                      </ul>
+
+                      {/* Toggle Button */}
+                      {milestoneAnniversaries.length > 5 && (
+                        <div className="mt-4 text-center">
+                          <button
+                            className="text-xs font-semibold text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50"
+                            onClick={handleViewAllClick}
+                          >
+                            {isAnniversaryModalOpen ? 'Show Less' : 'View All'}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center">No milestone anniversaries</p>
+                  )}
+                </TabsContent>
+
+                {/* Fullscreen Modal for Anniversaries */}
+                <Modal
+                  title="All Milestone Anniversaries"
+                  description="Here are all employees celebrating milestone years of service."
+                  isOpen={isAnniversaryModalOpen}
+                  onClose={() => setIsAnniversaryModalOpen(false)}
+                >
+                  <div className="space-y-2 max-h-[70vh] overflow-y-auto">
+                    {getSortedMilestones(milestoneAnniversaries).map((emp, index) => {
+                      const hireDate = new Date(emp.dateHired);
+                      const years = currentYear - hireDate.getFullYear();
+                      const formatted = hireDate.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      });
+
+                      return (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-2 border-b border-gray-200"
+                        >
+                          <span
+                            className={`text-sm font-medium ${isNextYearAnniversary(emp.dateHired) ? "text-green-600" : "text-gray-800"
+                              }`}
+                          >
+                            {emp.firstName} {emp.lastName}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {years} years on {formatted}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                  </div>
+                </Modal>
+
+              </div>
+            </Tabs>
+          </PopoverContent>
+
+        </Popover>
+
+      )
+      }
     </div>
-
-
   );
 };
 

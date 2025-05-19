@@ -1,38 +1,56 @@
 "use client";
 
-import { ScanLine } from "lucide-react"; // White scanner-style icon
+import { ScanLine } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { BrowserQRCodeReader } from "@zxing/browser";
 
 const CameraScanner = () => {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setVisible(false);
-    }, 100000);
-
-    return () => clearTimeout(timer);
-  },[]);
+  const [qrResult, setQrResult] = useState<string | null>(null);
 
 
   const handleClick = () => {
     inputRef.current?.click();
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      console.log("Scanned image:", file);
-      // TODO: preview, OCR, or upload logic
-    }
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const img = new Image();
+      img.src = reader.result as string;
+      img.onload = async () => {
+        try {
+          const codeReader = new BrowserQRCodeReader();
+          const result = await codeReader.decodeFromImageElement(img);
+          const scannedText = result.getText();
+          console.log("QR Code Result:", scannedText);
+          setQrResult(scannedText);
+
+          // ✅ Only open if URL starts with your domain
+          if (scannedText.startsWith("https://hrps.vercel.app/")) {
+            window.location.href = scannedText;
+          } else {
+            alert("Scanned QR code is not from a trusted source.");
+          }
+
+        } catch (error) {
+          console.error("QR scan failed:", error);
+          setQrResult("Failed to scan QR code");
+        }
+      };
+    };
+    reader.readAsDataURL(file);
   };
 
-  if(!visible) return null;
+
+
+
 
   return (
     <>
-      {/* Hidden file input to trigger camera */}
       <input
         ref={inputRef}
         type="file"
@@ -42,7 +60,6 @@ const CameraScanner = () => {
         className="hidden"
       />
 
-      {/* Floating scanner icon button – only on mobile */}
       <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 sm:hidden">
         <button
           onClick={handleClick}
@@ -51,6 +68,12 @@ const CameraScanner = () => {
           <ScanLine className="h-6 w-6 text-white" />
         </button>
       </div>
+
+      {qrResult && (
+        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-white p-4 rounded-md shadow-md text-sm z-50">
+          {qrResult}
+        </div>
+      )}
     </>
   );
 };
