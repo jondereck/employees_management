@@ -2,7 +2,6 @@ import { UserButton, auth } from "@clerk/nextjs";
 import DepartmentSwitcher from "./department-switcher";
 import { redirect } from "next/navigation";
 import prismadb from "@/lib/prismadb";
-import MobileNavbar from "./mobile-sidebars-deleted";
 import Back from "./back";
 import Notifications from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/notifications";
 import { Employees } from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/types";

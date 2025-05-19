@@ -5,8 +5,6 @@ import { auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import ModalProvider from "./(routes)/(frontend)/providers/modal-provider";
 
-import MobileNavbar from "@/components/mobile-sidebars-deleted";
-
 export default async function DashboardLayout({
   children,
   params
