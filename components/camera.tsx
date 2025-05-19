@@ -13,17 +13,6 @@ const CameraScanner = forwardRef((_, ref) => {
   const [loadingCamera, setLoadingCamera] = useState(true);
   const [loadingRedirect, setLoadingRedirect] = useState(false);
 
-  const askForCameraPermission = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      stream.getTracks().forEach((track) => track.stop()); // stop it immediately
-      console.log("Camera permission granted");
-      startScan(); // ✅ Start scanner AFTER permission is granted
-    } catch (err) {
-      console.error("Camera permission denied", err);
-      setError("Camera access denied. Please allow access to scan QR codes.");
-    }
-  };
 
   useEffect(() => {
     codeReader.current = new BrowserQRCodeReader();
@@ -34,6 +23,13 @@ const CameraScanner = forwardRef((_, ref) => {
       }
     };
   }, []);
+
+  
+  const handleTryAgain = () => {
+    setError(null);
+    setQrResult(null);
+    startScan();
+  };
 
   const startScan = async () => {
     setError(null);
@@ -76,23 +72,25 @@ const CameraScanner = forwardRef((_, ref) => {
         (result, err) => {
           if (result) {
             const text = result.getText();
-            setQrResult(text);
-            controls.stop();
-            setScanning(false);
-
+      
             if (text.startsWith("https://hrps.vercel.app/")) {
-              setLoadingRedirect(true); // show spinner before navigation
+              controls.stop(); // only stop when valid
+              setQrResult(text);
+              setScanning(false);
               window.location.href = text;
             } else {
-              alert("Scanned QR code is not from a trusted source.");
+              // don’t stop, show error and let user continue
+              setError("Scanned QR code is not from a trusted source.");
             }
           }
-
+      
           if (err && !(err.name === "NotFoundException")) {
             console.error("QR scan error:", err);
+            setError("An error occurred while scanning.");
           }
         }
       );
+      
 
       controlsRef.current = controls;
       setLoadingCamera(false);  // stop loading here after camera started
@@ -121,7 +119,7 @@ const CameraScanner = forwardRef((_, ref) => {
     startScan();
   }, []);
 
-
+  
 
   return (
     <>
@@ -177,16 +175,11 @@ const CameraScanner = forwardRef((_, ref) => {
         />
 
         {/* Guide Box (centered) */}
-        <div
-          className="absolute border-4 border-green-500 rounded-md"
-          style={{
-            top: '25%',
-            left: '12.5%',
-            width: '75%',
-            height: '50%',
-            zIndex: 10,
-          }}
-        />
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[60vw] h-[35vh] border-4 border-green-500 rounded-md z-10" />
+
+
+
+
 
         {/* Hint Text */}
         <p className="absolute text-center bottom-10 left-1/2 transform -translate-x-1/2 text-white text-sm z-20">
@@ -209,6 +202,18 @@ const CameraScanner = forwardRef((_, ref) => {
           {error}
         </div>
       )}
+
+{error && (
+  <div className="fixed bottom-32 left-1/2 max-w-xs transform -translate-x-1/2 rounded-lg bg-red-50 p-4 text-center text-sm font-medium text-red-700 shadow-md ring-1 ring-red-200 transition-opacity duration-300 z-50">
+    <p>{error}</p>
+    <button
+      onClick={handleTryAgain}
+      className="mt-2 inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-1.5 text-white text-xs font-medium hover:bg-red-700 transition"
+    >
+      Try Again
+    </button>
+  </div>
+)}
 
       {loadingRedirect && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-70">

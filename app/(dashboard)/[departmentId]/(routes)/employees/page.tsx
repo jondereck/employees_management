@@ -6,6 +6,7 @@ import { formatTinNumber, formatter } from "@/lib/utils";
 import ApiList from "@/components/ui/api-list";
 import { Suspense } from "react";
 import EmployeesLoadingSkeleton from "@/components/skeleteon/employees-loading-skeleton";
+import CameraScannerWrapper from "@/components/camera-scanner-wrapper";
 
 
 const EmployeesPage = async ({
@@ -119,6 +120,7 @@ const EmployeesPage = async ({
     <div className="flex-1 space-y-4 p-4 pt-6">
       <Suspense fallback={<EmployeesLoadingSkeleton />}>
         <EmployeesClient data={formattedEmployees} offices={offices} eligibilities={eligibilities} employeeTypes={employeeTypes} />
+        <CameraScannerWrapper/>
       </Suspense>
     </div>
   </div>

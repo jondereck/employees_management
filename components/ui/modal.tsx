@@ -35,7 +35,7 @@ const Modal = ({
   }
   return (
     <Dialog open={isOpen} onOpenChange={onChange}>
-     <DialogContent className="p-0 sm:max-w-[100vw] sm:max-h-[100vh] w-full h-full bg-black">
+     <DialogContent className="p-4 sm:max-w-[75vw] sm:max-h-[75vh] w-full h-full">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>

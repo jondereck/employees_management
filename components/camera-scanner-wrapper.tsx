@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { ScanLine } from "lucide-react";
 import Modal from "./ui/modal";
 import CameraScanner from "./camera";
+import { Button } from "./ui/button";
 
 
 const CameraScannerWrapper = () => {
@@ -20,7 +21,7 @@ const CameraScannerWrapper = () => {
       console.error("Camera permission error:", err);
     }
   };
-  
+
 
   const handleClose = () => {
     setIsOpen(false);
@@ -48,10 +49,24 @@ const CameraScannerWrapper = () => {
         isOpen={isOpen}
         onClose={handleClose}
       >
+        
         <div className="fixed inset-0 z-50 bg-black sm:hidden">
-  <CameraScanner ref={scannerRef} />
-</div>
+          <CameraScanner ref={scannerRef} />
+        </div>
+        <div className="fixed inset-0 z-50 bg-black sm:hidden">
+          {/* Close Button */}
+          <Button
+            size="icon"
+            variant="destructive"
+            onClick={handleClose}
+            className="absolute top-4 right-4 z-50 p-2 rounded-full"
+            aria-label="Close Scanner"
+          >
+            ✕
+          </Button>
 
+          <CameraScanner ref={scannerRef} />
+        </div>
       </Modal>
     </>
   );
