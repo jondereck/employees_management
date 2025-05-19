@@ -10,6 +10,8 @@ import ClientEmployeeChange from "@/components/client-employee-change";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { CardListClient } from "@/components/ui/card-list-client";
 import CameraScanner from "@/components/camera";
+import CameraScannerWrapper from "@/components/camera-scanner-mdodal";
+
 
 interface DashboardProps {
   params: { departmentId: string; officeId: string };
@@ -161,8 +163,8 @@ const DashboardPage = async ({ params }: DashboardProps) => {
             <Overview data={graphEmployee} />
           </CardContent>
         </Card>
+        <CameraScannerWrapper />
 
-        <CameraScanner />
       </div>
     </div>
   );

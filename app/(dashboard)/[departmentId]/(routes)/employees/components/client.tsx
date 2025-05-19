@@ -26,8 +26,8 @@ import EmployeeFilters from "./employee-filters";
 interface EmployeesClientProps {
   data: EmployeesColumn[];
   offices: { id: string; name: string }[];
-  eligibilities: { id: string; name: string, value: string  }[];
-  employeeTypes: { id: string; name: string, value: string  }[];
+  eligibilities: { id: string; name: string, value: string }[];
+  employeeTypes: { id: string; name: string, value: string }[];
 }
 
 export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
@@ -82,7 +82,7 @@ export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
 
 
   return (
-    <div className="flex flex-col min-h-screen px-4 sm:px-6 lg:px-8 py-6 gap-6 bg-gray-50">
+    <div className="flex flex-col min-h-screen px-4 sm:px-4 lg:px-6 py-6 gap-6 bg-gray-50">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <Heading
@@ -103,52 +103,51 @@ export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
 
       <Separator />
 
-      {/* FILTER CONTROLS */}
       <div className="bg-white p-4 rounded-2xl shadow-sm border">
-    
- 
+        <div className="flex flex-col md:flex-row md:items-center md:gap-4 gap-3 w-full">
+          <div className="flex flex-row items-center gap-2 w-full">
+            {/* Search Input */}
+            <div className="flex-1">
+              <SearchFilter searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+            </div>
+            {/* Download Button */}
+            <div className="w-auto">
+              <DownloadEmployeeBackup />
+            </div>
+          </div>
 
-      {/* Search & Download Controls */}
-      <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-        <div className="w-full md:flex-1">
-          <SearchFilter searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+          {/* Filters beside or below */}
+          <div className="w-full md:w-auto">
+            <EmployeeFilters
+              offices={offices}
+              eligibilities={eligibilities}
+              employeeTypes={employeeTypes}
+              onFilterChange={setFilters}
+            />
+          </div>
         </div>
-        <EmployeeFilters
-          offices={offices}
-          eligibilities={eligibilities}
-          employeeTypes={employeeTypes}
-          onFilterChange={setFilters}
-        />
-        <div className="w-full md:w-auto ml-auto">
-          <DownloadEmployeeBackup />
-        </div>
-      </div>
+
+
       </div>
       {/* Data Table */}
       <div className="bg-white p-4 rounded-2xl shadow-sm border">
-      {filteredData.length === 0 ? (
-  <div className="text-center text-gray-500 py-12">
-    No employees match your filters or search.
-  </div>
-) : (
-  <div className="bg-white p-4 rounded-2xl shadow-sm border">
-    <DataTable
-      columns={columns}
-      data={filteredData}
-      offices={offices}
-      eligibilities={eligibilities}
-      employeeTypes={employeeTypes}
-    />
-  </div>
-)}
+        {filteredData.length === 0 ? (
+          <div className="text-center text-gray-500 py-12">
+            No employees match your filters or search.
+          </div>
+        ) : (
+          <div className="bg-white p-4 rounded-2xl shadow-sm border">
+            <DataTable
+              columns={columns}
+              data={filteredData}
+              offices={offices}
+              eligibilities={eligibilities}
+              employeeTypes={employeeTypes}
+            />
+          </div>
+        )}
       </div>
-
       <ApiList entityIdName="employeesId" entityName="employees" />
-      <div className="fixed bottom-6 right-6 z-50 md:hidden">
-        <Button onClick={() => document.getElementById("open-filters")?.click()} className="rounded-full shadow-lg px-4 py-3">
-          Filter
-        </Button>
-      </div>
       <Footer />
     </div>
 

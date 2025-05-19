@@ -128,14 +128,26 @@ export default function EmployeeFilters({
 
   return (
     <>
-    {/* Trigger Button (shown inline and mobile floating button will also use this) */}
+ 
+   {/* Inline Filter button - visible on md+ */}
+   <Button
+    onClick={() => setIsOpen(true)}
+    id="open-filters"
+    className="hidden md:inline-block md:w-auto w-full"
+  >
+    Filter
+  </Button>
+
+  {/* Floating Filter button - visible on small screens */}
+  <div className="fixed bottom-6 right-6 z-50 md:hidden">
     <Button
       onClick={() => setIsOpen(true)}
-      id="open-filters"
-      className="md:w-auto w-full"
+      className="rounded-full shadow-lg px-4 py-3"
     >
       Filter
     </Button>
+  </div>
+
   
     {/* Active Filters as Chips */}
     <div className="flex gap-2 mt-2 flex-wrap">
