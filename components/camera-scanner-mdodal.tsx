@@ -10,9 +10,17 @@ const CameraScannerWrapper = () => {
   const [isOpen, setIsOpen] = useState(false);
   const scannerRef = useRef<{ startScan: () => void; stopScan: () => void } | null>(null);
 
-  const handleOpen = () => {
-    setIsOpen(true);
+  const handleOpen = async () => {
+    try {
+      // Prompt for permission explicitly on mobile
+      await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      setIsOpen(true);
+    } catch (err) {
+      alert("Camera permission is required to scan QR codes.");
+      console.error("Camera permission error:", err);
+    }
   };
+  
 
   const handleClose = () => {
     setIsOpen(false);
