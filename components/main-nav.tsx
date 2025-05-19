@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Building,
 } from "lucide-react";
+import LoadingSkeleton from "./loading-state";
 
 type Route = {
   href: string;
@@ -40,7 +41,22 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   const pathname = usePathname();
   const params = useParams();
   const router = useRouter();
+  const [loading, setLoading] = React.useState(false);
   const [loadingPath, setLoadingPath] = React.useState<string | null>(null);
+
+
+  // 👇 Set loader before navigation
+  const handleNavClick = (href: string) => {
+    if (href !== pathname) {
+      setLoading(true);
+      router.push(href);
+    }
+  };
+
+  // 👇 Watch for path change to turn off loader
+  React.useEffect(() => {
+    setLoading(false); // reset loader when pathname changes
+  }, [pathname]);
 
   // Main nav routes with icons
   const routes: Route[] = [
@@ -92,99 +108,107 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   const activeRoute = itemroutes.find((route) => route.active);
 
   return (
+    <>
 
-    <nav className={cn("flex items-center space-x-2", className)} {...props}>
-      {/* Main routes */}
-      {routes.map(({ href, label, active, icon }) => (
-        <Link
-          key={href}
-          href={href}
+      {loading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-black/80">
+          <LoadingSkeleton />
+        </div>
+      )}
+      <nav className={cn("flex items-center space-x-2", className)} {...props}>
+        {/* Main routes */}
+        {routes.map(({ href, label, active, icon }) => (
+                <button
+                key={href}
+                onClick={() => handleNavClick(href)} // ✅ Use the actual route href
+                className={cn(
+                  "inline-flex items-center px-3 py-2 border-b-2 transition-colors duration-300",
+                  active
+                    ? "border-green-600 text-green-700 font-semibold"
+                    : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600"
+                )}
+              >
+                {icon}
+                <span className="text-base">{label}</span>
+              </button>
+        ))}
+
+        {/* Dropdown for Employees */}
+        <NavigationMenu>
+          <NavigationMenuList>
+            <NavigationMenuItem>
+              <NavigationMenuTrigger
+                className={cn(
+                  "text-base font-semibold px-3 py-2 border-b-2 transition-colors duration-300",
+                  activeRoute ? "border-green-600 text-green-700" : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600"
+                )}
+              >
+                {activeRoute ? activeRoute.label : "Employees"}
+              </NavigationMenuTrigger>
+              <NavigationMenuContent className="rounded-md border border-gray-200 bg-white shadow-lg p-6 w-[500px] dark:bg-gray-900 dark:border-gray-700">
+                <ul className="grid grid-cols-[1fr_2fr] gap-6">
+                  <li className="row-span-3">
+                    <NavigationMenuLink asChild>
+                      <button
+                        onClick={() => handleNavClick(`/${params.departmentId}/employees`)}
+                        className={cn(
+                          "flex h-auto flex-col justify-end rounded-md bg-gradient-to-b from-green-50 to-green-100 p-6 no-underline outline-none focus:ring-2 focus:ring-green-500 text-green-700 font-semibold",
+                          pathname === `/${params.departmentId}/employees` ? "ring-2 ring-green-500" : ""
+                        )}
+                      >
+                        <div className="text-xl mb-1">Manage Employees</div>
+                        <p className="text-sm leading-tight">Browse and manage the list of department employees.</p>
+                      </button>
+                    </NavigationMenuLink>
+                  </li>
+
+                  {itemroutes.map(({ href, label, active, description, icon }) => (
+                    <ListItem
+                      key={href}
+                      href={href}
+                      className={cn(
+                        "text-sm font-medium transition-colors hover:text-green-600",
+                        active ? "text-green-700 font-semibold" : "text-muted-foreground"
+                      )}
+                      title={""} // <-- keep this a string for tooltip
+                      onClick={() => handleNavClick(href)} 
+                    >
+                      <div className="flex items-center">
+                        {icon}
+                        <span>{label}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 whitespace-normal overflow-visible break-words">
+                        {description}
+                      </p>
+                    </ListItem>
+                  ))}
+
+                </ul>
+              </NavigationMenuContent>
+            </NavigationMenuItem>
+          </NavigationMenuList>
+        </NavigationMenu>
+
+        {/* Settings link */}
+
+        <button
+          
           className={cn(
-            "inline-flex items-center px-3 py-2 border-b-2 transition-colors duration-300",
-            active
+            "flex item-center text-base font-medium px-3 py-2 border-b-2 transition-colors duration-300 ",
+            pathname === `/${params.departmentId}/settings`
               ? "border-green-600 text-green-700 font-semibold"
               : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600"
           )}
+          onClick={() => handleNavClick(`/${params.departmentId}/settings`)} 
+
         >
-          {icon}
-          <span className="text-base">{label}</span>
-        </Link>
-      ))}
-
-      {/* Dropdown for Employees */}
-      <NavigationMenu>
-        <NavigationMenuList>
-          <NavigationMenuItem>
-            <NavigationMenuTrigger
-              className={cn(
-                "text-base font-semibold px-3 py-2 border-b-2 transition-colors duration-300",
-                activeRoute ? "border-green-600 text-green-700" : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600"
-              )}
-            >
-              {activeRoute ? activeRoute.label : "Employees"}
-            </NavigationMenuTrigger>
-            <NavigationMenuContent className="rounded-md border border-gray-200 bg-white shadow-lg p-6 w-[500px] dark:bg-gray-900 dark:border-gray-700">
-              <ul className="grid grid-cols-[1fr_2fr] gap-6">
-                <li className="row-span-3">
-                  <NavigationMenuLink asChild>
-                    <Link
-                      href={`/${params.departmentId}/employees`}
-                      className={cn(
-                        "flex h-auto flex-col justify-end rounded-md bg-gradient-to-b from-green-50 to-green-100 p-6 no-underline outline-none focus:ring-2 focus:ring-green-500 text-green-700 font-semibold",
-                        pathname === `/${params.departmentId}/employees` ? "ring-2 ring-green-500" : ""
-                      )}
-                    >
-                      <div className="text-xl mb-1">Manage Employees</div>
-                      <p className="text-sm leading-tight">Browse and manage the list of department employees.</p>
-                    </Link>
-                  </NavigationMenuLink>
-                </li>
-
-                {itemroutes.map(({ href, label, active, description, icon }) => (
-  <ListItem
-    key={href}
-    href={href}
-    className={cn(
-      "text-sm font-medium transition-colors hover:text-green-600",
-      active ? "text-green-700 font-semibold" : "text-muted-foreground"
-    )}
-    title={""} // <-- keep this a string for tooltip
-  >
-    <div className="flex items-center">
-      {icon}
-      <span>{label}</span>
-    </div>
-    <p className="text-xs text-muted-foreground mt-1 whitespace-normal overflow-visible break-words">
-      {description}
-    </p>
-  </ListItem>
-))}
-
-              </ul>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
-        </NavigationMenuList>
-      </NavigationMenu>
-
-      {/* Settings link */}
-
-      <Link
-        href={`/${params.departmentId}/settings`}
-        className={cn(
-          "flex item-center text-base font-medium px-3 py-2 border-b-2 transition-colors duration-300 ",
-          pathname === `/${params.departmentId}/settings`
-            ? "border-green-600 text-green-700 font-semibold"
-            : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600"
-        )}
-
-      >
-        <Settings className="h-5 w-5 mr-2" />
-        Settings
-      </Link>
+          <Settings className="h-5 w-5 mr-2" />
+          Settings
+        </button>
 
 
-    </nav>
-
+      </nav>
+    </>
 
   );
 }
