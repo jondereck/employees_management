@@ -98,7 +98,7 @@ const Notifications = ({ data }: NotificationsProps) => {
 
       // If birthday has already passed this year, shift to next year
       if (thisYearBirthday < today) {
-        thisYearBirthday.setFullYear(today.getFullYear() + 0.5);
+        thisYearBirthday.setFullYear(today.getFullYear() + 1);
       }
 
       const diffTime = thisYearBirthday.getTime() - today.getTime();
@@ -130,7 +130,6 @@ const Notifications = ({ data }: NotificationsProps) => {
                   <TabsTrigger value="birthdays">Birthdays</TabsTrigger>
                   <TabsTrigger value="retirement">Retirements</TabsTrigger>
                   <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
-
                 </TabsList>
 
                 <TabsContent value="birthdays">
