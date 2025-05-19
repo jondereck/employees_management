@@ -2,168 +2,189 @@
 
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
-import * as React from "react"
+import { useParams, usePathname, useRouter } from "next/navigation";
+import * as React from "react";
 
 import {
   NavigationMenu,
   NavigationMenuContent,
-  NavigationMenuIndicator,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
   NavigationMenuTrigger,
-  NavigationMenuViewport,
-} from "@/components/ui/navigation-menu"
+} from "@/components/ui/navigation-menu";
 import ListItem from "./list-items";
-import { PersonIcon } from "@radix-ui/react-icons";
+
+import {
+  Menu,
+  Users,
+  Building2,
+  Settings,
+  Eye,
+  BadgeCheck,
+  Briefcase,
+  LayoutDashboard,
+  Monitor,
+  ShieldCheck,
+  Building,
+} from "lucide-react";
 
 type Route = {
   href: string;
   label: string;
   active: boolean;
+  icon?: React.ReactNode;
 };
 
-export function MainNav({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLElement>) {
+export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElement>) {
   const pathname = usePathname();
   const params = useParams();
+  const router = useRouter();
+  const [loadingPath, setLoadingPath] = React.useState<string | null>(null);
 
-  const routes = [
+  // Main nav routes with icons
+  const routes: Route[] = [
     {
       href: `/${params.departmentId}`,
-      label: 'Overview',
-      active: pathname === `/${params.departmentId}`
+      label: "Overview",
+      active: pathname === `/${params.departmentId}`,
+      icon: <LayoutDashboard className="h-5 w-5 mr-1" />,
     },
     {
       href: `/${params.departmentId}/billboards`,
-      label: 'Covers',
-      active: pathname === `/${params.departmentId}/billboards`
+      label: "Covers",
+      active: pathname === `/${params.departmentId}/billboards`,
+      icon: <Monitor className="h-5 w-5 mr-1" />,
     },
     {
       href: `/${params.departmentId}/offices`,
-      label: 'Offices',
-      active: pathname === `/${params.departmentId}/offices`
+      label: "Offices",
+      active: pathname === `/${params.departmentId}/offices`,
+      icon: <Building2 className="h-5 w-5 mr-1" />,
     },
-    // {
-    //   href: `/${params.departmentId}/employee_type`,
-    //   label: 'Appointment',
-    //   active: pathname === `/${params.departmentId}/employee_type`
-    // },
-
-    // {
-    //   href: `/${params.departmentId}/eligibility`,
-    //   label: 'Eligibilty',
-    //   active: pathname === `/${params.departmentId}/eligibility`
-    // },
-    // {
-    //   href: `/${params.departmentId}/employees`,
-    //   label: 'Employees',
-    //   active: pathname === `/${params.departmentId}/employees`
-    // },
-
 
   ];
 
   const itemroutes = [
     {
       href: `/${params.departmentId}/view`,
-      label: 'View Employee',
+      label: "View Employee",
       active: pathname === `/${params.departmentId}/view`,
-      description: 'View the list of department employees.',
+      description: "View the list of department employees.",
+      icon: <Users className="h-5 w-5 mr-1" />,
     },
-
     {
       href: `/${params.departmentId}/employee_type`,
-      label: 'Appointment',
+      label: "Appointment",
       active: pathname === `/${params.departmentId}/employee_type`,
-      description: 'Manage employee appointment details.',
+      description: "Manage employee appointment details.",
+      icon: <Briefcase className="h-5 w-5 mr-1" />,
     },
-
     {
       href: `/${params.departmentId}/eligibility`,
-      label: 'Eligibility',
+      label: "Eligibility",
       active: pathname === `/${params.departmentId}/eligibility`,
-      description: 'View and update eligibility criteria for employees.',
+      description: "View and update eligibility criteria for employees.",
+      icon: <ShieldCheck className="h-5 w-5 mr-1" />,
     },
-
-
-
   ];
 
-  const activeRoute: Route | undefined = itemroutes.find(route => route.active);
+  const activeRoute = itemroutes.find((route) => route.active);
+
   return (
-    <nav
-      className={cn("flex items-center space-x-4 lg:space-x-6 ", className)}
-    >
 
-
-      {routes.map((route) => (
+    <nav className={cn("flex items-center space-x-2", className)} {...props}>
+      {/* Main routes */}
+      {routes.map(({ href, label, active, icon }) => (
         <Link
-          key={route.href}
-          href={route.href}
-          className={cn("text-sm font-medium transition-colors hover:text-primary ", route.active ? "text-black dark:text-white" : "text-muted-foreground")}
+          key={href}
+          href={href}
+          className={cn(
+            "inline-flex items-center px-3 py-2 border-b-2 transition-colors duration-300",
+            active
+              ? "border-green-600 text-green-700 font-semibold"
+              : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600"
+          )}
         >
-          {route.label}
+          {icon}
+          <span className="text-base">{label}</span>
         </Link>
       ))}
 
-
+      {/* Dropdown for Employees */}
       <NavigationMenu>
         <NavigationMenuList>
           <NavigationMenuItem>
             <NavigationMenuTrigger
-              className={cn("", activeRoute ? "text-black dark:text-white" : "text-muted-foreground")}>
-                {activeRoute ? activeRoute.label : 'Employees'}
+              className={cn(
+                "text-base font-semibold px-3 py-2 border-b-2 transition-colors duration-300",
+                activeRoute ? "border-green-600 text-green-700" : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600"
+              )}
+            >
+              {activeRoute ? activeRoute.label : "Employees"}
             </NavigationMenuTrigger>
-            <NavigationMenuContent>
-              <ul className="grid gap-3 p-6 md:w-[400px] lg:w-[500px] lg:grid-cols-[.75fr_1fr]">
+            <NavigationMenuContent className="rounded-md border border-gray-200 bg-white shadow-lg p-6 w-[500px] dark:bg-gray-900 dark:border-gray-700">
+              <ul className="grid grid-cols-[1fr_2fr] gap-6">
                 <li className="row-span-3">
                   <NavigationMenuLink asChild>
                     <Link
-                      className={cn(
-                        "flex h-full w-full select-none flex-col justify-end rounded-md bg-gradient-to-b from-muted/50 to-muted p-6 no-underline outline-none focus:shadow-md text-muted-foreground",
-                        pathname === `/${params.departmentId}/employees` ? "text-black dark:text-white" : "text-muted-foreground"
-                      )}
                       href={`/${params.departmentId}/employees`}
+                      className={cn(
+                        "flex h-auto flex-col justify-end rounded-md bg-gradient-to-b from-green-50 to-green-100 p-6 no-underline outline-none focus:ring-2 focus:ring-green-500 text-green-700 font-semibold",
+                        pathname === `/${params.departmentId}/employees` ? "ring-2 ring-green-500" : ""
+                      )}
                     >
-                      <PersonIcon />
-                      <div className="mb-2 mt-4 text-lg font-medium">
-                        Manage Employees
-                      </div>
-                      <p className="text-sm leading-tight text-muted-foreground">
-                        Browse and manage the list of department employees.
-                      </p>
+                      <div className="text-xl mb-1">Manage Employees</div>
+                      <p className="text-sm leading-tight">Browse and manage the list of department employees.</p>
                     </Link>
                   </NavigationMenuLink>
                 </li>
-                {itemroutes.map((component) => (
-                  <ListItem
-                    key={component.href}
-                    title={component.label}
-                    href={component.href}
-                    className={cn("text-sm font-medium transition-colors hover:text-primary ", component.active ? "text-black dark:text-white" : "text-muted-foreground")}
-                  >
-                    {component.description}
-                  </ListItem>
-                ))}
+
+                {itemroutes.map(({ href, label, active, description, icon }) => (
+  <ListItem
+    key={href}
+    href={href}
+    className={cn(
+      "text-sm font-medium transition-colors hover:text-green-600",
+      active ? "text-green-700 font-semibold" : "text-muted-foreground"
+    )}
+    title={""} // <-- keep this a string for tooltip
+  >
+    <div className="flex items-center">
+      {icon}
+      <span>{label}</span>
+    </div>
+    <p className="text-xs text-muted-foreground mt-1 whitespace-normal overflow-visible break-words">
+      {description}
+    </p>
+  </ListItem>
+))}
+
               </ul>
             </NavigationMenuContent>
           </NavigationMenuItem>
-
         </NavigationMenuList>
       </NavigationMenu>
 
+      {/* Settings link */}
+
       <Link
         href={`/${params.departmentId}/settings`}
-        className={cn("text-sm font-medium transition-colors hover:text-primary ", pathname === `/${params.departmentId}/settings` ? "text-black dark:text-white" : "text-muted-foreground")}
+        className={cn(
+          "flex item-center text-base font-medium px-3 py-2 border-b-2 transition-colors duration-300 ",
+          pathname === `/${params.departmentId}/settings`
+            ? "border-green-600 text-green-700 font-semibold"
+            : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600"
+        )}
+
       >
+        <Settings className="h-5 w-5 mr-2" />
         Settings
       </Link>
+
+
     </nav>
 
 
-  )
+  );
 }

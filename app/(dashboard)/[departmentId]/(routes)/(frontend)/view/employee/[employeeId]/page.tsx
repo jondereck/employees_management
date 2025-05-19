@@ -8,6 +8,7 @@ import Container from "../../components/ui/container";
 import EmployeeList from "../../components/ui/employee-list";
 import Info from "../../components/ui/info";
 import Footer from "../../components/footer";
+import CameraScannerWrapper from "@/components/camera-scanner-wrapper";
 
 export const revalidate = 0;
 
@@ -57,6 +58,7 @@ const EmployeeInvdividualPage = async ({
           {/* Optionally include related personnel */}
           {/* <EmployeeList title="Related Personnel" items={suggestedPeople} /> */}
         </div>
+        <CameraScannerWrapper/>
         <Footer/>
       </Container>
 

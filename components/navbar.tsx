@@ -1,12 +1,14 @@
 import { UserButton, auth } from "@clerk/nextjs";
-import { MainNav } from "./main-nav";
 import DepartmentSwitcher from "./department-switcher";
 import { redirect } from "next/navigation";
 import prismadb from "@/lib/prismadb";
-import MobileNavbar from "./mobile-sidebar";
+import MobileNavbar from "./mobile-sidebars-deleted";
 import Back from "./back";
 import Notifications from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/notifications";
 import { Employees } from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/types";
+import MobileSidebar from "./mobile-sidebar";
+import { MainNav } from "./main-nav";
+
 
 
 
@@ -32,10 +34,9 @@ export const Navbar = async () => {
   return (
     <div className="border-b ">
       <div className="flex items-center lg:justify-between px-4 my-5 md:my-2 h-16 ">
-        <MobileNavbar />
+        <MobileSidebar/>
         <Back />
         <div>
-
           <DepartmentSwitcher items={department} className="hidden md:flex px-2" />
         </div>
         <MainNav className="hidden md:flex px-2" />
