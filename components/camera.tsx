@@ -13,6 +13,17 @@ const CameraScanner = forwardRef((_, ref) => {
   const [loadingCamera, setLoadingCamera] = useState(true);
   const [loadingRedirect, setLoadingRedirect] = useState(false);
 
+  const askForCameraPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach((track) => track.stop()); // stop it immediately
+      console.log("Camera permission granted");
+      startScan(); // ✅ Start scanner AFTER permission is granted
+    } catch (err) {
+      console.error("Camera permission denied", err);
+      setError("Camera access denied. Please allow access to scan QR codes.");
+    }
+  };
   
   useEffect(() => {
     codeReader.current = new BrowserQRCodeReader();
@@ -99,9 +110,17 @@ const CameraScanner = forwardRef((_, ref) => {
     startScan();
   }, []);
 
+
   
   return (
     <>
+    <button
+  onClick={askForCameraPermission}
+  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg shadow-lg"
+>
+  Allow Camera & Start Scanning
+</button>
+
     {loadingCamera && (
   <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-80 z-20">
     <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
