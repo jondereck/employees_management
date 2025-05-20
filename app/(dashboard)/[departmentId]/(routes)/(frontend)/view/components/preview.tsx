@@ -25,6 +25,7 @@ const PreviewModal = () => {
         </div>
         <div className="sm:colspan-1 md:col-span-2 lg:col-span-2">
           <Info data={employee}/>
+          
         </div>
       </div>
     </Modal>

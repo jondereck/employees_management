@@ -5,6 +5,7 @@ import { ScanLine } from "lucide-react";
 import Modal from "./ui/modal";
 import CameraScanner from "./camera";
 import { Button } from "./ui/button";
+import ModalCamera from "./ui/modal-camera";
 
 
 const CameraScannerWrapper = () => {
@@ -43,7 +44,7 @@ const CameraScannerWrapper = () => {
       </div>
 
       {/* Modal with Fullscreen Scanner */}
-      <Modal
+      <ModalCamera
         title=""
         description=""
         isOpen={isOpen}
@@ -67,7 +68,7 @@ const CameraScannerWrapper = () => {
 
           <CameraScanner ref={scannerRef} />
         </div>
-      </Modal>
+      </ModalCamera>
     </>
   );
 };

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./dialog";
 
-interface ModalProps {
+interface ModalCameraProps {
   title: string;
   description: string;
   isOpen: boolean;
@@ -11,13 +11,13 @@ interface ModalProps {
   children?: React.ReactNode
 }
 
-const Modal = ({
+const ModalCamera = ({
   title,
   description,
   isOpen,
   onClose,
   children
-}: ModalProps) => {
+}: ModalCameraProps) => {
 
   const [isMounted, setIsMounted] = useState(false);
 
@@ -35,7 +35,7 @@ const Modal = ({
   }
   return (
     <Dialog open={isOpen} onOpenChange={onChange}>
-     <DialogContent className="p-4 sm:max-w-[75vw] sm:max-h-[75vh] w-full h-auto">
+     <DialogContent className="p-4 sm:max-w-[75vw] sm:max-h-[75vh] w-full h-full">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -50,4 +50,4 @@ const Modal = ({
   );
 }
 
-export default Modal;
+export default ModalCamera;

@@ -67,7 +67,7 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
           tabIndex={0}
           onKeyDown={(e) => e.key === "Enter" && handleOpen()}
         >
-          <QRCodeCanvas value={qrValue} size={128} />
+          <QRCodeCanvas value={qrValue} size={100} />
         </div>
       </ActionTooltip>
 

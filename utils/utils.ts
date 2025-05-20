@@ -342,3 +342,4 @@ export const capitalizeWordsIgnoreSpecialChars = (input: string) => {
       wordWithoutSpecialChars.slice(1).toLowerCase();
   });
 };
+
