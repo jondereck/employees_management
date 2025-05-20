@@ -36,3 +36,27 @@ export function calculateAge(birthDateString: string): number {
   return isBirthdayPassed ? diffInYears : diffInYears - 1;
 }
 
+
+export async function convertImageToPng(url: string): Promise<HTMLCanvasElement> {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.src = url;
+
+  await new Promise((res, rej) => {
+    img.onload = res;
+    img.onerror = rej;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not get 2D context from canvas");
+
+  ctx.drawImage(img, 0, 0);
+
+
+  return canvas
+}
+
+
