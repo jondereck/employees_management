@@ -29,6 +29,7 @@ import {
   Building,
 } from "lucide-react";
 import LoadingSkeleton from "./loading-state";
+import Loading from "@/app/loading";
 
 type Route = {
   href: string;
@@ -112,7 +113,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
 
       {loading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-black/80">
-          <LoadingSkeleton />
+          <Loading />
         </div>
       )}
       <nav className={cn("flex items-center space-x-2", className)} {...props}>

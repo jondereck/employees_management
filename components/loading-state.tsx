@@ -1,12 +1,71 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 
+const quotes = [
+  "Good things take time...",
+  "Hang tight, magic is loading...",
+  "Almost there...",
+  "Fetching greatness...",
+  "Just a moment more...",
+  "Powering up the awesomeness...",
+];
 
+function LoadingDotsWithTypewriter({ text }: { text: string }) {
+  const [visibleText, setVisibleText] = useState("");
 
-import { cn } from "@/lib/utils"; // Optional: for conditional class merging
-import React from "react";
+  useEffect(() => {
+    let index = 0;
 
-export default function LoadingSkeleton({ className }: { className?: string }) {
+    const typeInterval = setInterval(() => {
+      setVisibleText((prev) => {
+        if (index >= text.length) {
+          clearInterval(typeInterval);
+          return prev;
+        }
+        const next = text.slice(0, index + 1); // ✅ show correct characters in order
+        index++;
+        return next;
+      });
+    }, 40); // type speed
+
+    return () => clearInterval(typeInterval);
+  }, [text]);
+
+const [dots, setDots] = useState("");
+
+  useEffect(() => {
+    const dotInterval = setInterval(() => {
+      setDots((prev) => (prev.length < 3 ? prev + "." : ""));
+    }, 400);
+    return () => clearInterval(dotInterval);
+  }, []);
+
+  return (
+    <span className="tracking-wide uppercase animate-pulse">
+      {visibleText}
+      {dots}
+    </span>
+  );
+}
+
+export default function Loading({ className }: { className?: string }) {
+  const [quoteIndex, setQuoteIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setQuoteIndex((prev) => (prev + 1) % quotes.length);
+    }, 3000); // Change quote every 4 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "vibrate" in navigator) {
+      navigator.vibrate?.(100); // optional: small vibration
+    }
+  }, []);
+
   return (
     <div
       className={cn(
@@ -14,7 +73,7 @@ export default function LoadingSkeleton({ className }: { className?: string }) {
         className
       )}
     >
-      {/* Logo or icon loader */}
+      {/* Spinner */}
       <div className="relative">
         <div className="h-16 w-16 rounded-full border-4 border-green-500 border-t-transparent animate-spin"></div>
         <div className="absolute inset-0 flex items-center justify-center text-green-700 font-bold text-xl">
@@ -22,24 +81,17 @@ export default function LoadingSkeleton({ className }: { className?: string }) {
         </div>
       </div>
 
-      {/* Text loading shimmer */}
+      {/* Animated Text */}
       <div className="text-center">
         <p className="text-sm text-muted-foreground">Please wait...</p>
-        <p className="mt-1 text-green-600 text-xs animate-pulse tracking-wide uppercase">
-          Loading your next screen
+        <p className="mt-1 text-green-600 text-xs">
+          <LoadingDotsWithTypewriter text="Loading your next screen" />
         </p>
+        <p className="mt-2 text-xs text-muted-foreground italic">{quotes[quoteIndex]}</p>
       </div>
     </div>
   );
 }
-
-
-
-
-
-
-
-
 
 
 

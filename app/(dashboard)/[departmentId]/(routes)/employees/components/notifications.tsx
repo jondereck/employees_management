@@ -32,6 +32,7 @@ const Notifications = ({ data }: NotificationsProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnniversaryModalOpen, setIsAnniversaryModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isNotification,setNotification ] = useState(true);
 
 
   useEffect(() => {
@@ -145,6 +146,7 @@ const Notifications = ({ data }: NotificationsProps) => {
                       {celebrantsToday.map((emp, index) => {
                         const birthday = addOneDay(new Date(emp.birthday));
                         const formatted = getFormattedDate(birthday);
+                        setNotification(false);
                         const handleOpenPreview = () => usePreviewModal.getState().onOpen(emp);
 
                         return (
