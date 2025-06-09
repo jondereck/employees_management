@@ -58,7 +58,7 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   };
 
   return (
-    <div>
+ <div className="hidden md:block">
       <ActionTooltip label="Click to enlarge" side="top" align="center">
         <div
           className="my-4 flex flex-col items-start space-y-2 cursor-pointer"
