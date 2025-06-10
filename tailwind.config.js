@@ -6,7 +6,7 @@ module.exports = {
     './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
-	],
+  ],
   theme: {
     container: {
       center: true,
@@ -53,10 +53,19 @@ module.exports = {
         gradientColorStops: (theme) => ({
           'gold': '#ffd700',
         }),
+        keyframes: {
+          scan: {
+            '0%': { top: '0%' },
+            '100%': { top: '100%' },
+          },
+        },
+        animation: {
+          scan: 'scan 2s linear infinite',
+        },
       },
       fontFamily: {
         alex: ['Alex Brush'],
-        arizona:['Arizonia']
+        arizona: ['Arizonia']
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -80,10 +89,10 @@ module.exports = {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
       },
-    
+
     },
   },
-  
+
   plugins: [require("tailwindcss-animate")],
   variants: {
     extend: {

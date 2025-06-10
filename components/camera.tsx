@@ -12,6 +12,10 @@ const CameraScanner = forwardRef((_, ref) => {
   const [error, setError] = useState<string | null>(null);
   const [loadingCamera, setLoadingCamera] = useState(true);
   const [loadingRedirect, setLoadingRedirect] = useState(false);
+  const [showScanningHint, setShowScanningHint] = useState(false);
+  const [scanStartTime, setScanStartTime] = useState<number | null>(null);
+
+
 
 
   useEffect(() => {
@@ -24,7 +28,7 @@ const CameraScanner = forwardRef((_, ref) => {
     };
   }, []);
 
-  
+
   const handleTryAgain = () => {
     setError(null);
     setQrResult(null);
@@ -35,36 +39,44 @@ const CameraScanner = forwardRef((_, ref) => {
     setError(null);
     setQrResult(null);
     setScanning(true);
-    setLoadingCamera(true); // start loading spinner
+    setLoadingCamera(true);
+    setShowScanningHint(true); // show scanning hint when starting
+
+    // Then after delay logic, add a timer to hide hint after a few seconds
+    setTimeout(() => {
+      setShowScanningHint(false); // hide after 5s or adjust as needed
+    }, 5000);
 
     if (!videoRef.current || !codeReader.current) {
       setError("No video or QR code reader available");
       setScanning(false);
-      setLoadingCamera(false); // stop loading here
+      setLoadingCamera(false);
       return;
     }
 
     try {
       const videoInputs = await BrowserQRCodeReader.listVideoInputDevices();
 
-      // Try to find a rear camera
       let selectedDeviceId = videoInputs.find((device) =>
         device.label.toLowerCase().includes("back") ||
         device.label.toLowerCase().includes("rear")
       )?.deviceId;
 
-      // If not found, just use the first one
       if (!selectedDeviceId && videoInputs.length > 0) {
         selectedDeviceId = videoInputs[0].deviceId;
       }
 
-
       if (!selectedDeviceId) {
         setError("No camera device found");
         setScanning(false);
-        setLoadingCamera(false); // stop loading here
+        setLoadingCamera(false);
         return;
       }
+
+      const now = Date.now();
+      setScanStartTime(now);
+
+      let scanSucceeded = false;
 
       const controls = await codeReader.current.decodeFromVideoDevice(
         selectedDeviceId,
@@ -72,36 +84,49 @@ const CameraScanner = forwardRef((_, ref) => {
         (result, err) => {
           if (result) {
             const text = result.getText();
-      
             if (text.startsWith("https://hrps.vercel.app/")) {
-              controls.stop(); // only stop when valid
-              setQrResult(text);
+              scanSucceeded = true;
+              controls.stop(); // stop only on valid code
+              if (navigator.vibrate) {
+                navigator.vibrate([100, 50, 100]); // vibrate-pause-vibrate
+              }
+              // setQrResult(text);
               setScanning(false);
-              window.location.href = text;
+              setLoadingRedirect(true);
+
+              setTimeout(() => {
+                window.location.href = text;
+              }, 1500); // 1.5 seconds delay
             } else {
-              // don’t stop, show error and let user continue
               setError("Scanned QR code is not from a trusted source.");
             }
           }
-      
+
           if (err && !(err.name === "NotFoundException")) {
-            console.error("QR scan error:", err);
-            setError("An error occurred while scanning.");
+            const now = Date.now();
+            const gracePeriod = 3000;
+
+            if (!scanStartTime || now - scanStartTime > gracePeriod) {
+              console.error("QR scan error:", err);
+              setError("An error occurred while scanning.");
+            } else {
+              console.warn("Ignored early scan error:", err.message);
+            }
           }
+
         }
       );
-      
 
       controlsRef.current = controls;
-      setLoadingCamera(false);  // stop loading here after camera started
+      setLoadingCamera(false);
 
     } catch (e) {
+      console.error("Camera error:", e);
       setError("Failed to access camera or scan QR code.");
       setScanning(false);
-      setLoadingCamera(false);  // stop loading here on error
+      setLoadingCamera(false);
     }
   };
-
 
 
   const stopScan = () => {
@@ -119,7 +144,7 @@ const CameraScanner = forwardRef((_, ref) => {
     startScan();
   }, []);
 
-  
+
 
   return (
     <>
@@ -141,12 +166,12 @@ const CameraScanner = forwardRef((_, ref) => {
       </div>
       <div className="absolute inset-0 pointer-events-none">
         {/* Top overlay */}
-        <div className="absolute top-0 left-0 right-0" style={{ height: '25%' }} >
+        <div className="absolute top-0 left-0 right-0" style={{ height: '32%' }} >
           <div className="w-full h-full bg-black opacity-60" />
         </div>
 
         {/* Bottom overlay */}
-        <div className="absolute bottom-0 left-0 right-0" style={{ height: '25%' }}>
+        <div className="absolute bottom-0 left-0 right-0" style={{ height: '32%' }}>
           <div className="w-full h-full bg-black opacity-60" />
         </div>
 
@@ -154,8 +179,8 @@ const CameraScanner = forwardRef((_, ref) => {
         <div
           className="absolute"
           style={{
-            top: '25%',
-            bottom: '25%',
+            top: '32%',
+            bottom: '32%',
             left: 0,
             width: '12.5%',
             backgroundColor: 'rgba(0,0,0,0.6)',
@@ -166,16 +191,30 @@ const CameraScanner = forwardRef((_, ref) => {
         <div
           className="absolute"
           style={{
-            top: '25%',
-            bottom: '25%',
+            top: '32%',
+            bottom: '32%',
             right: 0,
             width: '12.5%',
             backgroundColor: 'rgba(0,0,0,0.6)',
           }}
         />
 
-        {/* Guide Box (centered) */}
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[60vw] h-[35vh] border-4 border-green-500 rounded-md z-10" />
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-green-400 animate-scan" />
+        </div>
+
+
+        {/* Corner markers instead of full border */}
+        <div className="absolute top-1/2 left-1/2 w-[60vw] h-[60vw] -translate-x-1/2 -translate-y-1/2 z-10">
+          {/* Top-left */}
+          <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-green-500 rounded-tl-md" />
+          {/* Top-right */}
+          <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-green-500 rounded-tr-md" />
+          {/* Bottom-left */}
+          <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-green-500 rounded-bl-md" />
+          {/* Bottom-right */}
+          <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-green-500 rounded-br-md" />
+        </div>
 
 
 
@@ -203,23 +242,27 @@ const CameraScanner = forwardRef((_, ref) => {
         </div>
       )}
 
-{error && (
-  <div className="fixed bottom-32 left-1/2 max-w-xs transform -translate-x-1/2 rounded-lg bg-red-50 p-4 text-center text-sm font-medium text-red-700 shadow-md ring-1 ring-red-200 transition-opacity duration-300 z-50">
-    <p>{error}</p>
-    <button
-      onClick={handleTryAgain}
-      className="mt-2 inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-1.5 text-white text-xs font-medium hover:bg-red-700 transition"
-    >
-      Try Again
-    </button>
-  </div>
-)}
+      {error && (
+        <div className="fixed bottom-32 left-1/2 max-w-xs transform -translate-x-1/2 rounded-lg bg-red-50 p-4 text-center text-sm font-medium text-red-700 shadow-md ring-1 ring-red-200 transition-opacity duration-300 z-50">
+          <p>{error}</p>
+          <button
+            onClick={handleTryAgain}
+            className="mt-2 inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-1.5 text-white text-xs font-medium hover:bg-red-700  hover:scale-105 transition-transform"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
 
       {loadingRedirect && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-70">
-          <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin" />
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin" />
+            <p className="text-white text-sm">Valid QR detected, redirecting...</p>
+          </div>
         </div>
       )}
+
 
     </>
   );
