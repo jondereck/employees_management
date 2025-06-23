@@ -19,7 +19,7 @@ export const UpcomingBirthdays = ({
   celebrantsUpcoming,
   onOpenPreview,
   closeParentModal,
-  limit = 5,
+  limit = 8,
 }: UpcomingBirthdaysProps) => {
   const handleOpen = (emp: EmployeesColumn) => {
     onOpenPreview?.(emp);

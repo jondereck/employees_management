@@ -89,7 +89,7 @@ const Notifications = ({ data }: NotificationsProps) => {
       // ✅ Add 1 day to the birthday before extracting month and day
       dob.setDate(dob.getDate());
 
-      const empMonthDay = `${dob.getMonth() + 1}-${dob.getDate()}`;
+      const empMonthDay = `${dob.getMonth() }-${dob.getDate()}`;
 
       return empMonthDay === todayMonthDay && !emp.isArchived;
     });
@@ -105,7 +105,7 @@ const Notifications = ({ data }: NotificationsProps) => {
 
       // If birthday has already passed this year, shift to next year
       if (thisYearBirthday < today) {
-        thisYearBirthday.setFullYear(today.getFullYear() + 1);
+        thisYearBirthday.setFullYear(today.getFullYear());
       }
 
       const diffTime = thisYearBirthday.getTime() - today.getTime();
@@ -163,7 +163,7 @@ const Notifications = ({ data }: NotificationsProps) => {
                         usePreviewModal.getState().onOpen(emp);
                       }}
                       closeParentModal={closeModal}
-                      limit={5}
+                      limit={8}
                     />
                   </div>
                 </TabsContent>

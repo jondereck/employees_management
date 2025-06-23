@@ -6,7 +6,7 @@ const ServiceWorkerProvider = () => {
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js?v=2').then((registration) => {
+        navigator.serviceWorker.register('my-nextjs-pwa-cache-v3').then((registration) => {
           console.log('Service Worker registered with scope:', registration.scope);
         }).catch((error) => {
           console.error('Service Worker registration failed:', error);
