@@ -1,59 +1,72 @@
-const CACHE_NAME = 'my-nextjs-pwa-cache-v1';
+const CACHE_NAME = 'my-nextjs-pwa-cache-v2';
 
+const BASE_PATH = '/f622687f-79c6-44e8-87c6-301a257582b2';
 
 const urlsToCache = [
-  '/view/page',
-  '/view/offices/484f6b4c-b65d-4a73-9b0f-8b2f35a43090',
-  '/view/offices/',
-  '/f622687f-79c6-44e8-87c6-301a257582b2/employees' 
- 
-  // Add other specific URLs you want to cache
+  `${self.location.origin}${BASE_PATH}`,
+   `${self.location.origin}${BASE_PATH}/view`,
+   `${self.location.origin}${BASE_PATH}/employees`,
 ];
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    fetch(event.request)
-      .then((networkResponse) => {
-        // Save updated response in cache
-        return caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, networkResponse.clone());
-          return networkResponse;
-        });
-      })
-      .catch(() => {
-        // If network fails, use cached version
-        return caches.match(event.request);
-      })
+
+// ✅ Install: pre-cache
+self.addEventListener('install', (event) => {
+  self.skipWaiting(); // Activate new worker immediately
+
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const url of urlsToCache) {
+        try {
+          await cache.add(url);
+        } catch (err) {
+          console.warn(`❌ Failed to cache: ${url}`, err);
+        }
+      }
+    })
   );
 });
 
+// ✅ Activate: take control of all clients
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
+});
+
+// ✅ Fetch handler
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  if (event.request.method !== 'GET') return;
+
+  const request = event.request;
+  const url = new URL(request.url);
 
   if (url.pathname.includes('/employees')) {
-    // Network-first for employee data
     event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
+      fetch(request)
+        .then((response) => {
           return caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, networkResponse.clone());
-            return networkResponse;
+            try {
+              cache.put(request, response.clone());
+            } catch (err) {
+              console.warn('⚠️ Failed to cache /employees request:', err);
+            }
+            return response;
           });
         })
-        .catch(() => caches.match(event.request))
+        .catch(() => caches.match(request))
     );
   } else {
-    // Default: try cache first
     event.respondWith(
-      caches.match(event.request).then((response) => {
-        return (
-          response ||
-          fetch(event.request).then((networkResponse) => {
-            return caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse.clone());
-              return networkResponse;
-            });
-          })
-        );
+      caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
+
+        return fetch(request).then((response) => {
+          return caches.open(CACHE_NAME).then((cache) => {
+            try {
+              cache.put(request, response.clone());
+            } catch (err) {
+              console.warn('⚠️ Failed to cache request:', err);
+            }
+            return response;
+          });
+        });
       })
     );
   }

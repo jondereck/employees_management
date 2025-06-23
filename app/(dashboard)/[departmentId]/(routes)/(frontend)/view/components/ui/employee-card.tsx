@@ -59,6 +59,7 @@ const EmployeeCard = ({
       className={cn(`bg-white group cursor-pointer rounded-xl border p-3 space-y-4 `, data.isHead ? 'border ' : '')}>
       <div className="aspect-square rounded-xl bg-gray-100 relative">
         <Image
+        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           src={data?.images?.[0]?.url}
           fill
           alt="Image"

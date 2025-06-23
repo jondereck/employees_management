@@ -119,7 +119,6 @@ const CameraScanner = forwardRef((_, ref) => {
 
       controlsRef.current = controls;
       setLoadingCamera(false);
-
     } catch (e) {
       console.error("Camera error:", e);
       setError("Failed to access camera or scan QR code.");

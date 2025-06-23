@@ -168,6 +168,7 @@ const Gallery = ({
                     width={64}
                     height={64}
                     className="object-cover w-full h-full"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   />
                 </div>
               )}
@@ -183,6 +184,7 @@ const Gallery = ({
             <div className="relative w-full max-w-sm mx-auto aspect-square overflow-hidden rounded-lg border bg-gray-100">
               <Image
                 fill
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 src={image.url}
                 alt="Main Image"
                 className={cn(
@@ -193,6 +195,7 @@ const Gallery = ({
               {/* Logo */}
               <div className="absolute top-2 left-2 z-10">
                 <Image
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   src="https://res.cloudinary.com/ddzjzrqrj/image/upload/v1702523620/Lingayen-3-removebg-preview_lmhivo.png"
                   alt="Company Logo"
                   width={32}

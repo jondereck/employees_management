@@ -54,6 +54,7 @@ const ImageUpload = ({
                 </Button>
               </div>
               <Image
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 fill
                 className="object-cover"
                 alt="image"
@@ -65,6 +66,7 @@ const ImageUpload = ({
           : (
             <div className="relative w-[200px] h-[200px] rounded-md overflow-hidden">
               <Image 
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 fill
                 className="object cover"
                 alt="default image"
