@@ -87,9 +87,9 @@ const Notifications = ({ data }: NotificationsProps) => {
       if (isNaN(dob.getTime())) return false;
 
       // ✅ Add 1 day to the birthday before extracting month and day
-      dob.setDate(dob.getDate());
+      dob.setDate(dob.getDate() + 1);
 
-      const empMonthDay = `${dob.getMonth() }-${dob.getDate()}`;
+      const empMonthDay = `${dob.getMonth() + 1}-${dob.getDate()}`;
 
       return empMonthDay === todayMonthDay && !emp.isArchived;
     });
