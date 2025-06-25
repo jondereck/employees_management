@@ -1,27 +1,27 @@
 const CACHE_NAME = 'my-nextjs-pwa-cache-v3'; // ⬅️ bump version when changing URLs
 
-const BASE_PATH = '/f622687f-79c6-44e8-87c6-301a257582b2';
-const urlsToCache = [
-  // `${self.location.origin}${BASE_PATH}/view`,
-  // `${self.location.origin}${BASE_PATH}/employees`,
-];
 
-// ✅ Install: Pre-cache essential assets
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
+// const urlsToCache = [
+//   `${self.location.origin}/`,
+  
+// ];
 
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      for (const url of urlsToCache) {
-        try {
-          await cache.add(url);
-        } catch (err) {
-          console.warn(`❌ Failed to cache: ${url}`, err);
-        }
-      }
-    })
-  );
-});
+// // ✅ Install: Pre-cache essential assets
+// self.addEventListener('install', (event) => {
+//   self.skipWaiting();
+
+//   event.waitUntil(
+//     caches.open(CACHE_NAME).then(async (cache) => {
+//       for (const url of urlsToCache) {
+//         try {
+//           await cache.add(url);
+//         } catch (err) {
+//           console.warn(`❌ Failed to cache: ${url}`, err);
+//         }
+//       }
+//     })
+//   );
+// });
 
 // ✅ Activate: Take control and delete old caches
 self.addEventListener('activate', (event) => {
@@ -58,24 +58,29 @@ self.addEventListener('fetch', (event) => {
 
 
   // Optionally: Skip caching API or auth routes
-  if (url.pathname.includes('/api') || url.pathname.includes('/auth')) {
+   if (
+    request.url.includes('/api') ||
+    request.url.includes('clerk') ||
+    request.credentials === 'include'
+  ) {
     return;
   }
 
   // Employees: network-first
-  if (url.pathname.includes('/employees')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          return caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, response.clone());
-            return response;
-          });
-        })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
+if (url.pathname.startsWith('/view') || url.pathname.includes('employee')) {
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        return caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request, response.clone());
+          return response;
+        });
+      })
+      .catch(() => caches.match(request))
+  );
+  return;
+}
+
 
   // Everything else: cache-first
   event.respondWith(
