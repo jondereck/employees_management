@@ -87,9 +87,7 @@ const CameraScanner = forwardRef((_, ref) => {
             if (text.startsWith("https://hrps.vercel.app/")) {
               scanSucceeded = true;
               controls.stop(); // stop only on valid code
-              if (navigator.vibrate) {
-                navigator.vibrate([100, 50, 100]); // vibrate-pause-vibrate
-              }
+       
               // setQrResult(text);
               setScanning(false);
               setLoadingRedirect(true);

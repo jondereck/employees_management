@@ -36,10 +36,12 @@ const Filter = ({
   const router = useRouter();
 
   const isLoading = useLoadingStore((state) => state.isLoading);
+  const setLoading = useLoadingStore((state) => state.setLoading);
 
   const selectedValues = searchParams.getAll(valueKey);
 
   const onClick = (id: string) => {
+     setLoading(true); 
     const current = qs.parse(searchParams.toString());
 
     let updatedValues;
@@ -94,7 +96,7 @@ const Filter = ({
                 className={cn(
                   "rounded-md text-sm font-bold text-gray-800 p-2 bg-white border border-gray-300",
                   selectedValues.includes(filter.id) && "bg-black text-white",
-                  isLoading && "opacity-50 pointer-events-none cursor-not-allowed"
+                  isLoading  && "opacity-50 pointer-events-none cursor-not-allowed"
                 )}
               >
                 {filter.name} ({countMap[filter.id] || 0})

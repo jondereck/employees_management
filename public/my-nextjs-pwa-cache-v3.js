@@ -22,8 +22,7 @@ const CACHE_NAME = 'my-nextjs-pwa-cache-v3'; // ⬅️ bump version when changin
 //     })
 //   );
 // });
-
-// ✅ Activate: Take control and delete old caches
+// ✅ Activate: Delete old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
@@ -31,7 +30,7 @@ self.addEventListener('activate', (event) => {
       await Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('🗑 Deleting old cache:', key);
+            console.log('🧹 Deleting old cache:', key);
             return caches.delete(key);
           }
         })
@@ -41,65 +40,94 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// ✅ Fetch: Cache-first with network fallback
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+// ✅ Skip waiting immediately (optional, forces update)
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
 
-  const request = event.request;
+// ✅ Fetch: Cache-first with Clerk/auth safety
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
   const url = new URL(request.url);
 
+  // Skip non-GET requests
+  if (request.method !== 'GET') return;
+
+  // ✅ Skip sensitive or auth-related requests
+  const skipCache = [
+    '/api',
+    '/auth',
+    '/sign-in',
+    '/sign-up',
+    '/_clerk',
+    'clerk',
+    'supabase',
+    'vercel',
+  ].some((skip) => request.url.includes(skip));
 
   if (
-    request.method !== 'GET' ||
-    url.protocol !== 'http:' && url.protocol !== 'https:'
-  ) {
-    return;
-  }
-
-
-  // Optionally: Skip caching API or auth routes
-   if (
-    request.url.includes('/api') ||
-    request.url.includes('clerk') ||
+    skipCache ||
     request.credentials === 'include'
   ) {
     return;
   }
 
-  // Employees: network-first
-if (url.pathname.startsWith('/view') || url.pathname.includes('employee')) {
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        return caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, response.clone());
-          return response;
-        });
-      })
-      .catch(() => caches.match(request))
-  );
-  return;
-}
-
-
-  // Everything else: cache-first
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-
-      return fetch(request)
+  // ✅ Employees: Network-first strategy
+  if (url.pathname.startsWith('/view') || url.pathname.includes('employee')) {
+    event.respondWith(
+      fetch(request)
         .then((response) => {
-          return caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, response.clone());
-            return response;
-          });
+          if (response && response.ok) {
+            return caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, response.clone());
+              return response;
+            });
+          }
+          return response;
         })
-        .catch(() => {
-          return new Response('⚠️ Offline or not cached', {
-            status: 503,
-            headers: { 'Content-Type': 'text/plain' },
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // ✅ Everything else: Cache-first strategy
+ event.respondWith(
+  caches.match(request).then((cached) => {
+    if (cached) return cached;
+
+    return fetch(request)
+      .then((response) => {
+        // ✅ Must clone before any usage
+        const clonedResponse = response.clone();
+
+        // Skip bad responses
+        if (
+          !response || 
+          response.status !== 200 || 
+          response.type === 'opaque'
+        ) {
+          return response;
+        }
+
+        // Avoid caching private responses
+        const cacheControl = response.headers.get('Cache-Control') || '';
+        const isPrivate = cacheControl.includes('no-store') || cacheControl.includes('private');
+
+        if (!isPrivate) {
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, clonedResponse);
           });
+        }
+
+        return response;
+      })
+      .catch(() => {
+        return new Response('⚠️ Offline or not cached', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain' },
         });
-    })
-  );
+      });
+  })
+);
+
 });

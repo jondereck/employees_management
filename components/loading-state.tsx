@@ -60,11 +60,7 @@ export default function Loading({ className }: { className?: string }) {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (typeof window !== "undefined" && "vibrate" in navigator) {
-      navigator.vibrate?.(100);
-    }
-  }, []);
+
 
   return (
     <div

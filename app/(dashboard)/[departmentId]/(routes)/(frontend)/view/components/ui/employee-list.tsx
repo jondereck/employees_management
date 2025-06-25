@@ -6,6 +6,7 @@ import EmployeeCard from "./employee-card";
 import NoResults from "./no-results";
 import PaginationControls from "@/components/ui/pagination-control";
 import { Separator } from "@/components/ui/separator";
+import useLoadingStore from "@/hooks/use-loading";
 
 
 const EmployeePerPage = 15;
@@ -22,6 +23,8 @@ const EmployeeList = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [displayedEmployee, setDisplayedEmployee] = useState<Employees[]>([]);
   const totalPages = Math.ceil(items.length / EmployeePerPage);
+  const isLoading = useLoadingStore((state) => state.isLoading);
+  const setLoading = useLoadingStore((state) => state.setLoading);
 
 
   const handlePageChange = (newPage: number) => {
@@ -45,7 +48,7 @@ const EmployeeList = ({
     {displayedEmployee.length === 0 && <NoResults />}
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
       {displayedEmployee.map((item) => (
-        <EmployeeCard key={item.id} data={item} />
+        <EmployeeCard key={item.id} data={item} isDisabled={isLoading}/>
       ))}
     </div>
 
