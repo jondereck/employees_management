@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { cn } from "@/lib/utils";
 import Button2 from "../../../components/ui/button";
+import useLoadingStore from "@/hooks/use-loading";
 
 
 interface FilterProps {
@@ -34,6 +35,7 @@ const Filter = ({
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  const isLoading = useLoadingStore((state) => state.isLoading);
 
   const selectedValues = searchParams.getAll(valueKey);
 
@@ -88,10 +90,16 @@ const Filter = ({
             <div key={filter.id} className="flex items-center">
               <Button2
                 onClick={() => onClick(filter.id)}
-                className={cn("rounded-md text-sm font-bold text-gray-800 p-2 bg-white border border-gray-300", selectedValues.includes(filter.id) && "bg-black text-white")}
+                disabled={isLoading}
+                className={cn(
+                  "rounded-md text-sm font-bold text-gray-800 p-2 bg-white border border-gray-300",
+                  selectedValues.includes(filter.id) && "bg-black text-white",
+                  isLoading && "opacity-50 pointer-events-none cursor-not-allowed"
+                )}
               >
-                {filter.name} ( {countMap[filter.id] || 0}  )
+                {filter.name} ({countMap[filter.id] || 0})
               </Button2>
+
 
             </div>
           ))}

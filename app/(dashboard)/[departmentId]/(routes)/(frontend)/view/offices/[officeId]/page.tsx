@@ -16,6 +16,7 @@ import MobileFilter from "./components/mobile-filter";
 import { getEligibilityCountsByOffice } from "../../actions/get-eligibility-by-offices";
 import EmployeeList from "./components/employee-list-view";
 import { getEmployeeCountsByOffice } from "../../actions/get-employee-counts-office";
+import SetLoadingClient from "./components/set-loading-client";
 
 
 
@@ -37,6 +38,8 @@ const OfficesPage = async ({
   searchParams
 }: OfficesPageProps) => {
   const officeId = params.officeId;
+
+
   const employeeCounts = await getEmployeeCountsByOffice(officeId);
   const totalEmployeeCount = employeeCounts.find((count) => count.id === officeId)?.count || 0;
 
@@ -67,7 +70,7 @@ const OfficesPage = async ({
         <div className="mx-8 mb-5 lg:text-2xl text-sm flex font-semibold border-b-2 ">
           {/* Display total employee count */}
           <p className="font-bold">
-              Total Employee(s): {typeof totalEmployeeCount === 'object' ? totalEmployeeCount._all : totalEmployeeCount}
+            Total Employee(s): {typeof totalEmployeeCount === 'object' ? totalEmployeeCount._all : totalEmployeeCount}
           </p>
         </div>
 

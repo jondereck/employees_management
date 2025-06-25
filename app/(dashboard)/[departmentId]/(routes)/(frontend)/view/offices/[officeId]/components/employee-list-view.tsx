@@ -4,6 +4,7 @@ import { Employees } from "../../../types";
 import { useEffect, useState } from "react";
 import NoResults from "../../../components/ui/no-results";
 import EmployeeCard from "../../../components/ui/employee-card";
+import useLoadingStore from "@/hooks/use-loading";
 
 
 const EmployeePerPage = 12;
@@ -18,24 +19,30 @@ const EmployeeList = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [displayedEmployee, setDisplayedEmployee] = useState<Employees[]>([]);
   const totalPages = Math.ceil(items.length / EmployeePerPage);
+const isLoading = useLoadingStore((state) => state.isLoading);
+const setLoading = useLoadingStore((state) => state.setLoading);
+
 
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
   };
+useEffect(() => {
+  const employeeSort = [...items].sort((a, b) => (b.isHead ? 1 : 0) - (a.isHead ? 1 : 0));
+  const startIdx = (currentPage - 1) * EmployeePerPage;
+  const endIdx = startIdx + EmployeePerPage;
+  const employeeForPage = employeeSort.slice(startIdx, endIdx);
+  setDisplayedEmployee(employeeForPage);
 
-  useEffect(() => {
-    const employeeSort = [...items].sort((a, b) => (b.isHead ? 1 : 0) - (a.isHead ? 1 : 0));
-  
-    // Calculate start and end indices based on currentPage
-    const startIdx = (currentPage - 1) * EmployeePerPage;
-    const endIdx = startIdx + EmployeePerPage;
-  
-    // Slice items to get displayed employees for the current page
-    const employeeForPage = employeeSort.slice(startIdx, endIdx);
-    setDisplayedEmployee(employeeForPage);
-  
-  }, [currentPage, items]);
+  // 🧠 This sets loading to false after employees are displayed
+  const timer = setTimeout(() => {
+    setLoading(false);
+  }, 200); // give short delay
+
+  return () => clearTimeout(timer);
+}, [currentPage, items]);
+
+
 
   return (
 
@@ -46,12 +53,11 @@ const EmployeeList = ({
           <EmployeeCard
             key={item.id}
             data={item}
+            isDisabled={isLoading}
           />
         ))}
         {/* <SearchInput/> */}
       </div>
-
-
 
       <>
 

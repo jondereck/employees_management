@@ -15,6 +15,7 @@ import { getEmployeeCountsByOffice } from "../actions/get-employee-counts-office
 import { setTimeout } from "timers/promises";
 import Loading from "@/app/loading";
 import useSearchModal from "@/hooks/user-search-modal";
+import useLoadingStore from "@/hooks/use-loading";
 
 type PopoverTriggerProps = React.ComponentPropsWithoutRef<typeof PopoverTrigger>
 
@@ -48,21 +49,16 @@ const MainNav = ({
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+
+const setLoading = useLoadingStore((state) => state.setLoading);
+
   
 
-  const onDepartmentSelect = async (department: { value: string, label: string }) => {
-    setIsLoading(true);
-    try {
-      
-      setOpen(false)
-      router.push(`/${params.departmentId}/view/offices/${department.value}`);
-    } catch (error) {
-      
-    } 
-    // Fetch and set the employee counts for the selected office
+const onDepartmentSelect = async (department: { value: string, label: string }) => {
+  setLoading(true);
+  router.push(`/${params.departmentId}/view/offices/${department.value}`);
+};
 
-  }
-  
   const sortedItems = formattedItems.slice().sort((a, b) => a.label.localeCompare(b.label));
   // const routes = data.map((route) => ({
   //   href: `/${params.departmentId}/view/offices/${route.id}`,

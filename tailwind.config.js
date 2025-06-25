@@ -65,7 +65,9 @@ module.exports = {
       },
       fontFamily: {
         alex: ['Alex Brush'],
-        arizona: ['Arizonia']
+        arizona: ['Arizonia'],
+        bebas: ['"Bebas Neue"', 'sans-serif'],
+
       },
       borderRadius: {
         lg: "var(--radius)",

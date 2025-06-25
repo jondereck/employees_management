@@ -1,8 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Alex+Brush&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Arizonia&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Barcode+39&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 
 html,
 body,

@@ -50,13 +50,6 @@ function LoadingDotsWithTypewriter({ text }: { text: string }) {
   );
 }
 
-if (typeof window === 'undefined') {
-  console.log('[SSR] Server render');
-} else {
-  console.log('[Client] Client render');
-}
-
-
 export default function Loading({ className }: { className?: string }) {
   const [quoteIndex, setQuoteIndex] = useState(0);
 
@@ -67,16 +60,11 @@ export default function Loading({ className }: { className?: string }) {
     return () => clearInterval(interval);
   }, []);
 
- useEffect(() => {
-  if ('vibrate' in navigator && document.hasFocus()) {
-    try {
-      navigator.vibrate(100);
-    } catch (e) {
-      console.warn('Vibrate blocked or unsupported');
+  useEffect(() => {
+    if (typeof window !== "undefined" && "vibrate" in navigator) {
+      navigator.vibrate?.(100);
     }
-  }
-}, []);
-
+  }, []);
 
   return (
     <div

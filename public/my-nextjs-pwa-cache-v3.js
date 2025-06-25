@@ -2,8 +2,8 @@ const CACHE_NAME = 'my-nextjs-pwa-cache-v3'; // ⬅️ bump version when changin
 
 const BASE_PATH = '/f622687f-79c6-44e8-87c6-301a257582b2';
 const urlsToCache = [
-  `${self.location.origin}${BASE_PATH}/view`,
-  `${self.location.origin}${BASE_PATH}/employees`,
+  // `${self.location.origin}${BASE_PATH}/view`,
+  // `${self.location.origin}${BASE_PATH}/employees`,
 ];
 
 // ✅ Install: Pre-cache essential assets
@@ -47,6 +47,15 @@ self.addEventListener('fetch', (event) => {
 
   const request = event.request;
   const url = new URL(request.url);
+
+
+  if (
+    request.method !== 'GET' ||
+    url.protocol !== 'http:' && url.protocol !== 'https:'
+  ) {
+    return;
+  }
+
 
   // Optionally: Skip caching API or auth routes
   if (url.pathname.includes('/api') || url.pathname.includes('/auth')) {
