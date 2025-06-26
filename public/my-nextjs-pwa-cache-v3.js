@@ -1,28 +1,11 @@
-const CACHE_NAME = 'my-nextjs-pwa-cache-v3'; // ⬅️ bump version when changing URLs
+const CACHE_NAME = 'my-nextjs-pwa-cache-v3';
 
+// ✅ Immediately take control
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
 
-// const urlsToCache = [
-//   `${self.location.origin}/`,
-  
-// ];
-
-// // ✅ Install: Pre-cache essential assets
-// self.addEventListener('install', (event) => {
-//   self.skipWaiting();
-
-//   event.waitUntil(
-//     caches.open(CACHE_NAME).then(async (cache) => {
-//       for (const url of urlsToCache) {
-//         try {
-//           await cache.add(url);
-//         } catch (err) {
-//           console.warn(`❌ Failed to cache: ${url}`, err);
-//         }
-//       }
-//     })
-//   );
-// });
-// ✅ Activate: Delete old caches
+// ✅ Clean up old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
@@ -40,21 +23,17 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// ✅ Skip waiting immediately (optional, forces update)
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
-});
-
-// ✅ Fetch: Cache-first with Clerk/auth safety
+// ✅ Intercept fetch requests
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET requests
+  // ✅ Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // ✅ Skip sensitive or auth-related requests
-  const skipCache = [
+  // ✅ Never cache Clerk/auth/sensitive routes
+  const shouldBypass = [
+    '/',
     '/api',
     '/auth',
     '/sign-in',
@@ -63,24 +42,21 @@ self.addEventListener('fetch', (event) => {
     'clerk',
     'supabase',
     'vercel',
-  ].some((skip) => request.url.includes(skip));
+  ].some((path) => url.pathname.includes(path) || request.url.includes(path));
 
-  if (
-    skipCache ||
-    request.credentials === 'include'
-  ) {
+  if (shouldBypass || request.credentials === 'include') {
     return;
   }
 
-  // ✅ Employees: Network-first strategy
-  if (url.pathname.startsWith('/view') || url.pathname.includes('employee')) {
+  // ✅ Use network-first for employee-related pages
+  if ( url.pathname.includes('/employee')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
           if (response && response.ok) {
-            return caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, response.clone());
-              return response;
+            const cloned = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, cloned);
             });
           }
           return response;
@@ -90,44 +66,35 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ✅ Everything else: Cache-first strategy
- event.respondWith(
-  caches.match(request).then((cached) => {
-    if (cached) return cached;
+  // ✅ Default: cache-first for assets (JS, CSS, images, etc.)
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
 
-    return fetch(request)
-      .then((response) => {
-        // ✅ Must clone before any usage
-        const clonedResponse = response.clone();
+      return fetch(request)
+        .then((response) => {
+          // Avoid caching bad or private responses
+          const contentType = response.headers.get('Content-Type') || '';
+          const cacheControl = response.headers.get('Cache-Control') || '';
 
-        // Skip bad responses
-        if (
-          !response || 
-          response.status !== 200 || 
-          response.type === 'opaque'
-        ) {
+          const isHTML = contentType.includes('text/html');
+          const isPrivate = cacheControl.includes('no-store') || cacheControl.includes('private');
+
+          if (response.ok && !isHTML && !isPrivate) {
+            const cloned = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, cloned);
+            });
+          }
+
           return response;
-        }
-
-        // Avoid caching private responses
-        const cacheControl = response.headers.get('Cache-Control') || '';
-        const isPrivate = cacheControl.includes('no-store') || cacheControl.includes('private');
-
-        if (!isPrivate) {
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, clonedResponse);
+        })
+        .catch(() => {
+          return new Response('⚠️ Offline or not cached', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain' },
           });
-        }
-
-        return response;
-      })
-      .catch(() => {
-        return new Response('⚠️ Offline or not cached', {
-          status: 503,
-          headers: { 'Content-Type': 'text/plain' },
         });
-      });
-  })
-);
-
+    })
+  );
 });

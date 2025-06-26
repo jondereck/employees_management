@@ -1,8 +1,5 @@
-// app/components/Loading.tsx
 "use client";
-
-import React, { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 const quotes = [
   "Good things take time...",
@@ -10,30 +7,22 @@ const quotes = [
   "Almost there...",
   "Fetching greatness...",
   "Just a moment more...",
-  "Powering up the awesomeness...",
 ];
 
 function LoadingDotsWithTypewriter({ text }: { text: string }) {
   const [visibleText, setVisibleText] = useState("");
+  const [dots, setDots] = useState("");
 
   useEffect(() => {
     let index = 0;
-    const typeInterval = setInterval(() => {
-      setVisibleText((prev) => {
-        if (index >= text.length) {
-          clearInterval(typeInterval);
-          return prev;
-        }
-        const next = text.slice(0, index + 1);
+    const interval = setInterval(() => {
+      if (index <= text.length) {
+        setVisibleText(text.slice(0, index));
         index++;
-        return next;
-      });
+      }
     }, 40);
-
-    return () => clearInterval(typeInterval);
+    return () => clearInterval(interval);
   }, [text]);
-
-  const [dots, setDots] = useState("");
 
   useEffect(() => {
     const dotInterval = setInterval(() => {
@@ -50,7 +39,7 @@ function LoadingDotsWithTypewriter({ text }: { text: string }) {
   );
 }
 
-export default function Loading({ className }: { className?: string }) {
+export default function LoadingState({ progress = 0 }: { progress?: number }) {
   const [quoteIndex, setQuoteIndex] = useState(0);
 
   useEffect(() => {
@@ -60,28 +49,23 @@ export default function Loading({ className }: { className?: string }) {
     return () => clearInterval(interval);
   }, []);
 
-
-
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center space-y-4 animate-pulse",
-        className
-      )}
-    >
+    <div className="flex flex-col items-center justify-center space-y-4 animate-pulse">
       <div className="relative">
-        <div className="h-16 w-16 rounded-full border-4 border-green-500 border-t-transparent animate-spin"></div>
+        <div className="h-20 w-20 rounded-full border-4 border-green-500 border-t-transparent animate-spin"></div>
         <div className="absolute inset-0 flex items-center justify-center text-green-700 font-bold text-xl">
-          <span className="animate-ping">•</span>
+          {progress}%
         </div>
       </div>
 
       <div className="text-center">
         <p className="text-sm text-muted-foreground">Please wait...</p>
-        <p className="mt-1 text-green-600 text-xs animate-pulse tracking-wide uppercase">
+        <p className="mt-1 text-green-600 text-xs tracking-wide uppercase">
           <LoadingDotsWithTypewriter text="Loading your next screen" />
         </p>
-        <p className="mt-2 text-xs text-muted-foreground italic">{quotes[quoteIndex]}</p>
+        <p className="mt-2 text-xs text-muted-foreground italic">
+          {quotes[quoteIndex]}
+        </p>
       </div>
     </div>
   );
