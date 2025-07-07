@@ -168,7 +168,9 @@ export default function DownloadStyledExcel() {
 
 
     try {
-      const response = await fetch('/api/backup-employee');
+      const response = await fetch('/api/backup-employee?' + new Date().getTime(), {
+        cache: 'no-store', // explicitly avoid caching
+      });
       if (!response.ok) throw new Error('Failed to fetch employee data');
 
       const data = await response.json();
@@ -413,26 +415,25 @@ export default function DownloadStyledExcel() {
   };
 
   return (
-<div className="flex justify-end">
-  <button
-    onClick={handleDownload}
-    disabled={loading}
-    className={`px-4 py-2 text-sm sm:text-base rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-      loading
-        ? 'bg-gray-500 cursor-not-allowed'
-        : 'bg-green-700 hover:bg-green-800 focus:ring-green-600'
-    } text-white flex items-center justify-center space-x-2`}
-  >
-    {loading ? (
-      'Generating...'
-    ) : (
-      <>
-        <FaFileExcel className="text-base sm:text-lg" />
-        <span className="hidden sm:inline">Download</span>
-      </>
-    )}
-  </button>
-</div>
+    <div className="flex justify-end">
+      <button
+        onClick={handleDownload}
+        disabled={loading}
+        className={`px-4 py-2 text-sm sm:text-base rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${loading
+            ? 'bg-gray-500 cursor-not-allowed'
+            : 'bg-green-700 hover:bg-green-800 focus:ring-green-600'
+          } text-white flex items-center justify-center space-x-2`}
+      >
+        {loading ? (
+          'Generating...'
+        ) : (
+          <>
+            <FaFileExcel className="text-base sm:text-lg" />
+            <span className="hidden sm:inline">Download</span>
+          </>
+        )}
+      </button>
+    </div>
 
 
   );
