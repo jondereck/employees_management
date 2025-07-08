@@ -1,12 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx-js-style';
 import { FaFileExcel } from 'react-icons/fa';
+import Modal from './ui/modal';
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'retired'>('all');
+
 
   const columnOrder = [
     { name: 'Employee No', key: 'employeeNo' },
@@ -46,6 +51,45 @@ export default function DownloadStyledExcel() {
 
 
   ];
+
+  const isAllSelected = selectedColumns.length === columnOrder.length;
+
+  const defaultKeys = [
+    'lastName',
+    'firstName',
+    'middleName',
+    'officeId',
+    'position',
+    'employeeTypeId',
+  ];
+
+
+  useEffect(() => {
+    setSelectedColumns(defaultKeys);
+  }, []);
+
+
+  const toggleColumn = (key: string) => {
+    setSelectedColumns((prev) =>
+      prev.includes(key)
+        ? prev.filter((k) => k !== key)
+        : [...prev, key]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedColumns([]);
+    } else {
+      setSelectedColumns(columnOrder.map(col => col.key));
+    }
+  };
+
+  const openModal = () => {
+    setSelectedColumns(columnOrder.map(col => col.key));
+    setModalOpen(true);
+  };
+
   // Office ID to Name Mapping
   const officeMapping: Record<string, string> = {
     '6d0731ae-e589-46a3-8512-6faad043c3f5': 'Accounting Office',
@@ -148,7 +192,7 @@ export default function DownloadStyledExcel() {
 
 
 
-  const handleDownload = async () => {
+  const handleDownload = async (selectedKeys: string[]) => {
     setLoading(true);
     const toastId = toast.loading('Generating Excel file...');
 
@@ -178,6 +222,8 @@ export default function DownloadStyledExcel() {
 
       // Map officeId to office name
       const updatedData = data.map((row: any) => {
+
+
         // Replace Office ID with Name
         if (row.officeId && officeMapping[row.officeId]) {
           row.officeId = officeMapping[row.officeId];
@@ -212,19 +258,27 @@ export default function DownloadStyledExcel() {
         return row;
       });
 
+      let filteredEmployees = updatedData;
 
+      if (statusFilter === 'active') {
+        filteredEmployees = filteredEmployees.filter((emp: any) => emp.isArchived === false);
+      } else if (statusFilter === 'retired') {
+        filteredEmployees = filteredEmployees.filter((emp: any) => emp.isArchived === true);
+      }
 
       //Filter out hidden columns
-      const visibleColumns = columnOrder.filter(col => !hiddenFields.includes(col.key));
+      const visibleColumns = columnOrder.filter(
+        col => !hiddenFields.includes(col.key) && selectedKeys.includes(col.key)
+      );
 
       //Use display names for headers (important)
       const headers = visibleColumns.map(col => col.name);
 
       //Map data using display names as keys
-      const filteredData = updatedData.map((row: any) => {
+      const filteredData = filteredEmployees.map((row: any) => {
         const newRow: Record<string, any> = {};
         visibleColumns.forEach((col) => {
-          newRow[col.name] = row[col.key]; // Consistent keys
+          newRow[col.name] = row[col.key];
         });
         return newRow;
       });
@@ -417,24 +471,112 @@ export default function DownloadStyledExcel() {
   return (
     <div className="flex justify-end">
       <button
-        onClick={handleDownload}
-        disabled={loading}
-        className={`px-4 py-2 text-sm sm:text-base rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${loading
-            ? 'bg-gray-500 cursor-not-allowed'
-            : 'bg-green-700 hover:bg-green-800 focus:ring-green-600'
-          } text-white flex items-center justify-center space-x-2`}
-      >
-        {loading ? (
-          'Generating...'
-        ) : (
-          <>
-            <FaFileExcel className="text-base sm:text-lg" />
-            <span className="hidden sm:inline">Download</span>
-          </>
-        )}
+        onClick={() => setModalOpen(true)}   >
+        <div>
+          <div
+            className={`px-4 py-2 text-sm sm:text-base rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${loading
+              ? 'bg-gray-500 cursor-not-allowed'
+              : 'bg-green-700 hover:bg-green-800 focus:ring-green-600'
+              } text-white flex items-center justify-center space-x-2`}
+          >
+            {loading ? (
+              'Generating...'
+            ) : (
+              <>
+                <FaFileExcel className="text-base sm:text-lg" />
+                <span className="hidden sm:inline">Download</span>
+              </>
+            )}
+          </div>
+        </div>
+
       </button>
+
+      {/* MODAL for column selection */}
+      <Modal
+        title="Select Columns to Export"
+        description="Choose which fields to include in the Excel file."
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+      >
+        <div className="mb-2 flex justify-between items-center text-sm">
+          <label className="font-medium">Select Columns</label>
+          <button
+            onClick={toggleSelectAll}
+            className="text-blue-600 hover:underline text-xs"
+          >
+            {isAllSelected ? 'Deselect All' : 'Select All'}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow">
+          {columnOrder.map((col) => (
+            <label key={col.key} className="flex items-center space-x-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selectedColumns.includes(col.key)}
+                onChange={() => toggleColumn(col.key)}
+              />
+              <span>{col.name}</span>
+            </label>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <label className="font-medium text-sm">Include Status:</label>
+          <div className="flex space-x-4 text-sm">
+            <label className="flex items-center space-x-1">
+              <input
+                type="radio"
+                name="status"
+                value="all"
+                checked={statusFilter === 'all'}
+                onChange={() => setStatusFilter('all')}
+              />
+              <span>All</span>
+            </label>
+            <label className="flex items-center space-x-1">
+              <input
+                type="radio"
+                name="status"
+                value="active"
+                checked={statusFilter === 'active'}
+                onChange={() => setStatusFilter('active')}
+              />
+              <span>Active</span>
+            </label>
+            <label className="flex items-center space-x-1">
+              <input
+                type="radio"
+                name="status"
+                value="retired"
+                checked={statusFilter === 'retired'}
+                onChange={() => setStatusFilter('retired')}
+              />
+              <span>Retired</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-4 space-x-2">
+          <button
+            onClick={() => setModalOpen(false)}
+            className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              setModalOpen(false);
+              handleDownload(selectedColumns);
+            }}
+            className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded text-sm"
+          >
+            Download
+          </button>
+        </div>
+      </Modal>
+
     </div>
-
-
   );
 }
