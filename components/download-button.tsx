@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx-js-style';
 import { FaFileExcel } from 'react-icons/fa';
@@ -9,14 +9,14 @@ import Modal from './ui/modal';
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  
- const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'retired'>(() => {
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('statusFilter');
-    if (stored === 'active' || stored === 'retired') return stored;
-  }
-  return 'all';
-});
+
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'retired'>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('statusFilter');
+      if (stored === 'active' || stored === 'retired') return stored;
+    }
+    return 'all';
+  });
 
   const columnOrder = [
     { name: 'Employee No', key: 'employeeNo' },
@@ -57,7 +57,7 @@ export default function DownloadStyledExcel() {
 
   ];
 
-  const defaultSelectedColumns  = [
+  const defaultSelectedColumns = [
     'lastName',
     'firstName',
     'middleName',
@@ -66,48 +66,50 @@ export default function DownloadStyledExcel() {
     'employeeTypeId',
   ];
 
-const [selectedColumns, setSelectedColumns] = useState<string[]>(() => {
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('selectedColumns');
-    return stored ? JSON.parse(stored) : defaultSelectedColumns;
-  }
-  return defaultSelectedColumns;
-});
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('selectedColumns');
+      return stored ? JSON.parse(stored) : defaultSelectedColumns;
+    }
+    return defaultSelectedColumns;
+  });
 
-const isAllSelected = selectedColumns.length === columnOrder.length;
-useEffect(() => {
-  if (typeof window !== 'undefined') {
-    const storedColumns = localStorage.getItem('selectedColumns');
-    const storedStatus = localStorage.getItem('statusFilter');
+  const isAllSelected = selectedColumns.length === columnOrder.length;
 
-    if (storedColumns) {
-      try {
-        const parsed = JSON.parse(storedColumns);
-        if (Array.isArray(parsed)) setSelectedColumns(parsed);
-      } catch (err) {
-        console.error('Invalid stored selectedColumns:', err);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedColumns = localStorage.getItem('selectedColumns');
+      const storedStatus = localStorage.getItem('statusFilter');
+
+      if (storedColumns) {
+        try {
+          const parsed = JSON.parse(storedColumns);
+          if (Array.isArray(parsed)) setSelectedColumns(parsed);
+        } catch (err) {
+          console.error('Invalid stored selectedColumns:', err);
+        }
+      }
+
+      if (storedStatus === 'active' || storedStatus === 'retired') {
+        setStatusFilter(storedStatus);
       }
     }
+  }, []); // Load from localStorage once on mount
 
-    if (storedStatus === 'active' || storedStatus === 'retired') {
-      setStatusFilter(storedStatus);
+  // Save selectedColumns when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selectedColumns', JSON.stringify(selectedColumns));
     }
-  }
-}, []); // Load from localStorage once on mount
+  }, [selectedColumns]);
 
-// Save selectedColumns when it changes
-useEffect(() => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('selectedColumns', JSON.stringify(selectedColumns));
-  }
-}, [selectedColumns]);
-
-// Save statusFilter when it changes
-useEffect(() => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('statusFilter', statusFilter);
-  }
-}, [statusFilter]);
+  // Save statusFilter when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('statusFilter', statusFilter);
+    }
+  }, [statusFilter]);
 
 
   const toggleColumn = (key: string) => {
@@ -130,6 +132,13 @@ useEffect(() => {
     setSelectedColumns(columnOrder.map(col => col.key));
     setModalOpen(true);
   };
+
+  const selectedColumnsRef = useRef<string[]>(selectedColumns);
+
+  useEffect(() => {
+    selectedColumnsRef.current = selectedColumns;
+  }, [selectedColumns]);
+
 
   // Office ID to Name Mapping
   const officeMapping: Record<string, string> = {
@@ -609,7 +618,7 @@ useEffect(() => {
           <button
             onClick={() => {
               setModalOpen(false);
-              handleDownload(selectedColumns);
+               handleDownload(selectedColumnsRef.current); 
             }}
             className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded text-sm"
           >
