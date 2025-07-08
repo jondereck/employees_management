@@ -9,9 +9,14 @@ import Modal from './ui/modal';
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'retired'>('all');
-
+  
+ const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'retired'>(() => {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('statusFilter');
+    if (stored === 'active' || stored === 'retired') return stored;
+  }
+  return 'all';
+});
 
   const columnOrder = [
     { name: 'Employee No', key: 'employeeNo' },
@@ -52,9 +57,7 @@ export default function DownloadStyledExcel() {
 
   ];
 
-  const isAllSelected = selectedColumns.length === columnOrder.length;
-
-  const defaultKeys = [
+  const defaultSelectedColumns  = [
     'lastName',
     'firstName',
     'middleName',
@@ -63,10 +66,48 @@ export default function DownloadStyledExcel() {
     'employeeTypeId',
   ];
 
+const [selectedColumns, setSelectedColumns] = useState<string[]>(() => {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('selectedColumns');
+    return stored ? JSON.parse(stored) : defaultSelectedColumns;
+  }
+  return defaultSelectedColumns;
+});
 
-  useEffect(() => {
-    setSelectedColumns(defaultKeys);
-  }, []);
+const isAllSelected = selectedColumns.length === columnOrder.length;
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    const storedColumns = localStorage.getItem('selectedColumns');
+    const storedStatus = localStorage.getItem('statusFilter');
+
+    if (storedColumns) {
+      try {
+        const parsed = JSON.parse(storedColumns);
+        if (Array.isArray(parsed)) setSelectedColumns(parsed);
+      } catch (err) {
+        console.error('Invalid stored selectedColumns:', err);
+      }
+    }
+
+    if (storedStatus === 'active' || storedStatus === 'retired') {
+      setStatusFilter(storedStatus);
+    }
+  }
+}, []); // Load from localStorage once on mount
+
+// Save selectedColumns when it changes
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('selectedColumns', JSON.stringify(selectedColumns));
+  }
+}, [selectedColumns]);
+
+// Save statusFilter when it changes
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('statusFilter', statusFilter);
+  }
+}, [statusFilter]);
 
 
   const toggleColumn = (key: string) => {
