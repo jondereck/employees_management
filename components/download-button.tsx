@@ -268,10 +268,11 @@ export default function DownloadStyledExcel() {
       if (!response.ok) throw new Error('Failed to fetch employee data');
 
       const data = await response.json();
+      console.log('Fetched data:', data); 
       if (data.length === 0) throw new Error('No employee data found.');
 
       // Map officeId to office name
-      const updatedData = data.map((row: any) => {
+      const updatedData = data.employees.map((row: any) => {
 
 
         // Replace Office ID with Name
