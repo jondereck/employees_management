@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import LoadingState from "@/components/loading-state";
 import { motion, AnimatePresence } from "framer-motion";
 
-const Loading = ({ isDone }: { isDone: boolean }) => {
+const Loading = ({ isDone }: { isDone?: boolean }) => {
   const [progress, setProgress] = useState(0);
   const [show, setShow] = useState(true);
 
