@@ -35,10 +35,10 @@ const SearchFilter: FC<SearchFilterProps> = ({ searchTerm, setSearchTerm }) => {
       <input
         type="text"
         className="border px-4 py-2 rounded-md w-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-300"
-        placeholder="Search employees by first name, last name,contact number "
+        placeholder="Search employees by Employee No., First Name, Last Name,Contact Number "
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        aria-label="Search employees by first name, last name,contact number, nickname, position, barangay, or etc. "
+        aria-label="Search employees by empNo, first name, last name,contact number, nickname, position, barangay, or etc. "
       />
     </div>
   );

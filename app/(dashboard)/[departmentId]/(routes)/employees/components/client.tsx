@@ -64,20 +64,25 @@ export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
   const [searchTerm, setSearchTerm] = useState("");
 
   // Filter data based on the search term
-  const filteredData = useMemo(() => {
-    const lowercasedSearchTerm = searchTerm.toLowerCase();
-    return filteredEmployees.filter((employee) => {
-      const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
-      const reversedName = `${employee.lastName} ${employee.firstName}`.toLowerCase();
+const filteredData = useMemo(() => {
+  const lowercasedSearchTerm = searchTerm.toLowerCase();
+  return filteredEmployees.filter((employee) => {
+    const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
+    const reversedName = `${employee.lastName} ${employee.firstName}`.toLowerCase();
+    const contactNumber = employee.contactNumber?.toLowerCase() || '';
+    const nickname = employee.nickname?.toLowerCase() || '';
+    const employeeNo = employee.employeeNo?.toLowerCase() || '';
 
-      return (
-        fullName.includes(lowercasedSearchTerm) ||
-        reversedName.includes(lowercasedSearchTerm) ||
-        employee.contactNumber.toLowerCase().includes(lowercasedSearchTerm) ||
-        employee.nickname.toLowerCase().includes(lowercasedSearchTerm)
-      );
-    });
-  }, [filteredEmployees, searchTerm]);
+    return (
+      fullName.includes(lowercasedSearchTerm) ||
+      reversedName.includes(lowercasedSearchTerm) ||
+      contactNumber.includes(lowercasedSearchTerm) ||
+      nickname.includes(lowercasedSearchTerm) ||
+      employeeNo.includes(lowercasedSearchTerm)
+    );
+  });
+}, [filteredEmployees, searchTerm]);
+
 
 
 
