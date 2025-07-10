@@ -41,13 +41,13 @@ const EmployeeInvdividualPage = async ({
             {/* Profile Info */}
             <div className="mt-8 lg:mt-0 flex-1">
               <div className="bg-white rounded-xl shadow-sm border p-6">
-              <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold mb-6 relative inline-block px-4 sm:px-6 py-2 bg-primary text-white rounded-r-lg shadow-md 
+                <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold mb-6 relative inline-block px-4 sm:px-6 py-2 bg-primary text-white rounded-r-lg shadow-md 
   before:absolute before:content-[''] before:left-0 before:top-1/2 before:-translate-y-1/2 before:-ml-3 sm:before:-ml-4 
   before:border-y-[10px] sm:before:border-y-[12px] 
   before:border-l-[10px] sm:before:border-l-[12px] 
   before:border-y-transparent before:border-l-primary">
-  Employee Information
-</h2>
+                  Employee Information
+                </h2>
 
 
                 <Info data={employee} />
@@ -58,12 +58,9 @@ const EmployeeInvdividualPage = async ({
           {/* Optionally include related personnel */}
           {/* <EmployeeList title="Related Personnel" items={suggestedPeople} /> */}
         </div>
-        <CameraScannerWrapper/>
-        <Footer/>
+        <CameraScannerWrapper />
+        <Footer />
       </Container>
-
-    
-
     </div>
   );
 }
