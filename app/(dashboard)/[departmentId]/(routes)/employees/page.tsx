@@ -119,7 +119,7 @@ const EmployeesPage = async ({
     <div className="flex-col">
     <div className="flex-1 space-y-4 p-4 pt-6">
       <Suspense fallback={<EmployeesLoadingSkeleton />}>
-        <EmployeesClient data={formattedEmployees} offices={offices} eligibilities={eligibilities} employeeTypes={employeeTypes} />
+        <EmployeesClient  data={formattedEmployees} departmentId={params.departmentId}offices={offices} eligibilities={eligibilities} employeeTypes={employeeTypes} /> 
         <CameraScannerWrapper/>
       </Suspense>
     </div>

@@ -135,7 +135,7 @@ export const CellAction = ({
 
   return (
     <>
-     <Loading isDone={!isPending} />
+     {/* {isPending && <Loading />} */}
       <AlertModal
         isOpen={open}
         onClose={handleCloseModal}

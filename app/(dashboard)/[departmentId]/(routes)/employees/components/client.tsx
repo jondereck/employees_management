@@ -3,6 +3,10 @@ import { Plus } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { Eligibility, EmployeeType, EmployeesColumn, Offices, columns } from "./columns";
 
+import useSWR from 'swr';
+import { useEmployees } from "@/hooks/use-employees";
+import { useDebounce } from "@/hooks/use-debounce"; 
+
 
 import { Button } from "@/components/ui/button";
 import Heading from "@/components/ui/heading";
@@ -18,19 +22,22 @@ import BirthdayNotifications from "./notifications";
 import Notifications from "./notifications";
 import { OfficesColumn } from "../../offices/components/columns";
 import EmployeeFilters from "./employee-filters";
+import { format } from "date-fns";
 
 
 
 
 
 interface EmployeesClientProps {
-  data: EmployeesColumn[];
+  departmentId: string; // ✅ Add this instead to build your SWR URL
+  data?:EmployeesColumn[];
   offices: { id: string; name: string }[];
-  eligibilities: { id: string; name: string, value: string }[];
-  employeeTypes: { id: string; name: string, value: string }[];
+  eligibilities: { id: string; name: string; value: string }[];
+  employeeTypes: { id: string; name: string; value: string }[];
 }
 
-export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
+
+export const EmployeesClient = ({ departmentId, data, offices, eligibilities, employeeTypes
 }: EmployeesClientProps) => {
   const router = useRouter();
   const params = useParams();
@@ -41,9 +48,30 @@ export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
     employeeTypes: [] as string[],
     status: "all",
   });
+
+ const { employees: swrEmployees = [], isLoading, isError } = useEmployees(departmentId);
+
+const employees = useMemo(() => {
+  const raw = swrEmployees.length > 0 ? swrEmployees : (data ?? []);
+
+  const formatted = raw.map((emp) => ({
+    ...emp,
+    birthday: emp.birthday ? format(new Date(emp.birthday), "M d, yyyy") : '',
+    dateHired: emp.dateHired ? format(new Date(emp.dateHired), "M d, yyyy") : '',
+  }));
+
+  // Sort by updatedAt (desc), fallback to createdAt if updatedAt is missing
+  return formatted.sort((a, b) => {
+    const dateA = new Date((a as any).updatedAt || (a as any).createdAt).getTime();
+    const dateB = new Date((b as any).updatedAt || (b as any).createdAt).getTime();
+    return dateB - dateA;
+  });
+}, [swrEmployees, data]);
+
+
   // Filter employees by IDs
   const filteredEmployees = useMemo(() => {
-    return data.filter((employee) => {
+    return employees.filter((employee) => {
       const officeMatch =
         filters.offices.length === 0 || filters.offices.includes(employee.offices.id);
       const eligMatch =
@@ -57,31 +85,33 @@ export const EmployeesClient = ({ data, offices, eligibilities, employeeTypes
 
       return officeMatch && eligMatch && typeMatch && statusMatch;
     });
-  }, [data, filters]);
+  }, [employees, filters]);
 
 
   // State for search input
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 400);
 
   // Filter data based on the search term
 const filteredData = useMemo(() => {
-  const lowercasedSearchTerm = searchTerm.toLowerCase();
+  const lower = debouncedSearchTerm.toLowerCase();
+
   return filteredEmployees.filter((employee) => {
     const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
     const reversedName = `${employee.lastName} ${employee.firstName}`.toLowerCase();
-    const contactNumber = employee.contactNumber?.toLowerCase() || '';
-    const nickname = employee.nickname?.toLowerCase() || '';
-    const employeeNo = employee.employeeNo?.toLowerCase() || '';
+    const contactNumber = employee.contactNumber?.toLowerCase() || "";
+    const nickname = employee.nickname?.toLowerCase() || "";
+    const employeeNo = employee.employeeNo?.toLowerCase() || "";
 
     return (
-      fullName.includes(lowercasedSearchTerm) ||
-      reversedName.includes(lowercasedSearchTerm) ||
-      contactNumber.includes(lowercasedSearchTerm) ||
-      nickname.includes(lowercasedSearchTerm) ||
-      employeeNo.includes(lowercasedSearchTerm)
+      fullName.includes(lower) ||
+      reversedName.includes(lower) ||
+      contactNumber.includes(lower) ||
+      nickname.includes(lower) ||
+      employeeNo.includes(lower)
     );
   });
-}, [filteredEmployees, searchTerm]);
+}, [filteredEmployees, debouncedSearchTerm]);
 
 
 
