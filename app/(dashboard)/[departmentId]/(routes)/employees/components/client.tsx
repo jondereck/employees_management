@@ -30,7 +30,7 @@ import { format } from "date-fns";
 
 interface EmployeesClientProps {
   departmentId: string; // ✅ Add this instead to build your SWR URL
-  data?:EmployeesColumn[];
+  data:EmployeesColumn[];
   offices: { id: string; name: string }[];
   eligibilities: { id: string; name: string; value: string }[];
   employeeTypes: { id: string; name: string; value: string }[];
@@ -52,16 +52,21 @@ export const EmployeesClient = ({ departmentId, data, offices, eligibilities, em
  const { employees: swrEmployees = [], isLoading, isError } = useEmployees(departmentId);
 
 const employees = useMemo(() => {
-  const raw = swrEmployees.length > 0 ? swrEmployees : (data ?? []);
+  let merged: EmployeesColumn[];
 
-  const formatted = raw.map((emp) => ({
-    ...emp,
-    birthday: emp.birthday ? format(new Date(emp.birthday), "M d, yyyy") : '',
-    dateHired: emp.dateHired ? format(new Date(emp.dateHired), "M d, yyyy") : '',
-  }));
+  // If SWR has data, prefer it
+  if (swrEmployees.length > 0) {
+    merged = swrEmployees.map((emp) => ({
+      ...emp,
+      birthday: emp.birthday ? format(new Date(emp.birthday), "M d, yyyy") : '',
+      dateHired: emp.dateHired ? format(new Date(emp.dateHired), "M d, yyyy") : '',
+    }));
+  } else {
+    // If no SWR data yet, use the already formatted SSR data directly
+    merged = data ?? [];
+  }
 
-  // Sort by updatedAt (desc), fallback to createdAt if updatedAt is missing
-  return formatted.sort((a, b) => {
+  return merged.sort((a, b) => {
     const dateA = new Date((a as any).updatedAt || (a as any).createdAt).getTime();
     const dateB = new Date((b as any).updatedAt || (b as any).createdAt).getTime();
     return dateB - dateA;
@@ -69,23 +74,23 @@ const employees = useMemo(() => {
 }, [swrEmployees, data]);
 
 
-  // Filter employees by IDs
-  const filteredEmployees = useMemo(() => {
-    return employees.filter((employee) => {
-      const officeMatch =
-        filters.offices.length === 0 || filters.offices.includes(employee.offices.id);
-      const eligMatch =
-        filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.id);
-      const typeMatch =
-        filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.id);
-      const statusMatch =
-        filters.status === "all" ||
-        (filters.status === "Active" && !employee.isArchived) ||
-        (filters.status === "Inactive" && employee.isArchived);
 
-      return officeMatch && eligMatch && typeMatch && statusMatch;
-    });
-  }, [employees, filters]);
+ const filteredEmployees = useMemo(() => {
+  return data.filter((employee) => {
+    const officeMatch =
+      filters.offices.length === 0 || filters.offices.includes(employee.offices.id);
+    const eligMatch =
+      filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.id);
+    const typeMatch =
+      filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.id);
+    const statusMatch =
+      filters.status === "all" ||
+      (filters.status === "Active" && !employee.isArchived) ||
+      (filters.status === "Inactive" && employee.isArchived);
+
+    return officeMatch && eligMatch && typeMatch && statusMatch;
+  });
+}, [data, filters]);
 
 
   // State for search input
