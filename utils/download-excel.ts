@@ -15,7 +15,7 @@ export async function generateExcelFile({
   statusFilter,
 }: DownloadExcelParams): Promise<Blob> {
   const hiddenFields = [
-    'departmentId', 'id', 'isFeatured', 'isHead', 'isAwardee',
+    'departmentId', 'id', 'isFeatured', 'isAwardee',
     'createdAt', 'updatedAt', 'employeeLink', 'prefix', 'region'
   ];
 

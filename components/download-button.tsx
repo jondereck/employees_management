@@ -56,6 +56,7 @@ export default function DownloadStyledExcel() {
     { name: 'Member Policy No', key: 'memberPolicyNo' },
     { name: 'Emergency Contact Name', key: 'emergencyContactName' },
     { name: 'Emergency Contact Number', key: 'emergencyContactNumber' },
+    { name: 'isHead', key: 'isHead' },
 
 
   ];
