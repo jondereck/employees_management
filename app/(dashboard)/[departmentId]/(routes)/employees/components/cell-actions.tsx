@@ -135,52 +135,51 @@ export const CellAction = ({
 
   return (
     <>
-     {/* {isPending && <Loading />} */}
+      {/* Global loading overlay */}
+      {(loading || isPending) && <Loading />}
+
       <AlertModal
         isOpen={open}
         onClose={handleCloseModal}
         onConfirm={onConfirm}
         loading={loading}
       />
+
       <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only"> Open Menu</span>
+            <span className="sr-only">Open Menu</span>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
+
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => onCopy(data.id)} >
+
+          <DropdownMenuItem onClick={() => onCopy(data.id)}>
             <Copy className="mr-2 h-4 w-4" />
             Copy Id
           </DropdownMenuItem>
+
           {data.employeeLink && (
-            <DropdownMenuItem onClick={() => window.open(data?.employeeLink, '_blank')}>
-              <FileIcon
-                className="mr-2 h-4 w-4" />
+            <DropdownMenuItem onClick={() => window.open(data.employeeLink, "_blank")}>
+              <FileIcon className="mr-2 h-4 w-4" />
               View File
             </DropdownMenuItem>
           )}
 
-          <DropdownMenuItem
-            onClick={onView}
-          >
+          <DropdownMenuItem onClick={onView}>
             <Eye className="mr-2 h-4 w-4" />
             View
           </DropdownMenuItem>
 
-          <DropdownMenuItem
-            onClick={onUpdate}
-          >
-
+          <DropdownMenuItem onClick={onUpdate}>
             <Edit className="mr-2 h-4 w-4" />
             Update
           </DropdownMenuItem>
 
           <DropdownMenuItem onClick={openDeleteModal}>
-            <Trash
-              className="mr-2 h-4 w-4" />
+            <Trash className="mr-2 h-4 w-4" />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

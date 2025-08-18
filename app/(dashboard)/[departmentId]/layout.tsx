@@ -4,6 +4,7 @@ import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import ModalProvider from "./(routes)/(frontend)/providers/modal-provider";
+import { Toaster } from "@/components/ui/toaster";
 
 export default async function DashboardLayout({
   children,
@@ -36,6 +37,7 @@ export default async function DashboardLayout({
         <Navbar />
         
         {children}
+        <Toaster/>
       </div>
     </>
   )

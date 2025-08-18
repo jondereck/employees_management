@@ -11,7 +11,8 @@ import { Separator } from "@/components/ui/separator";
 import { useEffect, useState } from "react";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { toast } from "@/components/ui/use-toast";
+import { toast, Toaster } from "sonner";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import axios from "axios";
 import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
@@ -24,6 +25,7 @@ import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import eachDayOfInterval from "date-fns/eachDayOfInterval/index";
 import { capitalizeWordsIgnoreSpecialChars, formatToProperCase, formatToUpperCase } from "@/utils/utils";
+import { AutoFillField } from "../../components/autofill";
 
 
 
@@ -218,17 +220,19 @@ export const EmployeesForm = ({
 
   const onSubmit = async (values: EmployeesFormValues) => {
     try {
-      setLoading(true);
+       const toastId = toast.loading("Processing...", {
+    description: "Please wait while we save your data.",
+  });
 
-      values.firstName = values.firstName.trim().toUpperCase();
-      values.lastName = values.lastName.trim().toUpperCase();
-      values.middleName = values.middleName.trim().toUpperCase();
-      values.province = values.province.trim().toUpperCase();
-      values.nickname = values.nickname.trim().toUpperCase();
-      values.emergencyContactName = values.emergencyContactName.trim().toUpperCase();
-      values.city = values.city.trim().toUpperCase();
-      values.barangay = values.barangay.trim().toUpperCase();
-      values.street = values.street.trim().toUpperCase();
+      // values.firstName = values.firstName.trim().toUpperCase();
+      // values.lastName = values.lastName.trim().toUpperCase();
+      // values.middleName = values.middleName.trim().toUpperCase();
+      // values.province = values.province.trim().toUpperCase();
+      // values.nickname = values.nickname.trim().toUpperCase();
+      // values.emergencyContactName = values.emergencyContactName.trim().toUpperCase();
+      // values.city = values.city.trim().toUpperCase();
+      // values.barangay = values.barangay.trim().toUpperCase();
+      // values.street = values.street.trim().toUpperCase();
       if (initialData) {
         await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
 
@@ -236,29 +240,29 @@ export const EmployeesForm = ({
         await axios.post(`/api/${params.departmentId}/employees`, values);;
       }
 
-      router.refresh();
-      router.back();
-      toast({
-        title: "Success!",
-        description: toastMessage,
-      })
+  
+      toast.success("Success!", {
+      id: toastId,
+      description: toastMessage,
+    });
+      setTimeout(() => {
+        router.refresh();
+        router.back();
+      }, 500); // half second
     } catch (error: any) {
-      if (error.response && error.response.data && error.response.data.error) {
+      if (error.response?.data?.error) {
         // Handle API error messages
         const errorMessage = error.response.data.error;
-        toast({
-          variant: "destructive",
-          title: "Uh oh! Something went wrong.",
+        toast.error("Uh oh! Something went wrong.", {
           description: errorMessage,
         });
       } else {
         // Handle generic error
-        toast({
-          variant: "destructive",
-          title: "Uh oh! Something went wrong.",
+        toast.error("Uh oh! Something went wrong.", {
           description: "There was a problem with your request.",
         });
       }
+
     } finally {
       setLoading(false);
     }
@@ -271,20 +275,20 @@ export const EmployeesForm = ({
 
       await axios.delete(`/api/${params.departmentId}/employees/${params.employeesId}`);
 
-      toast({
-        title: "Success!",
-        description: "Employee deleted."
-      })
+      toast.success("Success!", {
+        description: "Employee deleted.",
+      });
 
       router.refresh();
       router.push(`/${params.departmentId}/employees`)
 
 
     } catch (error) {
-      toast({
-        title: "Error!",
-        description: "Remove all users to proceed."
-      })
+
+        toast.success("Error!", {
+        description: "Remove all users to proceed.",
+      });
+
     } finally {
       setLoading(false);
     }
@@ -550,27 +554,16 @@ export const EmployeesForm = ({
               control={form.control}
               name="position"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Position </FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Position"
-                      {...field}
-                      onChange={(e) => {
-                        // Convert the input value to uppercase for every word
-                        const properCaseValue = capitalizeWordsIgnoreSpecialChars(e.target.value);
-                        field.onChange(properCaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Ex: Administrative Officer III
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoFillField
+                  label="Position"
+                  field={field}
+                  endpoint="/api/autofill/positions"
+                  placeholder="Search or enter Position..."
+                />
               )}
             />
+
+
             <FormField
               control={form.control}
               name="contactNumber"
@@ -708,32 +701,19 @@ export const EmployeesForm = ({
                   <FormMessage />
                 </FormItem>
               )}
-            />
-            <FormField
+            />  <FormField
               control={form.control}
               name="education"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Education</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Education"
-                      {...field}
-                      onChange={(e) => {
-                        // Convert the input value to uppercase for every word
-                        const properCaseValue = formatToProperCase(e.target.value);
-                        field.onChange(properCaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Ex: Bachelor of Information Technology
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoFillField
+                  label="Education"
+                  field={field}
+                  endpoint="/api/autofill/educations"
+                  placeholder="Search or enter Position..."
+                />
               )}
             />
+
           </div>
           <Separator />
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
@@ -834,31 +814,17 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
-
             <FormField
               control={form.control}
               name="street"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Street</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Mendoza Street"
-                      {...field}
-                      onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
-                        field.onChange(uppercaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    This is optional
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoFillField
+                  label="Street"
+                  field={field}
+                  endpoint="/api/autofill/streets"
+                  placeholder="Search or enter Street..."
+                  uppercase={true}
+                />
               )}
             />
 
@@ -866,52 +832,26 @@ export const EmployeesForm = ({
               control={form.control}
               name="barangay"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Barangay</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Wawa"
-                      {...field}
-                      onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
-                        field.onChange(uppercaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoFillField
+                  label="Barangay"
+                  field={field}
+                  endpoint="/api/autofill/barangays"
+                  placeholder="Search or enter Barangay..."
+                  uppercase={true}
+                />
               )}
             />
-
 
             <FormField
               control={form.control}
               name="city"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>City/Municipal</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Lingayen"
-                      {...field}
-                      onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
-                        field.onChange(uppercaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoFillField
+                  label="City"
+                  field={field}
+                  endpoint="/api/autofill/cities"
+                  placeholder="Search or enter City..."
+                />
               )}
             />
 
@@ -919,30 +859,14 @@ export const EmployeesForm = ({
               control={form.control}
               name="province"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Province</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Pangasinan"
-                      {...field}
-                      onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
-                        field.onChange(uppercaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoFillField
+                  label="Province"
+                  field={field}
+                  endpoint="/api/autofill/provinces"
+                  placeholder="Search or enter Province..."
+                />
               )}
             />
-
-
-
 
           </div>
 
