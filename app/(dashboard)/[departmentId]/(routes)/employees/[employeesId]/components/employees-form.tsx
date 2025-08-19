@@ -26,10 +26,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import eachDayOfInterval from "date-fns/eachDayOfInterval/index";
 import { capitalizeWordsIgnoreSpecialChars, formatToProperCase, formatToUpperCase } from "@/utils/utils";
 import { AutoFillField } from "../../components/autofill";
+import { SalaryInput } from "../../components/salary-input";
+import { StepIndicator } from "../../components/step-indicator";
 
 
 
 const formSchema = z.object({
+  step: z.number().optional(),
   prefix: z.string(),
   employeeNo: z.string(),
   lastName: z.string().min(1, {
@@ -81,7 +84,7 @@ const formSchema = z.object({
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
   isHead: z.boolean(),
-  salaryGrade: z.string(),
+  salaryGrade: z.string().or(z.number()).optional(),
   memberPolicyNo: z.string(),
   age: z.string(),
   nickname: z.string(),
@@ -140,28 +143,33 @@ export const EmployeesForm = ({
 
 
   const form = useForm<EmployeesFormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: initialData ? {
-      ...initialData,
-      firstName: initialData.firstName.toUpperCase(),
-      middleName: initialData.middleName.toUpperCase(),
-      lastName: initialData.lastName.toUpperCase(),
-      province: initialData.province.toUpperCase(),
-      city: initialData.city.toUpperCase(),
-      barangay: initialData.barangay.toUpperCase(),
-      street: initialData.street.toUpperCase(),
-      salary: parseFloat(String(initialData?.salary)),
-
-    }
-
-      : {
+  resolver: zodResolver(formSchema),
+  defaultValues: initialData
+    ? {
+        ...initialData,
+        firstName: initialData.firstName.toUpperCase(),
+        middleName: initialData.middleName.toUpperCase(),
+        lastName: initialData.lastName.toUpperCase(),
+        province: initialData.province.toUpperCase(),
+        city: initialData.city.toUpperCase(),
+        barangay: initialData.barangay.toUpperCase(),
+        street: initialData.street.toUpperCase(),
+        dateHired: initialData.dateHired ? new Date(initialData.dateHired) : undefined,
+        salaryGrade: initialData.salaryGrade ? Number(initialData.salaryGrade) : 1,
+        salary: initialData.salary ? Number(initialData.salary) : 0,
+      }
+    : {
         prefix: '',
         employeeNo: '',
         lastName: '',
         firstName: '',
         middleName: '',
         suffix: '',
-        images: [{ url: 'https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg' }],
+        images: [
+          {
+            url: 'https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg',
+          },
+        ],
         gender: '',
         contactNumber: '',
         position: '',
@@ -172,6 +180,7 @@ export const EmployeesForm = ({
         pagIbigNo: '',
         philHealthNo: '',
         salary: 0,
+        salaryGrade: 1, // default SG
         dateHired: undefined,
         latestAppointment: '',
         terminateDate: '',
@@ -188,15 +197,13 @@ export const EmployeesForm = ({
         city: '',
         barangay: '',
         street: '',
-        salaryGrade: '',
         memberPolicyNo: '',
         nickname: '',
         emergencyContactName: '',
         emergencyContactNumber: '',
         employeeLink: '',
-      }
-  });
-
+      },
+});
 
   const [calculatedAge, setCalculatedAge] = useState(0);
 
@@ -220,31 +227,26 @@ export const EmployeesForm = ({
 
   const onSubmit = async (values: EmployeesFormValues) => {
     try {
-       const toastId = toast.loading("Processing...", {
-    description: "Please wait while we save your data.",
-  });
+      const toastId = toast.loading("Processing...", {
+        description: "Please wait while we save your data.",
+      });
 
-      // values.firstName = values.firstName.trim().toUpperCase();
-      // values.lastName = values.lastName.trim().toUpperCase();
-      // values.middleName = values.middleName.trim().toUpperCase();
-      // values.province = values.province.trim().toUpperCase();
-      // values.nickname = values.nickname.trim().toUpperCase();
-      // values.emergencyContactName = values.emergencyContactName.trim().toUpperCase();
-      // values.city = values.city.trim().toUpperCase();
-      // values.barangay = values.barangay.trim().toUpperCase();
-      // values.street = values.street.trim().toUpperCase();
-      if (initialData) {
-        await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, values);
-
-      } else {
-        await axios.post(`/api/${params.departmentId}/employees`, values);;
-      }
-
-  
+       const data = {
+    ...values,
+    salaryGrade: String(values.salaryGrade), // ensure string
+  };
+   if (initialData) {
+      await axios.patch(
+        `/api/${params.departmentId}/employees/${params.employeesId}`,
+        data // use "data" here
+      );
+    } else {
+      await axios.post(`/api/${params.departmentId}/employees`, data); // also use "data" here
+    }
       toast.success("Success!", {
-      id: toastId,
-      description: toastMessage,
-    });
+        id: toastId,
+        description: toastMessage,
+      });
       setTimeout(() => {
         router.refresh();
         router.back();
@@ -285,7 +287,7 @@ export const EmployeesForm = ({
 
     } catch (error) {
 
-        toast.success("Error!", {
+      toast.success("Error!", {
         description: "Remove all users to proceed.",
       });
 
@@ -873,35 +875,21 @@ export const EmployeesForm = ({
           <Separator />
 
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
-            <FormField
-              control={form.control}
-              name="salary"
 
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Salary </FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Salary"
-                      {...field}
-                      value={field.value ? `₱ ${new Intl.NumberFormat().format(field.value)}` : ''}
-                      onChange={(e) => {
-                        const inputValue = e.target.value.replace(/[₱,]/g, '').trim();
-                        const numericValue = Number(inputValue);
-                        field.onChange(numericValue);
-                      }}
-                      className="w-auto h-auto"
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {field.value <= 5000 && <span className="text-red-600">Salary cannot be lower than ₱ 6,000</span>}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
+            {/* <SalaryInput
+  form={form}
+  loading={loading}
+  dateHired={form.getValues("dateHired")}
+/> */}
+<SalaryInput
+  form={form}
+  loading={loading}
+  dateHired={form.watch("dateHired")}
+  latestAppointment={form.watch("latestAppointment")}
+  maxStep={8}
+/>
+
+            {/* <FormField
               control={form.control}
               name="salaryGrade"
               render={({ field }) => (
@@ -913,15 +901,65 @@ export const EmployeesForm = ({
                       placeholder="12"
                       {...field}
                       className="w-auto h-auto"
+                      onChange={async (e) => {
+                        field.onChange(e); // update salaryGrade field itself
+                        const sg = Number(e.target.value);
+                        const step = form.getValues("step") || 1; // default to step 1 if no field
+                        if (sg > 0) {
+                          try {
+                            const res = await fetch(`/api/departments/salary?sg=${sg}&step=${step}`);
+                            if (res.ok) {
+                              const data = await res.json();
+                              form.setValue("salary", data.salary); // auto-fill salary
+                            }
+                          } catch (err) {
+                            console.error("Failed to fetch salary:", err);
+                          }
+                        }
+                      }}
                     />
                   </FormControl>
-                  <FormDescription>
+              
 
+
+                  <FormDescription>
+                    Type SG (e.g. 1–33) and salary auto-fills.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
-            />
+            /> */}
+ <StepIndicator dateHired={form.watch("dateHired")} maxStep={8}   latestAppointment={form.watch("latestAppointment")}/>
+            {/* <FormField
+              control={form.control}
+              name="salary"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Salary</FormLabel>
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="Salary"
+                      {...field}
+                      value={field.value ? `₱ ${new Intl.NumberFormat().format(field.value)}` : ""}
+                      onChange={(e) => {
+                        const inputValue = e.target.value.replace(/[₱,]/g, "").trim();
+                        const numericValue = Number(inputValue);
+                        field.onChange(numericValue);
+                      }}
+                      className="w-auto h-auto"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {field.value <= 6000 && (
+                      <span className="text-red-600">Salary cannot be lower than ₱6,000</span>
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            /> */}
+
             {/* <FormField
               control={form.control}
               name="officeId"
