@@ -71,20 +71,22 @@ const formSchema = z.object({
   barangay: z.string(),
   houseNo: z.string(),
   street: z.string(),
-  salary: z.coerce.number().min(1),
+  salaryGrade: z.union([z.string(), z.number()])
+    .transform((v) => String(v)) // always string for Prisma
+    .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric"),
+  salary: z.number().min(0),
   birthday: z.date(),
   // age: z.string(),
   gsisNo: z.string(),
   pagIbigNo: z.string(),
   tinNo: z.string(),
   philHealthNo: z.string(),
-  dateHired: z.date(),
-  latestAppointment: z.string(),
+  dateHired: z.union([z.date(), z.string()]).optional(),
+  latestAppointment: z.union([z.date(), z.string()]).optional(),
   terminateDate: z.string(),
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
   isHead: z.boolean(),
-  salaryGrade: z.string().or(z.number()).optional(),
   memberPolicyNo: z.string(),
   age: z.string(),
   nickname: z.string(),
@@ -143,9 +145,9 @@ export const EmployeesForm = ({
 
 
   const form = useForm<EmployeesFormValues>({
-  resolver: zodResolver(formSchema),
-  defaultValues: initialData
-    ? {
+    resolver: zodResolver(formSchema),
+    defaultValues: initialData
+      ? {
         ...initialData,
         firstName: initialData.firstName.toUpperCase(),
         middleName: initialData.middleName.toUpperCase(),
@@ -154,11 +156,14 @@ export const EmployeesForm = ({
         city: initialData.city.toUpperCase(),
         barangay: initialData.barangay.toUpperCase(),
         street: initialData.street.toUpperCase(),
+
+        salary: Number(initialData.salary ?? 0),
+        salaryGrade: String(initialData.salaryGrade ?? "1"), // ✅ cast to string
+
         dateHired: initialData.dateHired ? new Date(initialData.dateHired) : undefined,
-        salaryGrade: initialData.salaryGrade ? Number(initialData.salaryGrade) : 1,
-        salary: initialData.salary ? Number(initialData.salary) : 0,
+        latestAppointment: initialData.latestAppointment ? new Date(initialData.latestAppointment) : undefined,
       }
-    : {
+      : {
         prefix: '',
         employeeNo: '',
         lastName: '',
@@ -180,9 +185,9 @@ export const EmployeesForm = ({
         pagIbigNo: '',
         philHealthNo: '',
         salary: 0,
-        salaryGrade: 1, // default SG
+        salaryGrade: "0", // ✅ make it string here too
         dateHired: undefined,
-        latestAppointment: '',
+        latestAppointment: undefined,
         terminateDate: '',
         isFeatured: false,
         isArchived: false,
@@ -203,7 +208,8 @@ export const EmployeesForm = ({
         emergencyContactNumber: '',
         employeeLink: '',
       },
-});
+  });
+
 
   const [calculatedAge, setCalculatedAge] = useState(0);
 
@@ -227,48 +233,30 @@ export const EmployeesForm = ({
 
   const onSubmit = async (values: EmployeesFormValues) => {
     try {
-      const toastId = toast.loading("Processing...", {
-        description: "Please wait while we save your data.",
-      });
+      const toastId = toast.loading("Processing...", { description: "Please wait while we save your data." });
 
-       const data = {
-    ...values,
-    salaryGrade: String(values.salaryGrade), // ensure string
-  };
-   if (initialData) {
-      await axios.patch(
-        `/api/${params.departmentId}/employees/${params.employeesId}`,
-        data // use "data" here
-      );
-    } else {
-      await axios.post(`/api/${params.departmentId}/employees`, data); // also use "data" here
-    }
-      toast.success("Success!", {
-        id: toastId,
-        description: toastMessage,
-      });
-      setTimeout(() => {
-        router.refresh();
-        router.back();
-      }, 500); // half second
-    } catch (error: any) {
-      if (error.response?.data?.error) {
-        // Handle API error messages
-        const errorMessage = error.response.data.error;
-        toast.error("Uh oh! Something went wrong.", {
-          description: errorMessage,
-        });
+      const data = {
+        ...values,
+        salaryGrade: String(values.salaryGrade), // Prisma expects string
+        salary: Number(values.salary ?? 0),      // make sure it's number
+      };
+
+      if (initialData) {
+        await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, data);
       } else {
-        // Handle generic error
-        toast.error("Uh oh! Something went wrong.", {
-          description: "There was a problem with your request.",
-        });
+        await axios.post(`/api/${params.departmentId}/employees`, data);
       }
 
+      toast.success("Success!", { id: toastId, description: toastMessage });
+      setTimeout(() => { router.refresh(); router.back(); }, 500);
+    } catch (error: any) {
+      toast.error("Uh oh! Something went wrong.", {
+        description: error?.response?.data?.error ?? "There was a problem with your request.",
+      });
     } finally {
       setLoading(false);
     }
-  }
+  };
 
 
   const onDelete = async () => {
@@ -868,153 +856,12 @@ export const EmployeesForm = ({
                   placeholder="Search or enter Province..."
                 />
               )}
-            />
-
+            />      
           </div>
 
           <Separator />
-
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
-
-            {/* <SalaryInput
-  form={form}
-  loading={loading}
-  dateHired={form.getValues("dateHired")}
-/> */}
-<SalaryInput
-  form={form}
-  loading={loading}
-  dateHired={form.watch("dateHired")}
-  latestAppointment={form.watch("latestAppointment")}
-  maxStep={8}
-/>
-
-            {/* <FormField
-              control={form.control}
-              name="salaryGrade"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Salary Grade</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="12"
-                      {...field}
-                      className="w-auto h-auto"
-                      onChange={async (e) => {
-                        field.onChange(e); // update salaryGrade field itself
-                        const sg = Number(e.target.value);
-                        const step = form.getValues("step") || 1; // default to step 1 if no field
-                        if (sg > 0) {
-                          try {
-                            const res = await fetch(`/api/departments/salary?sg=${sg}&step=${step}`);
-                            if (res.ok) {
-                              const data = await res.json();
-                              form.setValue("salary", data.salary); // auto-fill salary
-                            }
-                          } catch (err) {
-                            console.error("Failed to fetch salary:", err);
-                          }
-                        }
-                      }}
-                    />
-                  </FormControl>
-              
-
-
-                  <FormDescription>
-                    Type SG (e.g. 1–33) and salary auto-fills.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            /> */}
- <StepIndicator dateHired={form.watch("dateHired")} maxStep={8}   latestAppointment={form.watch("latestAppointment")}/>
-            {/* <FormField
-              control={form.control}
-              name="salary"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Salary</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Salary"
-                      {...field}
-                      value={field.value ? `₱ ${new Intl.NumberFormat().format(field.value)}` : ""}
-                      onChange={(e) => {
-                        const inputValue = e.target.value.replace(/[₱,]/g, "").trim();
-                        const numericValue = Number(inputValue);
-                        field.onChange(numericValue);
-                      }}
-                      className="w-auto h-auto"
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {field.value <= 6000 && (
-                      <span className="text-red-600">Salary cannot be lower than ₱6,000</span>
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            /> */}
-
-            {/* <FormField
-              control={form.control}
-              name="officeId"
-              render={({ field }) => (
-                <FormItem>
-                  <div className="flex flex-col gap-4">
-                    <FormLabel>Office </FormLabel>
-                  <Popover open={inputSearchOpen} onOpenChange={setInputSearchOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={inputSearchOpen}
-                        className="w-auto justify-between"
-                      >
-                        {field.value ? offices.find((office) => office.name === field.value)?.id : "Select Office..."}
-                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-             
-                    <PopoverContent className="w-auto p-0">
-                      <Command>
-                        <CommandInput placeholder="Search office..." />
-                        <CommandEmpty>No office found.</CommandEmpty>
-                        <CommandGroup className="max-h-48 overflow-y-auto">
-                        {offices.map((office) => (
-                  <CommandItem
-                    key={office.id}
-                       value={office.id}        
-                    onSelect={(currentValue) => {
-                      field.onChange(currentValue === field.value ? "" : currentValue);
-                      setOpen(false);
-                    }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  field.value === office.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              {office.name}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-
-                  </div>
-                  
-                  <FormMessage />
-                </FormItem>
-              )}
-            /> */}
-
+            <SalaryInput form={form} loading={loading} maxStep={8} />
             <FormField
               control={form.control}
               name="officeId"
@@ -1134,18 +981,21 @@ export const EmployeesForm = ({
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
-                        variant={"outline"}
-                        className={cn("w-auto  justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                        variant="outline"
+                        className={cn(
+                          "w-auto justify-start text-left font-normal",
+                          !field.value && "text-muted-foreground"
+                        )}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                        {field.value ? format(new Date(field.value), "PPP") : <span>Pick a date</span>}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent align="start" className=" w-auto p-0">
+                    <PopoverContent align="start" className="w-auto p-0">
                       <Calendar
                         mode="single"
                         captionLayout="dropdown-buttons"
-                        selected={field.value}
+                        selected={field.value ? new Date(field.value) : undefined}
                         onSelect={field.onChange}
                         fromYear={fromYear}
                         toYear={currentYear}
@@ -1159,6 +1009,7 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
+
           </div>
           <Separator />
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
@@ -1308,27 +1159,40 @@ export const EmployeesForm = ({
               control={form.control}
               name="latestAppointment"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Latest Appointment </FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="mm/dd/yyyy"
-                      {...field}
-                      onChange={(e) => {
-                        const formattedValue = formatDate(e.target.value);
-                        field.onChange(formattedValue);
-                      }}
-                    />
-                  </FormControl>
+                <FormItem className="flex flex-col">
+                  <FormLabel>Latest Appointment</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-auto justify-start text-left font-normal",
+                          !field.value && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(new Date(field.value), "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        captionLayout="dropdown-buttons"
+                        selected={field.value ? new Date(field.value) : undefined}
+                        onSelect={(date) => field.onChange(date?.toISOString() ?? undefined)}
+                        fromYear={fromYear}
+                        toYear={currentYear}
+                      />
+                    </PopoverContent>
+                  </Popover>
                   <FormDescription>
-                    This field is optional for employee with the most recent appointment.
+                    This field is optional for employees with the most recent appointment.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
-
             />
+
 
             <FormField
               control={form.control}

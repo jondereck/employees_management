@@ -1,70 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
-import Papa from "papaparse";
+import { PrismaClient } from "@prisma/client";
 
-type SalaryRow = {
-  SG: number;
-  Step: number;
-  Salary: number;
-};
+const prisma = new PrismaClient();
 
-let salaryTable: Record<number, Record<number, number>> | null = null;
-
-// Load and cache the salary table
-function loadSalaryTable() {
-  if (salaryTable) return salaryTable;
-
-  const filePath = path.join(process.cwd(), "data", "salary_grades.csv");
-  const csvData = fs.readFileSync(filePath, "utf-8");
-
-  const parsed = Papa.parse<SalaryRow>(csvData, {
-    header: true,
-    dynamicTyping: true,
-    skipEmptyLines: true,
-  });
-
-  salaryTable = {};
-  parsed.data.forEach((row) => {
-    if (!row.SG || !row.Step || !row.Salary) return;
-    if (!salaryTable![row.SG]) salaryTable![row.SG] = {};
-    salaryTable![row.SG][row.Step] = row.Salary;
-  });
-
-  return salaryTable;
-}
-
-// ✅ Correct API handler with named export only
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const sg = searchParams.get("sg");
-    const step = searchParams.get("step");
+    const sg = Number(searchParams.get("sg"));
 
-    if (!sg || !step) {
+    if (!sg || sg <= 0) {
       return NextResponse.json(
-        { error: "Missing sg or step query params" },
+        { error: "Missing or invalid sg query param" },
         { status: 400 }
       );
     }
 
-    const table = loadSalaryTable();
-    const salary = table[Number(sg)]?.[Number(step)] ?? null;
+    // Fetch all steps for the given grade
+    const salaryRecords = await prisma.salary.findMany({
+      where: { grade: sg },
+      orderBy: { step: "asc" },
+    });
 
-    if (salary === null) {
-      return NextResponse.json({ error: "Salary not found" }, { status: 404 });
+    if (!salaryRecords || salaryRecords.length === 0) {
+      return NextResponse.json(
+        { error: "Salary data not found" },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json({
-      sg: Number(sg),
-      step: Number(step),
-      salary,
+    // Build a map: step -> amount
+    const steps: Record<number, number> = {};
+    salaryRecords.forEach((s) => {
+      steps[s.step] = s.amount;
     });
+
+    return NextResponse.json({ sg, steps });
   } catch (err) {
     console.error("API Error:", err);
     return NextResponse.json(
       { error: "Failed to load salary data" },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

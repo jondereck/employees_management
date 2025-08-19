@@ -1,63 +1,63 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import axios from "axios";
+import { toast } from "sonner";
+import { computeStep } from "@/utils/compute-step";
 
 interface SalaryInputProps {
-  form: any; // react-hook-form instance
+  form: any; // UseFormReturn<EmployeesFormValues>
   loading: boolean;
-  dateHired?: string | number | Date;
-  latestAppointment?: string | number | Date;
-  maxStep?: number;
+  maxStep?: number; // 8 or 32
 }
 
-export const SalaryInput = ({
-  form,
-  loading,
-  dateHired,
-  latestAppointment,
-  maxStep = 32,
-}: SalaryInputProps) => {
-  const [salary, setSalary] = useState<number | null>(null);
+export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
+  const sg = form.watch("salaryGrade");
+  const dateHired = form.watch("dateHired");
+  const latestAppointment = form.watch("latestAppointment");
 
-  // Compute step based on latestAppointment or dateHired
-  const computeStep = () => {
-    const startDateRaw = latestAppointment || dateHired;
-    if (!startDateRaw) return 1;
+  const currentStep = useMemo(
+    () => computeStep({ dateHired, latestAppointment, maxStep }),
+    [dateHired, latestAppointment, maxStep]
+  );
 
-    const startDate = startDateRaw instanceof Date ? startDateRaw : new Date(startDateRaw);
+  const [fetching, setFetching] = useState(false);
+  const [salarySteps, setSalarySteps] = useState<Record<number, number>>({});
 
-    const currentYear = new Date().getFullYear();
-    const yearsWorked = currentYear - startDate.getFullYear();
-    const stepIncrease = Math.floor(yearsWorked / 3); // every 3 years -> step up
+  useEffect(() => {
+    const fetchSalarySteps = async () => {
+      const sgNum = Number(sg);
+      if (!sgNum || Number.isNaN(sgNum)) return;
 
-    return Math.min(stepIncrease + 1, maxStep);
-  };
+      setFetching(true);
+      try {
+        const res = await axios.get("/api/departments/salary/", { params: { sg: sgNum } });
+        setSalarySteps(res.data.steps);
+      } catch (e) {
+        toast.error("Failed to fetch salary data.");
+        setSalarySteps({});
+      } finally {
+        setFetching(false);
+      }
+    };
 
-  const handleSalaryGradeChange = async (sgValue: number) => {
-    const step = computeStep();
+    fetchSalarySteps();
+  }, [sg]);
 
-    try {
-      const res = await axios.get(`/api/departments/salary`, {
-        params: { sg: sgValue, step },
-      });
+  // Compute current salary from fetched steps
+  const currentSalary = useMemo(() => {
+    return salarySteps[currentStep] ?? 0;
+  }, [salarySteps, currentStep]);
 
-      const fetchedSalary = res.data.salary;
-      setSalary(fetchedSalary);
-
-      form.setValue("salaryGrade",  String(sgValue));
-      form.setValue("salary", fetchedSalary);
-    } catch (err) {
-      console.error("Failed to fetch salary:", err);
-      setSalary(null);
-      form.setValue("salary", null);
-    }
-  };
+  // Update form whenever currentSalary changes
+  useEffect(() => {
+    form.setValue("salary", currentSalary, { shouldValidate: true, shouldDirty: true });
+  }, [currentSalary, form]);
 
   return (
-    <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
+    <div className="grid lg:grid-cols-3 grid-cols-1 gap-4">
       {/* Salary Grade */}
       <FormField
         control={form.control}
@@ -68,22 +68,24 @@ export const SalaryInput = ({
             <FormControl>
               <Input
                 disabled={loading}
+                inputMode="numeric"
                 placeholder="Enter Salary Grade"
-                {...field}
-                type="number"
-                min={1}
-                max={32}
-                onChange={(e) => {
-                  const sgValue = Number(e.target.value);
-                  field.onChange(sgValue);
-                  handleSalaryGradeChange(sgValue);
-                }}
+                value={field.value ?? ""}
+                onChange={(e) => field.onChange(e.target.value.replace(/\D/g, ""))}
               />
             </FormControl>
             <FormMessage />
           </FormItem>
         )}
       />
+
+      {/* Current Step */}
+      <div className="flex flex-col">
+        <label className="text-sm font-medium mb-2">Current Step</label>
+        <div className="h-10 px-3 rounded-md border flex items-center bg-muted/30">
+          Step {currentStep}
+        </div>
+      </div>
 
       {/* Salary */}
       <FormField
@@ -95,9 +97,14 @@ export const SalaryInput = ({
             <FormControl>
               <Input
                 disabled
-                placeholder="Salary"
-                {...field}
-                value={salary ? `${new Intl.NumberFormat().format(salary)}` : ""}
+                value={
+                  field.value
+                    ? `₱ ${new Intl.NumberFormat().format(Number(field.value))}`
+                    : fetching
+                    ? "Loading…"
+                    : ""
+                }
+                readOnly
               />
             </FormControl>
             <FormMessage />
@@ -106,4 +113,4 @@ export const SalaryInput = ({
       />
     </div>
   );
-};
+}

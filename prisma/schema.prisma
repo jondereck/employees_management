@@ -126,7 +126,8 @@ model Employee {
   dateHired              DateTime
   latestAppointment      String       @default("")
   terminateDate          String       @default("")
-  salaryGrade            String       @default("")
+  salaryGrade            Int?       @default(0)
+  salaryStep             Int?       @default(0)
   memberPolicyNo         String       @default("")
   nickname               String       @default("")
   emergencyContactName   String       @default("")
@@ -162,4 +163,14 @@ model Image {
   updatedAt  DateTime @updatedAt
 
   @@index([employeeId])
+}
+
+
+model Salary {
+  id     Int     @id @default(autoincrement())
+  grade  Int      
+  step   Int
+  amount Float
+
+  @@unique([grade, step]) 
 }

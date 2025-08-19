@@ -9,6 +9,8 @@ export async function POST(
   { params }: { params: { departmentId: string } }
 ) {
   try {
+
+
     const { userId } = auth();
     const body = await req.json()
 
@@ -46,6 +48,7 @@ export async function POST(
       officeId,
       eligibilityId,
       salaryGrade,
+      salaryStep,
       memberPolicyNo,
       age,
       nickname,
@@ -53,7 +56,22 @@ export async function POST(
       emergencyContactNumber,
       employeeLink,
     } = body;
-    
+
+
+    let autoSalary = 0;
+    if (salaryGrade && salaryStep) {
+      const salaryRecord = await prismadb.salary.findUnique({
+        where: {
+          grade_step: {
+            grade: Number(salaryGrade),
+            step: Number(salaryStep),
+          },
+        },
+      });
+
+      autoSalary = salaryRecord?.amount ?? 0;
+    }
+
     const urlRegex = /^https:\/\/drive\.google\.com\/.*$/;
 
     if (!userId) {
@@ -219,7 +237,7 @@ export async function POST(
         tinNo,
         pagIbigNo,
         philHealthNo,
-        salary,
+        salary: autoSalary,
         dateHired,
         latestAppointment,
         isFeatured,
@@ -229,6 +247,7 @@ export async function POST(
         officeId,
         eligibilityId,
         salaryGrade,
+        salaryStep,          
         memberPolicyNo,
         age,
         nickname,

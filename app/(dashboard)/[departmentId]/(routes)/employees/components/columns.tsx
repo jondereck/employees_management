@@ -25,6 +25,8 @@ import { formatContactNumber, formatDate, formatFullName, formatGsisNumber, form
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { salarySchedule } from "@/utils/salary-schedule"
+import { computeStep } from "@/utils/compute-step"
 
 
 
@@ -91,6 +93,7 @@ export type EmployeesColumn = {
   barangay: string;
   houseNo: string;
   salaryGrade: string;
+    salaryStep: string;
   memberPolicyNo: string;
   age: string;
   nickname: string;
@@ -346,16 +349,34 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Gender" />
     ),
   },
-  {
-    accessorKey: "salary",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Salary" />
-    ),
-    cell: ({ row }) => {
-      const salary = row.getValue('salary') as string;
-      return formatSalary(salary);
-    }
-  },
+{
+  accessorKey: "salary",
+  header: ({ column }) => (
+    <DataTableColumnHeader column={column} title="Salary" />
+  ),
+  cell: ({ row }) => {
+    const grade = Number(row.getValue("salaryGrade")); // employee grade
+    const dateHired = row.original.dateHired;
+    const latestAppointment = row.original.latestAppointment;
+
+    // Compute step using your utility
+    const step = computeStep({ dateHired, latestAppointment });
+
+    // Find the employee's salary from the seeded table
+    const salaryRecord = salarySchedule.find(s => s.grade === grade);
+    const salary = salaryRecord ? salaryRecord.steps[step - 1] ?? 0 : 0;
+
+    console.log("Salary column debug:");
+    console.log("grade:", grade, "dateHired:", dateHired, "latestAppointment:", latestAppointment);
+    console.log("Computed step:", step);
+    console.log("Found salaryRecord:", salaryRecord);
+    console.log("Calculated salary:", salary);
+
+    return formatSalary(String(salary));
+  }
+},
+
+  
   {
     accessorKey: "salaryGrade",
     header: ({ column }) => (
