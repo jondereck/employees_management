@@ -55,11 +55,13 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
 
         canvas.toBlob((blob) => {
           if (blob) {
-            saveAs(blob, `${employee.employeeNo}.png`);
-            toast.success(`QR Code for ${employee.employeeNo} downloaded!`);
+            const employeeNoSafe = employee.employeeNo.split(",")[0].trim(); // <-- take only before comma
+            saveAs(blob, `${employeeNoSafe}.png`);
+            toast.success(`QR Code for ${employeeNoSafe} downloaded!`);
           }
           setLoading(false);
         });
+
         return;
       }
 
@@ -88,9 +90,10 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
         ctx.drawImage(logo, x, y, logoSize, logoSize);
 
         const imgData = canvas.toDataURL("image/png");
-        zip.file(`${employee.employeeNo}.png`, imgData.split("base64,")[1], {
-          base64: true,
-        });
+       zip.file(`${employee.employeeNo.split(",")[0].trim()}.png`, imgData.split("base64,")[1], {
+  base64: true,
+});
+
       }
 
       const blob = await zip.generateAsync({ type: "blob" });
@@ -129,8 +132,8 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
           ? `${ids.length} employees archived`
           : `${ids.length} employees unarchived`
       );
-          // 🔄 Refresh employees list via SWR
-    mutate(`/api/${departmentId}/employees`);
+      // 🔄 Refresh employees list via SWR
+      mutate(`/api/${departmentId}/employees`);
 
       // Optional: refresh or clear selections
       table.resetRowSelection();
@@ -154,56 +157,56 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
           className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md"
         >
           <Card
-  className="
+            className="
     flex flex-col md:flex-row gap-3 md:gap-4
     items-center md:items-center
     justify-between
     p-4 shadow-lg rounded-2xl border
     bg-background/90 backdrop-blur-md
   "
->
-  {/* Selection count */}
-  <span className="text-sm font-medium text-center md:text-left w-full md:w-auto">
-    {selectedRows.length} selected
-  </span>
+          >
+            {/* Selection count */}
+            <span className="text-sm font-medium text-center md:text-left w-full md:w-auto">
+              {selectedRows.length} selected
+            </span>
 
-  {/* Action buttons */}
-  <div
-    className="
+            {/* Action buttons */}
+            <div
+              className="
       flex flex-col sm:flex-row w-full md:w-auto
       gap-2 justify-center md:justify-end
     "
-  >
-    <Button
-      onClick={handleBatchDownload}
-      disabled={loading}
-      size="sm"
-      className="flex items-center gap-1 w-full sm:w-auto"
-    >
-      {loading ? "Exporting..." : "Export QR Codes"}
-    </Button>
+            >
+              <Button
+                onClick={handleBatchDownload}
+                disabled={loading}
+                size="sm"
+                className="flex items-center gap-1 w-full sm:w-auto"
+              >
+                {loading ? "Exporting..." : "Export QR Codes"}
+              </Button>
 
-    <Button
-      onClick={() => handleBulkArchive(true)}
-      disabled={loading}
-      size="sm"
-      variant="destructive"
-      className="w-full sm:w-auto"
-    >
-      Archive
-    </Button>
+              <Button
+                onClick={() => handleBulkArchive(true)}
+                disabled={loading}
+                size="sm"
+                variant="destructive"
+                className="w-full sm:w-auto"
+              >
+                Archive
+              </Button>
 
-    <Button
-      onClick={() => handleBulkArchive(false)}
-      disabled={loading}
-      size="sm"
-      variant="outline"
-      className="w-full sm:w-auto"
-    >
-      Unarchive
-    </Button>
-  </div>
-</Card>
+              <Button
+                onClick={() => handleBulkArchive(false)}
+                disabled={loading}
+                size="sm"
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                Unarchive
+              </Button>
+            </div>
+          </Card>
 
 
         </motion.div>
