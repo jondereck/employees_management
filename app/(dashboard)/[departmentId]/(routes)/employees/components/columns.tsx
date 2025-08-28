@@ -365,13 +365,6 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     // Find the employee's salary from the seeded table
     const salaryRecord = salarySchedule.find(s => s.grade === grade);
     const salary = salaryRecord ? salaryRecord.steps[step - 1] ?? 0 : 0;
-
-    console.log("Salary column debug:");
-    console.log("grade:", grade, "dateHired:", dateHired, "latestAppointment:", latestAppointment);
-    console.log("Computed step:", step);
-    console.log("Found salaryRecord:", salaryRecord);
-    console.log("Calculated salary:", salary);
-
     return formatSalary(String(salary));
   }
 },

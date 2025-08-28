@@ -31,6 +31,10 @@ import { useEffect, useMemo, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import CopyOptionsModal from "../copy-options";
 import { toast } from "sonner";
+import { computeStep } from "@/utils/compute-step";
+import { salarySchedule } from "@/utils/salary-schedule";
+import { applyFormat, buildCopyFullName, buildFullName } from "@/utils/formatters";
+import { DetailItem } from "./detail-item";
 
 
 type Field = "fullName" | "position" | "office";
@@ -43,111 +47,68 @@ interface InfoProps {
 const Info = ({
   data,
 }: InfoProps) => {
+const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+const [selectedFields, setSelectedFields] = useState<Field[]>(["fullName"]);
+const [format, setFormat] = useState<"uppercase" | "lowercase" | "capitalize">("capitalize");
+const [isInfoOpen, setIsInfoOpen] = useState(false);
+const [copied, setCopied] = useState(false);
 
-  const formattedSalary = formatSalary(data.salary);
-  const annualSalary = calculateAnnualSalary(data.salary);
-  const formattedContactNumber = formatContactNumber(data.contactNumber);
-  const formattedAddress = addressFormat(data);
-  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
-  // Lifted state for fields & format
-  const [selectedFields, setSelectedFields] = useState<Field[]>(["fullName"]);
-  const [format, setFormat] = useState("capitalize");
-  const [isInfoOpen, setIsInfoOpen] = useState(false);
+const grade = Number(data.salaryGrade);
+const step = computeStep({ dateHired: data.dateHired, latestAppointment: data.latestAppointment });
+const salaryRecord = salarySchedule.find((s) => s.grade === grade);
+const monthlySalary = salaryRecord ? salaryRecord.steps[step - 1] ?? 0 : 0;
+const formattedSalary = formatSalary(String(monthlySalary));
+const annualSalary = calculateAnnualSalary(String(monthlySalary));
+const formattedAddress = addressFormat(data);
 
+const yearService = calculateYearService(data.dateHired, data.terminateDate);
+const latestAppointmentService = calculateYearServiceLatestAppointment(data.latestAppointment);
 
-  // Calculate years of service
-  const yearService = calculateYearService(data.dateHired, data.terminateDate);
+const formattedDateHired = getBirthday(data.dateHired);
+const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment);
+const formattedTerminateDate = formatTerminateDate(data.terminateDate);
+const calculatedAge = calculateAge(data.birthday);
+const formattedBirthday = getBirthday(data.birthday);
 
-  // Calculate years of service since latest appointment
-  const latestAppointmentService = calculateYearServiceLatestAppointment(data.latestAppointment);
+const fullName = buildFullName(data);
+const copyFullName = buildCopyFullName(data);
 
-  // Format dates
-  const formattedDateHired = getBirthday(data.dateHired);
-  const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment);
-  const formattedTerminateDate = formatTerminateDate(data.terminateDate);
-  const calculatedAge = calculateAge(data.birthday);
-  const formattedBirthday = getBirthday(data.birthday);
+const copyData: Record<Field, string> = {
+  fullName: copyFullName,
+  office: data.offices?.name || "",
+  position: data.position || "",
+};
 
-  const [copied, setCopied] = useState(false);
+// Load saved copy options
+useEffect(() => {
+  const saved = localStorage.getItem("copyOptions");
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed.fields && parsed.format) {
+        setSelectedFields(parsed.fields);
+        setFormat(parsed.format);
+      }
+    } catch {}
+  }
+}, []);
 
-  const onCopyClick = () => {
-    handleCopy();
-    setCopied(true);
-    toast.success("Copied to clipboard!");
-    setTimeout(() => setCopied(false), 2000);
-  };
+const handleInfoClose = () => {
+  localStorage.setItem("copyOptions", JSON.stringify({ fields: selectedFields, format }));
+  setIsInfoOpen(false);
+};
 
+const previewText = useMemo(() => {
+  const parts = selectedFields.map((field) => copyData[field]);
+  return applyFormat(parts.join(", "), format);
+}, [selectedFields, format, copyData]);
 
-  const fullName = `${data.prefix} ${data.firstName.toUpperCase()} ${data.nickname ? `"${data.nickname}"` : ""} ${data.middleName.length === 1 ? data.middleName.toUpperCase() + '.' : data.middleName.toUpperCase()} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
-
-
-  const copyFullName = `${data.firstName.toUpperCase()}${data.middleName ? ' ' + data.middleName[0].toUpperCase() + '.' : ''} ${data.lastName.toUpperCase()} ${data.suffix.toUpperCase()}`;
-
-
-  const DetailItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
-    <div className="mb-1">
-      <h3 className="text-xs sm:text-sm text-muted-foreground">{label}</h3>
-      <p className="text-sm sm:text-base font-medium text-gray-900">{value}</p>
-    </div>
-
-  );
-
-  const copyData: Record<Field, string> = {
-    fullName: copyFullName,
-    office: data.offices?.name || "",
-    position: data.position || "",
-  };
-
-  // Load saved copy options once
-  useEffect(() => {
-    const saved = localStorage.getItem("copyOptions");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.fields && parsed.format) {
-          setSelectedFields(parsed.fields);
-          setFormat(parsed.format);
-        }
-      } catch { }
-    }
-  }, []);
-
-  const handleInfoClose = () => {
-    // Save copy options before closing
-    localStorage.setItem(
-      "copyOptions",
-      JSON.stringify({ fields: selectedFields, format })
-    );
-    setIsInfoOpen(false);
-  };
-
-  const applyFormat = (text: string) => {
-    switch (format) {
-      case "uppercase":
-        return text.toUpperCase();
-      case "lowercase":
-        return text.toLowerCase();
-      case "capitalize":
-        return text
-          .split(" ")
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(" ");
-      default:
-        return text;
-    }
-  };
-
-
-  const previewText = useMemo(() => {
-    const parts = selectedFields.map((field) => copyData[field]);
-    const joined = parts.join(" , ");
-    return applyFormat(joined);
-  }, [selectedFields, format, copyData]);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(previewText);
-  };
-
+const handleCopy = () => {
+  navigator.clipboard.writeText(previewText);
+  setCopied(true);
+  toast.success("Copied to clipboard!");
+  setTimeout(() => setCopied(false), 2000);
+};
 
   return (
    <div
@@ -227,7 +188,7 @@ const Info = ({
        <div className="flex flex-col items-center gap-4 mt-4 sm:mt-1 print:hidden">
           <div className="hidden md:flex gap-3">
             <Button
-              onClick={onCopyClick}
+              onClick={handleCopy}
               variant="outline"
               size="icon"
               className="flex items-center gap-2"
@@ -292,7 +253,7 @@ const Info = ({
           <DetailItem label="Birthday" value={formattedBirthday || "—"} />
           <DetailItem label="Age" value={calculatedAge || "—"} />
           <DetailItem label="Educational Attainment" value={data?.education || "—"} />
-          <DetailItem label="Contact Number" value={formattedContactNumber || "—"} />
+         <DetailItem label="Contact Number" value={formatContactNumber(data.contactNumber)} />
           <DetailItem label="Address" value={formattedAddress || "—"} />
           <DetailItem
             label="Emergency Contact Person"

@@ -5,7 +5,7 @@ import { Eligibility, EmployeeType, EmployeesColumn, Offices, columns } from "./
 
 import useSWR from 'swr';
 import { useEmployees } from "@/hooks/use-employees";
-import { useDebounce } from "@/hooks/use-debounce"; 
+import { useDebounce } from "@/hooks/use-debounce";
 
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import Notifications from "./notifications";
 import { OfficesColumn } from "../../offices/components/columns";
 import EmployeeFilters from "./employee-filters";
 import { format } from "date-fns";
+import { FloatingSelectionBar } from "./floating-selection-bar";
 
 
 
@@ -30,7 +31,7 @@ import { format } from "date-fns";
 
 interface EmployeesClientProps {
   departmentId: string; // ✅ Add this instead to build your SWR URL
-  data:EmployeesColumn[];
+  data: EmployeesColumn[];
   offices: { id: string; name: string }[];
   eligibilities: { id: string; name: string; value: string }[];
   employeeTypes: { id: string; name: string; value: string }[];
@@ -49,48 +50,48 @@ export const EmployeesClient = ({ departmentId, data, offices, eligibilities, em
     status: "all",
   });
 
- const { employees: swrEmployees = [], isLoading, isError } = useEmployees(departmentId);
+  const { employees: swrEmployees = [], isLoading, isError } = useEmployees(departmentId);
 
-const employees = useMemo(() => {
-  let merged: EmployeesColumn[];
+  const employees = useMemo(() => {
+    let merged: EmployeesColumn[];
 
-  // If SWR has data, prefer it
-  if (swrEmployees.length > 0) {
-    merged = swrEmployees.map((emp) => ({
-      ...emp,
-      birthday: emp.birthday ? format(new Date(emp.birthday), "M d, yyyy") : '',
-      dateHired: emp.dateHired ? format(new Date(emp.dateHired), "M d, yyyy") : '',
-    }));
-  } else {
-    // If no SWR data yet, use the already formatted SSR data directly
-    merged = data ?? [];
-  }
+    // If SWR has data, prefer it
+    if (swrEmployees.length > 0) {
+      merged = swrEmployees.map((emp) => ({
+        ...emp,
+        birthday: emp.birthday ? format(new Date(emp.birthday), "M d, yyyy") : '',
+        dateHired: emp.dateHired ? format(new Date(emp.dateHired), "M d, yyyy") : '',
+      }));
+    } else {
+      // If no SWR data yet, use the already formatted SSR data directly
+      merged = data ?? [];
+    }
 
-  return merged.sort((a, b) => {
-    const dateA = new Date((a as any).updatedAt || (a as any).createdAt).getTime();
-    const dateB = new Date((b as any).updatedAt || (b as any).createdAt).getTime();
-    return dateB - dateA;
-  });
-}, [swrEmployees, data]);
+    return merged.sort((a, b) => {
+      const dateA = new Date((a as any).updatedAt || (a as any).createdAt).getTime();
+      const dateB = new Date((b as any).updatedAt || (b as any).createdAt).getTime();
+      return dateB - dateA;
+    });
+  }, [swrEmployees, data]);
 
 
 
- const filteredEmployees = useMemo(() => {
-  return data.filter((employee) => {
-    const officeMatch =
-      filters.offices.length === 0 || filters.offices.includes(employee.offices.id);
-    const eligMatch =
-      filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.id);
-    const typeMatch =
-      filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.id);
-    const statusMatch =
-      filters.status === "all" ||
-      (filters.status === "Active" && !employee.isArchived) ||
-      (filters.status === "Inactive" && employee.isArchived);
+  const filteredEmployees = useMemo(() => {
+    return data.filter((employee) => {
+      const officeMatch =
+        filters.offices.length === 0 || filters.offices.includes(employee.offices.id);
+      const eligMatch =
+        filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.id);
+      const typeMatch =
+        filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.id);
+      const statusMatch =
+        filters.status === "all" ||
+        (filters.status === "Active" && !employee.isArchived) ||
+        (filters.status === "Inactive" && employee.isArchived);
 
-    return officeMatch && eligMatch && typeMatch && statusMatch;
-  });
-}, [data, filters]);
+      return officeMatch && eligMatch && typeMatch && statusMatch;
+    });
+  }, [data, filters]);
 
 
   // State for search input
@@ -98,25 +99,25 @@ const employees = useMemo(() => {
   const debouncedSearchTerm = useDebounce(searchTerm, 400);
 
   // Filter data based on the search term
-const filteredData = useMemo(() => {
-  const lower = debouncedSearchTerm.toLowerCase();
+  const filteredData = useMemo(() => {
+    const lower = debouncedSearchTerm.toLowerCase();
 
-  return filteredEmployees.filter((employee) => {
-    const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
-    const reversedName = `${employee.lastName} ${employee.firstName}`.toLowerCase();
-    const contactNumber = employee.contactNumber?.toLowerCase() || "";
-    const nickname = employee.nickname?.toLowerCase() || "";
-    const employeeNo = employee.employeeNo?.toLowerCase() || "";
+    return filteredEmployees.filter((employee) => {
+      const fullName = `${employee.firstName} ${employee.lastName}`.toLowerCase();
+      const reversedName = `${employee.lastName} ${employee.firstName}`.toLowerCase();
+      const contactNumber = employee.contactNumber?.toLowerCase() || "";
+      const nickname = employee.nickname?.toLowerCase() || "";
+      const employeeNo = employee.employeeNo?.toLowerCase() || "";
 
-    return (
-      fullName.includes(lower) ||
-      reversedName.includes(lower) ||
-      contactNumber.includes(lower) ||
-      nickname.includes(lower) ||
-      employeeNo.includes(lower)
-    );
-  });
-}, [filteredEmployees, debouncedSearchTerm]);
+      return (
+        fullName.includes(lower) ||
+        reversedName.includes(lower) ||
+        contactNumber.includes(lower) ||
+        nickname.includes(lower) ||
+        employeeNo.includes(lower)
+      );
+    });
+  }, [filteredEmployees, debouncedSearchTerm]);
 
 
 
@@ -183,10 +184,14 @@ const filteredData = useMemo(() => {
               offices={offices}
               eligibilities={eligibilities}
               employeeTypes={employeeTypes}
+              renderExtra={(table) => <FloatingSelectionBar table={table} departmentId={departmentId} />}
             />
+
           </div>
+
         )}
       </div>
+
       <ApiList entityIdName="employeesId" entityName="employees" />
       <Footer />
     </div>

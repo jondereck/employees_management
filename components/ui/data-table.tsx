@@ -43,7 +43,7 @@ interface DataTableProps<TData, TValue> {
   eligibilities?: { id: string; name: string }[]
   employeeTypes?: { id: string; name: string }[]
   searchKeys?: string[]
-
+renderExtra?: (table: any) => React.ReactNode;
 }
 
 export function DataTable<TData, TValue>({
@@ -52,7 +52,8 @@ export function DataTable<TData, TValue>({
   offices,
   eligibilities,
   employeeTypes,
-  searchKeys
+  searchKeys,
+  renderExtra
 
 
 }: DataTableProps<TData, TValue>) {
@@ -199,6 +200,7 @@ export function DataTable<TData, TValue>({
           </div>
         </div>
       </div>
+       {renderExtra && renderExtra(table)}
     </div>
 
   )
