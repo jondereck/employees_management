@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Billboard, Offices } from "../types";
+import type { Billboard, Offices } from "../types";
 import useLoadingStore from "@/hooks/use-loading";
 import { motion } from "framer-motion";
 import Loading from "@/components/loading-state";
