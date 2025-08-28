@@ -43,20 +43,11 @@ export const CellAction = ({
 
   }
  
-  const onView = async () => {
-    try {
-      startTransition(() => {
-        router.push(`/${params.departmentId}/view/employee/${data.id}`);
-      });
-    } catch (error) {
-      toast({
-        title: "Error!",
-        description: "Failed to archive employee."
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+const onView = () => {
+  startTransition(() => {
+    router.push(`/${params.departmentId}/view/employee/${data.id}`);
+  });
+};
 
   const onUpdate = async () => {
     try {
