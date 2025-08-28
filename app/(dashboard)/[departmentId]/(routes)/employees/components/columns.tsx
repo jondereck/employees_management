@@ -93,7 +93,7 @@ export type EmployeesColumn = {
   barangay: string;
   houseNo: string;
   salaryGrade: string;
-    salaryStep: string;
+  salaryStep: string;
   memberPolicyNo: string;
   age: string;
   nickname: string;

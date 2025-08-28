@@ -48,6 +48,7 @@ export interface Employees {
   philHealthNo: string;
   pagIbigNo: string;
   salary: string;
+   salaryStep: string;
   dateHired: string;
   latestAppointment: string;
   terminateDate: string;
