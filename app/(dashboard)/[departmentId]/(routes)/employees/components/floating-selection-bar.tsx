@@ -12,6 +12,7 @@ import QRCode from "qrcode";
 import ImageLogo from "@/public/icon-192x192.png";
 import axios from "axios";
 import { mutate } from "swr";
+import { AlertModal } from "@/components/modals/alert-modal";
 
 interface FloatingSelectionBarProps<TData> {
   table: Table<TData>;
@@ -22,6 +23,7 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
   const selectedRows = table.getSelectedRowModel().rows;
   const hasSelection = selectedRows.length > 0;
   const [loading, setLoading] = useState(false);
+  const [isAlertOpen, setIsAlertOpen] = useState(false);
 
   const handleBatchDownload = async () => {
     setLoading(true);
@@ -90,9 +92,9 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
         ctx.drawImage(logo, x, y, logoSize, logoSize);
 
         const imgData = canvas.toDataURL("image/png");
-       zip.file(`${employee.employeeNo.split(",")[0].trim()}.png`, imgData.split("base64,")[1], {
-  base64: true,
-});
+        zip.file(`${employee.employeeNo.split(",")[0].trim()}.png`, imgData.split("base64,")[1], {
+          base64: true,
+        });
 
       }
 
@@ -115,6 +117,31 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
       setLoading(false);
     }
   };
+
+  const handleBulkDelete = async () => {
+    if (selectedRows.length === 0) return;
+
+    setLoading(true);
+    try {
+      const ids = selectedRows.map((row) => (row.original as any).id);
+
+        await axios.delete(`/api/${departmentId}/employees/delete`, {
+      data: { employeeIds: ids },
+    });
+
+
+      toast.success(`${ids.length} employees deleted.`);
+      mutate(`/api/${departmentId}/employees`);
+      table.resetRowSelection();
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to delete employees.");
+    } finally {
+      setLoading(false);
+      setIsAlertOpen(false); // Close modal after deletion
+    }
+  };
+
 
   const handleBulkArchive = async (archived: boolean) => {
     try {
@@ -156,6 +183,13 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
           transition={{ type: "spring", stiffness: 200, damping: 20 }}
           className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md"
         >
+          <AlertModal
+            isOpen={isAlertOpen}
+            onClose={() => setIsAlertOpen(false)}
+            onConfirm={handleBulkDelete}
+            loading={loading}
+          />
+
           <Card
             className="
     flex flex-col md:flex-row gap-3 md:gap-4
@@ -183,7 +217,7 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
                 size="sm"
                 className="flex items-center gap-1 w-full sm:w-auto"
               >
-                {loading ? "Exporting..." : "Export QR Codes"}
+                QR Code
               </Button>
 
               <Button
@@ -205,11 +239,22 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
               >
                 Unarchive
               </Button>
+              <Button
+                onClick={() => setIsAlertOpen(true)}
+                disabled={loading}
+                size="sm"
+                variant="destructive"
+                className="w-full sm:w-auto"
+              >
+                Delete
+              </Button>
             </div>
           </Card>
 
 
         </motion.div>
+
+
       )}
     </AnimatePresence>
   );
