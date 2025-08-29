@@ -244,3 +244,47 @@ export async function PATCH(
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
+
+
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: { departmentId: string, employeesId: string } }
+) {
+  try {
+    const { userId } = auth();
+
+    if (!userId) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    if (!params.employeesId) {
+      return new NextResponse("Employees id is required", { status: 400 });
+    }
+
+    const departmentByUserId = await prismadb.department.findFirst({
+      where: {
+        id: params.departmentId,
+        userId,
+      }
+    });
+
+    if (!departmentByUserId) {
+      return new NextResponse("Unauthorized", { status: 405 })
+    }
+
+    const employee = await prismadb.employee.delete({
+      where: {
+        id: params.employeesId,
+
+      },
+    });
+
+    return NextResponse.json(employee);
+
+  } catch (error) {
+    console.log("[EMPLOYEES_DELETE]", error);
+    return new NextResponse("Internal Error", { status: 500 })
+  }
+}
+

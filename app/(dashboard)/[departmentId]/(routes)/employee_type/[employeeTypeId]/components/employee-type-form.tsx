@@ -67,7 +67,7 @@ export const EmployeeTypeForm = ({
         await axios.post(`/api/${params.departmentId}/employee_type`, values); ;
       }
 
-      router.refresh();
+      // router.refresh();
       router.push(`/${params.departmentId}/employee_type`)
 
 
