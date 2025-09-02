@@ -25,7 +25,7 @@ import { formatContactNumber, formatDate, formatFullName, formatGsisNumber, form
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { salarySchedule } from "@/utils/salary-schedule"
+import { salarySchedule } from "@/utils/salarySchedule"
 import { computeStep } from "@/utils/compute-step"
 
 

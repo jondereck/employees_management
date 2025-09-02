@@ -32,9 +32,10 @@ import { QRCodeCanvas } from "qrcode.react";
 import CopyOptionsModal from "../copy-options";
 import { toast } from "sonner";
 import { computeStep } from "@/utils/compute-step";
-import { salarySchedule } from "@/utils/salary-schedule";
+
 import { applyFormat, buildCopyFullName, buildFullName } from "@/utils/formatters";
 import { DetailItem } from "./detail-item";
+import { salarySchedule } from "@/utils/salarySchedule";
 
 
 type Field = "fullName" | "position" | "office";

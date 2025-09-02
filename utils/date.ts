@@ -1,6 +1,31 @@
 // utils/date.ts
 import * as XLSX from 'xlsx-js-style';
 
+// utils/date.ts
+
+// Parse a date-like value and return UTC Y/M/D
+export function getUTCYMD(value?: string | Date | null): { y: number; m: number; d: number } | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return null;
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() };
+}
+
+// Excel serial date from UTC Y/M/D (days since 1899-12-30), ignoring TZ completely.
+export function excelSerialFromUTCYMD(ymd: { y: number; m: number; d: number }): number {
+  const { y, m, d } = ymd;
+  const ms = Date.UTC(y, m, d) - Date.UTC(1899, 11, 30); // Excel epoch
+  return Math.round(ms / 86400000); // exact day count
+}
+
+// Convenience: input -> Excel serial (or null if invalid)
+export function toExcelSerialDate(value?: string | Date | null): number | null {
+  const ymd = getUTCYMD(value);
+  if (!ymd) return null;
+  return excelSerialFromUTCYMD(ymd);
+}
+
+
 // Reusable formatter for *string* output when you just need display text
 export const fmtDateUTC = new Intl.DateTimeFormat('en-US', {
   timeZone: 'UTC',

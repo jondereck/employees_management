@@ -1,4 +1,4 @@
-import { salarySchedule } from "@/utils/salary-schedule";
+import { salarySchedule } from "../utils/salarySchedule";
 import { PrismaClient } from "@prisma/client";
 
 
@@ -26,7 +26,7 @@ async function main() {
     }
   }
 
-  console.log("✅ Salary schedule seeded up to SG 10");
+  console.log("✅ Salary schedule seeded ");
 }
 
 main()
