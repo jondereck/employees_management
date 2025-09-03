@@ -3,14 +3,21 @@ import { officeMapping, eligibilityMapping, appointmentMapping } from '@/utils/e
 
 type Column = { name: string; key: string };
 
+export type Mappings = {
+  officeMapping: Record<string, string>;
+  eligibilityMapping: Record<string, string>;
+  appointmentMapping: Record<string, string>;
+};
+
 type DownloadExcelParams = {
   selectedKeys: string[];
   columnOrder: Column[];
   statusFilter: 'all' | 'active' | 'retired';
-  baseImageDir: string;   // <-- NEW
-  baseQrDir: string;      // <-- NEW
+  baseImageDir: string;
+  baseQrDir: string;
   qrPrefix?: string;
   appointmentFilters: string[] | 'all';
+  mappings: Mappings; // <-- NEW
 };
 
 function normalizeWindowsDir(p: string) {
@@ -27,8 +34,11 @@ export async function generateExcelFile({
   baseImageDir,
   baseQrDir,
   qrPrefix = 'JDN',
-  appointmentFilters
+  appointmentFilters,
+  mappings
 }: DownloadExcelParams): Promise<Blob> {
+
+   const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
   const hiddenFields = [
     'departmentId', 'id', 'isFeatured', 'isAwardee',
     'createdAt', 'updatedAt', 'employeeLink', 'prefix', 'region'

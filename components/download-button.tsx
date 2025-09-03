@@ -6,12 +6,13 @@ import * as XLSX from 'xlsx-js-style';
 import { FaFileExcel } from 'react-icons/fa';
 import Modal from './ui/modal';
 import { officeMapping, eligibilityMapping, appointmentMapping } from "@/utils/employee-mappings";
-import { generateExcelFile } from '@/utils/download-excel';
+import { generateExcelFile, Mappings } from '@/utils/download-excel';
 
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+   const [mappings, setMappings] = useState<Mappings | null>(null);
 
   // at the top of DownloadStyledExcel component
 const [showAdvanced, setShowAdvanced] = useState<boolean>(() => {
@@ -35,41 +36,61 @@ useEffect(() => {
     }
     return 'all';
   });
-  const APPOINTMENT_OPTIONS = useMemo(
-    () => Array.from(new Set(Object.values(appointmentMapping))).sort(),
-    []
-  );
 
-  // state: default to ALL options
-  const [appointmentFilters, setAppointmentFilters] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('appointmentFilters');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        } catch { }
+    useEffect(() => {
+    const load = async () => {
+      try {
+        const cached = localStorage.getItem('hrps_mappings');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setMappings(parsed);
+        }
+        const res = await fetch('/api/mappings?' + Date.now(), { cache: 'no-store' });
+        if (res.ok) {
+          const fresh = await res.json();
+          setMappings(fresh);
+          localStorage.setItem('hrps_mappings', JSON.stringify(fresh));
+        }
+      } catch (e) {
+        console.error('Failed loading mappings', e);
       }
+    };
+    load();
+  }, [modalOpen]);
+
+   const APPOINTMENT_OPTIONS = useMemo(() => {
+    if (!mappings) return [];
+    return Array.from(new Set(Object.values(mappings.appointmentMapping))).sort();
+  }, [mappings]);
+
+  // Appointment filters state (default = all)
+  const [appointmentFilters, setAppointmentFilters] = useState<string[]>([]);
+  useEffect(() => {
+    // initialize after mappings are ready
+    if (!mappings) return;
+    const saved = localStorage.getItem('appointmentFilters');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setAppointmentFilters(parsed);
+          return;
+        }
+      } catch {}
     }
-    return APPOINTMENT_OPTIONS;  // all by default
-  });
+    setAppointmentFilters(APPOINTMENT_OPTIONS); // default: all
+  }, [mappings, APPOINTMENT_OPTIONS.length]);
 
   useEffect(() => {
     localStorage.setItem('appointmentFilters', JSON.stringify(appointmentFilters));
   }, [appointmentFilters]);
 
-const toggleAppointment = (label: string) => {
-  setAppointmentFilters((prev) =>
-    prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
-  );
-};
-
-const isAllAppointments = appointmentFilters.length === APPOINTMENT_OPTIONS.length;
-
-const toggleAllAppointments = () => {
-  setAppointmentFilters(isAllAppointments ? [] : [...APPOINTMENT_OPTIONS]);
-};
-
+  const isAllAppointments = APPOINTMENT_OPTIONS.length > 0 &&
+                            appointmentFilters.length === APPOINTMENT_OPTIONS.length;
+  const toggleAppointment = (label: string) =>
+    setAppointmentFilters(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]);
+  const toggleAllAppointments = () =>
+    setAppointmentFilters(isAllAppointments ? [] : [...APPOINTMENT_OPTIONS]);
 
   // NEW state
   const [imageBaseDir, setImageBaseDir] = useState<string>(() =>
@@ -213,25 +234,27 @@ const toggleAllAppointments = () => {
   useEffect(() => {
     selectedColumnsRef.current = selectedColumns;
   }, [selectedColumns]);
-
-  const handleDownload = async (selectedKeys: string[]) => {
+const handleDownload = async (selectedKeys: string[]) => {
+    if (!mappings) {
+      toast.error('Mappings not loaded yet. Please try again.');
+      return;
+    }
     setLoading(true);
     const toastId = toast.loading('Generating Excel file...');
-
     try {
       const blob = await generateExcelFile({
         selectedKeys,
         columnOrder,
         statusFilter,
-        baseImageDir: imageBaseDir,  // NEW
-        baseQrDir: qrBaseDir,        // NEW
+        baseImageDir: imageBaseDir,
+        baseQrDir: qrBaseDir,
         qrPrefix,
-       appointmentFilters:
-    appointmentFilters.length === APPOINTMENT_OPTIONS.length ? 'all' : appointmentFilters,
+        appointmentFilters: isAllAppointments ? 'all' : appointmentFilters,
+        mappings, // <-- pass dynamic mappings
       });
 
       const now = new Date();
-      const filename = `employee_list_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}.xlsx`;
+      const filename = `employee_list_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}.xlsx`;
 
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
