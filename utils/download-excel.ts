@@ -7,12 +7,27 @@ type DownloadExcelParams = {
   selectedKeys: string[];
   columnOrder: Column[];
   statusFilter: 'all' | 'active' | 'retired';
+  baseImageDir: string;   // <-- NEW
+  baseQrDir: string;      // <-- NEW
+  qrPrefix?: string;
+  appointmentFilters: string[] | 'all';
 };
+
+function normalizeWindowsDir(p: string) {
+  const trimmed = (p || '').trim().replace(/[\/]/g, '\\');
+  // remove trailing slashes
+  return trimmed.replace(/[\\]+$/, '');
+}
+
 
 export async function generateExcelFile({
   selectedKeys,
   columnOrder,
   statusFilter,
+  baseImageDir,
+  baseQrDir,
+  qrPrefix = 'JDN',
+  appointmentFilters
 }: DownloadExcelParams): Promise<Blob> {
   const hiddenFields = [
     'departmentId', 'id', 'isFeatured', 'isAwardee',
@@ -26,6 +41,9 @@ export async function generateExcelFile({
 
   const data = await response.json();
   if (data.length === 0) throw new Error('No employee data found.');
+
+  const safeImageDir = normalizeWindowsDir(baseImageDir);
+  const safeQrDir = normalizeWindowsDir(baseQrDir);
 
   const updatedData = data.employees.map((row: any) => {
     if (row.officeId && officeMapping[row.officeId]) {
@@ -47,6 +65,27 @@ export async function generateExcelFile({
         year: 'numeric', month: '2-digit', day: '2-digit',
       });
     }
+
+    if (row.middleName) {
+      const trimmed = row.middleName.trim();
+      row.middleName = trimmed.length > 0 ? `${trimmed[0].toUpperCase()}.` : '';
+    }
+
+
+    row.gsisNo = (row.gsisNo?.toString().trim()) || "N/A";
+    row.tinNo = (row.tinNo?.toString().trim()) || "N/A";
+    row.philHealthNo = (row.philHealthNo?.toString().trim()) || "N/A";
+    row.pagIbigNo = (row.pagIbigNo?.toString().trim()) || "N/A";
+
+    // --- NEW: auto-fill nickname from first word of firstName if missing ---
+    if (!row.nickname || row.nickname.toString().trim() === "") {
+      const first = (row.firstName ?? "").toString().trim();
+      row.nickname = first.split(/\s+/)[0] || "";
+    }
+
+    const employeeNoSafe = String(row.employeeNo ?? '').split(',')[0].trim();
+    row.imagePath = `${safeImageDir}\\${employeeNoSafe}.png`;
+    row.qrPath = `${safeQrDir}\\${qrPrefix}${employeeNoSafe}.png`;
     return row;
   });
 
@@ -57,6 +96,12 @@ export async function generateExcelFile({
     filteredEmployees = updatedData.filter((emp: any) => emp.isArchived === true);
   }
 
+  if (appointmentFilters !== 'all') {
+    const allowed = new Set(appointmentFilters.map(s => s.toLowerCase()));
+    filteredEmployees = filteredEmployees.filter((emp: any) =>
+      emp.employeeTypeId && allowed.has(String(emp.employeeTypeId).toLowerCase())
+    );
+  }
   const visibleColumns = columnOrder.filter(
     col => !hiddenFields.includes(col.key) && selectedKeys.includes(col.key)
   );

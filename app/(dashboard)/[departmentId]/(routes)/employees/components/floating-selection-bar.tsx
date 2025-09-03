@@ -58,11 +58,13 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
         canvas.toBlob((blob) => {
           if (blob) {
             const employeeNoSafe = employee.employeeNo.split(",")[0].trim(); // <-- take only before comma
-            saveAs(blob, `${employeeNoSafe}.png`);
-            toast.success(`QR Code for ${employeeNoSafe} downloaded!`);
+            const fileName = `JDN${employeeNoSafe}.png`; // <-- prepend JDN
+            saveAs(blob, fileName);
+            toast.success(`QR Code for ${fileName} downloaded!`);
           }
           setLoading(false);
         });
+
 
         return;
       }
@@ -125,9 +127,9 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
     try {
       const ids = selectedRows.map((row) => (row.original as any).id);
 
-        await axios.delete(`/api/${departmentId}/employees/delete`, {
-      data: { employeeIds: ids },
-    });
+      await axios.delete(`/api/${departmentId}/employees/delete`, {
+        data: { employeeIds: ids },
+      });
 
 
       toast.success(`${ids.length} employees deleted.`);
