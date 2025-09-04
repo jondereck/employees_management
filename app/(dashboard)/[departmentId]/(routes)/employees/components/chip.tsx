@@ -1,40 +1,22 @@
-import React from "react";
-
-interface ChipProps {
-  label: string;
-  onRemove?: () => void;
-}
-
-const Chip: React.FC<ChipProps> = ({ label, onRemove }) => {
+// components/ui/Chip.tsx
+export default function Chip({
+  label,
+  onRemove,
+}: { label: string; onRemove?: () => void }) {
   return (
-    <div
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "4px 8px",
-        borderRadius: "16px",
-        backgroundColor: "#e0e0e0",
-        marginRight: "8px",
-      }}
-    >
-      <span>{label}</span>
+    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700">
+      <span className="truncate max-w-[180px]" title={label}>{label}</span>
       {onRemove && (
         <button
+          type="button"
           onClick={onRemove}
-          style={{
-            marginLeft: "8px",
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
+          className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-gray-500 hover:bg-gray-200"
           aria-label={`Remove ${label}`}
+          title="Remove"
         >
           ×
         </button>
       )}
-    </div>
+    </span>
   );
-};
-
-export default Chip;
+}

@@ -14,6 +14,8 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { Check, ChevronsUpDown } from "lucide-react";
 import clsx from 'clsx';
 import Chip from '@/app/(dashboard)/[departmentId]/(routes)/employees/components/chip';
+import { CheckboxListPicker } from './checkbox-list-picker';
+import { ActionTooltip } from './ui/action-tooltip';
 
 
 
@@ -30,21 +32,16 @@ export default function DownloadStyledExcel() {
   const [posRuleCaseSensitive, setPosRuleCaseSensitive] = useState(false);
   const [posRuleReplaceWith, setPosRuleReplaceWith] = useState('');
 
-  const assignSelectedToRow = (i: number) => {
-    if (posSelected.length === 0) return;
-    updateBulkRow(i, { targets: Array.from(new Set([...bulkRows[i].targets, ...posSelected])) });
+  const [globalTargets, setGlobalTargets] = useState<string[]>([]);
+
+  const applyGlobalToRow = (i: number) => {
+    if (globalTargets.length === 0) return;
+    updateBulkRow(i, { targets: [...globalTargets] });
   };
 
-  const assignFilteredToRow = (i: number) => {
-    if (filteredPositions.length === 0) return;
-    updateBulkRow(i, { targets: Array.from(new Set([...bulkRows[i].targets, ...filteredPositions])) });
-  };
 
-  const clearRowTargets = (i: number) => updateBulkRow(i, { targets: [] });
-
-  const removeRowTarget = (i: number, t: string) =>
-    updateBulkRow(i, { targets: bulkRows[i].targets.filter(x => x !== t) });
-
+  const truncate = (s: string, n = 32) =>
+    s.length > n ? s.slice(0, n - 1) + "…" : s;
 
   type BulkRow = {
     mode: 'exact' | 'startsWith' | 'contains' | 'regex';
@@ -479,110 +476,6 @@ export default function DownloadStyledExcel() {
   };
 
 
-  function TagPicker({
-    value,
-    onChange,
-    options,
-    placeholder = "Type to search positions…",
-    maxMenuHeight = 180,
-  }: {
-    value: string[];
-    onChange: (next: string[]) => void;
-    options: string[];
-    placeholder?: string;
-    maxMenuHeight?: number;
-  }) {
-    const [query, setQuery] = useState("");
-    const [open, setOpen] = useState(false);
-    const inputRef = useRef<HTMLInputElement | null>(null);
-
-    const lowerSelected = new Set(value.map(v => v.toLowerCase()));
-    const filtered = useMemo(() => {
-      const q = query.trim().toLowerCase();
-      const base = q
-        ? options.filter(o => o.toLowerCase().includes(q))
-        : options;
-      return base.filter(o => !lowerSelected.has(o.toLowerCase()));
-    }, [options, query, value]);
-
-    const add = (item: string) => {
-      if (!item) return;
-      const exists = value.some(v => v.toLowerCase() === item.toLowerCase());
-      if (exists) return;
-      onChange([...value, item]);
-      setQuery("");
-      setOpen(false);
-      inputRef.current?.focus();
-    };
-
-    const remove = (item: string) => {
-      onChange(value.filter(v => v !== item));
-      inputRef.current?.focus();
-    };
-
-    const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (filtered.length > 0) {
-          add(filtered[0]);
-        } else if (query.trim()) {
-          add(query.trim());
-        }
-      } else if (e.key === "Backspace" && !query) {
-        if (value.length > 0) {
-          onChange(value.slice(0, -1));
-        }
-      }
-    };
-
-    return (
-      <div className="border rounded px-2 py-1 text-xs bg-white">
-        {/* chips */}
-        {value.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-1">
-            {value.map((v) => (
-              <Chip key={v} label={v} onRemove={() => remove(v)} />
-            ))}
-          </div>
-        )}
-
-        {/* input */}
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onKeyDown={onKeyDown}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 120)}
-          className="outline-none w-full"
-          placeholder={placeholder}
-        />
-
-        {/* suggestions */}
-        {open && filtered.length > 0 && (
-          <div
-            className="mt-1 border rounded bg-white shadow text-xs"
-            style={{ maxHeight: maxMenuHeight, overflowY: "auto" }}
-          >
-            {filtered.map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                className="w-full text-left px-2 py-1 hover:bg-gray-100"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => add(opt)}
-                title={opt}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className="flex justify-end">
       <button
@@ -640,11 +533,11 @@ export default function DownloadStyledExcel() {
                 <div className="px-3 pb-3">
                   <Tabs value={advancedTab} onValueChange={setAdvancedTab} className="w-full">
                     <TabsList className="grid grid-cols-4 w-full gap-2">
-                      <TabsTrigger value="columns">Filter</TabsTrigger>    
+                      <TabsTrigger value="filters">Filter</TabsTrigger>
                       <TabsTrigger value="columns_path">Columns</TabsTrigger>
                       <TabsTrigger value="paths">Paths</TabsTrigger>
                       <TabsTrigger value="position">Find &amp; Replace</TabsTrigger>
-                      
+
                     </TabsList>
 
                     {/* TAB: Paths */}
@@ -714,51 +607,11 @@ export default function DownloadStyledExcel() {
                     {/* TAB: Position Find & Replace */}
                     <TabsContent value="position" className="mt-3">
                       <div className="rounded-md border bg-white p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                          <div className="space-y-2">
-                            {/* Current rules */}
-                            <div className="mt-2">
-                              {positionReplaceRules.length === 0 ? (
-                                <div className="text-xs text-gray-500">No rules yet.</div>
-                              ) : (
-                                <ul className="space-y-2">
-                                  {positionReplaceRules.map((r, idx) => (
-                                    <li key={idx} className="border rounded p-2 text-xs flex items-start justify-between">
-                                      <div className="pr-2">
-                                        <div><span className="font-semibold">Mode:</span> {r.mode}{r.caseSensitive ? ' (case)' : ''}</div>
-                                        <div className="break-words"><span className="font-semibold">Targets:</span> {r.targets.join(', ') || '(regex via search)'}</div>
-                                        <div><span className="font-semibold">Replace with:</span> {r.replaceWith}</div>
-                                      </div>
-                                      <button
-                                        onClick={() => removePositionRule(idx)}
-                                        className="text-red-600 hover:underline ml-2"
-                                      >
-                                        Remove
-                                      </button>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-
-                        {/*bulk */}
-                        <div className="flex items-center justify-between mt-2">
-                        </div>
-                        <div className="mt-3 space-y-2">
+                        <div className=" space-y-2">
                           <div className="flex items-center justify-between">
-                            <h5 className="text-sm font-semibold">Bulk mappings</h5>
+                            <h5 className="text-sm font-semibold">Position</h5>
                             <div className="space-x-3">
-                              <button
-                                type="button"
-                                onClick={addSelectedToBulk}
-                                className="text-xs text-blue-600 hover:underline"
-                                title="Use currently selected positions as targets"
-                              >
-                                Add selected positions
-                              </button>
+
                               <button
                                 type="button"
                                 onClick={addBulkRow}
@@ -770,20 +623,38 @@ export default function DownloadStyledExcel() {
                           </div>
 
                           <div className="border rounded">
-                            <div className="grid grid-cols-12 gap-2 px-2 py-1 text-[11px] text-gray-600 bg-gray-50">
-                              <div className="col-span-2">Mode</div>
-                              <div className="col-span-4">Target (find)</div>
-                              <div className="col-span-5">Replace with</div>
-                              <div className="col-span-1">Case</div>
+                            {/* === Global Target Picker at the top === */}
+                            <div className="p-2 border-b bg-white">
+                              <CheckboxListPicker
+                                value={globalTargets}
+                                onChange={setGlobalTargets}
+                                options={allPositions}
+                                placeholder="Search positions…"
+                                maxHeight={220}
+                              />
                             </div>
 
-                            <div className="max-h-44 overflow-y-auto">
+                            {/* === Table header === */}
+                            <div className="grid grid-cols-[7rem,1fr,4rem] gap-2 px-2 py-1 text-[11px] text-gray-600 bg-gray-50">
+                              <div>Mode</div>
+                              <div>Replace with</div>
+                              <div>Case</div>
+                            </div>
+
+                            {/* === Table body === */}
+                            <div className="max-h-[50vh] overflow-y-auto divide-y">
                               {bulkRows.map((row, i) => (
-                                <div key={i} className="grid grid-cols-12 gap-2 items-center px-2 py-1 border-t">
-                                  <div className="col-span-2">
+                                <div
+                                  key={i}
+                                  className="grid grid-cols-[7rem,1fr,4rem] gap-2 items-start px-2 py-2"
+                                >
+                                  {/* Mode */}
+                                  <div>
                                     <select
                                       value={row.mode}
-                                      onChange={(e) => updateBulkRow(i, { mode: e.target.value as BulkRow['mode'] })}
+                                      onChange={(e) =>
+                                        updateBulkRow(i, { mode: e.target.value as BulkRow["mode"] })
+                                      }
                                       className="border rounded px-2 py-1 text-xs w-full"
                                     >
                                       <option value="startsWith">Starts with</option>
@@ -792,32 +663,40 @@ export default function DownloadStyledExcel() {
                                       <option value="regex">Regex</option>
                                     </select>
                                   </div>
-                                  <div className="col-span-4">
-                                    <TagPicker
-                                      value={row.targets}
-                                      onChange={(vals) => updateBulkRow(i, { targets: vals })}
-                                      options={allPositions}
-                                      placeholder="Search and add positions…"
-                                    />
-                                  </div>
 
-
-
-                                  <div className="col-span-5">
+                                  {/* Replace with */}
+                                  <div>
                                     <input
                                       type="text"
                                       value={row.replaceWith}
-                                      onChange={(e) => updateBulkRow(i, { replaceWith: e.target.value })}
+                                      onChange={(e) =>
+                                        updateBulkRow(i, { replaceWith: e.target.value })
+                                      }
                                       className="border rounded px-2 py-1 text-xs w-full"
                                       placeholder="Replace with… (e.g. Security Guard)"
                                     />
+                                    <button
+                                      type="button"
+                                      onClick={() => applyGlobalToRow(i)}
+                                      className="mt-1 text-[11px] text-blue-600 hover:underline"
+                                    >
+                                      Use global targets ({globalTargets.length})
+                                    </button>
                                   </div>
-                                  <div className="col-span-1 flex items-center justify-between">
-                                    <input
-                                      type="checkbox"
-                                      checked={row.caseSensitive}
-                                      onChange={(e) => updateBulkRow(i, { caseSensitive: e.target.checked })}
-                                    />
+
+                                  {/* Case + Remove */}
+                                  <div className="flex flex-col items-start gap-2">
+
+                                    <label className="flex items-center gap-1 text-xs">
+                                      <input
+                                        type="checkbox"
+                                        checked={row.caseSensitive}
+                                        onChange={(e) =>
+                                          updateBulkRow(i, { caseSensitive: e.target.checked })
+                                        }
+                                      />
+
+                                    </label>
                                     <button
                                       type="button"
                                       onClick={() => removeBulkRow(i)}
@@ -831,20 +710,76 @@ export default function DownloadStyledExcel() {
                             </div>
                           </div>
 
+                         
+                            <div className="space-y-2">
+                              {/* Current rules */}
+                              <div className="flex-1 overflow-y-auto border rounded p-2">
+
+                                <ul className="space-y-2">
+                                  {positionReplaceRules.map((r, idx) => (
+                                    <li
+                                      key={idx}
+                                      className="border rounded p-2 text-xs flex items-start justify-between"
+                                    >
+                                      <div className="pr-2 space-y-1">
+                                        <div>
+                                          <span className="font-semibold">Mode:</span> {r.mode}
+                                          {r.caseSensitive ? " (case)" : ""}
+                                        </div>
+
+                                        {/* Targets preview (1 line only + tooltip) */}
+                                        <div className="flex items-center gap-1">
+                                          <span className="font-semibold">Targets:</span>
+                                          <ActionTooltip
+                                            label={r.targets.join(", ") || "(regex via search)"}
+                                            side="top"
+                                            align="start"
+                                          >
+                                            <span
+                                              className="truncate max-w-[250px] block cursor-help text-gray-700"
+                                              title={r.targets.join(", ")}
+                                            >
+                                              {r.targets.length > 0 ? r.targets[0] : "(regex via search)"}
+                                              {r.targets.length > 1 && `, +${r.targets.length - 1} more`}
+                                            </span>
+                                          </ActionTooltip>
+                                        </div>
+
+                                        <div>
+                                          <span className="font-semibold">Replace with:</span>{" "}
+                                          {r.replaceWith}
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        onClick={() => removePositionRule(idx)}
+                                        className="text-red-600 hover:underline ml-2"
+                                      >
+                                        Remove
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+
+
+                              </div>
+                            </div>
+                        
+
                           <div className="flex justify-end">
                             <button
                               type="button"
                               onClick={applyBulkRowsAsRules}
                               className="bg-green-700 hover:bg-green-800 text-white px-3 py-1.5 rounded text-sm"
                             >
-                              Add all as rules
+                              Add as rule
                             </button>
                           </div>
                         </div>
 
                       </div>
                     </TabsContent>
-                 {/* TAB: Columns */}
+                    {/* TAB: Columns */}
                     <TabsContent value="columns_path" className="mt-3">
                       <div className="rounded-md border bg-white p-3">
                         <div className="mb-2 flex justify-between items-center text-sm">
@@ -871,31 +806,37 @@ export default function DownloadStyledExcel() {
                         </div>
                       </div>
                     </TabsContent>
+                    <TabsContent value="filters" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 space-y-4">
+                        {/* Appointment filter */}
+                        <div>
+                          <div className="mb-2 flex justify-between items-center text-sm">
+                            <label className="font-medium">Filter by Appointment</label>
+                            <button
+                              onClick={toggleAllAppointments}
+                              className="text-blue-600 hover:underline text-xs"
+                            >
+                              {isAllAppointments ? 'Deselect All' : 'Select All'}
+                            </button>
+                          </div>
 
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto border p-2 rounded bg-white shadow">
+                            {APPOINTMENT_OPTIONS.map((label) => (
+                              <label key={label} className="flex items-center space-x-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={appointmentFilters.includes(label)}
+                                  onChange={() => toggleAppointment(label)}
+                                />
+                                <span>{label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
 
-                    <TabsContent value="columns" className="mt-3">
-  <div className="rounded-md border bg-white p-3">
-    <div className="mb-2 flex justify-between items-center text-sm">
-      <label className="font-medium">Select Columns</label>
-      <button onClick={toggleSelectAll} className="text-blue-600 hover:underline text-xs">
-        {isAllSelected ? 'Deselect All' : 'Select All'}
-      </button>
-    </div>
+                      </div>
+                    </TabsContent>
 
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow">
-      {columnOrder.map((col) => (
-        <label key={col.key} className="flex items-center space-x-2 text-sm">
-          <input
-            type="checkbox"
-            checked={selectedColumns.includes(col.key)}
-            onChange={() => toggleColumn(col.key)}
-          />
-          <span>{col.name}</span>
-        </label>
-      ))}
-    </div>
-  </div>
-</TabsContent>
 
 
                   </Tabs>
@@ -917,7 +858,7 @@ export default function DownloadStyledExcel() {
 
 
 
-     
+
 
         <div className="mt-4 space-y-2">
           <label className="font-medium text-sm">Include Status:</label>
