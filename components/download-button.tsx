@@ -6,27 +6,230 @@ import * as XLSX from 'xlsx-js-style';
 import { FaFileExcel } from 'react-icons/fa';
 import Modal from './ui/modal';
 import { officeMapping, eligibilityMapping, appointmentMapping } from "@/utils/employee-mappings";
-import { generateExcelFile, Mappings } from '@/utils/download-excel';
+import { generateExcelFile, Mappings, PositionReplaceRule } from '@/utils/download-excel';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import clsx from 'clsx';
+import Chip from '@/app/(dashboard)/[departmentId]/(routes)/employees/components/chip';
+
 
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-   const [mappings, setMappings] = useState<Mappings | null>(null);
+  const [mappings, setMappings] = useState<Mappings | null>(null);
+
+  const [allPositions, setAllPositions] = useState<string[]>([]);
+  const [posSearch, setPosSearch] = useState('');
+  const [posSelected, setPosSelected] = useState<string[]>([]);
+
+  const [posRuleMode, setPosRuleMode] = useState<'exact' | 'startsWith' | 'contains' | 'regex'>('startsWith');
+  const [posRuleCaseSensitive, setPosRuleCaseSensitive] = useState(false);
+  const [posRuleReplaceWith, setPosRuleReplaceWith] = useState('');
+
+  const assignSelectedToRow = (i: number) => {
+    if (posSelected.length === 0) return;
+    updateBulkRow(i, { targets: Array.from(new Set([...bulkRows[i].targets, ...posSelected])) });
+  };
+
+  const assignFilteredToRow = (i: number) => {
+    if (filteredPositions.length === 0) return;
+    updateBulkRow(i, { targets: Array.from(new Set([...bulkRows[i].targets, ...filteredPositions])) });
+  };
+
+  const clearRowTargets = (i: number) => updateBulkRow(i, { targets: [] });
+
+  const removeRowTarget = (i: number, t: string) =>
+    updateBulkRow(i, { targets: bulkRows[i].targets.filter(x => x !== t) });
+
+
+  type BulkRow = {
+    mode: 'exact' | 'startsWith' | 'contains' | 'regex';
+    targets: string[];
+    replaceWith: string;
+    caseSensitive: boolean;
+  };
+
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkRows, setBulkRows] = useState<BulkRow[]>([
+    { mode: 'startsWith', targets: [], replaceWith: '', caseSensitive: false }
+
+  ]);
+  const addBulkRow = () =>
+    setBulkRows((r) => [
+      ...r,
+      { mode: 'startsWith', targets: [], replaceWith: '', caseSensitive: false },
+    ]);
+
+  const removeBulkRow = (i: number) =>
+    setBulkRows((r) => r.filter((_, idx) => idx !== i));
+
+  const updateBulkRow = (i: number, patch: Partial<BulkRow>) =>
+    setBulkRows((r) =>
+      r.map((row, idx) => (idx === i ? { ...row, ...patch } : row))
+    );
+
+  // Add each selected position as its own row
+  const addSelectedToBulk = () => {
+    if (posSelected.length === 0) return;
+    setBulkRows((rows) => [
+      ...rows,
+      ...posSelected.map<BulkRow>((p) => ({
+        mode: 'startsWith',
+        targets: [p], // each row gets a single target in its array
+        replaceWith: '',
+        caseSensitive: false,
+      })),
+    ]);
+  };
+
+  const applyBulkRowsAsRules = () => {
+    const newRules = bulkRows
+      .filter((r) => r.targets.length > 0 && r.replaceWith.trim())
+      .map<PositionReplaceRule>((r) => ({
+        mode: r.mode,
+        targets: r.targets,
+        replaceWith: r.replaceWith,
+        caseSensitive: r.caseSensitive,
+      }));
+
+    if (newRules.length === 0) return;
+    setPositionReplaceRules((prev) => [...prev, ...newRules]);
+
+    setBulkRows([
+      { mode: 'startsWith', targets: [], replaceWith: '', caseSensitive: false },
+    ]);
+  };
+
+
+  const [advancedTab, setAdvancedTab] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("hrps_advanced_tab") || "paths";
+    }
+    return "paths";
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("hrps_advanced_tab", advancedTab);
+    }
+  }, [advancedTab]);
+
+
+  // full rule list (persisted)
+  const [positionReplaceRules, setPositionReplaceRules] = useState<PositionReplaceRule[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('positionReplaceRules');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        } catch { }
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('positionReplaceRules', JSON.stringify(positionReplaceRules));
+    }
+  }, [positionReplaceRules]);
+
+  // Load unique positions when modal opens
+  useEffect(() => {
+    if (!modalOpen) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/backup-employee?' + Date.now(), { cache: 'no-store' });
+        if (!res.ok) return;
+
+        // Type the response shape we actually use
+        const json = (await res.json()) as {
+          employees?: Array<{ position?: string | null }>;
+        };
+
+        // Normalize -> string[], remove empties
+        const positions: string[] = (json.employees ?? [])
+          .map(e => (e.position ?? '').toString().trim())
+          .filter((p): p is string => p.length > 0);
+
+        // Make unique and sort (explicit Set<string> so TS knows the type)
+        const unique: string[] = Array.from(new Set<string>(positions))
+          .sort((a, b) => a.localeCompare(b));
+
+        setAllPositions(unique); // OK: string[]
+      } catch (e) {
+        console.error('Failed to load positions', e);
+      }
+    })();
+  }, [modalOpen]);
+
+
+  // filtered positions by search
+  const filteredPositions = useMemo(() => {
+    const q = posSearch.trim().toLowerCase();
+    if (!q) return allPositions;
+    return allPositions.filter(p => p.toLowerCase().includes(q));
+  }, [posSearch, allPositions]);
+
+  const toggleSelectPosition = (p: string) => {
+    setPosSelected(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+  };
+  const selectAllFiltered = () => {
+    const setFiltered = new Set(filteredPositions);
+    setPosSelected(prev => {
+      const union = new Set(prev);
+      filteredPositions.forEach(p => union.add(p));
+      return Array.from(union);
+    });
+  };
+  const deselectAll = () => setPosSelected([]);
+
+  // Add rule
+  const addPositionRule = () => {
+    const targets = posRuleMode === 'regex'
+      ? (posSelected.length ? posSelected : (posSearch ? [posSearch] : []))
+      : posSelected; // for regex, allow typing pattern via search box
+
+    if (!targets.length || !posRuleReplaceWith.trim()) {
+      toast.error('Select positions (or provide a regex) and enter a replacement.');
+      return;
+    }
+    setPositionReplaceRules(prev => [
+      ...prev,
+      {
+        mode: posRuleMode,
+        targets,
+        replaceWith: posRuleReplaceWith,
+        caseSensitive: posRuleCaseSensitive,
+      }
+    ]);
+    // reset selector
+    setPosSelected([]);
+    setPosRuleReplaceWith('');
+  };
+
+  const removePositionRule = (idx: number) => {
+    setPositionReplaceRules(prev => prev.filter((_, i) => i !== idx));
+  };
 
   // at the top of DownloadStyledExcel component
-const [showAdvanced, setShowAdvanced] = useState<boolean>(() => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('showAdvancedPaths') === 'true';
-  }
-  return false; // hidden by default
-});
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('showAdvancedPaths') === 'true';
+    }
+    return false; // hidden by default
+  });
 
-useEffect(() => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('showAdvancedPaths', String(showAdvanced));
-  }
-}, [showAdvanced]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('showAdvancedPaths', String(showAdvanced));
+    }
+  }, [showAdvanced]);
 
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'retired'>(() => {
@@ -37,7 +240,7 @@ useEffect(() => {
     return 'all';
   });
 
-    useEffect(() => {
+  useEffect(() => {
     const load = async () => {
       try {
         const cached = localStorage.getItem('hrps_mappings');
@@ -58,7 +261,7 @@ useEffect(() => {
     load();
   }, [modalOpen]);
 
-   const APPOINTMENT_OPTIONS = useMemo(() => {
+  const APPOINTMENT_OPTIONS = useMemo(() => {
     if (!mappings) return [];
     return Array.from(new Set(Object.values(mappings.appointmentMapping))).sort();
   }, [mappings]);
@@ -76,7 +279,7 @@ useEffect(() => {
           setAppointmentFilters(parsed);
           return;
         }
-      } catch {}
+      } catch { }
     }
     setAppointmentFilters(APPOINTMENT_OPTIONS); // default: all
   }, [mappings, APPOINTMENT_OPTIONS.length]);
@@ -86,7 +289,7 @@ useEffect(() => {
   }, [appointmentFilters]);
 
   const isAllAppointments = APPOINTMENT_OPTIONS.length > 0 &&
-                            appointmentFilters.length === APPOINTMENT_OPTIONS.length;
+    appointmentFilters.length === APPOINTMENT_OPTIONS.length;
   const toggleAppointment = (label: string) =>
     setAppointmentFilters(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]);
   const toggleAllAppointments = () =>
@@ -166,6 +369,8 @@ useEffect(() => {
     'qrPath',
   ];
 
+
+
   const [selectedColumns, setSelectedColumns] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('selectedColumns');
@@ -234,7 +439,7 @@ useEffect(() => {
   useEffect(() => {
     selectedColumnsRef.current = selectedColumns;
   }, [selectedColumns]);
-const handleDownload = async (selectedKeys: string[]) => {
+  const handleDownload = async (selectedKeys: string[]) => {
     if (!mappings) {
       toast.error('Mappings not loaded yet. Please try again.');
       return;
@@ -250,11 +455,12 @@ const handleDownload = async (selectedKeys: string[]) => {
         baseQrDir: qrBaseDir,
         qrPrefix,
         appointmentFilters: isAllAppointments ? 'all' : appointmentFilters,
-        mappings, // <-- pass dynamic mappings
+        mappings,
+        positionReplaceRules
       });
 
       const now = new Date();
-      const filename = `employee_list_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}.xlsx`;
+      const filename = `employee_list_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}.xlsx`;
 
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
@@ -271,6 +477,111 @@ const handleDownload = async (selectedKeys: string[]) => {
       setLoading(false);
     }
   };
+
+
+  function TagPicker({
+    value,
+    onChange,
+    options,
+    placeholder = "Type to search positions…",
+    maxMenuHeight = 180,
+  }: {
+    value: string[];
+    onChange: (next: string[]) => void;
+    options: string[];
+    placeholder?: string;
+    maxMenuHeight?: number;
+  }) {
+    const [query, setQuery] = useState("");
+    const [open, setOpen] = useState(false);
+    const inputRef = useRef<HTMLInputElement | null>(null);
+
+    const lowerSelected = new Set(value.map(v => v.toLowerCase()));
+    const filtered = useMemo(() => {
+      const q = query.trim().toLowerCase();
+      const base = q
+        ? options.filter(o => o.toLowerCase().includes(q))
+        : options;
+      return base.filter(o => !lowerSelected.has(o.toLowerCase()));
+    }, [options, query, value]);
+
+    const add = (item: string) => {
+      if (!item) return;
+      const exists = value.some(v => v.toLowerCase() === item.toLowerCase());
+      if (exists) return;
+      onChange([...value, item]);
+      setQuery("");
+      setOpen(false);
+      inputRef.current?.focus();
+    };
+
+    const remove = (item: string) => {
+      onChange(value.filter(v => v !== item));
+      inputRef.current?.focus();
+    };
+
+    const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (filtered.length > 0) {
+          add(filtered[0]);
+        } else if (query.trim()) {
+          add(query.trim());
+        }
+      } else if (e.key === "Backspace" && !query) {
+        if (value.length > 0) {
+          onChange(value.slice(0, -1));
+        }
+      }
+    };
+
+    return (
+      <div className="border rounded px-2 py-1 text-xs bg-white">
+        {/* chips */}
+        {value.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-1">
+            {value.map((v) => (
+              <Chip key={v} label={v} onRemove={() => remove(v)} />
+            ))}
+          </div>
+        )}
+
+        {/* input */}
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onKeyDown={onKeyDown}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          className="outline-none w-full"
+          placeholder={placeholder}
+        />
+
+        {/* suggestions */}
+        {open && filtered.length > 0 && (
+          <div
+            className="mt-1 border rounded bg-white shadow text-xs"
+            style={{ maxHeight: maxMenuHeight, overflowY: "auto" }}
+          >
+            {filtered.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className="w-full text-left px-2 py-1 hover:bg-gray-100"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => add(opt)}
+                title={opt}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex justify-end">
@@ -303,139 +614,310 @@ const handleDownload = async (selectedKeys: string[]) => {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
       >
-        {/* SETTINGS (collapsible) */}
-<div className="mb-4 rounded-lg border bg-white shadow-sm">
-  <button
-    type="button"
-    onClick={() => setShowAdvanced((v) => !v)}
-    className="w-full flex items-center justify-between px-3 py-2"
-    aria-expanded={showAdvanced}
-    aria-controls="advanced-settings"
-  >
-    <span className="text-sm font-semibold">Advanced settings</span>
-    <span className="text-xs text-gray-600">
-      {showAdvanced ? 'Hide' : 'Show'}
-    </span>
-  </button>
+        {/* ADVANCED (single collapsible with both subsections) */}
+        <div className="max-h-[75vh] overflow-y-auto pr-1">
+          {/* ADVANCED (single box; sticky header + conditional mount for content) */}
+          <div className="mb-4 rounded-lg border bg-white shadow-sm">
+            {/* Sticky header so the toggle stays visible */}
+            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur px-3 py-2 border-b">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="w-full flex items-center justify-between"
+                aria-expanded={showAdvanced}
+              >
+                <span className="text-sm font-semibold">Advanced settings</span>
 
-  {/* Collapsible content */}
-  <div
-    id="advanced-settings"
-    className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${
-      showAdvanced ? 'max-h-[1000px]' : 'max-h-0'
-    }`}
-  >
-    <div className="px-3 pb-3 grid gap-3 sm:grid-cols-2">
-      {/* Image base folder */}
-      <div className="flex flex-col">
-        <label className="text-xs text-gray-600 mb-1">Image base folder</label>
-        <input
-          type="text"
-          value={imageBaseDir}
-          onChange={(e) => setImageBaseDir(e.target.value)}
-          className="border rounded px-2 py-1 text-sm"
-          placeholder="C:\Users\User\...\img\employees"
-        />
-        <p className="mt-1 text-[11px] text-gray-500">
-          Example: <code>{`${imageBaseDir}\\<employeeNo>.png`}</code>
-        </p>
-      </div>
+                <span className="text-xs text-gray-600 px-3 py-2 flex justify-end">{showAdvanced ? '' : 'Show'}</span>
+              </button>
+            </div>
 
-      {/* QR base folder */}
-      <div className="flex flex-col">
-        <label className="text-xs text-gray-600 mb-1">QR base folder</label>
-        <input
-          type="text"
-          value={qrBaseDir}
-          onChange={(e) => setQrBaseDir(e.target.value)}
-          className="border rounded px-2 py-1 text-sm"
-          placeholder="C:\Users\User\...\img\qr"
-        />
-        <p className="mt-1 text-[11px] text-gray-500">
-          Example: <code>{`${qrBaseDir}\\${qrPrefix}<employeeNo>.png`}</code>
-        </p>
-      </div>
+            <div
+              className={`overflow-hidden transition-all duration-500 ease-in-out ${showAdvanced ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'
+                }`}
+            >
+              <div className="px-3 pb-3 space-y-4">
+                <div className="px-3 pb-3">
+                  <Tabs value={advancedTab} onValueChange={setAdvancedTab} className="w-full">
+                    <TabsList className="grid grid-cols-4 w-full gap-2">
+                      <TabsTrigger value="columns">Filter</TabsTrigger>    
+                      <TabsTrigger value="columns_path">Columns</TabsTrigger>
+                      <TabsTrigger value="paths">Paths</TabsTrigger>
+                      <TabsTrigger value="position">Find &amp; Replace</TabsTrigger>
+                      
+                    </TabsList>
 
-      {/* QR prefix (optional) */}
-      <div className="sm:col-span-2 flex items-center gap-2">
-        <label className="text-xs text-gray-600">QR prefix</label>
-        <input
-          type="text"
-          value={qrPrefix}
-          onChange={(e) => setQrPrefix(e.target.value)}
-          className="border rounded px-2 py-1 text-sm w-28"
-          placeholder="JDN"
-        />
-        <span className="text-[11px] text-gray-500">
-          Result: <code>{`${qrPrefix}<employeeNo>.png`}</code>
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            setImageBaseDir('C:\\Users\\User\\Desktop\\HRMO Files\\Nifas\\.shared work\\img\\employees');
-            setQrBaseDir('C:\\Users\\User\\Desktop\\HRMO Files\\Nifas\\.shared work\\img\\qr');
-            setQrPrefix('JDN');
-          }}
-          className="ml-auto text-xs text-blue-600 hover:underline"
-        >
-          Reset defaults
-        </button>
-      </div>
+                    {/* TAB: Paths */}
+                    <TabsContent value="paths" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 space-y-3">
+                        <h4 className="text-sm font-semibold">Paths</h4>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {/* Image base folder */}
+                          <div className="flex flex-col">
+                            <label className="text-xs text-gray-600 mb-1">Image base folder</label>
+                            <input
+                              type="text"
+                              value={imageBaseDir}
+                              onChange={(e) => setImageBaseDir(e.target.value)}
+                              className="border rounded px-2 py-1 text-sm"
+                              placeholder="C:\Users\User\...\img\employees"
+                            />
+                            <p className="mt-1 text-[11px] text-gray-500">
+                              Example: <code>{`${imageBaseDir}\\<employeeNo>.png`}</code>
+                            </p>
+                          </div>
+
+                          {/* QR base folder */}
+                          <div className="flex flex-col">
+                            <label className="text-xs text-gray-600 mb-1">QR base folder</label>
+                            <input
+                              type="text"
+                              value={qrBaseDir}
+                              onChange={(e) => setQrBaseDir(e.target.value)}
+                              className="border rounded px-2 py-1 text-sm"
+                              placeholder="C:\Users\User\...\img\qr"
+                            />
+                            <p className="mt-1 text-[11px] text-gray-500">
+                              Example: <code>{`${qrBaseDir}\\${qrPrefix}<employeeNo>.png`}</code>
+                            </p>
+                          </div>
+
+                          {/* QR prefix + Reset */}
+                          <div className="sm:col-span-2 flex items-center gap-2">
+                            <label className="text-xs text-gray-600">QR prefix</label>
+                            <input
+                              type="text"
+                              value={qrPrefix}
+                              onChange={(e) => setQrPrefix(e.target.value)}
+                              className="border rounded px-2 py-1 text-sm w-28"
+                              placeholder="JDN"
+                            />
+                            <span className="text-[11px] text-gray-500">
+                              Result: <code>{`${qrPrefix}<employeeNo>.png`}</code>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setImageBaseDir('C:\\Users\\User\\Desktop\\HRMO Files\\Nifas\\.shared work\\img\\employees');
+                                setQrBaseDir('C:\\Users\\User\\Desktop\\HRMO Files\\Nifas\\.shared work\\img\\qr');
+                                setQrPrefix('JDN');
+                              }}
+                              className="ml-auto text-xs text-blue-600 hover:underline"
+                            >
+                              Reset defaults
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    {/* TAB: Position Find & Replace */}
+                    <TabsContent value="position" className="mt-3">
+                      <div className="rounded-md border bg-white p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <div className="space-y-2">
+                            {/* Current rules */}
+                            <div className="mt-2">
+                              {positionReplaceRules.length === 0 ? (
+                                <div className="text-xs text-gray-500">No rules yet.</div>
+                              ) : (
+                                <ul className="space-y-2">
+                                  {positionReplaceRules.map((r, idx) => (
+                                    <li key={idx} className="border rounded p-2 text-xs flex items-start justify-between">
+                                      <div className="pr-2">
+                                        <div><span className="font-semibold">Mode:</span> {r.mode}{r.caseSensitive ? ' (case)' : ''}</div>
+                                        <div className="break-words"><span className="font-semibold">Targets:</span> {r.targets.join(', ') || '(regex via search)'}</div>
+                                        <div><span className="font-semibold">Replace with:</span> {r.replaceWith}</div>
+                                      </div>
+                                      <button
+                                        onClick={() => removePositionRule(idx)}
+                                        className="text-red-600 hover:underline ml-2"
+                                      >
+                                        Remove
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+
+                        {/*bulk */}
+                        <div className="flex items-center justify-between mt-2">
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h5 className="text-sm font-semibold">Bulk mappings</h5>
+                            <div className="space-x-3">
+                              <button
+                                type="button"
+                                onClick={addSelectedToBulk}
+                                className="text-xs text-blue-600 hover:underline"
+                                title="Use currently selected positions as targets"
+                              >
+                                Add selected positions
+                              </button>
+                              <button
+                                type="button"
+                                onClick={addBulkRow}
+                                className="text-xs text-blue-600 hover:underline"
+                              >
+                                Add row
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="border rounded">
+                            <div className="grid grid-cols-12 gap-2 px-2 py-1 text-[11px] text-gray-600 bg-gray-50">
+                              <div className="col-span-2">Mode</div>
+                              <div className="col-span-4">Target (find)</div>
+                              <div className="col-span-5">Replace with</div>
+                              <div className="col-span-1">Case</div>
+                            </div>
+
+                            <div className="max-h-44 overflow-y-auto">
+                              {bulkRows.map((row, i) => (
+                                <div key={i} className="grid grid-cols-12 gap-2 items-center px-2 py-1 border-t">
+                                  <div className="col-span-2">
+                                    <select
+                                      value={row.mode}
+                                      onChange={(e) => updateBulkRow(i, { mode: e.target.value as BulkRow['mode'] })}
+                                      className="border rounded px-2 py-1 text-xs w-full"
+                                    >
+                                      <option value="startsWith">Starts with</option>
+                                      <option value="exact">Equals</option>
+                                      <option value="contains">Contains</option>
+                                      <option value="regex">Regex</option>
+                                    </select>
+                                  </div>
+                                  <div className="col-span-4">
+                                    <TagPicker
+                                      value={row.targets}
+                                      onChange={(vals) => updateBulkRow(i, { targets: vals })}
+                                      options={allPositions}
+                                      placeholder="Search and add positions…"
+                                    />
+                                  </div>
+
+
+
+                                  <div className="col-span-5">
+                                    <input
+                                      type="text"
+                                      value={row.replaceWith}
+                                      onChange={(e) => updateBulkRow(i, { replaceWith: e.target.value })}
+                                      className="border rounded px-2 py-1 text-xs w-full"
+                                      placeholder="Replace with… (e.g. Security Guard)"
+                                    />
+                                  </div>
+                                  <div className="col-span-1 flex items-center justify-between">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.caseSensitive}
+                                      onChange={(e) => updateBulkRow(i, { caseSensitive: e.target.checked })}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => removeBulkRow(i)}
+                                      className="text-[11px] text-red-600 hover:underline"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={applyBulkRowsAsRules}
+                              className="bg-green-700 hover:bg-green-800 text-white px-3 py-1.5 rounded text-sm"
+                            >
+                              Add all as rules
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    </TabsContent>
+                 {/* TAB: Columns */}
+                    <TabsContent value="columns_path" className="mt-3">
+                      <div className="rounded-md border bg-white p-3">
+                        <div className="mb-2 flex justify-between items-center text-sm">
+                          <label className="font-medium">Select Columns</label>
+                          <button
+                            onClick={toggleSelectAll}
+                            className="text-blue-600 hover:underline text-xs"
+                          >
+                            {isAllSelected ? "Deselect All" : "Select All"}
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow">
+                          {columnOrder.map((col) => (
+                            <label key={col.key} className="flex items-center space-x-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.includes(col.key)}
+                                onChange={() => toggleColumn(col.key)}
+                              />
+                              <span>{col.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </TabsContent>
+
+
+                    <TabsContent value="columns" className="mt-3">
+  <div className="rounded-md border bg-white p-3">
+    <div className="mb-2 flex justify-between items-center text-sm">
+      <label className="font-medium">Select Columns</label>
+      <button onClick={toggleSelectAll} className="text-blue-600 hover:underline text-xs">
+        {isAllSelected ? 'Deselect All' : 'Select All'}
+      </button>
+    </div>
+
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow">
+      {columnOrder.map((col) => (
+        <label key={col.key} className="flex items-center space-x-2 text-sm">
+          <input
+            type="checkbox"
+            checked={selectedColumns.includes(col.key)}
+            onChange={() => toggleColumn(col.key)}
+          />
+          <span>{col.name}</span>
+        </label>
+      ))}
     </div>
   </div>
-</div>
+</TabsContent>
 
-        
 
-        <div className="mb-2 flex justify-between items-center text-sm">
-          <label className="font-medium">Select Columns</label>
-          <button
-            onClick={toggleSelectAll}
-            className="text-blue-600 hover:underline text-xs"
-          >
-            {isAllSelected ? 'Deselect All' : 'Select All'}
-          </button>
+                  </Tabs>
+                </div>
+                {/* Hide button at bottom */}
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced(false)}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Hide advanced settings
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow">
-          {columnOrder.map((col) => (
-            <label key={col.key} className="flex items-center space-x-2 text-sm">
-              <input
-                type="checkbox"
-                checked={selectedColumns.includes(col.key)}
-                onChange={() => toggleColumn(col.key)}
-              />
-              <span>{col.name}</span>
-            </label>
-          ))}
-        </div>
 
-        {/* FILTER: Appointment Types */}
-<div className="mt-4">
-  <div className="mb-2 flex justify-between items-center text-sm">
-    <label className="font-medium">Filter by Appointment</label>
-    <button
-      onClick={toggleAllAppointments}
-      className="text-blue-600 hover:underline text-xs"
-    >
-      {isAllAppointments ? 'Deselect All' : 'Select All'}
-    </button>
-  </div>
 
-  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto border p-2 rounded bg-white shadow">
-    {APPOINTMENT_OPTIONS.map((label) => (
-      <label key={label} className="flex items-center space-x-2 text-sm">
-        <input
-          type="checkbox"
-          checked={appointmentFilters.includes(label)}
-          onChange={() => toggleAppointment(label)}
-        />
-        <span>{label}</span>
-      </label>
-    ))}
-  </div>
-</div>
-
+     
 
         <div className="mt-4 space-y-2">
           <label className="font-medium text-sm">Include Status:</label>

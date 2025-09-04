@@ -3,10 +3,17 @@ import { officeMapping, eligibilityMapping, appointmentMapping } from '@/utils/e
 
 type Column = { name: string; key: string };
 
+export type PositionReplaceRule = {
+  mode: 'exact' | 'startsWith' | 'contains' | 'regex';
+  targets: string[];        // user-selected positions / patterns
+  replaceWith: string;      // text to replace with
+  caseSensitive?: boolean;  // default false
+};
 export type Mappings = {
   officeMapping: Record<string, string>;
   eligibilityMapping: Record<string, string>;
   appointmentMapping: Record<string, string>;
+  
 };
 
 type DownloadExcelParams = {
@@ -18,6 +25,7 @@ type DownloadExcelParams = {
   qrPrefix?: string;
   appointmentFilters: string[] | 'all';
   mappings: Mappings; // <-- NEW
+    positionReplaceRules?: PositionReplaceRule[];
 };
 
 function normalizeWindowsDir(p: string) {
@@ -26,6 +34,36 @@ function normalizeWindowsDir(p: string) {
   return trimmed.replace(/[\\]+$/, '');
 }
 
+function applyPositionRules(
+  value: string,
+  rules: PositionReplaceRule[] | undefined
+): string {
+  if (!value || !rules?.length) return value;
+
+  let out = value;
+  for (const rule of rules) {
+    const cs = !!rule.caseSensitive;
+    const val = cs ? out : out.toLowerCase();
+
+    for (const t of rule.targets) {
+      const target = cs ? String(t) : String(t).toLowerCase();
+
+      if (rule.mode === 'exact') {
+        if (val === target) { out = rule.replaceWith; break; }
+      } else if (rule.mode === 'startsWith') {
+        if (val.startsWith(target)) { out = rule.replaceWith; break; }
+      } else if (rule.mode === 'contains') {
+        if (val.includes(target)) { out = rule.replaceWith; break; }
+      } else if (rule.mode === 'regex') {
+        try {
+          const rx = new RegExp(t, cs ? '' : 'i');
+          out = out.replace(rx, rule.replaceWith);
+        } catch { /* ignore bad regex */ }
+      }
+    }
+  }
+  return out;
+}
 
 export async function generateExcelFile({
   selectedKeys,
@@ -35,7 +73,8 @@ export async function generateExcelFile({
   baseQrDir,
   qrPrefix = 'JDN',
   appointmentFilters,
-  mappings
+  mappings,
+  positionReplaceRules
 }: DownloadExcelParams): Promise<Blob> {
 
    const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
@@ -54,6 +93,8 @@ export async function generateExcelFile({
 
   const safeImageDir = normalizeWindowsDir(baseImageDir);
   const safeQrDir = normalizeWindowsDir(baseQrDir);
+
+  
 
   const updatedData = data.employees.map((row: any) => {
     if (row.officeId && officeMapping[row.officeId]) {
@@ -79,6 +120,10 @@ export async function generateExcelFile({
     if (row.middleName) {
       const trimmed = row.middleName.trim();
       row.middleName = trimmed.length > 0 ? `${trimmed[0].toUpperCase()}.` : '';
+    }
+
+        if (row.position) {
+      row.position = applyPositionRules(String(row.position), positionReplaceRules);
     }
 
 
