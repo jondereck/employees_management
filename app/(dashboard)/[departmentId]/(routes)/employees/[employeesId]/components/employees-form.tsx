@@ -9,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { toast, Toaster } from "sonner";
@@ -29,7 +29,7 @@ import { capitalizeWordsIgnoreSpecialChars, formatToProperCase, formatToUpperCas
 import { AutoFillField } from "../../components/autofill";
 import { SalaryInput } from "../../components/salary-input";
 import { StepIndicator } from "../../components/step-indicator";
-import { employeesKey } from "@/hooks/use-employees";
+import { employeesKey, useEmployee } from "@/hooks/use-employees";
 
 
 
@@ -77,7 +77,7 @@ const formSchema = z.object({
     .transform((v) => String(v)) // always string for Prisma
     .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric"),
   salary: z.number().min(0),
-  birthday: z.date(),
+  birthday: z.date().optional(),
   // age: z.string(),
   gsisNo: z.string(),
   pagIbigNo: z.string(),
@@ -98,6 +98,96 @@ const formSchema = z.object({
 });
 
 type EmployeesFormValues = z.infer<typeof formSchema>;
+const upper = (s?: string | null) => (s ?? "").toUpperCase();
+const EMPTY_DEFAULTS: EmployeesFormValues = {
+  step: undefined,
+  prefix: "",
+  employeeNo: "",
+  lastName: "",
+  firstName: "",
+  middleName: "",
+  gender: "",
+  employeeTypeId: "",
+  officeId: "",
+  eligibilityId: "",
+  suffix: "",
+  images: [{ url: "https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg" }],
+  contactNumber: "",
+  position: "",
+  education: "",
+  region: "",
+  province: "",
+  city: "",
+  barangay: "",
+  houseNo: "",
+  street: "",
+  salaryGrade: "0",
+  salary: 0,
+  birthday: undefined,
+  gsisNo: "",
+  pagIbigNo: "",
+  tinNo: "",
+  philHealthNo: "",
+  dateHired: undefined,
+  latestAppointment: undefined,
+  terminateDate: "",
+  isFeatured: false,
+  isArchived: false,
+  isHead: false,
+  memberPolicyNo: "",
+  age: "",
+  nickname: "",
+  emergencyContactName: "",
+  emergencyContactNumber: "",
+  employeeLink: "",
+};
+
+function mapToDefaults(src: any): EmployeesFormValues {
+  if (!src) return EMPTY_DEFAULTS;
+  return {
+    ...EMPTY_DEFAULTS,
+    // IDs
+    employeeTypeId: src.employeeTypeId ?? "",
+    officeId: src.officeId ?? "",
+    eligibilityId: src.eligibilityId ?? "",
+    // Names (UPPERCASE safely)
+    firstName: upper(src.firstName),
+    middleName: upper(src.middleName),
+    lastName: upper(src.lastName),
+    prefix: src.prefix ?? "",
+    suffix: src.suffix ?? "",
+    // Address (UPPERCASE safely)
+    region: upper(src.region),
+    province: upper(src.province),
+    city: upper(src.city),
+    barangay: upper(src.barangay),
+    street: upper(src.street),
+    houseNo: src.houseNo ?? "",
+    // Others
+    employeeNo: src.employeeNo ?? "",
+    gender: src.gender ?? "",
+    contactNumber: src.contactNumber ?? "",
+    position: src.position ?? "",
+    education: src.education ?? "",
+    salary: Number(src.salary ?? 0),
+    salaryGrade: String(src.salaryGrade ?? "1"),
+    birthday: src.birthday ? new Date(src.birthday) : undefined,
+    dateHired: src.dateHired ? new Date(src.dateHired) : undefined,
+    latestAppointment: src.latestAppointment ? new Date(src.latestAppointment) : undefined,
+    terminateDate: src.terminateDate ?? "",
+    isFeatured: !!src.isFeatured,
+    isArchived: !!src.isArchived,
+    isHead: !!src.isHead,
+    memberPolicyNo: src.memberPolicyNo ?? "",
+    age: src.age?.toString?.() ?? "",
+    nickname: src.nickname ?? "",
+    emergencyContactName: src.emergencyContactName ?? "",
+    emergencyContactNumber: src.emergencyContactNumber ?? "",
+    employeeLink: src.employeeLink ?? "",
+    images: Array.isArray(src.images) && src.images.length > 0 ? src.images.map((i: any) => ({ url: i.url })) : EMPTY_DEFAULTS.images,
+  };
+}
+
 
 interface EmployeesFormProps {
   initialData: Employee & {
@@ -148,7 +238,7 @@ export const EmployeesForm = ({
 
   const form = useForm<EmployeesFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData
+    defaultValues: initialData 
       ? {
         ...initialData,
         firstName: initialData.firstName.toUpperCase(),
@@ -235,9 +325,36 @@ export const EmployeesForm = ({
 
   const params = useParams() as { departmentId: string; employeesId?: string };
   const key = employeesKey(params.departmentId);
+
+   const { departmentId, employeesId } = useParams() as {
+    departmentId: string;
+    employeesId?: string;
+  };
+
+    const { data: employee } = useEmployee(departmentId, employeesId);
+  const initialDefaults = useMemo(
+    () => (employee ? mapToDefaults(employee) : initialData ? mapToDefaults(initialData) : EMPTY_DEFAULTS),
+    // only compute from SSR (initialData); SWR reset will run in useEffect below
+    [initialData, employee] // safe; recomputes when SWR arrives
+  );
+
+  useEffect(() => {
+    if (employee) {
+      form.reset(mapToDefaults(employee));
+    } else if (initialData) {
+      form.reset(mapToDefaults(initialData));
+    } else {
+      form.reset(EMPTY_DEFAULTS);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employee, initialData]);
+
+
+
+
   const onSubmit = async (values: EmployeesFormValues) => {
 
-
+     setLoading(true);
     try {
       const toastId = toast.loading("Processing...", { description: "Please wait while we save your data." });
 

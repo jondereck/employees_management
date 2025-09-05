@@ -14,7 +14,8 @@ export function useEmployees(departmentId: string) {
       axios.get(url).then((r) => r.data as EmployeeWithRelations[]),
     {
       revalidateOnFocus: false,
-      dedupingInterval: 5000,
+        refreshInterval: 5000,
+      // dedupingInterval: 5000,
     }
   );
 
@@ -24,4 +25,19 @@ export function useEmployees(departmentId: string) {
     isError: !!error,
     mutate,
   };
+}
+
+
+
+export const employeeKey = (departmentId: string, employeeId: string) =>
+  `/api/${departmentId}/employees/${employeeId}`;
+
+export function useEmployee(departmentId: string, employeeId?: string) {
+  return useSWR<EmployeeWithRelations>(
+    employeeId ? employeeKey(departmentId, employeeId) : null,
+    (url: string) => axios.get(url).then((r) => r.data),
+    {
+      revalidateOnFocus: false,
+    }
+  );
 }
