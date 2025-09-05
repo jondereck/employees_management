@@ -19,6 +19,7 @@ import { ActionTooltip } from './ui/action-tooltip';
 
 
 
+
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -34,14 +35,49 @@ export default function DownloadStyledExcel() {
 
   const [globalTargets, setGlobalTargets] = useState<string[]>([]);
 
-  const applyGlobalToRow = (i: number) => {
-    if (globalTargets.length === 0) return;
-    updateBulkRow(i, { targets: [...globalTargets] });
-  };
+  
+const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
+const preview = (items: string[], max = 2) =>
+  items.length <= max ? items.join(", ") : `${items.slice(0, max).join(", ")} +${items.length - max} more`;
 
 
-  const truncate = (s: string, n = 32) =>
-    s.length > n ? s.slice(0, n - 1) + "…" : s;
+
+const applyGlobalToRow = (i: number) => {
+  // read latest checked positions from the global picker
+  const latest = globalTargets;
+
+  if (!latest || latest.length === 0) {
+    toast.info("No positions selected", {
+      description: "Use the picker above to select positions first.",
+    });
+    return;
+  }
+
+  const before = new Set(bulkRows[i].targets.map(t => t.toLowerCase()));
+  const merged = [...bulkRows[i].targets]; // preserve original casing/order for existing
+  let addedCount = 0;
+
+  for (const pos of latest) {
+    const key = pos.toLowerCase();
+    if (!before.has(key)) {
+      merged.push(pos);
+      before.add(key);
+      addedCount++;
+    }
+  }
+
+  updateBulkRow(i, { targets: merged });
+
+  if (addedCount === 0) {
+    toast.message("No new positions to add", {
+      description: preview(latest),
+    });
+  } else {
+    toast.success(`Added ${addedCount} ${plural(addedCount, "position")} to row ${i + 1}`, {
+      description: preview(latest),
+    });
+  }
+};
 
   type BulkRow = {
     mode: 'exact' | 'startsWith' | 'contains' | 'regex';
@@ -680,8 +716,9 @@ export default function DownloadStyledExcel() {
                                       onClick={() => applyGlobalToRow(i)}
                                       className="mt-1 text-[11px] text-blue-600 hover:underline"
                                     >
-                                      Use global targets ({globalTargets.length})
+                                      Use position(s) as targets 
                                     </button>
+
                                   </div>
 
                                   {/* Case + Remove */}
