@@ -71,4 +71,3 @@ export interface Employees {
   emergencyContactNumber: string,
   employeeLink: string,
 }
-

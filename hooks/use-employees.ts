@@ -1,25 +1,27 @@
 // hooks/use-employees.ts
-import { EmployeesColumn } from '@/app/(dashboard)/[departmentId]/(routes)/employees/components/columns';
-import useSWR from 'swr';
-// adjust path if needed
+import useSWR from "swr";
+import axios from "axios";
+import { EmployeeWithRelations } from "@/lib/types";
 
-const fetcher = (url: string): Promise<EmployeesColumn[]> =>
-  fetch(url).then((res) => res.json());
 
-export function useEmployees(departmentId: string, officeId?: string) {
-  const shouldFetch = !!departmentId;
+export const employeesKey = (departmentId: string) =>
+  `/api/${departmentId}/employees`;
 
-  const { data, error, isLoading } = useSWR<EmployeesColumn[]>(
-    shouldFetch ? `/api/${departmentId}/employees${officeId ? `?officeId=${officeId}` : ''}` : null,
-    fetcher,
+export function useEmployees(departmentId: string) {
+  const { data, error, isLoading, mutate } = useSWR<EmployeeWithRelations[]>(
+    employeesKey(departmentId),
+    (url: string) =>
+      axios.get(url).then((r) => r.data as EmployeeWithRelations[]),
     {
-      refreshInterval: 5000,
+      revalidateOnFocus: false,
+      dedupingInterval: 5000,
     }
   );
 
   return {
-    employees: data ?? [], // Make sure it's always an array
+    employees: data ?? [],
     isLoading,
-    isError: error,
+    isError: !!error,
+    mutate,
   };
 }

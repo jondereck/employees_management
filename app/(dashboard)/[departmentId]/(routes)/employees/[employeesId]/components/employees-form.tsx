@@ -1,6 +1,6 @@
 "use client";
 import * as z from "zod";
-import { mutate } from "swr";
+import { mutate as globalMutate } from "swr";
 import { Eligibility, Employee, EmployeeType, Gender, Image, Offices } from "@prisma/client";
 import { CalendarIcon, Check, ChevronDown, Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -29,6 +29,7 @@ import { capitalizeWordsIgnoreSpecialChars, formatToProperCase, formatToUpperCas
 import { AutoFillField } from "../../components/autofill";
 import { SalaryInput } from "../../components/salary-input";
 import { StepIndicator } from "../../components/step-indicator";
+import { employeesKey } from "@/hooks/use-employees";
 
 
 
@@ -139,7 +140,7 @@ export const EmployeesForm = ({
   const toastMessage = initialData ? "Employee updated." : "Employee created.";
   const action = initialData ? "Save changes" : "Create";
 
-  const params = useParams();
+
   const router = useRouter();
 
 
@@ -232,25 +233,47 @@ export const EmployeesForm = ({
   };
 
 
+  const params = useParams() as { departmentId: string; employeesId?: string };
+  const key = employeesKey(params.departmentId);
   const onSubmit = async (values: EmployeesFormValues) => {
+
+
     try {
       const toastId = toast.loading("Processing...", { description: "Please wait while we save your data." });
 
-      const data = {
+      const payload = {
         ...values,
-        salaryGrade: String(values.salaryGrade), // Prisma expects string
-        salary: Number(values.salary ?? 0),      // make sure it's number
+        salaryGrade: String(values.salaryGrade ?? ""),
+        salary: Number(values.salary ?? 0),
       };
 
-      if (initialData) {
-        await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, data);
-      } else {
-        await axios.post(`/api/${params.departmentId}/employees`, data);
-      }
-// ✅ Revalidate your employees table SWR key
-    mutate([`/api/${params.departmentId}/employees`]);
-      toast.success("Success!", { id: toastId, description: toastMessage });
+      // Call the API
+      const res = initialData
+        ? await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, payload)
+        : await axios.post(`/api/${params.departmentId}/employees`, payload);
 
+      const saved = res.data; // <-- return full employee from API
+
+      // ✅ Optimistic update SWR cache (no page refresh)
+      await globalMutate(
+        key,
+        (curr: any[] | undefined) => {
+          const list = curr ?? [];
+          if (initialData) {
+            // replace edited row
+            return list.map((e) => (e.id === saved.id ? { ...e, ...saved } : e));
+          } else {
+            // prepend new row
+            return [saved, ...list];
+          }
+        },
+        false // don't revalidate yet; instant UI update
+      );
+
+      // 🔄 Then revalidate to ensure perfect server state
+      globalMutate(key);
+      router.back();
+      toast.success("Success!", { id: toastId, description: initialData ? "Employee updated." : "Employee created." });
     } catch (error: any) {
       toast.error("Uh oh! Something went wrong.", {
         description: error?.response?.data?.error ?? "There was a problem with your request.",
@@ -259,7 +282,6 @@ export const EmployeesForm = ({
       setLoading(false);
     }
   };
-
 
   const onDelete = async () => {
     try {
@@ -858,7 +880,7 @@ export const EmployeesForm = ({
                   placeholder="Search or enter Province..."
                 />
               )}
-            />      
+            />
           </div>
 
           <Separator />
