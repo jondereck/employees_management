@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import Modal from "@/components/ui/modal";
 import Chip from "./chip";
@@ -13,20 +13,21 @@ interface Option {
 const STATUS_VALUES = ["all", "Active", "Inactive"] as const;
 type StatusValue = typeof STATUS_VALUES[number];
 
-
 interface EmployeeFiltersProps {
   offices: Option[];
   eligibilities: Option[];
   employeeTypes: Option[];
-  positions: Option[]; // <-- Option[]
+  positions: Option[];
   onFilterChange: (filters: {
     offices: string[];
     eligibilities: string[];
     employeeTypes: string[];
-    positions: string[];         // <-- included
+    positions: string[];
     status: StatusValue;
   }) => void;
 }
+
+const STORAGE_KEY = "employee_filters_v1";
 
 export default function EmployeeFilters({
   offices,
@@ -34,27 +35,72 @@ export default function EmployeeFilters({
   employeeTypes,
   positions,
   onFilterChange,
-  
 }: EmployeeFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
+
   const [selectedOffices, setSelectedOffices] = useState<string[]>([]);
   const [selectedEligibilities, setSelectedEligibilities] = useState<string[]>([]);
   const [selectedEmployeeTypes, setSelectedEmployeeTypes] = useState<string[]>([]);
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
- const [status, setStatus] = useState<StatusValue>("all");
+  const [status, setStatus] = useState<StatusValue>("all");
 
+  // ---- helpers to persist/restore ----
+  const saveToStorage = (filters: {
+    offices: string[];
+    eligibilities: string[];
+    employeeTypes: string[];
+    positions: string[];
+    status: StatusValue;
+  }) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
+    } catch {}
+  };
 
-   const handleApply = () => {
-    onFilterChange({
+  const loadFromStorage = () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed as {
+        offices: string[];
+        eligibilities: string[];
+        employeeTypes: string[];
+        positions: string[];
+        status: StatusValue;
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  // hydrate once on mount
+  useEffect(() => {
+    const saved = loadFromStorage();
+    if (saved) {
+      setSelectedOffices(saved.offices ?? []);
+      setSelectedEligibilities(saved.eligibilities ?? []);
+      setSelectedEmployeeTypes(saved.employeeTypes ?? []);
+      setSelectedPositions(saved.positions ?? []);
+      setStatus(saved.status ?? "all");
+      // inform parent immediately so the table uses saved filters
+      onFilterChange(saved);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleApply = () => {
+    const next = {
       offices: selectedOffices,
       eligibilities: selectedEligibilities,
       employeeTypes: selectedEmployeeTypes,
-      positions: selectedPositions, // NEW
+      positions: selectedPositions,
       status,
-    });
+    };
+    onFilterChange(next);
+    saveToStorage(next);
     setIsOpen(false);
   };
-
 
   const updateFilters = ({
     offices,
@@ -66,31 +112,33 @@ export default function EmployeeFilters({
     offices: string[];
     eligibilities: string[];
     employeeTypes: string[];
-    positions: string[]; // NEW
+    positions: string[];
     status: StatusValue;
   }) => {
     setSelectedOffices(offices);
     setSelectedEligibilities(eligibilities);
     setSelectedEmployeeTypes(employeeTypes);
-    setSelectedPositions(positions); // NEW
+    setSelectedPositions(positions);
     setStatus(status);
-    onFilterChange({ offices, eligibilities, employeeTypes, positions, status });
+    const next = { offices, eligibilities, employeeTypes, positions, status };
+    onFilterChange(next);
+    saveToStorage(next); // persist on every inline change (e.g., chip remove)
   };
 
   const clearAll = () => {
-    updateFilters({
+    const cleared = {
       offices: [],
       eligibilities: [],
       employeeTypes: [],
-      positions: [], // NEW
-      status: "all",
-    });
+      positions: [],
+      status: "all" as StatusValue,
+    };
+    updateFilters(cleared);
     setIsOpen(false);
   };
 
-
-  // MultiSelect component: checkbox multi-select list
- const MultiSelect = ({
+  // MultiSelect
+  const MultiSelect = ({
     options,
     selected,
     onChange,
@@ -124,8 +172,8 @@ export default function EmployeeFilters({
   };
 
   return (
-      <>
-      {/* Inline Filter button - visible on md+ */}
+    <>
+      {/* Trigger buttons */}
       <Button
         onClick={() => setIsOpen(true)}
         id="open-filters"
@@ -134,17 +182,13 @@ export default function EmployeeFilters({
         Filter
       </Button>
 
-      {/* Floating Filter button - visible on small screens */}
       <div className="fixed bottom-6 right-6 z-50 md:hidden">
-        <Button
-          onClick={() => setIsOpen(true)}
-          className="rounded-full shadow-lg px-4 py-3"
-        >
+        <Button onClick={() => setIsOpen(true)} className="rounded-full shadow-lg px-4 py-3">
           Filter
         </Button>
       </div>
 
-      {/* Active Filters as Chips */}
+      {/* Active chips */}
       <div className="flex gap-2 mt-2 flex-wrap">
         {selectedOffices.map((id) => {
           const office = offices.find((o) => o.id === id);
@@ -156,7 +200,7 @@ export default function EmployeeFilters({
                   offices: selectedOffices.filter((i) => i !== id),
                   eligibilities: selectedEligibilities,
                   employeeTypes: selectedEmployeeTypes,
-                  positions: selectedPositions, // NEW
+                  positions: selectedPositions,
                   status,
                 })
               }
@@ -175,7 +219,7 @@ export default function EmployeeFilters({
                   offices: selectedOffices,
                   eligibilities: selectedEligibilities.filter((i) => i !== id),
                   employeeTypes: selectedEmployeeTypes,
-                  positions: selectedPositions, // NEW
+                  positions: selectedPositions,
                   status,
                 })
               }
@@ -194,7 +238,7 @@ export default function EmployeeFilters({
                   offices: selectedOffices,
                   eligibilities: selectedEligibilities,
                   employeeTypes: selectedEmployeeTypes.filter((i) => i !== id),
-                  positions: selectedPositions, // NEW
+                  positions: selectedPositions,
                   status,
                 })
               }
@@ -213,7 +257,7 @@ export default function EmployeeFilters({
                   offices: selectedOffices,
                   eligibilities: selectedEligibilities,
                   employeeTypes: selectedEmployeeTypes,
-                  positions: selectedPositions.filter((i) => i !== id), // NEW
+                  positions: selectedPositions.filter((i) => i !== id),
                   status,
                 })
               }
@@ -229,7 +273,7 @@ export default function EmployeeFilters({
                 offices: selectedOffices,
                 eligibilities: selectedEligibilities,
                 employeeTypes: selectedEmployeeTypes,
-                positions: selectedPositions, // NEW
+                positions: selectedPositions,
                 status: "all",
               })
             }
@@ -238,7 +282,7 @@ export default function EmployeeFilters({
         )}
       </div>
 
-      {/* Filter Modal */}
+      {/* Modal */}
       <Modal
         title="Filter Employees"
         description="Select filters to narrow down employees"
@@ -248,11 +292,7 @@ export default function EmployeeFilters({
         <div className="space-y-4 max-h-[80vh] overflow-y-auto">
           <div>
             <label className="font-semibold block mb-1">Office</label>
-            <MultiSelect
-              options={offices}
-              selected={selectedOffices}
-              onChange={setSelectedOffices}
-            />
+            <MultiSelect options={offices} selected={selectedOffices} onChange={setSelectedOffices} />
           </div>
 
           <div>
@@ -296,11 +336,7 @@ export default function EmployeeFilters({
           </div>
 
           <div className="flex flex-col-reverse md:flex-row justify-end gap-2 pt-4">
-            <Button
-              variant="outline"
-              onClick={clearAll}
-              className="w-full md:w-auto"
-            >
+            <Button variant="outline" onClick={clearAll} className="w-full md:w-auto">
               Clear All
             </Button>
             <Button onClick={handleApply} className="w-full md:w-auto">
@@ -310,6 +346,5 @@ export default function EmployeeFilters({
         </div>
       </Modal>
     </>
-  
   );
 }
