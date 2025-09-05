@@ -1,5 +1,6 @@
 "use client";
 import * as z from "zod";
+import { mutate } from "swr";
 import { Eligibility, Employee, EmployeeType, Gender, Image, Offices } from "@prisma/client";
 import { CalendarIcon, Check, ChevronDown, Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -246,9 +247,10 @@ export const EmployeesForm = ({
       } else {
         await axios.post(`/api/${params.departmentId}/employees`, data);
       }
-
+// ✅ Revalidate your employees table SWR key
+    mutate([`/api/${params.departmentId}/employees`]);
       toast.success("Success!", { id: toastId, description: toastMessage });
-      setTimeout(() => { router.refresh(); router.back(); }, 500);
+
     } catch (error: any) {
       toast.error("Uh oh! Something went wrong.", {
         description: error?.response?.data?.error ?? "There was a problem with your request.",

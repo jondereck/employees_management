@@ -26,30 +26,33 @@ import { format } from "date-fns";
 import { FloatingSelectionBar } from "./floating-selection-bar";
 
 
+interface Option { id: string; name: string; }
 
+const STATUS_VALUES = ["all", "Active", "Inactive"] as const;
+type StatusValue = typeof STATUS_VALUES[number];
 
 
 interface EmployeesClientProps {
-  departmentId: string; // ✅ Add this instead to build your SWR URL
+  departmentId: string;
   data: EmployeesColumn[];
-  offices: { id: string; name: string }[];
+  offices: Option[];
   eligibilities: { id: string; name: string; value: string }[];
   employeeTypes: { id: string; name: string; value: string }[];
+  positions: Option[]; 
 }
 
-
-export const EmployeesClient = ({ departmentId, data, offices, eligibilities, employeeTypes
+export const EmployeesClient = ({ departmentId, data, offices, positions, eligibilities, employeeTypes
 }: EmployeesClientProps) => {
   const router = useRouter();
   const params = useParams();
 
-  const [filters, setFilters] = useState({
-    offices: [] as string[],
-    eligibilities: [] as string[],
-    employeeTypes: [] as string[],
-    status: "all",
-  });
-
+const [filters, setFilters] = useState({
+  offices: [] as string[],
+  eligibilities: [] as string[],
+  employeeTypes: [] as string[],
+  positions: [] as string[],       // <-- add this
+  status: "all" as StatusValue,    // <-- strong type
+});
   const { employees: swrEmployees = [], isLoading, isError } = useEmployees(departmentId);
 
   const employees = useMemo(() => {
@@ -76,22 +79,30 @@ export const EmployeesClient = ({ departmentId, data, offices, eligibilities, em
 
 
 
-  const filteredEmployees = useMemo(() => {
-    return data.filter((employee) => {
-      const officeMatch =
-        filters.offices.length === 0 || filters.offices.includes(employee.offices.id);
-      const eligMatch =
-        filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.id);
-      const typeMatch =
-        filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.id);
-      const statusMatch =
-        filters.status === "all" ||
-        (filters.status === "Active" && !employee.isArchived) ||
-        (filters.status === "Inactive" && employee.isArchived);
+const filteredEmployees = useMemo(() => {
+  return employees.filter((employee) => {
+    const officeMatch =
+      filters.offices.length === 0 || filters.offices.includes(employee.offices.id);
 
-      return officeMatch && eligMatch && typeMatch && statusMatch;
-    });
-  }, [data, filters]);
+    const eligMatch =
+      filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.id);
+
+    const typeMatch =
+      filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.id);
+
+    const posMatch =
+      filters.positions.length === 0 ||
+      (employee.position ? filters.positions.includes(employee.position) : false);
+
+    const statusMatch =
+      filters.status === "all" ||
+      (filters.status === "Active" && !employee.isArchived) ||
+      (filters.status === "Inactive" && employee.isArchived);
+
+    return officeMatch && eligMatch && typeMatch && posMatch && statusMatch;
+  });
+}, [employees, filters]);
+
 
 
   // State for search input
@@ -164,6 +175,7 @@ export const EmployeesClient = ({ departmentId, data, offices, eligibilities, em
               eligibilities={eligibilities}
               employeeTypes={employeeTypes}
               onFilterChange={setFilters}
+                positions={positions} 
             />
           </div>
         </div>
