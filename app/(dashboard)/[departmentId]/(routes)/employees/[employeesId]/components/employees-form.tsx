@@ -692,6 +692,10 @@ export const EmployeesForm = ({
                   field={field}
                   endpoint="/api/autofill/positions"
                   placeholder="Search or enter Position..."
+                   showFormatSwitch
+      formatMode="none"
+      formatModes={["none", "upper", "title", "sentence"]}
+                  
                 />
               )}
             />
@@ -956,7 +960,7 @@ export const EmployeesForm = ({
                   field={field}
                   endpoint="/api/autofill/streets"
                   placeholder="Search or enter Street..."
-                  uppercase={true}
+                  
                 />
               )}
             />
@@ -970,7 +974,7 @@ export const EmployeesForm = ({
                   field={field}
                   endpoint="/api/autofill/barangays"
                   placeholder="Search or enter Barangay..."
-                  uppercase={true}
+                  formatMode="upper"
                 />
               )}
             />
@@ -984,6 +988,7 @@ export const EmployeesForm = ({
                   field={field}
                   endpoint="/api/autofill/cities"
                   placeholder="Search or enter City..."
+                   formatMode="upper"
                 />
               )}
             />
@@ -997,6 +1002,7 @@ export const EmployeesForm = ({
                   field={field}
                   endpoint="/api/autofill/provinces"
                   placeholder="Search or enter Province..."
+                   formatMode="upper"
                 />
               )}
             />
