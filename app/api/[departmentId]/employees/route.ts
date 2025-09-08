@@ -265,51 +265,84 @@ export async function POST(
   }
 }
 
-
 export async function GET(
   req: Request,
   { params }: { params: { departmentId: string } }
 ) {
   try {
-    const { searchParams } = new URL(req.url);
-    const officeId = searchParams.get("officeId") || undefined;
-    const employeeTypeId = searchParams.get("employeeTypeId") || undefined;
-    const eligibilityId = searchParams.get("eligibilityId") || undefined;
-    const isFeatured = searchParams.get('isFeatured');
-    const isHead = searchParams.get('isHead');
-
-
-
     if (!params.departmentId) {
       return new NextResponse("Department Id is required", { status: 400 });
     }
 
-    const employee = await prismadb.employee.findMany({
-      where: {
-        departmentId: params.departmentId,
-        officeId,
-        employeeTypeId,
-        eligibilityId,
-        isFeatured: isFeatured ? true : undefined,
-        isArchived: false,
-        isHead: isHead ? true : undefined,
+    const { searchParams } = new URL(req.url);
 
-      },
+    // filters (all optional)
+    const officeId = searchParams.get("officeId") || undefined;
+    const employeeTypeId = searchParams.get("employeeTypeId") || undefined;
+    const eligibilityId = searchParams.get("eligibilityId") || undefined;
+
+    // booleans: pass `?isFeatured=1` or `?isFeatured=true`
+    const isFeaturedParam = searchParams.get("isFeatured");
+    const isHeadParam = searchParams.get("isHead");
+    const isFeatured =
+      isFeaturedParam === "1" || isFeaturedParam === "true" ? true :
+      isFeaturedParam === "0" || isFeaturedParam === "false" ? false :
+      undefined;
+    const isHead =
+      isHeadParam === "1" || isHeadParam === "true" ? true :
+      isHeadParam === "0" || isHeadParam === "false" ? false :
+      undefined;
+
+    // status: all | active | archived (default: all)
+    const status = (searchParams.get("status") ?? "all").toLowerCase() as
+      | "all" | "active" | "archived";
+
+    // simple search term (optional): `?q=...`
+    const q = (searchParams.get("q") || "").trim();
+
+    // build where
+    const where: any = {
+      departmentId: params.departmentId,
+      officeId,
+      employeeTypeId,
+      eligibilityId,
+      // Only set isFeatured/isHead if they’re explicitly boolean
+      ...(typeof isFeatured === "boolean" ? { isFeatured } : {}),
+      ...(typeof isHead === "boolean" ? { isHead } : {}),
+    };
+
+    if (status === "active") where.isArchived = false;
+    if (status === "archived") where.isArchived = true;
+    // status === "all" -> do not set isArchived
+
+    if (q) {
+      where.OR = [
+        { employeeNo: { contains: q, mode: "insensitive" } },
+        { lastName:   { contains: q, mode: "insensitive" } },
+        { firstName:  { contains: q, mode: "insensitive" } },
+        { middleName: { contains: q, mode: "insensitive" } },
+        { position:   { contains: q, mode: "insensitive" } },
+        { contactNumber: { contains: q, mode: "insensitive" } },
+        // add more fields as you need
+      ];
+    }
+
+    const employees = await prismadb.employee.findMany({
+      where,
       include: {
         images: true,
         offices: true,
         employeeType: true,
-        eligibility: true
+        eligibility: true,
       },
       orderBy: {
-        createdAt: 'asc'
-      }
+        updatedAt: "desc", // better for realtime UI
+      },
     });
 
-    return NextResponse.json(employee)
-
+    return NextResponse.json(employees);
   } catch (error) {
-    console.log('[EMPLOYEES_GET]', error);
-    return new NextResponse("Internal error", { status: 500 })
+    console.log("[EMPLOYEES_GET]", error);
+    return new NextResponse("Internal error", { status: 500 });
   }
 }
