@@ -71,16 +71,16 @@ const [searchTerm, setSearchTerm] = useState<string>(() => {
     } catch { }
   }, [searchTerm]);
 
-   // ✅ Escape clears search
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && searchTerm) {
-        setSearchTerm("");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [searchTerm]);
+  //  // ✅ Escape clears search
+  // useEffect(() => {
+  //   const onKey = (e: KeyboardEvent) => {
+  //     if (e.key === "Escape" && searchTerm) {
+  //       setSearchTerm("");
+  //     }
+  //   };
+  //   window.addEventListener("keydown", onKey);
+  //   return () => window.removeEventListener("keydown", onKey);
+  // }, [searchTerm]);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 400);
 

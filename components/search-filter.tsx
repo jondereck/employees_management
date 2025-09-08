@@ -10,6 +10,8 @@ interface SearchFilterProps {
   isDebouncing?: boolean; // optional, pass !!(debounced !== instant)
 }
 
+
+
 const MODE_STYLES: Record<string, { label: string; badge: string; ring: string; bg: string; border: string }> = {
   pos:  { label: "Position search", badge: "bg-purple-100 text-purple-700", ring: "focus:ring-purple-500", bg: "bg-purple-50", border: "border-purple-300" },
   nick: { label: "Nickname search", badge: "bg-green-100 text-green-700",  ring: "focus:ring-green-500",  bg: "bg-green-50",  border: "border-green-300"  },
