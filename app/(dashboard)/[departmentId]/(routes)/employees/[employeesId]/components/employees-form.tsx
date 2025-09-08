@@ -30,6 +30,7 @@ import { AutoFillField } from "../../components/autofill";
 import { SalaryInput } from "../../components/salary-input";
 import { StepIndicator } from "../../components/step-indicator";
 import { employeesKey, useEmployee } from "@/hooks/use-employees";
+import { debounce, parseDraft, serializeDraft } from "@/utils/form-draft";
 
 
 
@@ -238,68 +239,8 @@ export const EmployeesForm = ({
 
   const form = useForm<EmployeesFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData 
-      ? {
-        ...initialData,
-        firstName: initialData.firstName.toUpperCase(),
-        middleName: initialData.middleName.toUpperCase(),
-        lastName: initialData.lastName.toUpperCase(),
-        province: initialData.province.toUpperCase(),
-        city: initialData.city.toUpperCase(),
-        barangay: initialData.barangay.toUpperCase(),
-        street: initialData.street.toUpperCase(),
-
-        salary: Number(initialData.salary ?? 0),
-        salaryGrade: String(initialData.salaryGrade ?? "1"), // ✅ cast to string
-
-        dateHired: initialData.dateHired ? new Date(initialData.dateHired) : undefined,
-        latestAppointment: initialData.latestAppointment ? new Date(initialData.latestAppointment) : undefined,
-      }
-      : {
-        prefix: '',
-        employeeNo: '',
-        lastName: '',
-        firstName: '',
-        middleName: '',
-        suffix: '',
-        images: [
-          {
-            url: 'https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg',
-          },
-        ],
-        gender: '',
-        contactNumber: '',
-        position: '',
-        birthday: undefined,
-        age: '',
-        gsisNo: '',
-        tinNo: '',
-        pagIbigNo: '',
-        philHealthNo: '',
-        salary: 0,
-        salaryGrade: "0", // ✅ make it string here too
-        dateHired: undefined,
-        latestAppointment: undefined,
-        terminateDate: '',
-        isFeatured: false,
-        isArchived: false,
-        isHead: false,
-        employeeTypeId: '',
-        officeId: '',
-        eligibilityId: '',
-        houseNo: '',
-        education: '',
-        region: '',
-        province: '',
-        city: '',
-        barangay: '',
-        street: '',
-        memberPolicyNo: '',
-        nickname: '',
-        emergencyContactName: '',
-        emergencyContactNumber: '',
-        employeeLink: '',
-      },
+    defaultValues: EMPTY_DEFAULTS 
+      
   });
 
 
@@ -331,6 +272,8 @@ export const EmployeesForm = ({
     employeesId?: string;
   };
 
+  const DRAFT_KEY = `hrps.employeeFormDraft.${departmentId}.${employeesId ?? "new"}`;
+
     const { data: employee } = useEmployee(departmentId, employeesId);
   const initialDefaults = useMemo(
     () => (employee ? mapToDefaults(employee) : initialData ? mapToDefaults(initialData) : EMPTY_DEFAULTS),
@@ -338,17 +281,50 @@ export const EmployeesForm = ({
     [initialData, employee] // safe; recomputes when SWR arrives
   );
 
-  useEffect(() => {
-    if (employee) {
-      form.reset(mapToDefaults(employee));
-    } else if (initialData) {
-      form.reset(mapToDefaults(initialData));
-    } else {
-      form.reset(EMPTY_DEFAULTS);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employee, initialData]);
+ // 3a) On mount: pick the best source -> DRAFT > SWR employee > SSR initialData > EMPTY
+useEffect(() => {
+  const saved = typeof window !== "undefined" ? localStorage.getItem(DRAFT_KEY) : null;
 
+  if (saved) {
+    // ✅ load draft first
+    const draft = parseDraft<EmployeesFormValues>(saved);
+    form.reset(draft);
+    return; // don’t apply other sources if draft exists
+  }
+
+  if (employee) {
+    form.reset(mapToDefaults(employee));
+  } else if (initialData) {
+    form.reset(mapToDefaults(initialData));
+  } else {
+    form.reset(EMPTY_DEFAULTS);
+  }
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [employee, initialData]); // safe to re-run when SWR/SSR changes
+
+// 3b) While typing: save draft (debounced)
+useEffect(() => {
+  const save = debounce((vals: EmployeesFormValues) => {
+    try {
+      localStorage.setItem(DRAFT_KEY, serializeDraft(vals));
+    } catch {}
+  }, 500);
+
+  const sub = form.watch((vals) => save(vals as EmployeesFormValues));
+  return () => sub.unsubscribe();
+}, [form, DRAFT_KEY]);
+
+// 3c) Optional: warn if navigating away with dirty/unsaved state
+useEffect(() => {
+  const handler = (e: BeforeUnloadEvent) => {
+    if (form.formState.isDirty) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  };
+  window.addEventListener("beforeunload", handler);
+  return () => window.removeEventListener("beforeunload", handler);
+}, [form.formState.isDirty]);
 
 
 
@@ -389,6 +365,8 @@ export const EmployeesForm = ({
 
       // 🔄 Then revalidate to ensure perfect server state
       globalMutate(key);
+        localStorage.removeItem(DRAFT_KEY);
+
       router.back();
       toast.success("Success!", { id: toastId, description: initialData ? "Employee updated." : "Employee created." });
     } catch (error: any) {
@@ -405,6 +383,8 @@ export const EmployeesForm = ({
       setLoading(true);
 
       await axios.delete(`/api/${params.departmentId}/employees/${params.employeesId}`);
+        localStorage.removeItem(DRAFT_KEY);
+
 
       toast.success("Success!", {
         description: "Employee deleted.",
@@ -505,6 +485,17 @@ export const EmployeesForm = ({
               </FormItem>
             )}
           />
+<Button
+  type="button"
+  variant="secondary"
+  onClick={() => {
+    localStorage.removeItem(DRAFT_KEY);
+    form.reset(EMPTY_DEFAULTS);
+    toast.success("Draft cleared");
+  }}
+>
+  Clear Draft
+</Button>
 
           <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-4 gap-8">
             <FormField
