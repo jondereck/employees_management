@@ -182,24 +182,34 @@ const applyGlobalToRow = (i: number) => {
 
         // Type the response shape we actually use
         const json = (await res.json()) as {
-          employees?: Array<{ position?: string | null }>;
+         employees?: Array<{ position?: string | null; isArchived?: boolean | null }>;
         };
 
-        // Normalize -> string[], remove empties
         const positions: string[] = (json.employees ?? [])
-          .map(e => (e.position ?? '').toString().trim())
-          .filter((p): p is string => p.length > 0);
+        .filter(e => !e?.isArchived)                 // <-- exclude archived here
+        .map(e => (e.position ?? '').trim())
+        .filter(p => p.length > 0);
 
-        // Make unique and sort (explicit Set<string> so TS knows the type)
-        const unique: string[] = Array.from(new Set<string>(positions))
-          .sort((a, b) => a.localeCompare(b));
-
-        setAllPositions(unique); // OK: string[]
-      } catch (e) {
-        console.error('Failed to load positions', e);
+      // Deduplicate (case-insensitive), but keep original casing of first seen
+      const seen = new Set<string>();
+      const unique: string[] = [];
+      for (const p of positions) {
+        const key = p.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(p);
+        }
       }
-    })();
-  }, [modalOpen]);
+
+      // Sort nicely
+      unique.sort((a, b) => a.localeCompare(b));
+
+      setAllPositions(unique);
+    } catch (e) {
+      console.error('Failed to load positions', e);
+    }
+  })();
+}, [modalOpen]);
 
 
   // filtered positions by search

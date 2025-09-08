@@ -155,6 +155,36 @@ const employees = useMemo(() => {
 }, [swrEmployees, data]);
 
 
+// Unique positions from NON-archived employees only (case-insensitive, keep first casing)
+const activePositionOptions: Option[] = useMemo(() => {
+  const seen = new Set<string>();
+  const list: Option[] = [];
+  for (const e of employees) {
+    if (e.isArchived) continue;                       // <-- exclude archived owners
+    const p = (e.position ?? "").trim();
+    if (!p) continue;
+    const key = p.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      list.push({ id: p, name: p });
+    }
+  }
+  // sort by display name
+  return list.sort((a, b) => a.name.localeCompare(b.name));
+}, [employees]);
+
+
+useEffect(() => {
+  setFilters((prev) => {
+    if (prev.positions.length === 0) return prev;
+    const allowed = new Set(activePositionOptions.map(o => o.id));
+    const next = prev.positions.filter(p => allowed.has(p));
+    return next.length === prev.positions.length ? prev : { ...prev, positions: next };
+  });
+}, [activePositionOptions]);
+
+
+
   const filteredEmployees = useMemo(() => {
     return employees.filter((employee) => {
       const officeMatch =
@@ -262,7 +292,7 @@ const employees = useMemo(() => {
               eligibilities={eligibilities}
               employeeTypes={employeeTypes}
               onFilterChange={setFilters}
-              positions={positions}
+              positions={activePositionOptions}
             />
           </div>
         </div>
