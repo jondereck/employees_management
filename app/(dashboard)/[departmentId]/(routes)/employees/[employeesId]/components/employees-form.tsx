@@ -30,17 +30,8 @@ import { AutoFillField } from "../../components/autofill";
 import { SalaryInput } from "../../components/salary-input";
 import { StepIndicator } from "../../components/step-indicator";
 import { employeesKey, useEmployee } from "@/hooks/use-employees";
-import { debounce, parseDraft, serializeDraft } from "@/utils/form-draft";
 
 
-
-
-const dateOpt = z.preprocess((v) => {
-  if (v === "" || v == null) return undefined;               // treat empty/undefined as missing
-  if (v instanceof Date) return v;                           // already a Date
-  const d = new Date(v as any);                              // parse strings/numbers
-  return isNaN(d.getTime()) ? undefined : d;                 // invalid -> undefined
-}, z.date().optional());
 
 const formSchema = z.object({
   step: z.number().optional(),
@@ -86,14 +77,14 @@ const formSchema = z.object({
     .transform((v) => String(v)) // always string for Prisma
     .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric"),
   salary: z.number().min(0),
-  birthday: dateOpt,
+  birthday: z.date().optional(),
   // age: z.string(),
   gsisNo: z.string(),
   pagIbigNo: z.string(),
   tinNo: z.string(),
   philHealthNo: z.string(),
-  dateHired: dateOpt,
-  latestAppointment: dateOpt,
+  dateHired: z.union([z.date(), z.string()]).optional(),
+  latestAppointment: z.union([z.date(), z.string()]).optional(),
   terminateDate: z.string(),
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
@@ -247,8 +238,68 @@ export const EmployeesForm = ({
 
   const form = useForm<EmployeesFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: EMPTY_DEFAULTS
+    defaultValues: initialData 
+      ? {
+        ...initialData,
+        firstName: initialData.firstName.toUpperCase(),
+        middleName: initialData.middleName.toUpperCase(),
+        lastName: initialData.lastName.toUpperCase(),
+        province: initialData.province.toUpperCase(),
+        city: initialData.city.toUpperCase(),
+        barangay: initialData.barangay.toUpperCase(),
+        street: initialData.street.toUpperCase(),
 
+        salary: Number(initialData.salary ?? 0),
+        salaryGrade: String(initialData.salaryGrade ?? "1"), // ✅ cast to string
+
+        dateHired: initialData.dateHired ? new Date(initialData.dateHired) : undefined,
+        latestAppointment: initialData.latestAppointment ? new Date(initialData.latestAppointment) : undefined,
+      }
+      : {
+        prefix: '',
+        employeeNo: '',
+        lastName: '',
+        firstName: '',
+        middleName: '',
+        suffix: '',
+        images: [
+          {
+            url: 'https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg',
+          },
+        ],
+        gender: '',
+        contactNumber: '',
+        position: '',
+        birthday: undefined,
+        age: '',
+        gsisNo: '',
+        tinNo: '',
+        pagIbigNo: '',
+        philHealthNo: '',
+        salary: 0,
+        salaryGrade: "0", // ✅ make it string here too
+        dateHired: undefined,
+        latestAppointment: undefined,
+        terminateDate: '',
+        isFeatured: false,
+        isArchived: false,
+        isHead: false,
+        employeeTypeId: '',
+        officeId: '',
+        eligibilityId: '',
+        houseNo: '',
+        education: '',
+        region: '',
+        province: '',
+        city: '',
+        barangay: '',
+        street: '',
+        memberPolicyNo: '',
+        nickname: '',
+        emergencyContactName: '',
+        emergencyContactNumber: '',
+        employeeLink: '',
+      },
   });
 
 
@@ -275,65 +326,21 @@ export const EmployeesForm = ({
   const params = useParams() as { departmentId: string; employeesId?: string };
   const key = employeesKey(params.departmentId);
 
-  const safeFormat = (v: unknown, fmt = "PPP") => {
-  const d = v instanceof Date ? v : (v ? new Date(v as any) : undefined);
-  return d && !isNaN(d.getTime()) ? format(d, fmt) : "";
-};
-
-
-  const { departmentId, employeesId } = useParams() as {
+   const { departmentId, employeesId } = useParams() as {
     departmentId: string;
     employeesId?: string;
   };
 
-  const DRAFT_KEY = `hrps.employeeFormDraft.${departmentId}.${employeesId ?? "new"}`;
+  
 
-  const { data: employee } = useEmployee(departmentId, employeesId);
+    const { data: employee } = useEmployee(departmentId, employeesId);
   const initialDefaults = useMemo(
     () => (employee ? mapToDefaults(employee) : initialData ? mapToDefaults(initialData) : EMPTY_DEFAULTS),
-    [initialData, employee] 
+    // only compute from SSR (initialData); SWR reset will run in useEffect below
+    [initialData, employee] // safe; recomputes when SWR arrives
   );
 
-  const normalizeDate = (v: unknown) => {
-  if (!v || v === "") return undefined;
-  if (v instanceof Date) return v;
-  const d = new Date(v as any);
-  return isNaN(d.getTime()) ? undefined : d;
-};
-
-const normalizeDates = (vals: EmployeesFormValues): EmployeesFormValues => ({
-  ...vals,
-  birthday: normalizeDate(vals.birthday) as any,
-  dateHired: normalizeDate(vals.dateHired) as any,
-  latestAppointment: normalizeDate(vals.latestAppointment) as any,
-});
-
-useEffect(() => {
-  const save = debounce((vals: EmployeesFormValues) => {
-    try {
-      const normalized = normalizeDates(vals);
-      localStorage.setItem(DRAFT_KEY, serializeDraft(normalized));
-    } catch {}
-  }, 500);
-
-  const sub = form.watch((vals) => save(vals as EmployeesFormValues));
-  return () => sub.unsubscribe();
-}, [form, DRAFT_KEY]);
-
-
-
-
-  // 3a) On mount: pick the best source -> DRAFT > SWR employee > SSR initialData > EMPTY
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem(DRAFT_KEY) : null;
-
-    if (saved) {
-      // ✅ load draft first
-      const draft = parseDraft<EmployeesFormValues>(saved);
-      form.reset(draft);
-      return; // don’t apply other sources if draft exists
-    }
-
     if (employee) {
       form.reset(mapToDefaults(employee));
     } else if (initialData) {
@@ -342,37 +349,14 @@ useEffect(() => {
       form.reset(EMPTY_DEFAULTS);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employee, initialData]); // safe to re-run when SWR/SSR changes
+  }, [employee, initialData]);
 
-  // 3b) While typing: save draft (debounced)
-  useEffect(() => {
-    const save = debounce((vals: EmployeesFormValues) => {
-      try {
-        localStorage.setItem(DRAFT_KEY, serializeDraft(vals));
-      } catch { }
-    }, 500);
-
-    const sub = form.watch((vals) => save(vals as EmployeesFormValues));
-    return () => sub.unsubscribe();
-  }, [form, DRAFT_KEY]);
-
-  // 3c) Optional: warn if navigating away with dirty/unsaved state
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (form.formState.isDirty) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [form.formState.isDirty]);
 
 
 
   const onSubmit = async (values: EmployeesFormValues) => {
 
-    setLoading(true);
+     setLoading(true);
     try {
       const toastId = toast.loading("Processing...", { description: "Please wait while we save your data." });
 
@@ -407,8 +391,6 @@ useEffect(() => {
 
       // 🔄 Then revalidate to ensure perfect server state
       globalMutate(key);
-      localStorage.removeItem(DRAFT_KEY);
-
       router.back();
       toast.success("Success!", { id: toastId, description: initialData ? "Employee updated." : "Employee created." });
     } catch (error: any) {
@@ -425,8 +407,6 @@ useEffect(() => {
       setLoading(true);
 
       await axios.delete(`/api/${params.departmentId}/employees/${params.employeesId}`);
-      localStorage.removeItem(DRAFT_KEY);
-
 
       toast.success("Success!", {
         description: "Employee deleted.",
@@ -527,17 +507,6 @@ useEffect(() => {
               </FormItem>
             )}
           />
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              localStorage.removeItem(DRAFT_KEY);
-              form.reset(EMPTY_DEFAULTS);
-              toast.success("Draft cleared");
-            }}
-          >
-            Clear Draft
-          </Button>
 
           <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-4 gap-8">
             <FormField
