@@ -146,24 +146,26 @@ function mapToDefaults(src: any): EmployeesFormValues {
   if (!src) return EMPTY_DEFAULTS;
   return {
     ...EMPTY_DEFAULTS,
-    // IDs
+
+    // ids
     employeeTypeId: src.employeeTypeId ?? "",
     officeId: src.officeId ?? "",
     eligibilityId: src.eligibilityId ?? "",
-    // Names (UPPERCASE safely)
+
+    // names & address
     firstName: upper(src.firstName),
     middleName: upper(src.middleName),
     lastName: upper(src.lastName),
     prefix: src.prefix ?? "",
     suffix: src.suffix ?? "",
-    // Address (UPPERCASE safely)
     region: upper(src.region),
     province: upper(src.province),
     city: upper(src.city),
     barangay: upper(src.barangay),
     street: upper(src.street),
     houseNo: src.houseNo ?? "",
-    // Others
+
+    // others
     employeeNo: src.employeeNo ?? "",
     gender: src.gender ?? "",
     contactNumber: src.contactNumber ?? "",
@@ -184,9 +186,19 @@ function mapToDefaults(src: any): EmployeesFormValues {
     emergencyContactName: src.emergencyContactName ?? "",
     emergencyContactNumber: src.emergencyContactNumber ?? "",
     employeeLink: src.employeeLink ?? "",
-    images: Array.isArray(src.images) && src.images.length > 0 ? src.images.map((i: any) => ({ url: i.url })) : EMPTY_DEFAULTS.images,
+
+    // ✅ add these four
+    gsisNo: src.gsisNo ?? "",
+    tinNo: src.tinNo ?? "",
+    philHealthNo: src.philHealthNo ?? "",
+    pagIbigNo: src.pagIbigNo ?? "",
+
+    images: Array.isArray(src.images) && src.images.length > 0
+      ? src.images.map((i: any) => ({ url: i.url }))
+      : EMPTY_DEFAULTS.images,
   };
 }
+
 
 
 interface EmployeesFormProps {

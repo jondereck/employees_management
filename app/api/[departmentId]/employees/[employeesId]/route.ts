@@ -64,7 +64,7 @@ export async function PATCH(
       position,
       birthday,
       education,
-      houseNo,
+      houseNo, 
       street,
       barangay,
       city,
