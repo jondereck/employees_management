@@ -161,7 +161,9 @@ export async function POST(req: Request) {
           select: {
             id: true,
             firstName: true,
+            middleName: true,   // <-- add
             lastName: true,
+            suffix: true,       // <-- add
             position: true,
             offices: { select: { name: true } },
             employeeNo: true,
@@ -193,10 +195,25 @@ export async function POST(req: Request) {
     // 3) Build output rows
     const out = prepared.map((r) => {
       const e = map.get(r.id);
+
+      const middleInitial =
+        e?.middleName && e.middleName.trim()
+          ? `${e.middleName.trim()[0].toUpperCase()}.`
+          : "";
+
+      const suffix = e?.suffix?.trim() ?? "";
+
+      // Keep your combined Name as-is but enhanced (optional)
+      const displayName = e
+        ? `${e.lastName}, ${e.firstName}${middleInitial ? " " + middleInitial : ""}${suffix ? " " + suffix : ""}`
+        : "(Unmatched)";
+
       return {
         employeeId: e?.id ?? "",
         employeeNo: e?.employeeNo ?? "",
-        name: e ? `${e.lastName}, ${e.firstName}` : "(Unmatched)",
+        name: displayName,
+        middleInitial,      // <-- "D." style
+        suffix,
         office: e?.offices?.name ?? "",
         position: e?.position ?? "",
         date: r.dt.dateStr,

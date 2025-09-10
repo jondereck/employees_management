@@ -1,14 +1,20 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Papa from "papaparse";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import * as XLSX from "xlsx-js-style";
+import { toast } from "sonner";
+import { Loader2, X } from "lucide-react";
 
 import { parseIdFromText } from "@/lib/parseEmployeeIdFromText";
+
+
+type ParsedFile = { name: string; headers: string[]; rows: ParsedRow[]; count: number };
+
 
 // Types for mapping
 type Mapping = {
@@ -26,37 +32,18 @@ export default function CsvAttendanceImport() {
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [mapping, setMapping] = useState<Mapping>({});
   const [idType, setIdType] = useState<"employeeId" | "employeeNo">("employeeId");
-  const [regex, setRegex] = useState<string>(""); // optional custom regex with group 1 as ID
+  const [regex, setRegex] = useState<string>("");
   const [preview, setPreview] = useState<any[]>([]);
+  const [fileName, setFileName] = useState<string>("");
+  const [isParsing, setIsParsing] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const [filesInfo, setFilesInfo] = useState<ParsedFile[]>([]);
+  const [dedup, setDedup] = useState(true);
 
-    Papa.parse<ParsedRow>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (res) => {
-        const data = res.data as ParsedRow[];
-        setRows(data);
-        const hdrs = res.meta.fields || Object.keys(data[0] || {});
-        setHeaders(hdrs);
-        // naive auto-guess
-        const guess: Mapping = {};
-        const lower = (s: string) => s.toLowerCase();
-        for (const h of hdrs) {
-          const lh = lower(h);
-          if (!guess.scanText && /(text|scan|content|payload)/.test(lh)) guess.scanText = h;
-          if (!guess.timestamp && /(timestamp|datetime|scanned|time)/.test(lh)) guess.timestamp = h;
-          if (!guess.date && /(date)/.test(lh)) guess.date = h;
-          if (!guess.time && /(^|[^a-z])time([^a-z]|$)/.test(lh)) guess.time = h;
-          if (!guess.idColumn && /(id|employee.?no)/.test(lh)) guess.idColumn = h;
-        }
-        setMapping((m) => ({ ...m, ...guess }));
-      },
-    });
-  }
+
 
   function toDisplayEmployeeNo(val?: string) {
     // take text before comma, then keep digits only
@@ -65,159 +52,338 @@ export default function CsvAttendanceImport() {
     return digitsOnly;
   }
 
-  function buildPayload() {
-    const customRe = regex ? new RegExp(regex) : undefined;
-    const payloadRows = rows.map((r) => {
-      const idRaw = mapping.scanText ? (r[mapping.scanText] || "") : undefined;
-      let id: string | undefined = undefined;
+  async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const list = Array.from(e.target.files || []);
+    if (!list.length) return;
 
+    const t = toast.loading("Parsing CSV files…");
+    setIsParsing(true);
+
+    try {
+      // Parse all newly selected files
+      const parsed = await Promise.all(list.map(parseCsv));
+
+      // Merge with existing by filename (replace if same name)
+      const byName = new Map<string, ParsedFile>();
+      for (const f of filesInfo) byName.set(f.name, f);
+      for (const p of parsed) byName.set(p.name, p);
+
+      const next = Array.from(byName.values());
+      setFilesInfo(next);
+      recomputeFromFiles(next);
+
+      const newRowsCount = parsed.reduce((sum, p) => sum + p.count, 0);
+      toast.success(`Added ${newRowsCount.toLocaleString()} rows from ${parsed.length} file(s)`, { id: t });
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to parse one or more files", { id: t });
+    } finally {
+      setIsParsing(false);
+      // allow re-selecting the same file(s) (some browsers ignore change if same selection)
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+
+  function clearFile() {
+    if (fileRef.current) fileRef.current.value = "";
+    setFileName("");
+    setHeaders([]);
+    setRows([]);
+    setMapping({});
+    setPreview([]);
+    setFilesInfo([]);
+    toast.message("File cleared");
+  }
+
+
+  function buildPayload() {
+    function safeRegex(s?: string): RegExp | undefined {
+      if (!s?.trim()) return undefined;
+      try { return new RegExp(s, "i"); } catch { return undefined; }
+    }
+    const customRe = safeRegex(regex);
+    return rows.map((r) => {
+      const idRaw = mapping.scanText ? (r[mapping.scanText] || "") : undefined;
+      let id: string | undefined;
       if (mapping.idColumn && r[mapping.idColumn]) {
         const raw = String(r[mapping.idColumn]).trim();
-        // If it's already a bare UUID/number, keep it; else parse like scan text
-        if (/^([0-9a-fA-F-]{36})$/.test(raw) || /^\d+$/.test(raw)) {
-          id = raw;
-        } else {
-          id = parseIdFromText(raw, customRe).id ?? undefined;
-        }
+        if (/^([0-9a-fA-F-]{36})$/.test(raw) || /^\d+$/.test(raw)) id = raw;
+        else id = parseIdFromText(raw, customRe).id ?? undefined;
       } else if (mapping.scanText && r[mapping.scanText]) {
         const raw = String(r[mapping.scanText]).trim();
         id = parseIdFromText(raw, customRe).id ?? undefined;
       }
-
-
-
       const timestamp = mapping.timestamp ? r[mapping.timestamp] : undefined;
       const date = mapping.date ? r[mapping.date] : undefined;
       const time = mapping.time ? r[mapping.time] : undefined;
-
       return { idRaw, id, timestamp, date, time, source: "csv" };
     });
-    return payloadRows;
   }
+
+
 
   async function resolvePreview() {
     const payloadRows = buildPayload();
-    const res = await fetch("/api/import/attendance/resolve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idType, rows: payloadRows, regex: regex || undefined }),
-    });
-    const json = await res.json();
-    if (json.ok) setPreview(json.rows);
-  }
-function exportExcel() {
-  if (!preview.length) return;
+    const t = toast.loading("Resolving employees…");
+    setIsPreviewing(true);
+    try {
+      const res = await fetch("/api/import/attendance/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idType, rows: payloadRows, regex: regex || undefined }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        let rowsOut = json.rows as any[];
 
-  // Build rows with the exact header keys we want to see in Excel
-  const rows = preview.map((r) => ({
-    Date: r.date,
-    Time: r.time,
-    "Employee No": toDisplayEmployeeNo(r.employeeNo),
-    Name: r.name,
-    Office: r.office,
-  }));
-
-  // 1) Header row (fixed order)
-  const HEADER = ["Date", "Time", "Name", "Office", "Employee No"] as const;
-  const ws = XLSX.utils.aoa_to_sheet([HEADER as unknown as string[]]);
-
-  // 2) Append data starting at A2 (this API supports origin)
-  XLSX.utils.sheet_add_json(ws, rows, {
-    origin: "A2",
-    skipHeader: true,
-    header: HEADER as unknown as string[],
-  });
-
-  // 3) Column widths
-  (ws as any)["!cols"] = [
-    { wch: 12 }, // Date
-    { wch: 10 }, // Time
-    { wch: 28 }, // Name
-    { wch: 36 }, // Office
-    { wch: 14 }, // Employee No
-  ];
-
-  // 4) Freeze header row + autofilter
-  (ws as any)["!freeze"] = {
-    ySplit: 1,
-    xSplit: 0,
-    topLeftCell: "A2",
-    activePane: "bottomLeft",
-    state: "frozen",
-  };
-  (ws as any)["!autofilter"] = { ref: "A1:E1" };
-
-  // 5) Style header cells (A1:E1)
-  const headerAddrs = ["A1", "B1", "C1", "D1", "E1"];
-  headerAddrs.forEach((addr, i) => {
-    if (!(ws as any)[addr]) (ws as any)[addr] = { t: "s", v: HEADER[i] };
-    const cell: any = (ws as any)[addr];
-    cell.s = {
-      font: { bold: true, color: { rgb: "1F2937" } },             // slate-800
-      alignment: { horizontal: "center", vertical: "center", wrapText: true },
-      fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } }, // gray-100
-      border: {
-        top:    { style: "thin", color: { rgb: "D1D5DB" } },
-        bottom: { style: "thin", color: { rgb: "D1D5DB" } },
-        left:   { style: "thin", color: { rgb: "D1D5DB" } },
-        right:  { style: "thin", color: { rgb: "D1D5DB" } },
-      },
-    };
-  });
-  (ws as any)["!rows"] = [{ hpt: 24 }]; // header height
-
-  // 6) Zebra striping + borders + alignment
-  const ref = ws["!ref"] as string;
-  if (ref) {
-    const range = XLSX.utils.decode_range(ref);
-    for (let R = 1; R <= range.e.r; R++) { // start at row 2
-      const zebra = R % 2 === 1;
-      for (let C = 0; C <= range.e.c; C++) {
-        const addr = XLSX.utils.encode_cell({ r: R, c: C });
-        const cell: any = (ws as any)[addr];
-        if (!cell) continue;
-
-        cell.s = {
-          alignment: { vertical: "center" },
-          border: {
-            top:    { style: "hair", color: { rgb: "E5E7EB" } },
-            bottom: { style: "hair", color: { rgb: "E5E7EB" } },
-            left:   { style: "hair", color: { rgb: "E5E7EB" } },
-            right:  { style: "hair", color: { rgb: "E5E7EB" } },
-          },
-          ...(zebra ? { fill: { patternType: "solid", fgColor: { rgb: "FAFAFA" } } } : {}),
-        };
-
-        // Center Date / Time / Employee No
-        if (C === 0 || C === 1 || C === 4) {
-          cell.s.alignment = { ...(cell.s.alignment || {}), horizontal: "center" };
+        if (dedup) {
+          const seen = new Set<string>();
+          rowsOut = rowsOut.filter(r => {
+            const idPart = r.employeeId || r.employeeNo || r.id || "";
+            const key = `${idPart}|${r.date}|${r.time}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
         }
-        // Wrap Office column
-        if (C === 3) {
-          cell.s.alignment = { ...(cell.s.alignment || {}), wrapText: true };
-        }
+
+        setPreview(rowsOut);
+
+        const matched = rowsOut.filter((r: any) => r.idMatched).length;
+        const removed = (json.rows.length - rowsOut.length);
+        toast.success(
+          `Preview ready — ${matched}/${rowsOut.length} matched${dedup && removed > 0 ? `, removed ${removed} duplicate(s)` : ""}`,
+          { id: t }
+        );
+      } else {
+        toast.error(json.error || "Failed to resolve", { id: t });
       }
+
+    } catch (e) {
+      toast.error("Network error while resolving", { id: t });
+    } finally {
+      setIsPreviewing(false);
     }
   }
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Attendance");
-  XLSX.writeFile(wb, `Attendance_${new Date().toISOString().slice(0, 10)}.xlsx`, {
-    compression: true,
-  });
-}
+  function parseCsv(file: File): Promise<ParsedFile> {
+    return new Promise((resolve, reject) => {
+      Papa.parse<ParsedRow>(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (res) => {
+          const rows = res.data as ParsedRow[];
+          const headers = res.meta.fields || Object.keys(rows[0] || {});
+          resolve({ name: file.name, headers, rows, count: rows.length });
+        },
+        error: (err) => reject(err),
+      });
+    });
+  }
+
+  function exportExcel() {
+    if (!preview.length || isExporting) return;
+    setIsExporting(true);
+    const t = toast.loading("Exporting Excel…");
+
+    try {
+      const rows = preview.map((r) => ({
+        Date: r.date,
+        Time: r.time,
+        Name: r.name,
+        Office: r.office,
+        "Employee No": toDisplayEmployeeNo(r.employeeNo),
+      }));
+
+      // --- styled export with frozen header + autofilter ---
+      const HEADER = ["Date", "Time", "Employee No", "Name", "Office",] as const;
+      const ws = XLSX.utils.aoa_to_sheet([HEADER as unknown as string[]]);
+      XLSX.utils.sheet_add_json(ws, rows, {
+        origin: "A2",
+        skipHeader: true,
+        header: HEADER as unknown as string[],
+      });
+      (ws as any)["!cols"] = [
+        { wch: 12 }, // Date
+        { wch: 10 }, // Time
+        { wch: 10 }, // Employee No
+        { wch: 28 }, // Name
+        { wch: 36 },
+      ];
+      (ws as any)["!autofilter"] = { ref: "A1:E1" };
+      (ws as any)["!freeze"] = { ySplit: 1, xSplit: 0, topLeftCell: "A2", activePane: "bottomLeft", state: "frozen" };
+      const headerAddrs = ["A1", "B1", "C1", "D1", "E1"];
+      headerAddrs.forEach((addr, i) => {
+        if (!(ws as any)[addr]) (ws as any)[addr] = { t: "s", v: HEADER[i] };
+        const cell: any = (ws as any)[addr];
+        cell.s = {
+          font: { bold: true, color: { rgb: "1F2937" } },
+          alignment: { horizontal: "center", vertical: "center", wrapText: true },
+          fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } },
+          border: {
+            top: { style: "thin", color: { rgb: "D1D5DB" } },
+            bottom: { style: "thin", color: { rgb: "D1D5DB" } },
+            left: { style: "thin", color: { rgb: "D1D5DB" } },
+            right: { style: "thin", color: { rgb: "D1D5DB" } },
+          },
+        };
+      });
+      (ws as any)["!rows"] = [{ hpt: 24 }];
+
+      const ref = ws["!ref"] as string;
+      if (ref) {
+        const range = XLSX.utils.decode_range(ref);
+        for (let R = 1; R <= range.e.r; R++) {
+          const zebra = R % 2 === 1;
+          for (let C = 0; C <= range.e.c; C++) {
+            const addr = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell: any = (ws as any)[addr];
+            if (!cell) continue;
+            cell.s = {
+              alignment: { vertical: "center" },
+              border: {
+                top: { style: "hair", color: { rgb: "E5E7EB" } },
+                bottom: { style: "hair", color: { rgb: "E5E7EB" } },
+                left: { style: "hair", color: { rgb: "E5E7EB" } },
+                right: { style: "hair", color: { rgb: "E5E7EB" } },
+              },
+              ...(zebra ? { fill: { patternType: "solid", fgColor: { rgb: "FAFAFA" } } } : {}),
+            };
+            if (C === 0 || C === 1 || C === 2) {   // center Date, Time, Employee No
+              cell.s.alignment = { ...(cell.s.alignment || {}), horizontal: "center" };
+            }
+            if (C === 3) {
+              cell.s.alignment = { ...(cell.s.alignment || {}), wrapText: true };
+            }
+          }
+        }
+      }
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+      XLSX.writeFile(wb, `Attendance_${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true });
+
+      toast.success("Excel saved", { id: t });
+    } catch (e) {
+      console.error(e);
+      toast.error("Export failed", { id: t });
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  function removeFile(name: string) {
+    const next = filesInfo.filter(f => f.name !== name);
+    setFilesInfo(next);
+    recomputeFromFiles(next);
+    if (!next.length && fileRef.current) fileRef.current.value = "";
+  }
+
+
+  function recomputeFromFiles(next: ParsedFile[]) {
+    const mergedRows = next.flatMap(p => p.rows.map(r => ({ ...r, __source: p.name })));
+    setRows(mergedRows);
+
+    const unionHeaders = Array.from(new Set(next.flatMap(p => p.headers)));
+    setHeaders(unionHeaders);
+
+    // auto-guess mapping from union
+    const guess: Mapping = {};
+    const lower = (s: string) => s.toLowerCase();
+    for (const h of unionHeaders) {
+      const lh = lower(h);
+      if (!guess.scanText && /(text|scan|content|payload)/.test(lh)) guess.scanText = h;
+      if (!guess.timestamp && /(timestamp|datetime|scanned|time)/.test(lh)) guess.timestamp = h;
+      if (!guess.date && /(date)/.test(lh)) guess.date = h;
+      if (!guess.time && /(^|[^a-z])time([^a-z]|$)/.test(lh)) guess.time = h;
+      if (!guess.idColumn && /(id|employee.?no)/.test(lh)) guess.idColumn = h;
+    }
+    setMapping(guess);
+
+    setFileName(next.map(f => f.name).join(", "));
+    setPreview([]); // reset preview; user should click Preview again
+  }
 
 
   return (
     <div className="space-y-4">
+      {filesInfo.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {filesInfo.map(f => (
+            <span key={f.name} className="inline-flex items-center gap-2 px-2 py-1 rounded bg-muted text-xs">
+              {f.name} <span className="text-muted-foreground">({f.count})</span>
+              <button
+                type="button"
+                onClick={() => removeFile(f.name)}
+                className="ml-1 rounded hover:bg-background p-0.5"
+                aria-label={`Remove ${f.name}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+
       <Card>
         <CardHeader>
           <CardTitle>CSV Attendance Import</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Input type="file" accept=".csv" ref={fileRef} onChange={onFile} />
-            <Select value={idType} onValueChange={(v: any) => setIdType(v)}>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <input
+              ref={fileRef}
+              id="csvFiles"
+              type="file"
+              accept=".csv,text/csv"
+              multiple
+              onChange={onFiles}
+              className="sr-only"
+            />
+
+            {/* Faux picker */}
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={isParsing || isPreviewing}
+              >
+                Choose Files
+              </Button>
+
+              <span className="text-sm">
+                {filesInfo.length
+                  ? `${filesInfo.length} file${filesInfo.length > 1 ? "s" : ""} selected`
+                  : "No file selected"}
+              </span>
+
+              {filesInfo.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={clearFile}
+                  aria-label="Clear all files"
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={dedup}
+                    onChange={(e) => setDedup(e.target.checked)}
+                  />
+                  Deduplicate by ID + Date + Time
+                </label>
+              </div>
+            </div>
+
+            <Select value={idType} onValueChange={(v: any) => setIdType(v)} disabled={isParsing || isPreviewing}>
               <SelectTrigger className="w-[220px]"><SelectValue placeholder="ID Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="employeeId">employee.id (UUID)</SelectItem>
@@ -291,20 +457,24 @@ function exportExcel() {
           )}
 
           <div className="flex gap-3">
-            <Button onClick={resolvePreview} disabled={!headers.length}>Preview</Button>
-            <Button variant="outline" onClick={exportExcel} disabled={!preview.length}>Export to Excel</Button>
+            <Button onClick={resolvePreview} disabled={!headers.length || isPreviewing || isParsing}>
+              {isPreviewing ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Previewing…</>) : "Preview"}
+            </Button>
+            <Button variant="outline" onClick={exportExcel} disabled={!preview.length || isExporting}>
+              {isExporting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting…</>) : "Export to Excel"}
+            </Button>
           </div>
 
           {!!preview.length && (
             <div className="mt-4 border rounded-md overflow-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-muted">
-  <tr>
-    {["Date","Time","Name","Office","Employee No","Matched"].map(h => (
-      <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
-    ))}
-  </tr>
-</thead>
+                  <tr>
+                    {["Date", "Time", "Employee No", "Name", "Office", "Matched"].map(h => (
+                      <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
                 <tbody>
                   {preview.slice(0, 50).map((r, i) => (
                     <tr key={i} className="border-t">
