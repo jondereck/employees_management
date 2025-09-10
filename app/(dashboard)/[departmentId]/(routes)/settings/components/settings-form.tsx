@@ -17,6 +17,7 @@ import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { ApiAlert } from "@/components/api-alert";
 import { useOrigin } from "@/hooks/use-origin";
+import CsvAttendanceImport from "../../employees/components/csv-attendance-import";
 
 
 
@@ -115,6 +116,7 @@ export const SettingsForm = ({
         </Button>
       </div >
       <Separator />
+       
       <Form {...form} >
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
@@ -141,6 +143,10 @@ export const SettingsForm = ({
           </Button>
         </form>
       </Form>
+       
+            <h1 className="text-xl font-semibold mb-4">Import Attendance from CSV</h1>
+            <CsvAttendanceImport />
+
       <Separator/>
       <ApiAlert 
         title="NEXT_PUBLIC_API_URL" 

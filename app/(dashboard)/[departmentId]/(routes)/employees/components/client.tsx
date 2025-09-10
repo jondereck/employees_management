@@ -24,6 +24,7 @@ import { OfficesColumn } from "../../offices/components/columns";
 import EmployeeFilters from "./employee-filters";
 import { format } from "date-fns";
 import { FloatingSelectionBar } from "./floating-selection-bar";
+import CsvAttendanceImport from "./csv-attendance-import";
 
 
 interface Option { id: string; name: string; }
