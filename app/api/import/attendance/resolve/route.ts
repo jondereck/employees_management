@@ -236,8 +236,8 @@ export async function POST(req: Request) {
       },
     });
   } catch (e: any) {
-    console.error(e);
-    return NextResponse.json({ ok: false, error: "Invalid payload" }, { status: 400 });
+      console.error("resolve error:", e);
+      return NextResponse.json({ ok: false, error: e?.message || "Unknown error" }, { status: 500 });
   }
 }
 
