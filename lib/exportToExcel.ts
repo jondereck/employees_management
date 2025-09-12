@@ -9,6 +9,7 @@ type Row = {
 };
 
 export function exportAttendanceExcel(rows: Row[]) {
+  
   // 1) Header row (explicit order)
   const HEADER = ["Date", "Time", "Name", "Office", "Employee No"] as const;
   const ws = XLSX.utils.aoa_to_sheet([HEADER as unknown as string[]]);
@@ -103,3 +104,5 @@ export function exportAttendanceExcel(rows: Row[]) {
     compression: true,
   });
 }
+
+

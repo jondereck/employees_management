@@ -28,6 +28,23 @@ type DownloadExcelParams = {
     positionReplaceRules?: PositionReplaceRule[];
 };
 
+function normalizeNFC<T>(val: T): T {
+  if (typeof val === "string") return (val.normalize?.("NFC") ?? val) as T;
+  return val;
+}
+
+function normalizeRowStringsNFC<T extends Record<string, any>>(row: T): T {
+  const out: any = {};
+  for (const k in row) {
+    const v = row[k];
+    if (typeof v === "string") out[k] = normalizeNFC(v);
+    else if (Array.isArray(v)) out[k] = v.map((x:any) => (typeof x === "string" ? normalizeNFC(x) : x));
+    else out[k] = v;
+  }
+  return out as T;
+}
+
+
 function normalizeWindowsDir(p: string) {
   const trimmed = (p || '').trim().replace(/[\/]/g, '\\');
   // remove trailing slashes
@@ -141,6 +158,7 @@ export async function generateExcelFile({
     const employeeNoSafe = String(row.employeeNo ?? '').split(',')[0].trim();
     row.imagePath = `${safeImageDir}\\${employeeNoSafe}.png`;
     row.qrPath = `${safeQrDir}\\${qrPrefix}${employeeNoSafe}.png`;
+    row = normalizeRowStringsNFC(row);
     return row;
   });
 
@@ -254,6 +272,12 @@ export async function generateExcelFile({
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
-  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const excelBuffer = XLSX.write(workbook, {
+  bookType: 'xlsx',
+  type: 'array',
+  bookSST: true,          // <- shared strings table
+  cellStyles: true,
+  compression: true,
+});
   return new Blob([excelBuffer], { type: 'application/octet-stream' });
 }

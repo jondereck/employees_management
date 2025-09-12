@@ -143,10 +143,7 @@ export const SettingsForm = ({
           </Button>
         </form>
       </Form>
-       
-            <h1 className="text-xl font-semibold mb-4">Import Attendance from CSV</h1>
             <CsvAttendanceImport />
-
       <Separator/>
       <ApiAlert 
         title="NEXT_PUBLIC_API_URL" 
