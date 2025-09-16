@@ -30,6 +30,8 @@ type DownloadExcelParams = {
   mappings: Mappings; // <-- NEW
     positionReplaceRules?: PositionReplaceRule[];
      idColumnSource: IdColumnSource; 
+       imageExt?: string;
+  qrExt?: string;
 };
 
 function normalizeNFC<T>(val: T): T {
@@ -96,7 +98,9 @@ export async function generateExcelFile({
   appointmentFilters,
   mappings,
   positionReplaceRules,
-  idColumnSource
+  idColumnSource,
+  imageExt,
+  qrExt,
 }: DownloadExcelParams): Promise<Blob> {
 
    const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
@@ -159,10 +163,12 @@ export async function generateExcelFile({
       const first = (row.firstName ?? "").toString().trim();
       row.nickname = first.split(/\s+/)[0] || "";
     }
+    const imgExt = (imageExt || 'png').replace(/^\./, '').toLowerCase();
+const qrcodeExt = (qrExt || 'png').replace(/^\./, '').toLowerCase();
 
     const employeeNoSafe = String(row.employeeNo ?? '').split(',')[0].trim();
-    row.imagePath = `${safeImageDir}\\${employeeNoSafe}.png`;
-    row.qrPath = `${safeQrDir}\\${qrPrefix}${employeeNoSafe}.png`;
+row.imagePath = `${safeImageDir}\\${employeeNoSafe}.${imgExt}`;
+row.qrPath = `${safeQrDir}\\${qrPrefix}${employeeNoSafe}.${qrcodeExt}`;
     row = normalizeRowStringsNFC(row);
     return row;
   });

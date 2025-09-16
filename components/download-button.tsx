@@ -36,59 +36,59 @@ export default function DownloadStyledExcel() {
   const [globalTargets, setGlobalTargets] = useState<string[]>([]);
 
   // near other useStates
-const [idColumnSource, setIdColumnSource] = useState<'uuid' | 'bio' | 'employeeNo'>(() => {
-  if (typeof window !== 'undefined') {
-    const s = localStorage.getItem('idColumnSource');
-    if (s === 'uuid' || s === 'bio' || s === 'employeeNo') return s;
-  }
-  return 'employeeNo'; // default
-});
-
-
-
-  
-const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
-const preview = (items: string[], max = 2) =>
-  items.length <= max ? items.join(", ") : `${items.slice(0, max).join(", ")} +${items.length - max} more`;
-
-
-
-const applyGlobalToRow = (i: number) => {
-  // read latest checked positions from the global picker
-  const latest = globalTargets;
-
-  if (!latest || latest.length === 0) {
-    toast.info("No positions selected", {
-      description: "Use the picker above to select positions first.",
-    });
-    return;
-  }
-
-  const before = new Set(bulkRows[i].targets.map(t => t.toLowerCase()));
-  const merged = [...bulkRows[i].targets]; // preserve original casing/order for existing
-  let addedCount = 0;
-
-  for (const pos of latest) {
-    const key = pos.toLowerCase();
-    if (!before.has(key)) {
-      merged.push(pos);
-      before.add(key);
-      addedCount++;
+  const [idColumnSource, setIdColumnSource] = useState<'uuid' | 'bio' | 'employeeNo'>(() => {
+    if (typeof window !== 'undefined') {
+      const s = localStorage.getItem('idColumnSource');
+      if (s === 'uuid' || s === 'bio' || s === 'employeeNo') return s;
     }
-  }
+    return 'employeeNo'; // default
+  });
 
-  updateBulkRow(i, { targets: merged });
 
-  if (addedCount === 0) {
-    toast.message("No new positions to add", {
-      description: preview(latest),
-    });
-  } else {
-    toast.success(`Added ${addedCount} ${plural(addedCount, "position")} to row ${i + 1}`, {
-      description: preview(latest),
-    });
-  }
-};
+
+
+  const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
+  const preview = (items: string[], max = 2) =>
+    items.length <= max ? items.join(", ") : `${items.slice(0, max).join(", ")} +${items.length - max} more`;
+
+
+
+  const applyGlobalToRow = (i: number) => {
+    // read latest checked positions from the global picker
+    const latest = globalTargets;
+
+    if (!latest || latest.length === 0) {
+      toast.info("No positions selected", {
+        description: "Use the picker above to select positions first.",
+      });
+      return;
+    }
+
+    const before = new Set(bulkRows[i].targets.map(t => t.toLowerCase()));
+    const merged = [...bulkRows[i].targets]; // preserve original casing/order for existing
+    let addedCount = 0;
+
+    for (const pos of latest) {
+      const key = pos.toLowerCase();
+      if (!before.has(key)) {
+        merged.push(pos);
+        before.add(key);
+        addedCount++;
+      }
+    }
+
+    updateBulkRow(i, { targets: merged });
+
+    if (addedCount === 0) {
+      toast.message("No new positions to add", {
+        description: preview(latest),
+      });
+    } else {
+      toast.success(`Added ${addedCount} ${plural(addedCount, "position")} to row ${i + 1}`, {
+        description: preview(latest),
+      });
+    }
+  };
 
   type BulkRow = {
     mode: 'exact' | 'startsWith' | 'contains' | 'regex';
@@ -193,34 +193,34 @@ const applyGlobalToRow = (i: number) => {
 
         // Type the response shape we actually use
         const json = (await res.json()) as {
-         employees?: Array<{ position?: string | null; isArchived?: boolean | null }>;
+          employees?: Array<{ position?: string | null; isArchived?: boolean | null }>;
         };
 
         const positions: string[] = (json.employees ?? [])
-        .filter(e => !e?.isArchived)                 // <-- exclude archived here
-        .map(e => (e.position ?? '').trim())
-        .filter(p => p.length > 0);
+          .filter(e => !e?.isArchived)                 // <-- exclude archived here
+          .map(e => (e.position ?? '').trim())
+          .filter(p => p.length > 0);
 
-      // Deduplicate (case-insensitive), but keep original casing of first seen
-      const seen = new Set<string>();
-      const unique: string[] = [];
-      for (const p of positions) {
-        const key = p.toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          unique.push(p);
+        // Deduplicate (case-insensitive), but keep original casing of first seen
+        const seen = new Set<string>();
+        const unique: string[] = [];
+        for (const p of positions) {
+          const key = p.toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(p);
+          }
         }
+
+        // Sort nicely
+        unique.sort((a, b) => a.localeCompare(b));
+
+        setAllPositions(unique);
+      } catch (e) {
+        console.error('Failed to load positions', e);
       }
-
-      // Sort nicely
-      unique.sort((a, b) => a.localeCompare(b));
-
-      setAllPositions(unique);
-    } catch (e) {
-      console.error('Failed to load positions', e);
-    }
-  })();
-}, [modalOpen]);
+    })();
+  }, [modalOpen]);
 
 
   // filtered positions by search
@@ -348,6 +348,22 @@ const applyGlobalToRow = (i: number) => {
     setAppointmentFilters(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]);
   const toggleAllAppointments = () =>
     setAppointmentFilters(isAllAppointments ? [] : [...APPOINTMENT_OPTIONS]);
+
+
+  // under your other path states
+  const [imageExt, setImageExt] = useState<string>(() =>
+    (typeof window !== 'undefined' && localStorage.getItem('imageExt')) || 'png'
+  );
+  const [qrExt, setQrExt] = useState<string>(() =>
+    (typeof window !== 'undefined' && localStorage.getItem('qrExt')) || 'png'
+  );
+
+  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('imageExt', imageExt); }, [imageExt]);
+  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('qrExt', qrExt); }, [qrExt]);
+
+  // small helper to sanitize input like ".JPG" -> "jpg"
+  const normalizeExt = (v: string) =>
+    v.trim().replace(/^\./, '').toLowerCase() || 'png';
 
   // NEW state
   const [imageBaseDir, setImageBaseDir] = useState<string>(() =>
@@ -495,22 +511,22 @@ const applyGlobalToRow = (i: number) => {
   }, [selectedColumns]);
 
   const effectiveColumnOrder = useMemo(() => {
-  const label =
-    idColumnSource === 'uuid' ? 'Employee UUID' :
-    idColumnSource === 'bio' ? 'Employee Code' :
-    'Employee No';
+    const label =
+      idColumnSource === 'uuid' ? 'Employee UUID' :
+        idColumnSource === 'bio' ? 'Employee Code' :
+          'Employee No';
 
-  return columnOrder.map(col =>
-    col.key === 'employeeNo' ? { ...col, name: label } : col
-  );
-}, [columnOrder, idColumnSource]);
+    return columnOrder.map(col =>
+      col.key === 'employeeNo' ? { ...col, name: label } : col
+    );
+  }, [columnOrder, idColumnSource]);
 
 
-useEffect(() => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('idColumnSource', idColumnSource);
-  }
-}, [idColumnSource]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('idColumnSource', idColumnSource);
+    }
+  }, [idColumnSource]);
 
 
   const handleDownload = async (selectedKeys: string[]) => {
@@ -523,7 +539,7 @@ useEffect(() => {
     try {
       const blob = await generateExcelFile({
         selectedKeys,
-         columnOrder: effectiveColumnOrder,
+        columnOrder: effectiveColumnOrder,
         statusFilter,
         baseImageDir: imageBaseDir,
         baseQrDir: qrBaseDir,
@@ -532,6 +548,8 @@ useEffect(() => {
         mappings,
         positionReplaceRules,
         idColumnSource,
+         imageExt,   // NEW
+  qrExt,
       });
 
       const now = new Date();
@@ -610,12 +628,12 @@ useEffect(() => {
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
                   <Tabs value={advancedTab} onValueChange={setAdvancedTab} className="w-full">
-                    <TabsList className="grid grid-cols-5 w-full gap-2">
+                    <TabsList className="grid grid-cols-5 w-full gap-5">
                       <TabsTrigger value="filters">Filter</TabsTrigger>
                       <TabsTrigger value="columns_path">Columns</TabsTrigger>
                       <TabsTrigger value="paths">Paths</TabsTrigger>
                       <TabsTrigger value="position">Find &amp; Replace</TabsTrigger>
-                        <TabsTrigger value="id">ID Column</TabsTrigger> {/* NEW */}
+                      <TabsTrigger value="id">ID Column</TabsTrigger> {/* NEW */}
 
                     </TabsList>
 
@@ -634,8 +652,18 @@ useEffect(() => {
                               className="border rounded px-2 py-1 text-sm"
                               placeholder="C:\Users\User\...\img\employees"
                             />
+                            <div className="mt-2 flex items-center gap-2">
+                              <label className="text-xs text-gray-600">Image extension</label>
+                              <input
+                                type="text"
+                                value={imageExt}
+                                onChange={(e) => setImageExt(normalizeExt(e.target.value))}
+                                className="border rounded px-2 py-1 text-xs w-24"
+                                placeholder="png | jpg | webp"
+                              />
+                            </div>
                             <p className="mt-1 text-[11px] text-gray-500">
-                              Example: <code>{`${imageBaseDir}\\<employeeNo>.png`}</code>
+                              Example: <code>{`${imageBaseDir}\\<employeeNo>.${imageExt}`}</code>
                             </p>
                           </div>
 
@@ -649,10 +677,21 @@ useEffect(() => {
                               className="border rounded px-2 py-1 text-sm"
                               placeholder="C:\Users\User\...\img\qr"
                             />
+                            <div className="mt-2 flex items-center gap-2">
+                              <label className="text-xs text-gray-600">QR extension</label>
+                              <input
+                                type="text"
+                                value={qrExt}
+                                onChange={(e) => setQrExt(normalizeExt(e.target.value))}
+                                className="border rounded px-2 py-1 text-xs w-24"
+                                placeholder="png | jpg | webp"
+                              />
+                            </div>
                             <p className="mt-1 text-[11px] text-gray-500">
-                              Example: <code>{`${qrBaseDir}\\${qrPrefix}<employeeNo>.png`}</code>
+                              Example: <code>{`${qrBaseDir}\\${qrPrefix}<employeeNo>.${qrExt}`}</code>
                             </p>
                           </div>
+
 
                           {/* QR prefix + Reset */}
                           <div className="sm:col-span-2 flex items-center gap-2">
@@ -673,6 +712,8 @@ useEffect(() => {
                                 setImageBaseDir('C:\\Users\\User\\Desktop\\HRMO Files\\Nifas\\.shared work\\img\\employees');
                                 setQrBaseDir('C:\\Users\\User\\Desktop\\HRMO Files\\Nifas\\.shared work\\img\\qr');
                                 setQrPrefix('JDN');
+                                setImageExt('png');
+                                setQrExt('png');
                               }}
                               className="ml-auto text-xs text-blue-600 hover:underline"
                             >
@@ -759,7 +800,7 @@ useEffect(() => {
                                       onClick={() => applyGlobalToRow(i)}
                                       className="mt-1 text-[11px] text-blue-600 hover:underline"
                                     >
-                                      Use position(s) as targets 
+                                      Use position(s) as targets
                                     </button>
 
                                   </div>
@@ -790,61 +831,61 @@ useEffect(() => {
                             </div>
                           </div>
 
-                         
-                            <div className="space-y-2">
-                              {/* Current rules */}
-                              <div className="flex-1 overflow-y-auto border rounded p-2">
 
-                                <ul className="space-y-2">
-                                  {positionReplaceRules.map((r, idx) => (
-                                    <li
-                                      key={idx}
-                                      className="border rounded p-2 text-xs flex items-start justify-between"
-                                    >
-                                      <div className="pr-2 space-y-1">
-                                        <div>
-                                          <span className="font-semibold">Mode:</span> {r.mode}
-                                          {r.caseSensitive ? " (case)" : ""}
-                                        </div>
+                          <div className="space-y-2">
+                            {/* Current rules */}
+                            <div className="flex-1 overflow-y-auto border rounded p-2">
 
-                                        {/* Targets preview (1 line only + tooltip) */}
-                                        <div className="flex items-center gap-1">
-                                          <span className="font-semibold">Targets:</span>
-                                          <ActionTooltip
-                                            label={r.targets.join(", ") || "(regex via search)"}
-                                            side="top"
-                                            align="start"
-                                          >
-                                            <span
-                                              className="truncate max-w-[250px] block cursor-help text-gray-700"
-                                              title={r.targets.join(", ")}
-                                            >
-                                              {r.targets.length > 0 ? r.targets[0] : "(regex via search)"}
-                                              {r.targets.length > 1 && `, +${r.targets.length - 1} more`}
-                                            </span>
-                                          </ActionTooltip>
-                                        </div>
-
-                                        <div>
-                                          <span className="font-semibold">Replace with:</span>{" "}
-                                          {r.replaceWith}
-                                        </div>
+                              <ul className="space-y-2">
+                                {positionReplaceRules.map((r, idx) => (
+                                  <li
+                                    key={idx}
+                                    className="border rounded p-2 text-xs flex items-start justify-between"
+                                  >
+                                    <div className="pr-2 space-y-1">
+                                      <div>
+                                        <span className="font-semibold">Mode:</span> {r.mode}
+                                        {r.caseSensitive ? " (case)" : ""}
                                       </div>
 
-                                      <button
-                                        onClick={() => removePositionRule(idx)}
-                                        className="text-red-600 hover:underline ml-2"
-                                      >
-                                        Remove
-                                      </button>
-                                    </li>
-                                  ))}
-                                </ul>
+                                      {/* Targets preview (1 line only + tooltip) */}
+                                      <div className="flex items-center gap-1">
+                                        <span className="font-semibold">Targets:</span>
+                                        <ActionTooltip
+                                          label={r.targets.join(", ") || "(regex via search)"}
+                                          side="top"
+                                          align="start"
+                                        >
+                                          <span
+                                            className="truncate max-w-[250px] block cursor-help text-gray-700"
+                                            title={r.targets.join(", ")}
+                                          >
+                                            {r.targets.length > 0 ? r.targets[0] : "(regex via search)"}
+                                            {r.targets.length > 1 && `, +${r.targets.length - 1} more`}
+                                          </span>
+                                        </ActionTooltip>
+                                      </div>
+
+                                      <div>
+                                        <span className="font-semibold">Replace with:</span>{" "}
+                                        {r.replaceWith}
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      onClick={() => removePositionRule(idx)}
+                                      className="text-red-600 hover:underline ml-2"
+                                    >
+                                      Remove
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
 
 
-                              </div>
                             </div>
-                        
+                          </div>
+
 
                           <div className="flex justify-end">
                             <button
@@ -917,51 +958,51 @@ useEffect(() => {
                       </div>
                     </TabsContent>
 
-<TabsContent value="id" className="mt-3">
-  <div className="rounded-md border bg-white p-3 space-y-3">
-    <h4 className="text-sm font-semibold">Which ID should appear in the exported “Employee No” column?</h4>
+                    <TabsContent value="id" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 space-y-3">
+                        <h4 className="text-sm font-semibold">Which ID should appear in the exported “Employee No” column?</h4>
 
-    <div className="space-y-2 text-sm">
-      <label className="flex items-center gap-2">
-        <input
-          type="radio"
-          name="idColumnSource"
-          value="bio"
-          checked={idColumnSource === 'bio'}
-          onChange={() => setIdColumnSource('bio')}
-        />
-        <span>Bio Number (e.g., 3620016)</span>
-      </label>
+                        <div className="space-y-2 text-sm">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="idColumnSource"
+                              value="bio"
+                              checked={idColumnSource === 'bio'}
+                              onChange={() => setIdColumnSource('bio')}
+                            />
+                            <span>Bio Number (e.g., 3620016)</span>
+                          </label>
 
- <label className="flex items-center gap-2">
-  <input
-    type="radio"
-    name="idColumnSource"
-    value="employeeNo"
-    checked={idColumnSource === 'employeeNo'}
-    onChange={() => setIdColumnSource('employeeNo')}
-  />
-  <span>Employee No / Code (e.g., X-1)</span>
-</label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="idColumnSource"
+                              value="employeeNo"
+                              checked={idColumnSource === 'employeeNo'}
+                              onChange={() => setIdColumnSource('employeeNo')}
+                            />
+                            <span>Employee No / Code (e.g., X-1)</span>
+                          </label>
 
-      <label className="flex items-center gap-2">
-        <input
-          type="radio"
-          name="idColumnSource"
-          value="uuid"
-          checked={idColumnSource === 'uuid'}
-          onChange={() => setIdColumnSource('uuid')}
-        />
-        <span>Employee UUID (database <code>id</code>)</span>
-      </label>
-    </div>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="idColumnSource"
+                              value="uuid"
+                              checked={idColumnSource === 'uuid'}
+                              onChange={() => setIdColumnSource('uuid')}
+                            />
+                            <span>Employee UUID (database <code>id</code>)</span>
+                          </label>
+                        </div>
 
-    <p className="text-xs text-gray-600">
-      This choice only affects the value placed in the “Employee No” column of the Excel download.
-      Other paths (e.g., QR/Image path) remain unchanged.
-    </p>
-  </div>
-</TabsContent>
+                        <p className="text-xs text-gray-600">
+                          This choice only affects the value placed in the “Employee No” column of the Excel download.
+                          Other paths (e.g., QR/Image path) remain unchanged.
+                        </p>
+                      </div>
+                    </TabsContent>
 
 
                   </Tabs>
