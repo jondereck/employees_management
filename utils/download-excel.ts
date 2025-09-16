@@ -3,6 +3,9 @@ import { officeMapping, eligibilityMapping, appointmentMapping } from '@/utils/e
 
 type Column = { name: string; key: string };
 
+export type IdColumnSource = 'uuid' | 'bio' | 'employeeNo';
+
+
 export type PositionReplaceRule = {
   mode: 'exact' | 'startsWith' | 'contains' | 'regex';
   targets: string[];        // user-selected positions / patterns
@@ -26,6 +29,7 @@ type DownloadExcelParams = {
   appointmentFilters: string[] | 'all';
   mappings: Mappings; // <-- NEW
     positionReplaceRules?: PositionReplaceRule[];
+     idColumnSource: IdColumnSource; 
 };
 
 function normalizeNFC<T>(val: T): T {
@@ -91,7 +95,8 @@ export async function generateExcelFile({
   qrPrefix = 'JDN',
   appointmentFilters,
   mappings,
-  positionReplaceRules
+  positionReplaceRules,
+  idColumnSource
 }: DownloadExcelParams): Promise<Blob> {
 
    const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
@@ -175,17 +180,48 @@ export async function generateExcelFile({
       emp.employeeTypeId && allowed.has(String(emp.employeeTypeId).toLowerCase())
     );
   }
-  const visibleColumns = columnOrder.filter(
-    col => !hiddenFields.includes(col.key) && selectedKeys.includes(col.key)
-  );
+const visibleColumns = columnOrder
+  .filter(col => !hiddenFields.includes(col.key) && selectedKeys.includes(col.key))
+  .map(col => {
+    if (col.key !== 'employeeNo') return col;
+
+    const name =
+      idColumnSource === 'uuid' ? 'Employee UUID'
+      : idColumnSource === 'bio' ? 'Bio Number'
+      : 'Employee No'; // the code like X-1
+
+    return { ...col, name };
+  });
+
+
   const headers = visibleColumns.map(col => col.name);
 
   const filteredData = filteredEmployees.map((row: any) => {
     const newRow: Record<string, any> = {};
-    visibleColumns.forEach((col) => {
-      newRow[col.name] = row[col.key];
-    });
-    return newRow;
+  // Parse once
+  const raw = String(row.employeeNo ?? '').trim();
+  const [bioPartRaw, codePartRaw] = raw.split(','); // "3620016", " X-1"
+  const bioPart = (bioPartRaw ?? '').trim();  // 3620016
+  const codePart = (codePartRaw ?? '').trim(); // X-1
+
+  visibleColumns.forEach((col) => {
+    let val = row[col.key];
+
+    if (col.key === 'employeeNo') {
+      if (idColumnSource === 'uuid') {
+        val = row.id ?? '';
+      } else if (idColumnSource === 'bio') {
+        val = bioPart || codePart || row.id || '';
+      } else {
+        // 'employeeNo' => show the code like X-1
+        val = codePart || bioPart || row.id || '';
+      }
+    }
+
+    newRow[col.name] = val;
+  });
+
+  return newRow;
   });
 
   const sortedData = filteredData.sort((a: any, b: any) => {

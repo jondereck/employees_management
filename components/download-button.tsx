@@ -35,6 +35,17 @@ export default function DownloadStyledExcel() {
 
   const [globalTargets, setGlobalTargets] = useState<string[]>([]);
 
+  // near other useStates
+const [idColumnSource, setIdColumnSource] = useState<'uuid' | 'bio' | 'employeeNo'>(() => {
+  if (typeof window !== 'undefined') {
+    const s = localStorage.getItem('idColumnSource');
+    if (s === 'uuid' || s === 'bio' || s === 'employeeNo') return s;
+  }
+  return 'employeeNo'; // default
+});
+
+
+
   
 const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
 const preview = (items: string[], max = 2) =>
@@ -482,6 +493,26 @@ const applyGlobalToRow = (i: number) => {
   useEffect(() => {
     selectedColumnsRef.current = selectedColumns;
   }, [selectedColumns]);
+
+  const effectiveColumnOrder = useMemo(() => {
+  const label =
+    idColumnSource === 'uuid' ? 'Employee UUID' :
+    idColumnSource === 'bio' ? 'Employee Code' :
+    'Employee No';
+
+  return columnOrder.map(col =>
+    col.key === 'employeeNo' ? { ...col, name: label } : col
+  );
+}, [columnOrder, idColumnSource]);
+
+
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('idColumnSource', idColumnSource);
+  }
+}, [idColumnSource]);
+
+
   const handleDownload = async (selectedKeys: string[]) => {
     if (!mappings) {
       toast.error('Mappings not loaded yet. Please try again.');
@@ -492,14 +523,15 @@ const applyGlobalToRow = (i: number) => {
     try {
       const blob = await generateExcelFile({
         selectedKeys,
-        columnOrder,
+         columnOrder: effectiveColumnOrder,
         statusFilter,
         baseImageDir: imageBaseDir,
         baseQrDir: qrBaseDir,
         qrPrefix,
         appointmentFilters: isAllAppointments ? 'all' : appointmentFilters,
         mappings,
-        positionReplaceRules
+        positionReplaceRules,
+        idColumnSource,
       });
 
       const now = new Date();
@@ -578,11 +610,12 @@ const applyGlobalToRow = (i: number) => {
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
                   <Tabs value={advancedTab} onValueChange={setAdvancedTab} className="w-full">
-                    <TabsList className="grid grid-cols-4 w-full gap-2">
+                    <TabsList className="grid grid-cols-5 w-full gap-2">
                       <TabsTrigger value="filters">Filter</TabsTrigger>
                       <TabsTrigger value="columns_path">Columns</TabsTrigger>
                       <TabsTrigger value="paths">Paths</TabsTrigger>
                       <TabsTrigger value="position">Find &amp; Replace</TabsTrigger>
+                        <TabsTrigger value="id">ID Column</TabsTrigger> {/* NEW */}
 
                     </TabsList>
 
@@ -884,6 +917,51 @@ const applyGlobalToRow = (i: number) => {
                       </div>
                     </TabsContent>
 
+<TabsContent value="id" className="mt-3">
+  <div className="rounded-md border bg-white p-3 space-y-3">
+    <h4 className="text-sm font-semibold">Which ID should appear in the exported “Employee No” column?</h4>
+
+    <div className="space-y-2 text-sm">
+      <label className="flex items-center gap-2">
+        <input
+          type="radio"
+          name="idColumnSource"
+          value="bio"
+          checked={idColumnSource === 'bio'}
+          onChange={() => setIdColumnSource('bio')}
+        />
+        <span>Bio Number (e.g., 3620016)</span>
+      </label>
+
+ <label className="flex items-center gap-2">
+  <input
+    type="radio"
+    name="idColumnSource"
+    value="employeeNo"
+    checked={idColumnSource === 'employeeNo'}
+    onChange={() => setIdColumnSource('employeeNo')}
+  />
+  <span>Employee No / Code (e.g., X-1)</span>
+</label>
+
+      <label className="flex items-center gap-2">
+        <input
+          type="radio"
+          name="idColumnSource"
+          value="uuid"
+          checked={idColumnSource === 'uuid'}
+          onChange={() => setIdColumnSource('uuid')}
+        />
+        <span>Employee UUID (database <code>id</code>)</span>
+      </label>
+    </div>
+
+    <p className="text-xs text-gray-600">
+      This choice only affects the value placed in the “Employee No” column of the Excel download.
+      Other paths (e.g., QR/Image path) remain unchanged.
+    </p>
+  </div>
+</TabsContent>
 
 
                   </Tabs>
