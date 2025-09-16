@@ -1,73 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  FormItem, FormLabel, FormControl, FormMessage,
-} from "@/components/ui/form";
-import {
-  Command, CommandInput, CommandEmpty, CommandGroup, CommandItem,
-} from "@/components/ui/command";
-import {
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
-} from "@/components/ui/select";
+import { useEffect, useId, useMemo, useState } from "react";
+import { FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Search, X, Loader2 } from "lucide-react";
 
-type FormatMode =
-  | "none"
-  | "upper"
-  | "lower"
-  | "title"
-  | "sentence"
-  | "numeric"
-  | "alphanumeric";
+type FormatMode = "none" | "upper" | "lower" | "title" | "sentence" | "numeric" | "alphanumeric";
+const ALL_MODES: FormatMode[] = ["none", "upper", "lower", "title", "sentence", "numeric", "alphanumeric"];
 
-interface AutoFillFieldProps {
-  label: string;
-  field: { value?: string; onChange: (v: string) => void }; // RHF field
-  endpoint: string;
-  placeholder?: string;
-  /** Show the format dropdown (default: false) */
-  showFormatSwitch?: boolean;
-  /** Initial format mode (default: "none") */
-  formatMode?: FormatMode;
-  /** Limit selectable modes (default: all) */
-  formatModes?: FormatMode[];
-  /** Bubble up mode changes (optional) */
-  onFormatModeChange?: (m: FormatMode) => void;
-}
 
-const ALL_MODES: FormatMode[] = [
-  "none",
-  "upper",
-  "lower",
-  "title",
-  "sentence",
-  "numeric",
-  "alphanumeric",
-];
+// --- NEW helpers ---
 
+// --- format helpers ---
 function toTitleCase(s: string) {
-  return s
-    .toLowerCase()
-    .split(/\s+/)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+  return s.toLowerCase().split(/\s+/).map(w => (w ? w[0].toUpperCase() + w.slice(1) : "")).join(" ");
 }
-
 function toSentenceCase(s: string) {
   const t = s.trim();
   if (!t) return t;
   const lower = t.toLowerCase();
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
+  return lower[0].toUpperCase() + lower.slice(1);
 }
-
-function onlyDigits(s: string) {
-  return s.replace(/\D+/g, "");
-}
-
-function onlyAlnumSpace(s: string) {
-  return s.replace(/[^a-z0-9 ]/gi, "");
-}
-
+function onlyDigits(s: string) { return s.replace(/\D+/g, ""); }
+function onlyAlnumSpace(s: string) { return s.replace(/[^a-z0-9 ]/gi, ""); }
 function applyFormat(val: string, mode: FormatMode): string {
   switch (mode) {
     case "upper": return val.toUpperCase();
@@ -80,67 +38,141 @@ function applyFormat(val: string, mode: FormatMode): string {
   }
 }
 
-export function AutoFillField({
+function normalizeSpaces(s: string) {
+  return String(s ?? "").replace(/\s+/g, " ").trim();
+}
+function dedupeNormalized(arr: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of arr) {
+    const clean = normalizeSpaces(x);
+    const key = clean.toLowerCase();
+    if (clean && !seen.has(key)) {
+      seen.add(key);
+      out.push(clean);
+    }
+  }
+  return out;
+}
+
+
+
+interface AutoFillDatalistFieldProps {
+  label: string;
+  field: { value?: string; onChange: (v: string) => void };
+  endpoint?: string;
+  staticOptions?: string[];
+  placeholder?: string;
+  showFormatSwitch?: boolean;
+  formatMode?: FormatMode;
+  formatModes?: FormatMode[];
+  disabled?: boolean;
+
+  /** New QoL props */
+  description?: string;
+  required?: boolean;
+  maxLength?: number;
+  showCounter?: boolean;
+  className?: string;
+  priorityOptions?: string[];
+  pinSuggestions?: boolean;
+  pinnedLabel?: string;
+}
+
+export function AutoFillDatalistField({
   label,
   field,
   endpoint,
+  staticOptions,
   placeholder = "Search or enter...",
   showFormatSwitch = false,
   formatMode = "none",
   formatModes = ALL_MODES,
-  onFormatModeChange,
-}: AutoFillFieldProps) {
-  const [options, setOptions] = useState<string[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
+  disabled,
+  description,
+  required,
+  maxLength,
+  showCounter,
+  className,
+   priorityOptions = [],
+  pinSuggestions = false,
+  pinnedLabel = "Suggestions",
+}: AutoFillDatalistFieldProps) {
+  const [baseOptions, setBaseOptions] = useState<string[]>([]);
+
   const [mode, setMode] = useState<FormatMode>(formatMode);
+  const [loading, setLoading] = useState(false);
+  const listId = useId();
 
   useEffect(() => setMode(formatMode), [formatMode]);
 
   useEffect(() => {
+    let alive = true;
+ const priorityUnique = dedupeNormalized(priorityOptions);
+    const useStatic = staticOptions && staticOptions.length > 0;
+    // staticOptions takes priority
+   if (useStatic) {
+      const staticUnique = dedupeNormalized(staticOptions!);
+      // PRIORITIZE: put priority first, then the rest (no dupes)
+      const merged = dedupeNormalized([...priorityUnique, ...staticUnique]);
+      setBaseOptions(merged);
+      return () => { alive = false; };
+    }
+
+    if (!endpoint) {
+      setBaseOptions(dedupeNormalized(priorityUnique));
+      return () => { alive = false; };
+    }
+     setLoading(true);
     fetch(endpoint)
-      .then((res) => res.json())
-      .then((data) => setOptions(Array.isArray(data) ? data : []))
-      .catch(() => setOptions([]));
-  }, [endpoint]);
+      .then((r) => r.json())
+      .then((data) => {
+        if (!alive) return;
+        const fetched = Array.isArray(data) ? data : [];
+        const fetchedUnique = dedupeNormalized(fetched);
+        const merged = dedupeNormalized([...priorityUnique, ...fetchedUnique]);
+        setBaseOptions(merged);
+      })
+      .catch(() => { if (alive) setBaseOptions(dedupeNormalized(priorityUnique)); })
+      .finally(() => { if (alive) setLoading(false); });
 
-  // Re-apply formatting when mode changes (so current value follows the new mode)
-  useEffect(() => {
-    const v = field.value ?? "";
-    const next = applyFormat(v, mode);
-    if (next !== v) field.onChange(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+    return () => { alive = false; };
+  }, [endpoint, staticOptions, priorityOptions]);
 
-  const handleChange = (val: string) => {
-    const next = applyFormat(val, mode);
-    field.onChange(next);
-    setIsOpen(false);
-    setIsFocused(false);
-  };
-
-  // Build a view of options in the selected mode (but keep original as keys)
-  const current = applyFormat(field.value ?? "", mode).toLowerCase();
-  const viewOptions = options
-    .map((raw) => ({ raw, view: applyFormat(String(raw), mode) }))
-    // hide exact same as current (case-insensitive compare on view)
-    .filter((o) => o.view.toLowerCase() !== current);
-
+ const value = applyFormat(normalizeSpaces(field.value ?? ""), mode);
   const inputMode = mode === "numeric" ? "numeric" : undefined;
 
+  // Build formatted options; keep *order* with priority at top; dedupe on formatted view
+  const formattedOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { raw: string; view: string }[] = [];
+    for (const raw of baseOptions) {
+      const cleanRaw = normalizeSpaces(raw);
+      const view = applyFormat(cleanRaw, mode);
+      const key = view.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push({ raw: cleanRaw, view });
+      }
+    }
+    return out;
+  }, [baseOptions, mode]);
+
+
+  const datalistOptions = useMemo(() => {
+    const curr = value.toLowerCase();
+    return formattedOptions.filter(o => o.view.toLowerCase() !== curr);
+  }, [formattedOptions, value]);
   return (
-    <FormItem className="relative">
-      <FormLabel className="flex items-center justify-between gap-2">
-        <span>{label}</span>
+    <FormItem className={cn("space-y-1", className)}>
+      <FormLabel className="flex items-center justify-between text-sm font-medium">
+        <span>
+          {label} {required && <span className="text-red-500 align-top">*</span>}
+        </span>
+
         {showFormatSwitch && (
           <div className="w-40">
-            <Select
-              value={mode}
-              onValueChange={(m: FormatMode) => {
-                setMode(m);
-                onFormatModeChange?.(m);
-              }}
-            >
+            <Select value={mode} onValueChange={(m: FormatMode) => setMode(m)}>
               <SelectTrigger className="h-8">
                 <SelectValue placeholder="Format" />
               </SelectTrigger>
@@ -166,50 +198,66 @@ export function AutoFillField({
 
       <FormControl>
         <div
-          className={`transition-all border rounded-md ${
-            isFocused ? "border-blue-500 shadow-md" : "border-gray-300"
-          }`}
+          className={cn(
+            "relative flex items-center rounded-md"
+          )}
         >
-          <Command>
-            <CommandInput
-              inputMode={inputMode}
-              placeholder={placeholder}
-              value={applyFormat(field.value ?? "", mode)}
-              onFocus={() => {
-                setIsFocused(true);
-                setIsOpen(true);
-              }}
-              onBlur={() => {
-                // small delay to allow option click
-                setTimeout(() => setIsFocused(false), 150);
-              }}
-              onValueChange={(val) => {
-                // IMPORTANT: apply formatting per keystroke
-                field.onChange(applyFormat(val, mode));
-                setIsOpen(!!val || !(field.value ?? ""));
-              }}
-              className="px-1 py-1 outline-none w-full"
-            />
+          {/* Left icon */}
+          <Search className="ml-2 h-4 w-4 opacity-60" aria-hidden />
 
-            {isOpen && viewOptions.length > 0 && (
-              <CommandGroup className="absolute top-20 left-0 w-full max-h-[200px] overflow-y-auto bg-white shadow-lg z-50 rounded-md">
-                {viewOptions.map((o) => (
-                  <CommandItem
-                    key={o.raw}
-                    onSelect={() => handleChange(o.raw)}
-                    className="hover:bg-blue-100"
-                  >
-                    {o.view}
-                  </CommandItem>
-                ))}
-                <CommandEmpty className="p-2 text-sm text-muted-foreground">
-                  No matches
-                </CommandEmpty>
-              </CommandGroup>
-            )}
-          </Command>
+          {/* Input */}
+            <Input
+            disabled={disabled}
+            placeholder={placeholder}
+            list={listId}
+            inputMode={inputMode}
+            value={value}
+            maxLength={maxLength}
+            onChange={(e) => field.onChange(applyFormat(normalizeSpaces(e.target.value), mode))}
+            className="border-0 shadow-none focus-visible:ring-0 pl-2 pr-16"
+            autoCapitalize="off"
+            autoComplete="off"
+            spellCheck={false}
+          />
+
+
+      <datalist id={listId}>
+            {datalistOptions.map((o) => (
+              <option key={o.raw} value={o.view} />
+            ))}
+          </datalist>
         </div>
       </FormControl>
+
+      {/* Pinned chips (always visible, not subject to datalist filtering) */}
+      {pinSuggestions && priorityOptions?.length ? (
+        <div className="mt-1 flex items-center flex-wrap gap-2">
+          <span className="text-xs text-muted-foreground">{pinnedLabel}:</span>
+          {dedupeNormalized(priorityOptions).map((p) => {
+            const text = applyFormat(normalizeSpaces(p), mode);
+            return (
+              <Button
+                key={p}
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7"
+                onClick={() => field.onChange(text)}
+              >
+                {text}
+              </Button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{description}</span>
+        {showCounter && typeof maxLength === "number" && (
+          <span>{(field.value?.length ?? 0)}/{maxLength}</span>
+        )}
+      </div>
+
       <FormMessage />
     </FormItem>
   );

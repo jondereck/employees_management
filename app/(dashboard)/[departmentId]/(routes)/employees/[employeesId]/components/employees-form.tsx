@@ -26,10 +26,30 @@ import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import eachDayOfInterval from "date-fns/eachDayOfInterval/index";
 import { capitalizeWordsIgnoreSpecialChars, formatToProperCase, formatToUpperCase } from "@/utils/utils";
-import { AutoFillField } from "../../components/autofill";
+
 import { SalaryInput } from "../../components/salary-input";
 import { StepIndicator } from "../../components/step-indicator";
 import { employeesKey, useEmployee } from "@/hooks/use-employees";
+import { AutoFillDatalistField } from "../../components/autofill";
+
+const PREFIX_OPTIONS = [
+  "HON.", "ENGR.", "DR.", "ATTY.", "ARCH.", "PROF.", "DIR.", "SIR", "MA'AM"
+];
+
+const SUFFIX_OPTIONS = [
+  "JR.", "SR.", "II", "III", "IV", "V",
+  "CPA", "LPT", "RN", "RCRIM", "MIT"
+];
+
+
+const CITY_PRIORITY = [
+  "LINGAYEN"
+];
+
+const PROVINCE_PRIORITY = [
+  "PANGASINAN"
+];
+
 
 
 
@@ -250,7 +270,7 @@ export const EmployeesForm = ({
 
   const form = useForm<EmployeesFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData 
+    defaultValues: initialData
       ? {
         ...initialData,
         firstName: initialData.firstName.toUpperCase(),
@@ -338,14 +358,14 @@ export const EmployeesForm = ({
   const params = useParams() as { departmentId: string; employeesId?: string };
   const key = employeesKey(params.departmentId);
 
-   const { departmentId, employeesId } = useParams() as {
+  const { departmentId, employeesId } = useParams() as {
     departmentId: string;
     employeesId?: string;
   };
 
-  
 
-    const { data: employee } = useEmployee(departmentId, employeesId);
+
+  const { data: employee } = useEmployee(departmentId, employeesId);
   const initialDefaults = useMemo(
     () => (employee ? mapToDefaults(employee) : initialData ? mapToDefaults(initialData) : EMPTY_DEFAULTS),
     // only compute from SSR (initialData); SWR reset will run in useEffect below
@@ -368,10 +388,15 @@ export const EmployeesForm = ({
 
   const onSubmit = async (values: EmployeesFormValues) => {
 
-     setLoading(true);
+    setLoading(true);
     try {
-      const toastId = toast.loading("Processing...", { description: "Please wait while we save your data." });
-
+      const toastId = toast.loading("Processing...", {
+        description: "Please wait while we save your data.",
+        action: {
+          label: "Dismiss",
+          onClick: () => toast.dismiss(toastId), // manually close
+        },
+      });
       const payload = {
         ...values,
         salaryGrade: String(values.salaryGrade ?? ""),
@@ -551,28 +576,21 @@ export const EmployeesForm = ({
               control={form.control}
               name="prefix"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Prefix</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Prefix"
-                      {...field}
-                      onChange={(e) => {
-                        // Convert the input value to uppercase
-                        const uppercaseValue = e.target.value.toUpperCase();
-                        // Set the field value to the uppercase value
-                        field.onChange(uppercaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Ex: Hon., Engr., Dr., etc.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoFillDatalistField
+                  label="Prefix"
+                  field={field}
+                  staticOptions={PREFIX_OPTIONS}
+                  placeholder="Select or type Prefix..."
+
+                  formatMode="upper"
+                  formatModes={["none", "upper", "title"]}
+                  description="Ex: HON., ENGR., DR."
+                  maxLength={20}
+                  disabled={loading}
+                />
               )}
             />
+
             <FormField
               control={form.control}
               name="nickname"
@@ -675,39 +693,39 @@ export const EmployeesForm = ({
               control={form.control}
               name="suffix"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Suffix </FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Suffix"
-                      {...field}
-                      onChange={(e) => {
-                        const uppercaseValue = formatToUpperCase(e.target.value);
-                        field.onChange(uppercaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Ex: Jr.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoFillDatalistField
+                  label="Suffix"
+                  field={field}
+                  staticOptions={SUFFIX_OPTIONS}
+                  placeholder="Select or type Suffix..."
+                 
+                  formatMode="upper"
+                  formatModes={["none", "upper", "title"]}
+                  description="Ex: JR., SR., II"
+                  maxLength={20}
+                  disabled={loading}
+                />
               )}
             />
+
             <FormField
               control={form.control}
               name="position"
               render={({ field }) => (
-                <AutoFillField
+                <AutoFillDatalistField
                   label="Position"
                   field={field}
                   endpoint="/api/autofill/positions"
                   placeholder="Search or enter Position..."
-                   showFormatSwitch
-      formatMode="none"
-      formatModes={["none", "upper", "title", "sentence"]}
-                  
+                  required
+                  description="Type to filter or pick from the list."
+                  showFormatSwitch
+                  formatMode="none"
+                  formatModes={["none", "upper", "title", "sentence"]}
+                  showCounter
+                  disabled={loading}
+                  maxLength={80}
+
                 />
               )}
             />
@@ -854,7 +872,7 @@ export const EmployeesForm = ({
               control={form.control}
               name="education"
               render={({ field }) => (
-                <AutoFillField
+                <AutoFillDatalistField
                   label="Education"
                   field={field}
                   endpoint="/api/autofill/educations"
@@ -967,12 +985,12 @@ export const EmployeesForm = ({
               control={form.control}
               name="street"
               render={({ field }) => (
-                <AutoFillField
+                <AutoFillDatalistField
                   label="Street"
                   field={field}
                   endpoint="/api/autofill/streets"
                   placeholder="Search or enter Street..."
-                  
+
                 />
               )}
             />
@@ -981,7 +999,7 @@ export const EmployeesForm = ({
               control={form.control}
               name="barangay"
               render={({ field }) => (
-                <AutoFillField
+                <AutoFillDatalistField
                   label="Barangay"
                   field={field}
                   endpoint="/api/autofill/barangays"
@@ -995,12 +1013,15 @@ export const EmployeesForm = ({
               control={form.control}
               name="city"
               render={({ field }) => (
-                <AutoFillField
+                <AutoFillDatalistField
                   label="City"
                   field={field}
                   endpoint="/api/autofill/cities"
                   placeholder="Search or enter City..."
-                   formatMode="upper"
+                  formatMode="upper"
+                  priorityOptions={CITY_PRIORITY}
+                  pinSuggestions                      // shows clickable chips
+                  pinnedLabel="Suggested"
                 />
               )}
             />
@@ -1009,12 +1030,15 @@ export const EmployeesForm = ({
               control={form.control}
               name="province"
               render={({ field }) => (
-                <AutoFillField
+                <AutoFillDatalistField
                   label="Province"
                   field={field}
                   endpoint="/api/autofill/provinces"
                   placeholder="Search or enter Province..."
-                   formatMode="upper"
+                  formatMode="upper"
+                   priorityOptions={PROVINCE_PRIORITY}
+                  pinSuggestions                      // shows clickable chips
+                  pinnedLabel="Suggested"
                 />
               )}
             />
