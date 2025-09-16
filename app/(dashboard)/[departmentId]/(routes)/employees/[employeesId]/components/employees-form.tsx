@@ -698,7 +698,7 @@ export const EmployeesForm = ({
                   field={field}
                   staticOptions={SUFFIX_OPTIONS}
                   placeholder="Select or type Suffix..."
-                 
+
                   formatMode="upper"
                   formatModes={["none", "upper", "title"]}
                   description="Ex: JR., SR., II"
@@ -725,6 +725,10 @@ export const EmployeesForm = ({
                   showCounter
                   disabled={loading}
                   maxLength={80}
+                  priorityEndpoint="/api/autofill/popular"   // NEW
+                  priorityParams={{ field: "position", limit: 3 }}
+                  pinSuggestions
+                  pinnedLabel="Top positions"
 
                 />
               )}
@@ -1019,9 +1023,11 @@ export const EmployeesForm = ({
                   endpoint="/api/autofill/cities"
                   placeholder="Search or enter City..."
                   formatMode="upper"
-                  priorityOptions={CITY_PRIORITY}
-                  pinSuggestions                      // shows clickable chips
-                  pinnedLabel="Suggested"
+                  priorityEndpoint="/api/autofill/popular"   // NEW
+                  priorityParams={{ field: "city", limit: 3 }}
+                  pinSuggestions
+                  pinnedLabel="Suggestions"
+                  
                 />
               )}
             />
@@ -1036,9 +1042,10 @@ export const EmployeesForm = ({
                   endpoint="/api/autofill/provinces"
                   placeholder="Search or enter Province..."
                   formatMode="upper"
-                   priorityOptions={PROVINCE_PRIORITY}
-                  pinSuggestions                      // shows clickable chips
-                  pinnedLabel="Suggested"
+                    priorityEndpoint="/api/autofill/popular"   // NEW
+                  priorityParams={{ field: "province", limit: 3 }}
+                  pinSuggestions
+                  pinnedLabel="Suggestions"
                 />
               )}
             />

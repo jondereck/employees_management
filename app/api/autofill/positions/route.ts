@@ -11,3 +11,5 @@ export async function GET() {
 
   return NextResponse.json(positions.map((p) => p.position));
 }
+
+

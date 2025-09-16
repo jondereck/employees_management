@@ -38,6 +38,24 @@ function applyFormat(val: string, mode: FormatMode): string {
   }
 }
 
+function softApplyFormat(val: string, mode: FormatMode): string {
+  switch (mode) {
+    case "upper": return val.toUpperCase();
+    case "lower": return val.toLowerCase();
+    // for title/sentence while typing, don’t kill spaces:
+    case "title": return val
+      .split(/(\s+)/) // keep separators
+      .map(w => /\s+/.test(w) ? w : (w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w))
+      .join("");
+    case "sentence":
+      if (!val) return val;
+      return val[0].toUpperCase() + val.slice(1); // no trim/lower rest while typing
+    case "numeric": return onlyDigits(val);
+    case "alphanumeric": return onlyAlnumSpace(val); // keeps spaces
+    default: return val;
+  }
+}
+
 function normalizeSpaces(s: string) {
   return String(s ?? "").replace(/\s+/g, " ").trim();
 }
@@ -68,17 +86,22 @@ interface AutoFillDatalistFieldProps {
   formatModes?: FormatMode[];
   disabled?: boolean;
 
-  /** New QoL props */
+  /** QoL */
   description?: string;
   required?: boolean;
   maxLength?: number;
   showCounter?: boolean;
   className?: string;
+
+  /** Pinned / Popular */
   priorityOptions?: string[];
   pinSuggestions?: boolean;
   pinnedLabel?: string;
-}
 
+  /** NEW: fetch popular from API */
+  priorityEndpoint?: string; // e.g. `/api/autofill/popular?field=position&limit=8`
+  priorityParams?: Record<string, string | number>; // optional query params to append
+}
 export function AutoFillDatalistField({
   label,
   field,
@@ -94,26 +117,73 @@ export function AutoFillDatalistField({
   maxLength,
   showCounter,
   className,
-   priorityOptions = [],
+  priorityOptions = [],
   pinSuggestions = false,
   pinnedLabel = "Suggestions",
+
+  // NEW
+  priorityEndpoint,
+  priorityParams,
 }: AutoFillDatalistFieldProps) {
   const [baseOptions, setBaseOptions] = useState<string[]>([]);
-
+  const [fetchedPriority, setFetchedPriority] = useState<string[]>([]);
   const [mode, setMode] = useState<FormatMode>(formatMode);
   const [loading, setLoading] = useState(false);
+  const [loadingPriority, setLoadingPriority] = useState(false);
   const listId = useId();
+  const [rawValue, setRawValue] = useState<string>(field.value ?? "");
+  useEffect(() => {
+    setRawValue(field.value ?? "");
+  }, [field.value]);
+
+  // commit helper (normalize + hard format)
+  function commit(v: string) {
+    const committed = applyFormat(normalizeSpaces(v), mode);
+    field.onChange(committed);
+    setRawValue(committed); // reflect committed value in the input
+  }
+
+
 
   useEffect(() => setMode(formatMode), [formatMode]);
 
   useEffect(() => {
     let alive = true;
- const priorityUnique = dedupeNormalized(priorityOptions);
-    const useStatic = staticOptions && staticOptions.length > 0;
-    // staticOptions takes priority
-   if (useStatic) {
+    async function run() {
+      if (!priorityEndpoint) {
+        setFetchedPriority([]);
+        return;
+      }
+      setLoadingPriority(true);
+      try {
+        const url = new URL(priorityEndpoint, window.location.origin);
+        if (priorityParams) {
+          Object.entries(priorityParams).forEach(([k, v]) => url.searchParams.set(k, String(v)));
+        }
+        const r = await fetch(url.toString());
+        const data = (await r.json()) as unknown;
+        const arr = Array.isArray(data) ? data : [];
+        if (alive) setFetchedPriority(dedupeNormalized(arr));
+      } catch {
+        if (alive) setFetchedPriority([]);
+      } finally {
+        if (alive) setLoadingPriority(false);
+      }
+    }
+    run();
+    return () => { alive = false; };
+  }, [priorityEndpoint, JSON.stringify(priorityParams)]);
+
+  useEffect(() => {
+    let alive = true;
+    const priorityUnique = dedupeNormalized([
+      ...fetchedPriority,
+      ...priorityOptions,
+    ]);
+    const useStatic = !!(staticOptions && staticOptions.length > 0);
+
+    if (useStatic) {
       const staticUnique = dedupeNormalized(staticOptions!);
-      // PRIORITIZE: put priority first, then the rest (no dupes)
       const merged = dedupeNormalized([...priorityUnique, ...staticUnique]);
       setBaseOptions(merged);
       return () => { alive = false; };
@@ -123,7 +193,8 @@ export function AutoFillDatalistField({
       setBaseOptions(dedupeNormalized(priorityUnique));
       return () => { alive = false; };
     }
-     setLoading(true);
+
+    setLoading(true);
     fetch(endpoint)
       .then((r) => r.json())
       .then((data) => {
@@ -133,13 +204,15 @@ export function AutoFillDatalistField({
         const merged = dedupeNormalized([...priorityUnique, ...fetchedUnique]);
         setBaseOptions(merged);
       })
-      .catch(() => { if (alive) setBaseOptions(dedupeNormalized(priorityUnique)); })
+      .catch(() => {
+        if (alive) setBaseOptions(dedupeNormalized(priorityUnique));
+      })
       .finally(() => { if (alive) setLoading(false); });
 
     return () => { alive = false; };
-  }, [endpoint, staticOptions, priorityOptions]);
+  }, [endpoint, staticOptions, priorityOptions, fetchedPriority]);
 
- const value = applyFormat(normalizeSpaces(field.value ?? ""), mode);
+  const value = applyFormat(normalizeSpaces(field.value ?? ""), mode);
   const inputMode = mode === "numeric" ? "numeric" : undefined;
 
   // Build formatted options; keep *order* with priority at top; dedupe on formatted view
@@ -157,15 +230,19 @@ export function AutoFillDatalistField({
     }
     return out;
   }, [baseOptions, mode]);
+  const displayValue = softApplyFormat(rawValue, mode);
 
 
+  // datalist should compare against committed value (optional); using displayValue is fine too:
+  const valueLower = displayValue.toLowerCase();
   const datalistOptions = useMemo(() => {
-    const curr = value.toLowerCase();
-    return formattedOptions.filter(o => o.view.toLowerCase() !== curr);
-  }, [formattedOptions, value]);
+    return formattedOptions.filter(o => o.view.toLowerCase() !== valueLower);
+  }, [formattedOptions, valueLower]);
+
+
   return (
     <FormItem className={cn("space-y-1", className)}>
-      <FormLabel className="flex items-center justify-between text-sm font-medium">
+      <FormLabel className="flex items-center  text-sm font-medium">
         <span>
           {label} {required && <span className="text-red-500 align-top">*</span>}
         </span>
@@ -198,42 +275,57 @@ export function AutoFillDatalistField({
 
       <FormControl>
         <div
-          className={cn(
-            "relative flex items-center rounded-md"
+            className={cn(
+            "relative flex items-center rounded-md border bg-white",
+            "focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary",
+            "transition-shadow"
           )}
         >
           {/* Left icon */}
           <Search className="ml-2 h-4 w-4 opacity-60" aria-hidden />
 
           {/* Input */}
-            <Input
+          <Input
             disabled={disabled}
             placeholder={placeholder}
             list={listId}
             inputMode={inputMode}
-            value={value}
+            value={displayValue}
             maxLength={maxLength}
-            onChange={(e) => field.onChange(applyFormat(normalizeSpaces(e.target.value), mode))}
-            className="border-0 shadow-none focus-visible:ring-0 pl-2 pr-16"
+            onChange={(e) => {
+              const next = e.target.value;
+              // while typing, DON’T trim/collapse; just “soft” filter for modes that must restrict
+              const typed = mode === "numeric"
+                ? onlyDigits(next)
+                : mode === "alphanumeric"
+                  ? onlyAlnumSpace(next)
+                  : next;
+              setRawValue(softApplyFormat(typed, mode));
+            }}
+            onBlur={() => commit(rawValue)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit(rawValue);
+              }
+            }}
+            className="border-0 shadow-none focus-visible:ring-0 pl-2 pr-4"
             autoCapitalize="off"
             autoComplete="off"
             spellCheck={false}
           />
 
-
-      <datalist id={listId}>
+          <datalist id={listId}>
             {datalistOptions.map((o) => (
               <option key={o.raw} value={o.view} />
             ))}
           </datalist>
         </div>
       </FormControl>
-
-      {/* Pinned chips (always visible, not subject to datalist filtering) */}
-      {pinSuggestions && priorityOptions?.length ? (
+      {pinSuggestions && (fetchedPriority.length || priorityOptions.length) ? (
         <div className="mt-1 flex items-center flex-wrap gap-2">
           <span className="text-xs text-muted-foreground">{pinnedLabel}:</span>
-          {dedupeNormalized(priorityOptions).map((p) => {
+          {dedupeNormalized([...fetchedPriority, ...priorityOptions]).map((p) => {
             const text = applyFormat(normalizeSpaces(p), mode);
             return (
               <Button
@@ -242,7 +334,7 @@ export function AutoFillDatalistField({
                 size="sm"
                 variant="secondary"
                 className="h-7"
-                onClick={() => field.onChange(text)}
+                onClick={() => commit(text)}
               >
                 {text}
               </Button>
