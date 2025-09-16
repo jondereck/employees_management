@@ -65,6 +65,7 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Salary Grade</FormLabel>
+             <span className="text-red-500 align-top">*</span>
             <FormControl>
               <Input
                 disabled={loading}

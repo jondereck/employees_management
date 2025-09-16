@@ -99,6 +99,64 @@ export async function GET(req: Request) {
 
       return NextResponse.json(values);
     }
+
+     case "education": {
+      const grouped = await prismadb.employee.groupBy({
+        by: ["education"],
+        where: {
+          ...officeFilter,
+          // Only include rows where the field is NOT null/empty
+          education: { not: "" } as any,
+        },
+        _count: { education: true },
+        orderBy: { _count: { education: "desc" } }, // <-- correct typing
+        take: limit,
+      });
+
+      const values = grouped
+        .map(g => g.education)
+        .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+
+      return NextResponse.json(values);
+    }
+     case "street": {
+      const grouped = await prismadb.employee.groupBy({
+        by: ["street"],
+        where: {
+          ...officeFilter,
+          // Only include rows where the field is NOT null/empty
+          street: { not: "" } as any,
+        },
+        _count: { street: true },
+        orderBy: { _count: { street: "desc" } }, // <-- correct typing
+        take: limit,
+      });
+
+      const values = grouped
+        .map(g => g.street)
+        .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+
+      return NextResponse.json(values);
+    }
+    case "barangay": {
+      const grouped = await prismadb.employee.groupBy({
+        by: ["barangay"],
+        where: {
+          ...officeFilter,
+          // Only include rows where the field is NOT null/empty
+          barangay: { not: "" } as any,
+        },
+        _count: { barangay: true },
+        orderBy: { _count: { barangay: "desc" } }, // <-- correct typing
+        take: limit,
+      });
+
+      const values = grouped
+        .map(g => g.barangay)
+        .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+
+      return NextResponse.json(values);
+    }
     // ..
 
     default:

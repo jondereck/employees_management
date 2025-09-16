@@ -30,7 +30,8 @@ import { capitalizeWordsIgnoreSpecialChars, formatToProperCase, formatToUpperCas
 import { SalaryInput } from "../../components/salary-input";
 import { StepIndicator } from "../../components/step-indicator";
 import { employeesKey, useEmployee } from "@/hooks/use-employees";
-import { AutoFillDatalistField } from "../../components/autofill";
+import { AutoField } from "../../components/autofill";
+import { formatPHPretty, normalizePHMobileLive } from "@/utils/phone-number";
 
 const PREFIX_OPTIONS = [
   "HON.", "ENGR.", "DR.", "ATTY.", "ARCH.", "PROF.", "DIR.", "SIR", "MA'AM"
@@ -387,7 +388,7 @@ export const EmployeesForm = ({
 
 
   const onSubmit = async (values: EmployeesFormValues) => {
-
+    const contact = (values.contactNumber ?? "").trim();
     setLoading(true);
     try {
       const toastId = toast.loading("Processing...", {
@@ -402,7 +403,7 @@ export const EmployeesForm = ({
         salaryGrade: String(values.salaryGrade ?? ""),
         salary: Number(values.salary ?? 0),
       };
-
+      if (contact) payload.contactNumber = contact;
       // Call the API
       const res = initialData
         ? await axios.patch(`/api/${params.departmentId}/employees/${params.employeesId}`, payload)
@@ -465,7 +466,7 @@ export const EmployeesForm = ({
   }
 
   const currentYear = new Date().getFullYear();
-  const fromYear = currentYear - 74;
+  const fromYear = currentYear - 75;
 
 
   const genderOptions = Object.values(Gender);
@@ -576,16 +577,16 @@ export const EmployeesForm = ({
               control={form.control}
               name="prefix"
               render={({ field }) => (
-                <AutoFillDatalistField
+                <AutoField
+                  kind="datalist"
                   label="Prefix"
                   field={field}
                   staticOptions={PREFIX_OPTIONS}
+                  priorityOptions={["HON.", "DR.", "ATTY."]}
+                  pinSuggestions
                   placeholder="Select or type Prefix..."
-
                   formatMode="upper"
                   formatModes={["none", "upper", "title"]}
-                  description="Ex: HON., ENGR., DR."
-                  maxLength={20}
                   disabled={loading}
                 />
               )}
@@ -617,92 +618,83 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
               name="firstName"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>First Name</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="First Name"
-                      {...field}
-                      onChange={(e) => {
-                        const uppercaseValue = formatToUpperCase(e.target.value);
-                        field.onChange(uppercaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Ex: Jon
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoField
+                  kind="text"
+                  label="First Name"
+                  field={field}
+                  required
+                  placeholder="First Name"
+                  description="Ex: Jon"
+                  showCounter
+                  formatMode="upper"           // Anne marie -> Anne Marie
+                  normalizeWhitespace          // collapse extra spaces
+                  nameSafe                     // block digits/symbols (keeps - and ')
+                  autoFormatOnBlur
+                />
+
               )}
             />
+
+
             <FormField
               control={form.control}
               name="lastName"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Last Name</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Last Name"
-                      {...field}
-                      onChange={(e) => {
-                        const uppercaseValue = formatToUpperCase(e.target.value);
-                        field.onChange(uppercaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Ex: Nifas
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoField
+                  kind="text"
+                  label="Last Name"
+                  field={field}
+                  required
+                  placeholder="Last Name"
+                  description="Ex: Nifas"
+                  showCounter
+                  formatMode="upper"
+                  normalizeWhitespace
+                  nameSafe
+                  autoFormatOnBlur
+                />
               )}
             />
             <FormField
               control={form.control}
               name="middleName"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Middle Name</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Middle Name"
-                      {...field}
-                      onChange={(e) => {
-                        const uppercaseValue = formatToUpperCase(e.target.value);
-                        field.onChange(uppercaseValue);
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Ex: De Guzman
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoField
+                  kind="text"
+                  label="Middle Name"
+                  field={field}
+                  required
+                  placeholder="Middle Name"
+                  description="Ex: De Guzman"
+                  showCounter
+                  formatMode="upper"           // Anne marie -> Anne Marie
+                  normalizeWhitespace          // collapse extra spaces
+                  nameSafe                     // block digits/symbols (keeps - and ')
+                  autoFormatOnBlur
+                />
               )}
             />
+
+
             <FormField
               control={form.control}
               name="suffix"
               render={({ field }) => (
-                <AutoFillDatalistField
+                <AutoField
+                  kind="datalist"
                   label="Suffix"
                   field={field}
                   staticOptions={SUFFIX_OPTIONS}
+                  priorityOptions={["JR.", "CPA", "RN"]}
+                  pinSuggestions
                   placeholder="Select or type Suffix..."
-
                   formatMode="upper"
                   formatModes={["none", "upper", "title"]}
-                  description="Ex: JR., SR., II"
-                  maxLength={20}
                   disabled={loading}
                 />
               )}
@@ -712,24 +704,34 @@ export const EmployeesForm = ({
               control={form.control}
               name="position"
               render={({ field }) => (
-                <AutoFillDatalistField
+                <AutoField
+                  kind="datalist"
                   label="Position"
                   field={field}
-                  endpoint="/api/autofill/positions"
+                  endpoint="/api/autofill/positions" // full list (string[])
+                  priorityEndpoint={`/api/autofill/popular?field=position&limit=2`}
+                  pinSuggestions
+                  pinnedLabel="Frequently used"
                   placeholder="Search or enter Position..."
-                  required
-                  description="Type to filter or pick from the list."
                   showFormatSwitch
                   formatMode="none"
                   formatModes={["none", "upper", "title", "sentence"]}
-                  showCounter
                   disabled={loading}
-                  maxLength={80}
-                  priorityEndpoint="/api/autofill/popular"   // NEW
-                  priorityParams={{ field: "position", limit: 3 }}
-                  pinSuggestions
-                  pinnedLabel="Top positions"
+                />
+              )}
+            />
 
+
+
+            <FormField
+              control={form.control}
+              name="contactNumber"
+              render={({ field }) => (
+                <AutoField
+                  kind="phone"
+                  label="Contact Number"
+                  field={field}
+                  disabled={loading}
                 />
               )}
             />
@@ -737,89 +739,18 @@ export const EmployeesForm = ({
 
             <FormField
               control={form.control}
-              name="contactNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contact Number </FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Contact Number"
-                      {...field}
-                      onChange={(e) => {
-                        const inputValue = e.target.value;
-                        if (inputValue.length <= 11) {
-                          const formattedValue = inputValue.replace(/^(\+63|63|)/, '').replace(/\D/g, ''); // Remove non-numeric characters
-                          field.onChange(formattedValue);
-                        }
-                      }
-                      }
-                    // Remove the "+63" prefix and any non-numeric characters
-
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {field.value && field.value.length != 11 && <span className="text-red-600">Please check the contact number</span>}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            {/* <FormField
-              control={form.control}
-              name="age"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Age </FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Age"
-                       
-       
-                      {...field}
-                   
-                    />
-                  </FormControl>
-                  <FormDescription>
-
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            /> */}
-
-            <FormField
-              control={form.control}
               name="birthday"
               render={({ field }) => (
-                <FormItem className="flex flex-col mt-2">
-                  <FormLabel>Date of birth</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"} w-auto justify-start text-left font-normal
-                        className={cn("w-auto  justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className=" w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        captionLayout="dropdown-buttons"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        fromYear={fromYear}
-                        toYear={currentYear}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormDescription>
-                    Your date of birth is used to calculate your age.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoField
+                  kind="date"
+                  label="Date of birth"
+                  field={field}
+                  fromYear={currentYear - 100}
+                  toYear={currentYear}
+                  disableFuture
+                  description="Your date of birth is used to calculate your age."
+                  disabled={loading}
+                />
               )}
             />
             {/* <FormField
@@ -844,6 +775,7 @@ export const EmployeesForm = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Gender </FormLabel>
+                  <span className="text-red-500 align-top">*</span>
                   <Select
                     disabled={loading}
                     onValueChange={field.onChange}
@@ -876,10 +808,15 @@ export const EmployeesForm = ({
               control={form.control}
               name="education"
               render={({ field }) => (
-                <AutoFillDatalistField
+                <AutoField
+                  kind="datalist"
                   label="Education"
                   field={field}
                   endpoint="/api/autofill/educations"
+                  priorityEndpoint={`/api/autofill/popular?field=education&limit=2`}
+                  pinSuggestions
+                  formatMode="title"
+                  pinnedLabel="Suggestions"
                   placeholder="Search or enter Position..."
                 />
               )}
@@ -937,32 +874,35 @@ export const EmployeesForm = ({
             <FormField
               control={form.control}
               name="emergencyContactNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Emergency Contact Number </FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Emergency Contact Number"
-                      {...field}
-                      onChange={(e) => {
-                        const inputValue = e.target.value;
-                        if (inputValue.length <= 11) {
-                          const formattedValue = inputValue.replace(/^(\+63|63|)/, '').replace(/\D/g, ''); // Remove non-numeric characters
-                          field.onChange(formattedValue);
-                        }
-                      }
-                      }
-                    // Remove the "+63" prefix and any non-numeric characters
-
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {field.value && field.value.length != 11 && <span className="text-red-600">Please check the contact number</span>}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const display = formatPHPretty(field.value ?? ""); // pretty only
+                return (
+                  <FormItem>
+                    <FormLabel>Emergency Contact Number</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        pattern={"^0\\d{10}$|^0\\d{3}-\\d{3}-\\d{4}$"}
+                        value={display}
+                        onChange={(e) => {
+                          // Strip hyphens/spaces from UI, normalize + clamp, store raw (no hyphens)
+                          const raw = normalizePHMobileLive(e.target.value);
+                          // allow empty (optional field)
+                          field.onChange(raw);
+                        }}
+                        onBlur={(e) => {
+                          // Re-run normalize (handles paste cases cleanly)
+                          const raw = normalizePHMobileLive(e.target.value);
+                          field.onChange(raw);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <FormField
@@ -989,10 +929,14 @@ export const EmployeesForm = ({
               control={form.control}
               name="street"
               render={({ field }) => (
-                <AutoFillDatalistField
+                <AutoField
+                  kind="datalist"
                   label="Street"
                   field={field}
                   endpoint="/api/autofill/streets"
+                  priorityEndpoint={`/api/autofill/popular?field=street&limit=3`}
+                  pinSuggestions
+                  pinnedLabel="Suggestions"
                   placeholder="Search or enter Street..."
 
                 />
@@ -1003,31 +947,33 @@ export const EmployeesForm = ({
               control={form.control}
               name="barangay"
               render={({ field }) => (
-                <AutoFillDatalistField
+                <AutoField
+                kind="datalist"
                   label="Barangay"
                   field={field}
                   endpoint="/api/autofill/barangays"
+                  priorityEndpoint={`/api/autofill/popular?field=barangay&limit=2`}
+                  pinSuggestions
+                  pinnedLabel="Suggestions"
                   placeholder="Search or enter Barangay..."
                   formatMode="upper"
                 />
               )}
             />
-
             <FormField
               control={form.control}
               name="city"
               render={({ field }) => (
-                <AutoFillDatalistField
+                <AutoField
+                kind="datalist"
                   label="City"
                   field={field}
                   endpoint="/api/autofill/cities"
                   placeholder="Search or enter City..."
                   formatMode="upper"
-                  priorityEndpoint="/api/autofill/popular"   // NEW
-                  priorityParams={{ field: "city", limit: 3 }}
+                  priorityEndpoint={`/api/autofill/popular?field=city&limit=2`}
                   pinSuggestions
                   pinnedLabel="Suggestions"
-                  
                 />
               )}
             />
@@ -1036,14 +982,14 @@ export const EmployeesForm = ({
               control={form.control}
               name="province"
               render={({ field }) => (
-                <AutoFillDatalistField
+                  <AutoField
+                kind="datalist"
                   label="Province"
                   field={field}
                   endpoint="/api/autofill/provinces"
                   placeholder="Search or enter Province..."
                   formatMode="upper"
-                    priorityEndpoint="/api/autofill/popular"   // NEW
-                  priorityParams={{ field: "province", limit: 3 }}
+                  priorityEndpoint={`/api/autofill/popular?field=province&limit=2`}
                   pinSuggestions
                   pinnedLabel="Suggestions"
                 />
@@ -1060,6 +1006,7 @@ export const EmployeesForm = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Office </FormLabel>
+                  <span className="text-red-500 align-top">*</span>
                   <Select
                     disabled={loading}
                     onValueChange={field.onChange}
@@ -1096,6 +1043,7 @@ export const EmployeesForm = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Appointment </FormLabel>
+                  <span className="text-red-500 align-top">*</span>
                   <Select
                     disabled={loading}
                     onValueChange={field.onChange}
@@ -1132,6 +1080,7 @@ export const EmployeesForm = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Eligibility </FormLabel>
+                  <span className="text-red-500 align-top">*</span>
                   <div className="flex overflow-auto">
                     <Select
                       disabled={loading}

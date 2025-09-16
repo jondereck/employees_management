@@ -1,32 +1,34 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
-import { FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Search, X, Loader2 } from "lucide-react";
+import {useEffect, useId, useMemo, useState} from "react";
+import {FormItem, FormLabel, FormControl, FormMessage} from "@/components/ui/form";
+import {Input} from "@/components/ui/input";
+import {Button} from "@/components/ui/button";
+import {Select, SelectTrigger, SelectValue, SelectContent, SelectItem} from "@/components/ui/select";
+import {Popover, PopoverTrigger, PopoverContent} from "@/components/ui/popover";
+import {Calendar} from "@/components/ui/calendar";
+import {cn} from "@/lib/utils";
+import {Calendar as CalendarIcon, Search, X, Loader2} from "lucide-react";
+import {format} from "date-fns";
 
+
+/** ---------- Formatting helpers ---------- */
 type FormatMode = "none" | "upper" | "lower" | "title" | "sentence" | "numeric" | "alphanumeric";
-const ALL_MODES: FormatMode[] = ["none", "upper", "lower", "title", "sentence", "numeric", "alphanumeric"];
+const ALL_MODES: FormatMode[] = ["none","upper","lower","title","sentence","numeric","alphanumeric"];
 
-
-// --- NEW helpers ---
-
-// --- format helpers ---
-function toTitleCase(s: string) {
-  return s.toLowerCase().split(/\s+/).map(w => (w ? w[0].toUpperCase() + w.slice(1) : "")).join(" ");
-}
-function toSentenceCase(s: string) {
+const toTitleCase = (s: string) =>
+  s.toLowerCase().split(/\s+/).map(w => (w ? w[0].toUpperCase() + w.slice(1) : "")).join(" ");
+const toSentenceCase = (s: string) => {
   const t = s.trim();
   if (!t) return t;
   const lower = t.toLowerCase();
   return lower[0].toUpperCase() + lower.slice(1);
-}
-function onlyDigits(s: string) { return s.replace(/\D+/g, ""); }
-function onlyAlnumSpace(s: string) { return s.replace(/[^a-z0-9 ]/gi, ""); }
-function applyFormat(val: string, mode: FormatMode): string {
+};
+const onlyDigits = (s: string) => s.replace(/\D+/g, "");
+const onlyAlnumSpace = (s: string) => s.replace(/[^a-z0-9 ]/gi, "");
+const normalizeSpaces = (s: string) => String(s ?? "").replace(/\s+/g, " ").trim();
+
+const applyFormat = (val: string, mode: FormatMode): string => {
   switch (mode) {
     case "upper": return val.toUpperCase();
     case "lower": return val.toLowerCase();
@@ -36,7 +38,36 @@ function applyFormat(val: string, mode: FormatMode): string {
     case "alphanumeric": return onlyAlnumSpace(val);
     default: return val;
   }
+};
+const dedupeNormalized = (arr: string[]) => {
+  const seen = new Set<string>(), out: string[] = [];
+  for (const x of arr) {
+    const clean = normalizeSpaces(x);
+    const key = clean.toLowerCase();
+    if (clean && !seen.has(key)) { seen.add(key); out.push(clean); }
+  }
+  return out;
+};
+
+/** ---------- Phone helpers ---------- */
+// live normalizer: add 0 if starts with 9; trim to 11; tolerate 63/009 prefixes
+export function normalizePHMobileLive(input: string): string {
+  let d = (input ?? "").replace(/\D/g, "");
+  if (d.startsWith("009")) d = d.slice(2);
+  if (d.startsWith("63")) d = d.slice(2);
+  if (d.startsWith("9")) return ("0" + d).slice(0, 11);
+  if (d.startsWith("0")) return d.slice(0, 11);
+  return d.slice(0, 11);
 }
+export function formatPHPretty(raw: string): string {
+  const d = (raw ?? "").replace(/\D/g, "");
+  if (!d) return "";
+  const p1 = d.slice(0, 4);
+  const p2 = d.slice(4, 7);
+  const p3 = d.slice(7, 11);
+  return [p1, p2, p3].filter(Boolean).join("-");
+}
+
 
 function softApplyFormat(val: string, mode: FormatMode): string {
   switch (mode) {
@@ -56,215 +87,328 @@ function softApplyFormat(val: string, mode: FormatMode): string {
   }
 }
 
-function normalizeSpaces(s: string) {
-  return String(s ?? "").replace(/\s+/g, " ").trim();
-}
-function dedupeNormalized(arr: string[]) {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const x of arr) {
-    const clean = normalizeSpaces(x);
-    const key = clean.toLowerCase();
-    if (clean && !seen.has(key)) {
-      seen.add(key);
-      out.push(clean);
-    }
-  }
-  return out;
-}
 
+/** ---------- Props ---------- */
+type Kind = "text" | "datalist" | "phone" | "number" | "date";
+type RHFField = { value?: any; onChange: (v: any) => void };
 
-
-interface AutoFillDatalistFieldProps {
+type BaseProps = {
   label: string;
-  field: { value?: string; onChange: (v: string) => void };
-  endpoint?: string;
-  staticOptions?: string[];
+  field: RHFField;
+  disabled?: boolean;
+  description?: string;
+  required?: boolean;
+  className?: string;
+  
+};
+
+type DatalistProps = BaseProps & {
+  kind: "datalist";
   placeholder?: string;
+  endpoint?: string;          // returns string[] or { popular, options }
+  staticOptions?: string[];
+  priorityOptions?: string[]; // pinned/top suggestions (e.g. user pins or popular)
+  priorityEndpoint?: string;
+  pinSuggestions?: boolean;
+  pinnedLabel?: string;
   showFormatSwitch?: boolean;
   formatMode?: FormatMode;
   formatModes?: FormatMode[];
-  disabled?: boolean;
-
-  /** QoL */
-  description?: string;
-  required?: boolean;
   maxLength?: number;
   showCounter?: boolean;
-  className?: string;
+};
 
-  /** Pinned / Popular */
-  priorityOptions?: string[];
-  pinSuggestions?: boolean;
-  pinnedLabel?: string;
+type PhoneProps = BaseProps & {
+  kind: "phone";
+  placeholder?: string;
+};
 
-  /** NEW: fetch popular from API */
-  priorityEndpoint?: string; // e.g. `/api/autofill/popular?field=position&limit=8`
-  priorityParams?: Record<string, string | number>; // optional query params to append
+type NumberProps = BaseProps & {
+  kind: "number";
+  placeholder?: string;
+  allowDecimal?: boolean;
+  min?: number;
+  max?: number;
+  step?: number | "any";
+};
+
+type DateProps = BaseProps & {
+  kind: "date";
+  fromYear?: number;
+  toYear?: number;
+  disableFuture?: boolean;
+  placeholder?: string;
+};
+
+type TextProps = BaseProps & {
+  kind: "text";
+  placeholder?: string;
+  maxLength?: number;
+  showCounter?: boolean;
+    formatMode?: FormatMode;         // e.g. "title" | "upper" | "none"
+  normalizeWhitespace?: boolean;   // collapse multiple spaces, trim ends
+  nameSafe?: boolean;              // allow letters, spaces, hyphen, apostrophe only
+  autoFormatOnBlur?: boolean; 
+};
+
+type AutoFieldProps = DatalistProps | PhoneProps | NumberProps | DateProps | TextProps;
+
+/** ---------- Component ---------- */
+export function AutoField(props: AutoFieldProps) {
+  switch (props.kind) {
+    case "date": return <DateField {...props} />;
+    case "phone": return <PhoneField {...props} />;
+    case "number": return <NumberField {...props} />;
+    case "datalist": return <DatalistField {...props} />;
+    case "text":
+    default: return <TextField {...props} />;
+  }
 }
-export function AutoFillDatalistField({
-  label,
-  field,
-  endpoint,
-  staticOptions,
-  placeholder = "Search or enter...",
-  showFormatSwitch = false,
-  formatMode = "none",
-  formatModes = ALL_MODES,
-  disabled,
-  description,
-  required,
-  maxLength,
-  showCounter,
-  className,
-  priorityOptions = [],
-  pinSuggestions = false,
-  pinnedLabel = "Suggestions",
 
-  // NEW
-  priorityEndpoint,
-  priorityParams,
-}: AutoFillDatalistFieldProps) {
+
+/** ---------- Sub-fields ---------- */
+
+// TEXT
+function TextField({
+  label, field, disabled, description, required, className,
+  placeholder, maxLength, showCounter,
+  formatMode = "none",
+  normalizeWhitespace = true,
+  nameSafe = true,
+  autoFormatOnBlur = true,
+}: TextProps) {
+  const sanitize = (raw: string) => {
+    let v = raw ?? "";
+    if (nameSafe) {
+      // keep letters (with diacritics), spaces, hyphen, apostrophe
+      v = v.replace(/[^\p{L}\p{M}\s'\-]/gu, "");
+    }
+    if (normalizeWhitespace) {
+      v = v.replace(/\s+/g, " ").trim();
+    }
+    v = applyFormat(v, formatMode); // uses your existing applyFormat
+    return v;
+  };
+
+  return (
+    <FormItem className={className}>
+      <FormLabel>
+        {label} {required && <span className="text-red-500">*</span>}
+      </FormLabel>
+      <FormControl>
+        <Input
+          disabled={disabled}
+          placeholder={placeholder}
+          value={field.value ?? ""}
+          maxLength={maxLength}
+          autoCapitalize="words"
+          onChange={(e) => {
+            // live-sanitize but be gentle (don’t over-trim while typing)
+            const v = e.target.value;
+            // permit typing space/hyphen/apostrophe; normalize softly
+            const soft = nameSafe ? v.replace(/[^\p{L}\p{M}\s'\-]/gu, "") : v;
+            field.onChange(soft);
+          }}
+          onBlur={(e) => {
+            if (!autoFormatOnBlur) return;
+            field.onChange(sanitize(e.target.value));
+          }}
+        />
+      </FormControl>
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>{description}</span>
+        {showCounter && typeof maxLength === "number" && (
+          <span>{(field.value?.length ?? 0)}/{maxLength}</span>
+        )}
+      </div>
+      <FormMessage />
+    </FormItem>
+  );
+}
+
+
+// NUMBER (string-based to avoid losing leading 0; but constrained)
+function NumberField({label, field, disabled, description, required, className, placeholder, allowDecimal, min, max}: NumberProps) {
+  return (
+    <FormItem className={className}>
+      <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
+      <FormControl>
+        <Input
+          type="text"
+          inputMode={allowDecimal ? "decimal" : "numeric"}
+          placeholder={placeholder}
+          disabled={disabled}
+          value={field.value ?? ""}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const cleaned = allowDecimal
+              ? raw.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1") // one dot
+              : raw.replace(/\D/g, "");
+            // clamp min/max if both numeric
+            let next = cleaned;
+            if (next !== "" && !isNaN(Number(next))) {
+              const n = Number(next);
+              if (min !== undefined && n < min) next = String(min);
+              if (max !== undefined && n > max) next = String(max);
+            }
+            field.onChange(next);
+          }}
+        />
+      </FormControl>
+      <p className="text-xs text-muted-foreground">{description}</p>
+      <FormMessage />
+    </FormItem>
+  );
+}
+
+// PHONE (PH 11-digit, pretty display with hyphens)
+function PhoneField({label, field, disabled, description, required, className, placeholder = "09XXXXXXXXX"}: PhoneProps) {
+  const display = formatPHPretty(field.value ?? "");
+  return (
+    <FormItem className={className}>
+      <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
+      <FormControl>
+        <Input
+          type="text"
+          inputMode="numeric"
+          autoComplete="tel"
+          placeholder={placeholder}
+          value={display}
+          onChange={(e) => field.onChange(normalizePHMobileLive(e.target.value))}
+          onBlur={(e) => field.onChange(normalizePHMobileLive(e.target.value))}
+        />
+      </FormControl>
+      <p className="text-xs text-muted-foreground">{description ?? "Optional. Auto-fixes to 11 digits."}</p>
+      <FormMessage />
+    </FormItem>
+  );
+}
+
+// DATE (shadcn Calendar + Popover)
+function DateField({label, field, disabled, description, required, className, fromYear, toYear, disableFuture, placeholder = "Pick a date"}: DateProps) {
+  const currentYear = new Date().getFullYear();
+  const fromY = fromYear ?? currentYear - 100;
+  const toY = toYear ?? currentYear;
+
+  const selected: Date | undefined = field.value ? new Date(field.value) : undefined;
+  return (
+    <FormItem className={cn("flex flex-col", className)}>
+      <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className={cn("w-auto justify-start text-left font-normal", !selected && "text-muted-foreground")} disabled={disabled}>
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {selected ? format(selected, "PPP") : <span>{placeholder}</span>}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-auto p-0">
+          <Calendar
+            mode="single"
+            captionLayout="dropdown-buttons"
+            selected={selected}
+            onSelect={(d) => field.onChange(d ?? undefined)}
+            fromYear={fromY}
+            toYear={toY}
+            disabled={(date) => !!disableFuture && date > new Date()}
+          />
+        </PopoverContent>
+      </Popover>
+      <p className="text-xs text-muted-foreground">{description}</p>
+      <FormMessage />
+    </FormItem>
+  );
+}
+
+
+// DATALIST (with endpoint/static, dedupe, priority, optional format switch & chips)
+function DatalistField({
+  label, field, disabled, description, required, className, placeholder = "Search or enter...",
+  endpoint, staticOptions, priorityOptions = [], pinSuggestions, pinnedLabel = "Suggestions",
+  showFormatSwitch, formatMode = "none", formatModes = ALL_MODES, maxLength, showCounter , priorityEndpoint
+}: DatalistProps) {
   const [baseOptions, setBaseOptions] = useState<string[]>([]);
-  const [fetchedPriority, setFetchedPriority] = useState<string[]>([]);
   const [mode, setMode] = useState<FormatMode>(formatMode);
   const [loading, setLoading] = useState(false);
-  const [loadingPriority, setLoadingPriority] = useState(false);
-  const listId = useId();
-  const [rawValue, setRawValue] = useState<string>(field.value ?? "");
-  useEffect(() => {
-    setRawValue(field.value ?? "");
-  }, [field.value]);
 
-  // commit helper (normalize + hard format)
-  function commit(v: string) {
-    const committed = applyFormat(normalizeSpaces(v), mode);
-    field.onChange(committed);
-    setRawValue(committed); // reflect committed value in the input
-  }
-
-
+  const [priority, setPriority] = useState<string[]>([]);
 
   useEffect(() => setMode(formatMode), [formatMode]);
 
   useEffect(() => {
-    let alive = true;
-    async function run() {
-      if (!priorityEndpoint) {
-        setFetchedPriority([]);
-        return;
-      }
-      setLoadingPriority(true);
-      try {
-        const url = new URL(priorityEndpoint, window.location.origin);
-        if (priorityParams) {
-          Object.entries(priorityParams).forEach(([k, v]) => url.searchParams.set(k, String(v)));
-        }
-        const r = await fetch(url.toString());
-        const data = (await r.json()) as unknown;
-        const arr = Array.isArray(data) ? data : [];
-        if (alive) setFetchedPriority(dedupeNormalized(arr));
-      } catch {
-        if (alive) setFetchedPriority([]);
-      } finally {
-        if (alive) setLoadingPriority(false);
-      }
+  let alive = true;
+  (async () => {
+    try {
+      if (!priorityEndpoint) { setPriority([]); return; }
+      const r = await fetch(priorityEndpoint, { cache: "no-store" });
+      const d = await r.json().catch(() => null);
+      const pri = Array.isArray(d)
+        ? d
+        : d && Array.isArray(d.popular) ? d.popular
+        : d && Array.isArray(d.items) ? d.items
+        : [];
+      if (alive) setPriority(dedupeNormalized(pri));
+    } catch {
+      if (alive) setPriority([]);
     }
-    run();
-    return () => { alive = false; };
-  }, [priorityEndpoint, JSON.stringify(priorityParams)]);
-
-  useEffect(() => {
-    let alive = true;
-    const priorityUnique = dedupeNormalized([
-      ...fetchedPriority,
-      ...priorityOptions,
-    ]);
-    const useStatic = !!(staticOptions && staticOptions.length > 0);
-
-    if (useStatic) {
-      const staticUnique = dedupeNormalized(staticOptions!);
-      const merged = dedupeNormalized([...priorityUnique, ...staticUnique]);
-      setBaseOptions(merged);
-      return () => { alive = false; };
+  })();
+  return () => { alive = false; };
+}, [priorityEndpoint]);
+useEffect(() => {
+  let alive = true;
+  (async () => {
+    try {
+      if (staticOptions?.length) { setBaseOptions(dedupeNormalized(staticOptions)); return; }
+      if (!endpoint) { setBaseOptions([]); return; }
+      setLoading(true);
+      const res = await fetch(endpoint, { cache: "no-store" });
+      const data = await res.json();
+      const arr = Array.isArray(data) ? data : [];
+      if (alive) setBaseOptions(dedupeNormalized(arr));
+    } catch {
+      if (alive) setBaseOptions([]);
+    } finally {
+      if (alive) setLoading(false);
     }
+  })();
+  return () => { alive = false; };
+}, [endpoint, staticOptions]);
 
-    if (!endpoint) {
-      setBaseOptions(dedupeNormalized(priorityUnique));
-      return () => { alive = false; };
-    }
+const ordered = useMemo(() => dedupeNormalized([...priority, ...baseOptions]), [priority, baseOptions]);
 
-    setLoading(true);
-    fetch(endpoint)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!alive) return;
-        const fetched = Array.isArray(data) ? data : [];
-        const fetchedUnique = dedupeNormalized(fetched);
-        const merged = dedupeNormalized([...priorityUnique, ...fetchedUnique]);
-        setBaseOptions(merged);
-      })
-      .catch(() => {
-        if (alive) setBaseOptions(dedupeNormalized(priorityUnique));
-      })
-      .finally(() => { if (alive) setLoading(false); });
+// datalist id: stable
+const listId = useId(); 
 
-    return () => { alive = false; };
-  }, [endpoint, staticOptions, priorityOptions, fetchedPriority]);
-
-  const value = applyFormat(normalizeSpaces(field.value ?? ""), mode);
+ const value = field.value ?? ""; // keep raw while typing; format onBlur
   const inputMode = mode === "numeric" ? "numeric" : undefined;
 
-  // Build formatted options; keep *order* with priority at top; dedupe on formatted view
   const formattedOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { raw: string; view: string }[] = [];
-    for (const raw of baseOptions) {
-      const cleanRaw = normalizeSpaces(raw);
-      const view = applyFormat(cleanRaw, mode);
-      const key = view.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        out.push({ raw: cleanRaw, view });
-      }
-    }
-    return out;
-  }, [baseOptions, mode]);
-  const displayValue = softApplyFormat(rawValue, mode);
+  const seen = new Set<string>(), out: { raw: string; view: string }[] = [];
+  for (const raw of ordered) {                            // <-- changed
+    const clean = normalizeSpaces(raw);
+    const view = applyFormat(clean, mode);
+    const key = view.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); out.push({ raw: clean, view }); }
+  }
+  return out;
+}, [ordered, mode]);        
 
+  const datalistOptions = formattedOptions;  // 👈 show everything
 
-  // datalist should compare against committed value (optional); using displayValue is fine too:
-  const valueLower = displayValue.toLowerCase();
-  const datalistOptions = useMemo(() => {
-    return formattedOptions.filter(o => o.view.toLowerCase() !== valueLower);
-  }, [formattedOptions, valueLower]);
-
+  const filteredOptions = formattedOptions;
 
   return (
     <FormItem className={cn("space-y-1", className)}>
-      <FormLabel className="flex items-center  text-sm font-medium">
-        <span>
-          {label} {required && <span className="text-red-500 align-top">*</span>}
-        </span>
-
+      <FormLabel className="flex items-center justify-between text-sm font-medium">
+        <span>{label} {required && <span className="text-red-500">*</span>}</span>
         {showFormatSwitch && (
           <div className="w-40">
             <Select value={mode} onValueChange={(m: FormatMode) => setMode(m)}>
-              <SelectTrigger className="h-8">
-                <SelectValue placeholder="Format" />
-              </SelectTrigger>
+              <SelectTrigger className="h-8"><SelectValue placeholder="Format" /></SelectTrigger>
               <SelectContent>
-                {formatModes.map((m) => (
+                {(formatModes ?? ALL_MODES).map((m) => (
                   <SelectItem key={m} value={m}>
-                    {({
-                      none: "No formatting",
-                      upper: "UPPERCASE",
-                      lower: "lowercase",
-                      title: "Title Case",
-                      sentence: "Sentence case",
-                      numeric: "Numbers only",
-                      alphanumeric: "Alphanumeric",
-                    } as Record<FormatMode, string>)[m]}
+                    {({none:"No formatting", upper:"UPPERCASE", lower:"lowercase", title:"Title Case",
+                       sentence:"Sentence case", numeric:"Numbers only", alphanumeric:"Alphanumeric"} as Record<FormatMode,string>)[m]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -274,82 +418,84 @@ export function AutoFillDatalistField({
       </FormLabel>
 
       <FormControl>
-        <div
-            className={cn(
-            "relative flex items-center rounded-md border bg-white",
-            "focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary",
-            "transition-shadow"
-          )}
-        >
-          {/* Left icon */}
+        <div className={cn(
+          "relative flex items-center rounded-md border bg-white",
+          "focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary",
+          "transition-shadow"
+        )}>
           <Search className="ml-2 h-4 w-4 opacity-60" aria-hidden />
-
-          {/* Input */}
           <Input
             disabled={disabled}
             placeholder={placeholder}
             list={listId}
             inputMode={inputMode}
-            value={displayValue}
+            value={value}
             maxLength={maxLength}
-            onChange={(e) => {
-              const next = e.target.value;
-              // while typing, DON’T trim/collapse; just “soft” filter for modes that must restrict
-              const typed = mode === "numeric"
-                ? onlyDigits(next)
-                : mode === "alphanumeric"
-                  ? onlyAlnumSpace(next)
-                  : next;
-              setRawValue(softApplyFormat(typed, mode));
-            }}
-            onBlur={() => commit(rawValue)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commit(rawValue);
-              }
-            }}
-            className="border-0 shadow-none focus-visible:ring-0 pl-2 pr-4"
-            autoCapitalize="off"
-            autoComplete="off"
-            spellCheck={false}
+             onChange={(e) => field.onChange(softApplyFormat(e.target.value, mode))}
+ onBlur={(e) => field.onChange(applyFormat(normalizeSpaces(e.target.value), mode))}
+            className="border-0 shadow-none focus-visible:ring-0 pl-2 pr-16"
+            autoCapitalize="off" autoComplete="off" spellCheck={false}
           />
-
-          <datalist id={listId}>
-            {datalistOptions.map((o) => (
-              <option key={o.raw} value={o.view} />
-            ))}
-          </datalist>
+          <div className="absolute right-1 flex items-center gap-1">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin opacity-70" /> :
+              value ? (
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => field.onChange("")} title="Clear">
+                  <X className="h-4 w-4" />
+                </Button>
+              ) : null}
+          </div>
+         <datalist id={listId}>
+  {datalistOptions.map((o) => (
+    <option key={o.raw} value={o.view} />
+  ))}
+</datalist>
         </div>
       </FormControl>
-      {pinSuggestions && (fetchedPriority.length || priorityOptions.length) ? (
-        <div className="mt-1 flex items-center flex-wrap gap-2">
-          <span className="text-xs text-muted-foreground">{pinnedLabel}:</span>
-          {dedupeNormalized([...fetchedPriority, ...priorityOptions]).map((p) => {
-            const text = applyFormat(normalizeSpaces(p), mode);
-            return (
-              <Button
-                key={p}
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="h-7"
-                onClick={() => commit(text)}
-              >
-                {text}
-              </Button>
-            );
-          })}
-        </div>
-      ) : null}
+
+{pinSuggestions && (priority.length > 0 || (priorityOptions?.length ?? 0) > 0) && (
+  <div className="mt-1 flex flex-wrap items-center gap-2">
+    <span className="text-xs text-muted-foreground">{pinnedLabel}</span>
+
+    {/* Chips from fetched priorityEndpoint  ✅ */}
+    {priority.map((p) => {
+      const txt = applyFormat(normalizeSpaces(p), mode);
+      return (
+        <Button
+          key={`pri-${p}`}
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-7"
+          onClick={() => field.onChange(txt)}
+        >
+          {txt}
+        </Button>
+      );
+    })}
+
+    {/* Chips from prop-based priorityOptions (existing) */}
+    {dedupeNormalized(priorityOptions ?? []).map((p) => {
+      const txt = applyFormat(normalizeSpaces(p), mode);
+      return (
+        <Button
+          key={`prop-${p}`}
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-7"
+          onClick={() => field.onChange(txt)}
+        >
+          {txt}
+        </Button>
+      );
+    })}
+  </div>
+)}
 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{description}</span>
-        {showCounter && typeof maxLength === "number" && (
-          <span>{(field.value?.length ?? 0)}/{maxLength}</span>
-        )}
+        {showCounter && typeof maxLength === "number" && <span>{(field.value?.length ?? 0)}/{maxLength}</span>}
       </div>
-
       <FormMessage />
     </FormItem>
   );
