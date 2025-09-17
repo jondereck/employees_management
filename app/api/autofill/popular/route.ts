@@ -157,6 +157,82 @@ export async function GET(req: Request) {
 
       return NextResponse.json(values);
     }
+
+    case "employeeType": {
+  // officeId filter applies to Employee
+  const grouped = await prismadb.employee.groupBy({
+    by: ["employeeTypeId"],
+    where: {
+      ...(officeId ? { officeId } : {}),
+      // employeeTypeId is required in your schema, but keep a guard just in case
+      employeeTypeId: { not: "" },
+    },
+    _count: { employeeTypeId: true },
+    orderBy: { _count: { employeeTypeId: "desc" } },
+    take: limit,
+  });
+
+  if (!grouped.length) return NextResponse.json([]);
+
+  // Preserve popularity order
+  const idOrder = grouped.map(g => g.employeeTypeId);
+  const idToCount = new Map(grouped.map(g => [g.employeeTypeId, g._count.employeeTypeId]));
+
+  // Fetch labels for those IDs
+  const types = await prismadb.employeeType.findMany({
+    where: { id: { in: idOrder } },
+    select: { id: true, name: true, value: true },
+  });
+
+  // Put them back in popularity order
+  const byId = new Map(types.map(t => [t.id, t]));
+  const suggestions = idOrder
+    .map(id => byId.get(id))
+    .filter((t): t is { id: string; name: string; value: string } => !!t)
+    // choose what to show in the UI; here I use `name`, fallback to `value`
+    .map(t => t.name?.trim() || t.value?.trim())
+    .filter(s => s && s.length > 0);
+
+  return NextResponse.json(suggestions);
+}
+ case "eligibility": {
+  // officeId filter applies to Employee
+  const grouped = await prismadb.employee.groupBy({
+    by: ["eligibilityId"],
+    where: {
+      ...(officeId ? { officeId } : {}),
+      // eligibilityId is required in your schema, but keep a guard just in case
+      eligibilityId: { not: "" },
+    },
+    _count: { eligibilityId: true },
+    orderBy: { _count: { eligibilityId: "desc" } },
+    take: limit,
+  });
+
+  if (!grouped.length) return NextResponse.json([]);
+
+  // Preserve popularity order
+  const idOrder = grouped.map(g => g.eligibilityId);
+  const idToCount = new Map(grouped.map(g => [g.eligibilityId, g._count.eligibilityId]));
+
+  // Fetch labels for those IDs
+  const types = await prismadb.eligibility.findMany({
+    where: { id: { in: idOrder } },
+    select: { id: true, name: true, value: true },
+  });
+
+  // Put them back in popularity order
+  const byId = new Map(types.map(t => [t.id, t]));
+  const suggestions = idOrder
+    .map(id => byId.get(id))
+    .filter((t): t is { id: string; name: string; value: string } => !!t)
+    // choose what to show in the UI; here I use `name`, fallback to `value`
+    .map(t => t.name?.trim() || t.value?.trim())
+    .filter(s => s && s.length > 0);
+
+  return NextResponse.json(suggestions);
+}
+
     // ..
 
     default:

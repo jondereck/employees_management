@@ -94,15 +94,22 @@ function softApplyFormat(val: string, mode: FormatMode): string {
 type SelectOption = { value: string; label: string };
 
 type SelectFetchProps = {
-  /** If provided, fetch from endpoint that returns SelectOption[] */
   optionsEndpoint?: string;
-  /** Optional in-memory options (fallback or for SSR-provided lists) */
   options?: SelectOption[];
+  /** NEW: suggestion chips */
+  priorityEndpoint?: string;           // returns string[] or {id/name}[]
+  priorityOptions?: (SelectOption | string)[];
+  pinSuggestions?: boolean;
+  pinnedLabel?: string;
 };
 
 type SelectProps = BaseProps & SelectFetchProps & {
   kind: "select";
   placeholder?: string;
+
+  recentKey?: string;       // e.g. "eligibilityId"
+  recentMax?: number;       // e.g. 3
+  recentLabel?: string;     // e.g. "Recently used"
 };
 
 type TextareaProps = BaseProps & {
@@ -312,7 +319,7 @@ function PhoneField({label, field, disabled, description, required, className, p
           onBlur={(e) => field.onChange(normalizePHMobileLive(e.target.value))}
         />
       </FormControl>
-      <p className="text-xs text-muted-foreground">{description ?? "Optional. Auto-fixes to 11 digits."}</p>
+      <p className="text-xs text-muted-foreground">{description ?? "Optional"}</p>
       <FormMessage />
     </FormItem>
   );
@@ -540,10 +547,38 @@ function SelectField({
   label, field, disabled, description, required, className,
   placeholder = "Select...",
   optionsEndpoint, options,
+  // NEW
+  priorityEndpoint, priorityOptions = [],
+  pinSuggestions, pinnedLabel = "Suggestions",  recentKey,
+  recentMax = 3,
+  recentLabel = "Recently used",
 }: SelectProps) {
   const [opts, setOpts] = useState<SelectOption[]>(options ?? []);
   const [loading, setLoading] = useState(false);
+  const [pri, setPri] = useState<SelectOption[]>([]);
 
+  const [recents, setRecents] = useState<SelectOption[]>([]);
+
+  // helper: normalize any payload into SelectOption[]
+  const toOptions = (data: any): SelectOption[] => {
+    if (!data) return [];
+    if (Array.isArray(data)) {
+      // strings or objects
+      return data.map((x: any) => {
+        if (typeof x === "string") return ({ value: x, label: x });
+        if (x?.value && x?.label)   return ({ value: String(x.value), label: String(x.label) });
+        if (x?.id && x?.name)       return ({ value: String(x.id), label: String(x.name) });
+        return null;
+      }).filter(Boolean) as SelectOption[];
+    }
+    // also accept {items:[...]} or {popular:[...]}
+    const arr = Array.isArray(data.items) ? data.items
+            : Array.isArray(data.popular) ? data.popular
+            : [];
+    return toOptions(arr);
+  };
+
+  // fetch main options (if endpoint provided)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -551,12 +586,9 @@ function SelectField({
       setLoading(true);
       try {
         const r = await fetch(optionsEndpoint, { cache: "no-store" });
-        const data = await r.json();
+        const d = await r.json().catch(() => null);
         if (!alive) return;
-        const arr: SelectOption[] = Array.isArray(data)
-          ? data.map((o: any) => ({ value: String(o.id ?? o.value), label: String(o.name ?? o.label) }))
-          : [];
-        setOpts(arr);
+        setOpts(toOptions(d));
       } finally {
         if (alive) setLoading(false);
       }
@@ -564,20 +596,81 @@ function SelectField({
     return () => { alive = false; };
   }, [optionsEndpoint]);
 
+  // fetch priority suggestions (if endpoint provided)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!priorityEndpoint) { setPri([]); return; }
+      try {
+        const r = await fetch(priorityEndpoint, { cache: "no-store" });
+        const d = await r.json().catch(() => null);
+        if (!alive) return;
+        setPri(toOptions(d));
+      } catch {
+        if (alive) setPri([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [priorityEndpoint]);
+
+  // merge prop-based priorityOptions (strings or SelectOption)
+  const propPri: SelectOption[] = useMemo(() => toOptions(priorityOptions), [priorityOptions]);
+  useEffect(() => {
+    if (!recentKey) return;
+    try {
+      const raw = localStorage.getItem(`recent:${recentKey}`);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as SelectOption[];
+      setRecents(Array.isArray(saved) ? saved.slice(0, recentMax) : []);
+    } catch {}
+  }, [recentKey, recentMax]);
+
+  // NEW: util to persist a recent
+  const pushRecent = (opt: SelectOption) => {
+    if (!recentKey) return;
+    try {
+      const raw = localStorage.getItem(`recent:${recentKey}`);
+      const list: SelectOption[] = raw ? JSON.parse(raw) : [];
+      const next = [opt, ...list.filter(x => x.value !== opt.value)].slice(0, recentMax);
+      localStorage.setItem(`recent:${recentKey}`, JSON.stringify(next));
+      setRecents(next);
+    } catch {}
+  };
+
+  // dedupe by value (priority first)
+  const seen = new Set<string>();
+  const ordered = [...pri, ...propPri, ...opts].filter(o => {
+    const k = o.value.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+   const byValue = useMemo(() => {
+    const map = new Map<string, SelectOption>();
+    for (const o of ordered) map.set(o.value, o);
+    return map;
+  }, [ordered]);
+
   return (
     <FormItem className={className}>
       <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
-      <FormControl>
-        <Select
+
+        <FormControl>
+       <Select
           disabled={disabled || loading}
           value={field.value ?? ""}
-          onValueChange={(v) => field.onChange(v)}
+          onValueChange={(v) => {
+            field.onChange(v);
+            const hit = byValue.get(v);
+            if (hit) pushRecent(hit);
+          }}
         >
           <SelectTrigger className="w-full">
             <SelectValue placeholder={loading ? "Loading..." : placeholder} />
           </SelectTrigger>
-          <SelectContent>
-            {opts.map(opt => (
+          <SelectContent className="max-h-52 overflow-y-auto">
+            {ordered.map(opt => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}
               </SelectItem>
@@ -585,11 +678,60 @@ function SelectField({
           </SelectContent>
         </Select>
       </FormControl>
-      <p className="text-xs text-muted-foreground">{description}</p>
+ <p className="text-xs text-muted-foreground">{description}</p>
+      {/* Pinned suggestion chips */}
+      {pinSuggestions && (recents.length > 0 || pri.length > 0 || propPri.length > 0) && (
+        <div className="mt-2 space-y-1">
+          {recents.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">{recentLabel}</span>
+              {recents.map(opt => (
+                <Button
+                  key={`recent-${opt.value}`}
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-7"
+                  onClick={() => {
+                    field.onChange(opt.value);
+                    pushRecent(opt);
+                  }}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {(pri.length > 0 || propPri.length > 0) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">{pinnedLabel}</span>
+              {[...pri, ...propPri].map(opt => (
+                <Button
+                  key={`pin-${opt.value}`}
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-7"
+                  onClick={() => {
+                    field.onChange(opt.value);
+                    pushRecent(opt); // also mark as recent when clicked
+                  }}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+     
       <FormMessage />
     </FormItem>
   );
 }
+
 
 // TEXTAREA
  // shadcn textarea

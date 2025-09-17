@@ -1006,176 +1006,112 @@ export const EmployeesForm = ({
           </div>
 
           <Separator />
+          
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
             <SalaryInput form={form} loading={loading} maxStep={8} />
-            <FormField
-              control={form.control}
-              name="officeId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Office </FormLabel>
-                  <span className="text-red-500 align-top">*</span>
-                  <Select
-                    disabled={loading}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue
-                          defaultValue={field.value}
-                          placeholder="Select Office "
-                        />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent style={{ maxHeight: '200px', overflowY: 'auto' }} >
-                      {offices
-                        .slice()
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
+             <FormField
               control={form.control}
               name="designationId"
               render={({ field }) => (
                 <AutoField
                   kind="select"
-                  label="Designated Office"
+                  label="Plantilla Designation"
                   field={field}
                   placeholder="Choose office…"
                   optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`} // or just "/api/offices"
                   disabled={loading}
-                  description="Select the office where the employee is designated."
+                  description="Plantilla office record."
                   required={false}
                 />
               )}
             />
-
+            <FormField
+              control={form.control}
+              name="officeId"
+              render={({ field }) => (
+                <AutoField
+                  kind="select"
+                  label="Office"
+                  field={field}
+                  required
+                  disabled={loading}
+                  placeholder="Select Office"
+                  recentKey="officeId"
+                  recentMax={3}
+                  recentLabel="Recently used"
+                  pinSuggestions                              
+                  // feed preloaded options
+                  options={[...offices]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(o => ({ value: o.id, label: o.name }))}
+                  description="Select the office where the employee is designated."
+                />
+              )}
+            />
+           
             <FormField
               control={form.control}
               name="employeeTypeId"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Appointment </FormLabel>
-                  <span className="text-red-500 align-top">*</span>
-                  <Select
-                    disabled={loading}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue
-                          defaultValue={field.value}
-                          placeholder="Select Appointment "
-                        />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {employeeType.map((item) => (
-                        <SelectItem
-                          key={item.id}
-                          value={item.id}
-                        >
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+                <AutoField
+                  kind="select"
+                  label="Appointment"
+                  field={field}
+                  required
+                  disabled={loading}
+                  placeholder="Select Appointment"
+                  priorityEndpoint={`/api/autofill/popular?field=employeeType&limit=3`}
+                  pinSuggestions
+                  pinnedLabel="Suggestions"
+                  options={employeeType
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(et => ({ value: et.id, label: et.name }))}
+                />
               )}
             />
             <FormField
               control={form.control}
               name="eligibilityId"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Eligibility </FormLabel>
-                  <span className="text-red-500 align-top">*</span>
-                  <div className="flex overflow-auto">
-                    <Select
-                      disabled={loading}
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue
-                            defaultValue={field.value}
-                            placeholder="Select Eligibility "
-                          />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {eligibility.map((item) => (
-                          <SelectItem
-                            key={item.id}
-                            value={item.id}
-                          >
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-
-                    </Select>
-                  </div>
-                  <FormMessage />
-                </FormItem>
+                <AutoField
+                  kind="select"
+                  label="Eligibility"
+                  field={field}
+                  required
+                  disabled={loading}
+                  placeholder="Select Eligibility"
+                  recentKey="eligibilityId"
+                  recentMax={3}
+                  recentLabel="Recently used"
+                  priorityEndpoint={`/api/autofill/popular?field=eligibility&limit=3`}
+                  pinSuggestions
+                  pinnedLabel="Suggestions"
+                  options={eligibility
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(el => ({ value: el.id, label: el.name }))}
+                />
               )}
             />
+
             <FormField
               control={form.control}
               name="dateHired"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Date hired</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-auto justify-start text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {field.value ? format(new Date(field.value), "PPP") : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        captionLayout="dropdown-buttons"
-                        selected={field.value ? new Date(field.value) : undefined}
-                        onSelect={field.onChange}
-                        fromYear={fromYear}
-                        toYear={currentYear}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormDescription>
-                    Date hired is used to calculate years of service.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                <AutoField
+                  kind="date"
+                  label="Date hired"
+                  field={field}                 // ✅ pass RHF field
+                  fromYear={fromYear}           // e.g. currentYear - 75
+                  toYear={currentYear}
+                  disableFuture                 // optional: block future dates
+                  description="Date hired is used to calculate years of service."
+                  disabled={loading}
+                />
               )}
             />
+
 
           </div>
           <Separator />
@@ -1410,7 +1346,7 @@ export const EmployeesForm = ({
               )}
             />
 
-            
+
             <FormField
               control={form.control}
               name="note"
