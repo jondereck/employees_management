@@ -54,11 +54,31 @@ const [format, setFormat] = useState<"uppercase" | "lowercase" | "capitalize">("
 const [isInfoOpen, setIsInfoOpen] = useState(false);
 const [copied, setCopied] = useState(false);
 
-const grade = Number(data.salaryGrade);
-const step = computeStep({ dateHired: data.dateHired, latestAppointment: data.latestAppointment });
+const savedSalary = Number(data?.salary ?? 0); // ← manual/DB value, if any
+
+const grade = Number(data?.salaryGrade ?? 0);
+const step = computeStep({
+  dateHired: data?.dateHired,
+  latestAppointment: data?.latestAppointment,
+}) || 1;
+
 const salaryRecord = salarySchedule.find((s) => s.grade === grade);
+const computedSalary = salaryRecord ? (salaryRecord.steps[step - 1] ?? 0) : 0;
+
+// tiny tolerance to avoid rounding issues
+const EPS = 0.5;
+// If saved ≈ computed => AUTO; otherwise MANUAL
+const isManual = !(Math.abs(savedSalary - computedSalary) <= EPS);
+
+const displaySalary = isManual ? savedSalary : computedSalary;
+const formattedSalary = formatSalary(String(displaySalary));
+const salaryMode = isManual ? "MANUAL" : "AUTO";
+
+
+
+
 const monthlySalary = salaryRecord ? salaryRecord.steps[step - 1] ?? 0 : 0;
-const formattedSalary = formatSalary(String(monthlySalary));
+
 const annualSalary = calculateAnnualSalary(String(monthlySalary));
 const formattedAddress = addressFormat(data);
 
@@ -110,6 +130,8 @@ const handleCopy = () => {
   toast.success("Copied to clipboard!");
   setTimeout(() => setCopied(false), 2000);
 };
+
+
 
   return (
    <div
@@ -283,7 +305,15 @@ const handleCopy = () => {
             label="Service Rendered"
             value={`${yearService.years} Y/s, ${yearService.months} Mon/s, ${yearService.days} Day/s`}
           />
-          <DetailItem label="Monthly Salary" value={formattedSalary || "—"} />
+          <DetailItem
+  label="Monthly Salary"
+  value={
+    <span className="inline-flex items-center gap-2">
+      <span>{formattedSalary}</span>
+      <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{salaryMode}</span>
+    </span>
+  }
+/>
           <DetailItem label="Annual Salary" value={annualSalary || "—"} />
           <DetailItem label="Latest Appointment" value={formattedLatestAppointment || "—"} />
           <DetailItem

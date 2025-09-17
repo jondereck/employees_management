@@ -355,19 +355,21 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     <DataTableColumnHeader column={column} title="Salary" />
   ),
   cell: ({ row }) => {
-    const grade = Number(row.getValue("salaryGrade")); // employee grade
-    const dateHired = row.original.dateHired;
-    const latestAppointment = row.original.latestAppointment;
+    const saved = Number(row.original.salary ?? 0);     // 👈 manual/DB value
+    if (saved > 0) return formatSalary(String(saved));
 
-    // Compute step using your utility
-    const step = computeStep({ dateHired, latestAppointment });
-
-    // Find the employee's salary from the seeded table
-    const salaryRecord = salarySchedule.find(s => s.grade === grade);
-    const salary = salaryRecord ? salaryRecord.steps[step - 1] ?? 0 : 0;
-    return formatSalary(String(salary));
-  }
+    const grade = Number(row.getValue("salaryGrade"));
+    const step = computeStep({
+      dateHired: row.original.dateHired,
+      latestAppointment: row.original.latestAppointment,
+    });
+    const rec = salarySchedule.find((s) => s.grade === grade);
+    const computed = rec ? rec.steps[step - 1] ?? 0 : 0;
+    return formatSalary(String(computed));
+  },
 },
+
+
 
   
   {

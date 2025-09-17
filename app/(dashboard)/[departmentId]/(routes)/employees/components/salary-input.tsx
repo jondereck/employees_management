@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import axios from "axios";
 import { toast } from "sonner";
 import { computeStep } from "@/utils/compute-step";
+import { Switch } from "@/components/ui/switch"; // shadcn switch (or use Checkbox)
+import { cn } from "@/lib/utils";
 
 interface SalaryInputProps {
   form: any; // UseFormReturn<EmployeesFormValues>
@@ -25,36 +27,92 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
 
   const [fetching, setFetching] = useState(false);
   const [salarySteps, setSalarySteps] = useState<Record<number, number>>({});
+  const [manual, setManual] = useState(false);         // <-- NEW: user toggle
+  const [fetchError, setFetchError] = useState<string | null>(null); // track 
+  // fetch errors
+  const [hasFetched, setHasFetched] = useState(false);
 
-  useEffect(() => {
-    const fetchSalarySteps = async () => {
-      const sgNum = Number(sg);
-      if (!sgNum || Number.isNaN(sgNum)) return;
+  // fetch salary table by SG
+ useEffect(() => {
+  const fetchSalarySteps = async () => {
+    const sgNum = Number(sg);
+    if (!sgNum || Number.isNaN(sgNum)) {
+      setSalarySteps({});
+      setFetchError(null);
+      setHasFetched(false);        // ❗ reset when SG not valid
+      return;
+    }
 
-      setFetching(true);
-      try {
-        const res = await axios.get("/api/departments/salary/", { params: { sg: sgNum } });
-        setSalarySteps(res.data.steps);
-      } catch (e) {
-        toast.error("Failed to fetch salary data.");
-        setSalarySteps({});
-      } finally {
-        setFetching(false);
-      }
-    };
+    setFetching(true);
+    setFetchError(null);
+    try {
+      const res = await axios.get("/api/departments/salary/", { params: { sg: sgNum } });
+      setSalarySteps(res.data.steps ?? {});
+    } catch (e) {
+      setSalarySteps({});
+      setFetchError("Failed to fetch salary data.");
+      toast.error("Failed to fetch salary data.");
+    } finally {
+      setFetching(false);
+      setHasFetched(true);         // ✅ fetch cycle completed
+    }
+  };
 
-    fetchSalarySteps();
-  }, [sg]);
+  fetchSalarySteps();
+}, [sg]);
 
-  // Compute current salary from fetched steps
-  const currentSalary = useMemo(() => {
+
+  // computed from fetched steps
+  const autoSalary = useMemo(() => {
     return salarySteps[currentStep] ?? 0;
   }, [salarySteps, currentStep]);
 
-  // Update form whenever currentSalary changes
+  // whether automatic value is available
+  const autoAvailable = !!autoSalary && !Number.isNaN(autoSalary);
+
+  // If auto mode and auto value becomes available/changes, sync form.salary
   useEffect(() => {
-    form.setValue("salary", currentSalary, { shouldValidate: true, shouldDirty: true });
-  }, [currentSalary, form]);
+    if (!manual) {
+      form.setValue("salary", autoSalary, { shouldValidate: true, shouldDirty: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSalary, manual]);
+
+  // If fetch failed or there’s no auto value, force manual mode (but don’t turn it off if user already enabled it)
+useEffect(() => {
+  if (!manual && hasFetched && (fetchError || !autoAvailable)) {
+    setManual(true);
+  }
+}, [manual, hasFetched, autoAvailable, fetchError]);
+
+  // formatting helpers
+  const formatPeso = (n: number | string) => {
+    const v = Number(n || 0);
+    if (!Number.isFinite(v)) return "";
+    return `₱ ${new Intl.NumberFormat().format(v)}`;
+  };
+  const parseNumber = (s: string) => {
+    // strip currency symbols, commas, spaces
+    const clean = s.replace(/[₱,\s]/g, "");
+    const n = Number(clean);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  // Manual input value handlers (avoid reformat while typing)
+  const salaryValue = form.watch("salary");
+
+  const onManualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    // permit digits + dot; block letters
+    const cleaned = raw.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
+    // don’t format here to keep caret stable
+    form.setValue("salary", cleaned === "" ? 0 : Number(cleaned), { shouldDirty: true });
+  };
+
+  const onManualBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const n = parseNumber(String(e.target.value));
+    form.setValue("salary", n, { shouldValidate: true, shouldDirty: true });
+  };
 
   return (
     <div className="grid lg:grid-cols-3 grid-cols-1 gap-4">
@@ -64,8 +122,7 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
         name="salaryGrade"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Salary Grade</FormLabel>
-             <span className="text-red-500 align-top">*</span>
+            <FormLabel>Salary Grade <span className="text-red-500 align-top">*</span></FormLabel>
             <FormControl>
               <Input
                 disabled={loading}
@@ -88,29 +145,62 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
         </div>
       </div>
 
-      {/* Salary */}
+      {/* Salary (Auto / Manual) */}
       <FormField
         control={form.control}
         name="salary"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Salary</FormLabel>
-            <FormControl>
-              <Input
-                disabled
-                value={
-                  field.value
-                    ? `₱ ${new Intl.NumberFormat().format(Number(field.value))}`
-                    : fetching
-                    ? "Loading…"
-                    : ""
-                }
-                readOnly
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
+        render={({ field }) => {
+          const isManual = manual;
+          return (
+            <FormItem>
+              <div className="flex items-center justify-between">
+                <FormLabel>Salary</FormLabel>
+                <div className="flex items-center gap-2">
+                  <span className={cn("text-xs", isManual ? "text-amber-600" : "text-muted-foreground")}>
+                    {isManual ? "MANUAL" : "AUTO"}
+                  </span>
+                  <Switch
+                    checked={isManual}
+                    onCheckedChange={(v) => {
+                      setManual(v);
+                      if (!v) {
+                        // switching back to AUTO: push the computed value immediately
+                        form.setValue("salary", autoSalary, { shouldValidate: true, shouldDirty: true });
+                      }
+                    }}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              <FormControl>
+                {isManual ? (
+                  <Input
+                    inputMode="decimal"
+                    placeholder="Enter Salary"
+                    value={String(field.value ?? "")}
+                    onChange={onManualChange}
+                    onBlur={onManualBlur}
+                    disabled={loading}
+                  />
+                ) : (
+                  <Input
+                    disabled
+                    readOnly
+                    value={
+                      fetching
+                        ? "Loading…"
+                        : autoAvailable
+                        ? formatPeso(field.value ?? autoSalary)
+                        : ""
+                    }
+                  />
+                )}
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          );
+        }}
       />
     </div>
   );
