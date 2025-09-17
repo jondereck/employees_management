@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx-js-style';
 import { officeMapping, eligibilityMapping, appointmentMapping } from '@/utils/employee-mappings';
 
-type Column = { name: string; key: string };
+export type Column = { name: string; key: string };
 
 export type IdColumnSource = 'uuid' | 'bio' | 'employeeNo';
 
@@ -189,6 +189,7 @@ export async function generateExcelFile({
 
   const updatedData = data.employees.map((row: any) => {
     // --- map IDs to labels ---
+
     if (row.officeId && officeMapping[row.officeId]) {
       row.officeId = officeMapping[row.officeId];
     }
@@ -198,6 +199,11 @@ export async function generateExcelFile({
     if (row.employeeTypeId && appointmentMapping[row.employeeTypeId]) {
       row.employeeTypeId = appointmentMapping[row.employeeTypeId];
     }
+
+    row.appointment = row.employeeTypeId; // label string after mapping
+    row.eligibility = row.eligibilityId;  // label string after mapping
+    row.status = row.isArchived ? "Retired" : "Active";
+
 
     // --- Plantilla: designation name or fallback to office name ---
     if (row.designationId && officeMapping[row.designationId]) {
@@ -264,7 +270,7 @@ export async function generateExcelFile({
     // Or keep it separate (and add 'salaryExport' column in your modal):
     row.salaryExport = salaryExport;
     row.salarySourceExport = source;
-
+    if (row.yearsOfService === undefined) row.yearsOfService = "";
     // --- Normalize text for NFC (ñ fix) ---
     row = normalizeRowStringsNFC(row);
     return row;

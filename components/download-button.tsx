@@ -16,6 +16,8 @@ import clsx from 'clsx';
 import Chip from '@/app/(dashboard)/[departmentId]/(routes)/employees/components/chip';
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
+import { ExportTemplate, getAllTemplates, saveTemplateToLocalStorage } from '@/utils/export-templates';
+import ExportTemplatePicker from './ui/export-template-picker';
 
 
 
@@ -34,6 +36,27 @@ export default function DownloadStyledExcel() {
   const [posRuleReplaceWith, setPosRuleReplaceWith] = useState('');
 
   const [globalTargets, setGlobalTargets] = useState<string[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<ExportTemplate["id"]>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("hrps.export.template") as ExportTemplate["id"]) || "hr-core";
+    }
+    return "hr-core";
+  });
+
+
+  const templates = useMemo(() => getAllTemplates(), []);
+
+  function applyTemplate(tpl: ExportTemplate) {
+    setSelectedColumns(tpl.selectedKeys);
+    if (tpl.statusFilter) setStatusFilter(tpl.statusFilter);
+    if (tpl.idColumnSource) setIdColumnSource(tpl.idColumnSource);
+    if (tpl.appointmentFilters) {
+      setAppointmentFilters(tpl.appointmentFilters === "all" ? APPOINTMENT_OPTIONS : tpl.appointmentFilters);
+    }
+    if (tpl.positionReplaceRules) setPositionReplaceRules(tpl.positionReplaceRules);
+  }
+
+
 
   // near other useStates
   const [idColumnSource, setIdColumnSource] = useState<'uuid' | 'bio' | 'employeeNo'>(() => {
@@ -405,7 +428,6 @@ export default function DownloadStyledExcel() {
     { name: 'Latest Appointment', key: 'latestAppointment' },
     { name: 'Date Hired', key: 'dateHired' }, // Will format the date
     { name: 'Year(s) of Service', key: 'yearsOfService' },
-    { name: 'Salary', key: 'salary' },
     { name: 'Salary Grade', key: 'salaryGrade' },
     { name: 'Retired', key: 'isArchived' },
     { name: 'House No', key: 'houseNo' },
@@ -606,6 +628,34 @@ export default function DownloadStyledExcel() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
       >
+
+        <button
+          onClick={() => {
+            const name = prompt("Template name?");
+            if (!name) return;
+            saveTemplateToLocalStorage(name, {
+              selectedKeys: selectedColumns,
+              statusFilter,
+              idColumnSource,
+              appointmentFilters,
+              positionReplaceRules,
+              sheetName: "Sheet1",
+            });
+            // refresh list in UI if your picker reads it once
+            // simplest: force a reload or re-read getAllTemplates()
+          }}
+          className="text-xs text-blue-600 hover:underline"
+        >
+          Save current as template
+        </button>
+
+        <ExportTemplatePicker
+  value={selectedTemplateId}
+  templates={templates}         // <- pass it here
+  onApply={applyTemplate}
+  className="mb-3"
+/>
+
         {/* ADVANCED (single collapsible with both subsections) */}
         <div className="max-h-[75vh] overflow-y-auto pr-1">
           {/* ADVANCED (single box; sticky header + conditional mount for content) */}
