@@ -5,6 +5,7 @@ import { SettingsForm } from "./components/settings-form";
 import SettingsFooter from "./components/settings-footer";
 import { Separator } from "@/components/ui/separator";
 import CsvAttendanceImport from "../employees/components/csv-attendance-import";
+import NeonUsageCard from "@/components/neon-usage-card";
 
 interface settingsPageProps {
   params: {
@@ -38,7 +39,6 @@ const SettingsPage = async ({
     <div className="flex-1 space-y-4 p-8 pt-6">
       <SettingsForm initialData={department} />
     </div>
-  
     <Separator/>
     <div className="flex justify-center p-2 ">
       <SettingsFooter />

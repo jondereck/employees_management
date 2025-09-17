@@ -6,11 +6,11 @@ generator client {
 }
 
 datasource db {
-  provider     = "postgresql"
-  url          = env("DATABASE_URL")
-  directUrl    = env("DATABASE_URL_UNPOOLED")
-  shadowDatabaseUrl   = env("SHADOW_DATABASE_URL")
-  relationMode = "prisma"
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DATABASE_URL_UNPOOLED")
+  // shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  relationMode      = "prisma"
 }
 
 model Department {
@@ -40,15 +40,17 @@ model Billboard {
 }
 
 model Offices {
-  id           String     @id @default(uuid())
-  departmentId String
-  department   Department @relation("DepartmentToOffices", fields: [departmentId], references: [id])
-  billboardId  String
-  billboard    Billboard  @relation(fields: [billboardId], references: [id])
-  employee     Employee[] @relation("OfficesToEmployee")
-  name         String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                  String     @id @default(uuid())
+  departmentId        String
+  department          Department @relation("DepartmentToOffices", fields: [departmentId], references: [id])
+  billboardId         String
+  billboard           Billboard  @relation(fields: [billboardId], references: [id])
+  employee            Employee[] @relation("OfficesToEmployee")
+  designatedEmployees Employee[] @relation("OfficesToDesignation")
+
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([departmentId])
   @@index([billboardId])
@@ -92,18 +94,16 @@ enum Gender {
   Female
 }
 
-
-
 model Employee {
-  id                     String       @id @default(uuid())
-  employeeNo             String       @default("")
+  id                     String     @id @default(uuid())
+  employeeNo             String     @default("")
   departmentId           String
-  department             Department   @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
+  department             Department @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
   officeId               String
-  offices                Offices      @relation("OfficesToEmployee", fields: [officeId], references: [id])
-  prefix                 String       @default("")
-  lastName               String       @db.Text()
-  firstName              String       @db.Text()
+  offices                Offices    @relation("OfficesToEmployee", fields: [officeId], references: [id])
+  prefix                 String     @default("")
+  lastName               String     @db.Text()
+  firstName              String     @db.Text()
   middleName             String
   suffix                 String
   gender                 Gender
@@ -111,13 +111,13 @@ model Employee {
   position               String
   education              String
   birthday               DateTime
-  age                    String       @default("")
-  region                 String       @default("")
-  province               String       @default("")
-  city                   String       @default("")
-  barangay               String       @default("")
-  houseNo                String       @default("")
-  street                 String       @default("")
+  age                    String     @default("")
+  region                 String     @default("")
+  province               String     @default("")
+  city                   String     @default("")
+  barangay               String     @default("")
+  houseNo                String     @default("")
+  street                 String     @default("")
   // zipCode        String
   gsisNo                 String
   tinNo                  String
@@ -125,19 +125,23 @@ model Employee {
   pagIbigNo              String
   salary                 Float
   dateHired              DateTime
-  latestAppointment      String       @default("")
-  terminateDate          String       @default("")
+  latestAppointment      String     @default("")
+  terminateDate          String     @default("")
   salaryGrade            Int?       @default(0)
   salaryStep             Int?       @default(0)
-  memberPolicyNo         String       @default("")
-  nickname               String       @default("")
-  emergencyContactName   String       @default("")
-  emergencyContactNumber String       @default("")
+  memberPolicyNo         String     @default("")
+  nickname               String     @default("")
+  emergencyContactName   String     @default("")
+  emergencyContactNumber String     @default("")
   employeeTypeId         String
-  employeeLink           String       @default("")
-  employeeType           EmployeeType @relation(fields: [employeeTypeId], references: [id])
-  eligibilityId          String
-  eligibility            Eligibility  @relation(fields: [eligibilityId], references: [id])
+  employeeLink           String     @default("")
+  note                   String?    @db.Text
+  designationId          String?
+
+  designation   Offices?     @relation("OfficesToDesignation", fields: [designationId], references: [id])
+  employeeType  EmployeeType @relation(fields: [employeeTypeId], references: [id])
+  eligibilityId String
+  eligibility   Eligibility  @relation(fields: [eligibilityId], references: [id])
 
   isFeatured Boolean @default(false)
   isArchived Boolean @default(false)
@@ -153,8 +157,8 @@ model Employee {
   @@index([officeId])
   @@index([employeeTypeId])
   @@index([eligibilityId])
+  @@index([designationId])
 }
-
 
 model Image {
   id         String   @id @default(uuid())
@@ -167,12 +171,11 @@ model Image {
   @@index([employeeId])
 }
 
-
 model Salary {
-  id     Int     @id @default(autoincrement())
-  grade  Int      
+  id     Int   @id @default(autoincrement())
+  grade  Int
   step   Int
   amount Float
 
-  @@unique([grade, step]) 
+  @@unique([grade, step])
 }

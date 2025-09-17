@@ -1,7 +1,7 @@
 import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
-
+ 
 export async function PATCH(
   req: Request,
   { params }: { params: { departmentId: string; employeesId: string } }
@@ -50,12 +50,15 @@ export async function PATCH(
       officeId,
       eligibilityId,
       salaryGrade,
+      salaryStep,
       memberPolicyNo,
       age,
       nickname,
       emergencyContactName,
       emergencyContactNumber,
       employeeLink,
+       note,
+      designationId,
     } = body;
 
     // Validation
@@ -89,6 +92,16 @@ export async function PATCH(
         },
       });
       if (exists) return new NextResponse(JSON.stringify({ error: "Contact number already exists" }), { status: 400 });
+    }
+
+      if (designationId) {
+      const validDesignation = await prismadb.offices.findFirst({
+        where: { id: designationId, departmentId: params.departmentId },
+        select: { id: true },
+      });
+      if (!validDesignation) {
+        return new NextResponse(JSON.stringify({ error: "Invalid designationId (Office not found in this department)" }), { status: 400 });
+      }
     }
 
     // Update employee with merged images
@@ -136,6 +149,12 @@ export async function PATCH(
           deleteMany: {},
           createMany: { data: images.map((img: { url: string }) => img) },
         },
+         note: note ?? null,
+        designationId: designationId ?? null,
+      },
+      include: {
+        designation: { select: { id: true, name: true } },
+        images: true,
       },
     });
 

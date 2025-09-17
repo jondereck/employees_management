@@ -18,6 +18,7 @@ import { AlertModal } from "@/components/modals/alert-modal";
 import { ApiAlert } from "@/components/api-alert";
 import { useOrigin } from "@/hooks/use-origin";
 import CsvAttendanceImport from "../../employees/components/csv-attendance-import";
+import NeonUsageCard from "@/components/neon-usage-card";
 
 
 
@@ -144,6 +145,7 @@ export const SettingsForm = ({
         </form>
       </Form>
             <CsvAttendanceImport />
+             <NeonUsageCard/>
       <Separator/>
       <ApiAlert 
         title="NEXT_PUBLIC_API_URL" 

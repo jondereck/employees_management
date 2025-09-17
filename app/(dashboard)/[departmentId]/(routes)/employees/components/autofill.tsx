@@ -2,6 +2,7 @@
 
 import {useEffect, useId, useMemo, useState} from "react";
 import {FormItem, FormLabel, FormControl, FormMessage} from "@/components/ui/form";
+
 import {Input} from "@/components/ui/input";
 import {Button} from "@/components/ui/button";
 import {Select, SelectTrigger, SelectValue, SelectContent, SelectItem} from "@/components/ui/select";
@@ -10,6 +11,8 @@ import {Calendar} from "@/components/ui/calendar";
 import {cn} from "@/lib/utils";
 import {Calendar as CalendarIcon, Search, X, Loader2} from "lucide-react";
 import {format} from "date-fns";
+import { Textarea } from "@/components/ui/textarea";
+
 
 
 /** ---------- Formatting helpers ---------- */
@@ -88,8 +91,31 @@ function softApplyFormat(val: string, mode: FormatMode): string {
 }
 
 
+type SelectOption = { value: string; label: string };
+
+type SelectFetchProps = {
+  /** If provided, fetch from endpoint that returns SelectOption[] */
+  optionsEndpoint?: string;
+  /** Optional in-memory options (fallback or for SSR-provided lists) */
+  options?: SelectOption[];
+};
+
+type SelectProps = BaseProps & SelectFetchProps & {
+  kind: "select";
+  placeholder?: string;
+};
+
+type TextareaProps = BaseProps & {
+  kind: "textarea";
+  placeholder?: string;
+  rows?: number;
+  maxLength?: number;
+  showCounter?: boolean;
+};
+
+
 /** ---------- Props ---------- */
-type Kind = "text" | "datalist" | "phone" | "number" | "date";
+type Kind = "text" | "datalist" | "phone" | "number" | "date" | "select";
 type RHFField = { value?: any; onChange: (v: any) => void };
 
 type BaseProps = {
@@ -151,8 +177,14 @@ type TextProps = BaseProps & {
   autoFormatOnBlur?: boolean; 
 };
 
-type AutoFieldProps = DatalistProps | PhoneProps | NumberProps | DateProps | TextProps;
-
+type AutoFieldProps =
+  | DatalistProps
+  | PhoneProps
+  | NumberProps
+  | DateProps
+  | TextProps
+  | SelectProps
+  | TextareaProps;
 /** ---------- Component ---------- */
 export function AutoField(props: AutoFieldProps) {
   switch (props.kind) {
@@ -160,6 +192,8 @@ export function AutoField(props: AutoFieldProps) {
     case "phone": return <PhoneField {...props} />;
     case "number": return <NumberField {...props} />;
     case "datalist": return <DatalistField {...props} />;
+    case "select": return <SelectField {...props} />;
+    case "textarea": return <TextareaField {...props} />;
     case "text":
     default: return <TextField {...props} />;
   }
@@ -495,6 +529,95 @@ const listId = useId();
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{description}</span>
         {showCounter && typeof maxLength === "number" && <span>{(field.value?.length ?? 0)}/{maxLength}</span>}
+      </div>
+      <FormMessage />
+    </FormItem>
+  );
+}
+
+// SELECT (with endpoint/static options)
+function SelectField({
+  label, field, disabled, description, required, className,
+  placeholder = "Select...",
+  optionsEndpoint, options,
+}: SelectProps) {
+  const [opts, setOpts] = useState<SelectOption[]>(options ?? []);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!optionsEndpoint) return;
+      setLoading(true);
+      try {
+        const r = await fetch(optionsEndpoint, { cache: "no-store" });
+        const data = await r.json();
+        if (!alive) return;
+        const arr: SelectOption[] = Array.isArray(data)
+          ? data.map((o: any) => ({ value: String(o.id ?? o.value), label: String(o.name ?? o.label) }))
+          : [];
+        setOpts(arr);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [optionsEndpoint]);
+
+  return (
+    <FormItem className={className}>
+      <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
+      <FormControl>
+        <Select
+          disabled={disabled || loading}
+          value={field.value ?? ""}
+          onValueChange={(v) => field.onChange(v)}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder={loading ? "Loading..." : placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {opts.map(opt => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FormControl>
+      <p className="text-xs text-muted-foreground">{description}</p>
+      <FormMessage />
+    </FormItem>
+  );
+}
+
+// TEXTAREA
+ // shadcn textarea
+
+function TextareaField({
+  label, field, disabled, description, required, className,
+  placeholder, rows = 4, maxLength, showCounter,
+}: TextareaProps) {
+  const value: string = field.value ?? "";
+  return (
+    <FormItem className={className}>
+      <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
+      <FormControl>
+        <Textarea
+          disabled={disabled}
+          placeholder={placeholder}
+          value={value}
+          rows={rows}
+          maxLength={maxLength}
+          onChange={(e:any) => field.onChange(e.target.value)}
+          onBlur={(e:any) => field.onChange(normalizeSpaces(e.target.value))}
+        />
+      </FormControl>
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>{description}</span>
+        {showCounter && typeof maxLength === "number" && (
+          <span>{value.length}/{maxLength}</span>
+        )}
       </div>
       <FormMessage />
     </FormItem>

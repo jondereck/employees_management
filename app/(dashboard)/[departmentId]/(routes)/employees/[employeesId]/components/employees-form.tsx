@@ -116,6 +116,8 @@ const formSchema = z.object({
   emergencyContactName: z.string(),
   emergencyContactNumber: z.string(),
   employeeLink: z.string(),
+  designationId: z.string().optional().nullable(), // dropdown can be empty
+  note: z.string().optional().nullable(),
 });
 
 type EmployeesFormValues = z.infer<typeof formSchema>;
@@ -161,6 +163,8 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   emergencyContactName: "",
   emergencyContactNumber: "",
   employeeLink: "",
+  designationId: null,
+  note: "",
 };
 
 function mapToDefaults(src: any): EmployeesFormValues {
@@ -217,6 +221,8 @@ function mapToDefaults(src: any): EmployeesFormValues {
     images: Array.isArray(src.images) && src.images.length > 0
       ? src.images.map((i: any) => ({ url: i.url }))
       : EMPTY_DEFAULTS.images,
+    designationId: src.designationId ?? null,
+    note: src.note ?? "",
   };
 }
 
@@ -332,6 +338,8 @@ export const EmployeesForm = ({
         emergencyContactName: '',
         emergencyContactNumber: '',
         employeeLink: '',
+        designationId: null,
+        note: "",
       },
   });
 
@@ -948,7 +956,7 @@ export const EmployeesForm = ({
               name="barangay"
               render={({ field }) => (
                 <AutoField
-                kind="datalist"
+                  kind="datalist"
                   label="Barangay"
                   field={field}
                   endpoint="/api/autofill/barangays"
@@ -965,7 +973,7 @@ export const EmployeesForm = ({
               name="city"
               render={({ field }) => (
                 <AutoField
-                kind="datalist"
+                  kind="datalist"
                   label="City"
                   field={field}
                   endpoint="/api/autofill/cities"
@@ -982,8 +990,8 @@ export const EmployeesForm = ({
               control={form.control}
               name="province"
               render={({ field }) => (
-                  <AutoField
-                kind="datalist"
+                <AutoField
+                  kind="datalist"
                   label="Province"
                   field={field}
                   endpoint="/api/autofill/provinces"
@@ -1037,6 +1045,24 @@ export const EmployeesForm = ({
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="designationId"
+              render={({ field }) => (
+                <AutoField
+                  kind="select"
+                  label="Designated Office"
+                  field={field}
+                  placeholder="Choose office…"
+                  optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`} // or just "/api/offices"
+                  disabled={loading}
+                  description="Select the office where the employee is designated."
+                  required={false}
+                />
+              )}
+            />
+
             <FormField
               control={form.control}
               name="employeeTypeId"
@@ -1381,6 +1407,24 @@ export const EmployeesForm = ({
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
+              )}
+            />
+
+            
+            <FormField
+              control={form.control}
+              name="note"
+              render={({ field }) => (
+                <AutoField
+                  kind="textarea"
+                  label="Notes"
+                  field={field}
+                  placeholder="Enter any remarks, assignments, or special notes…"
+                  rows={5}
+                  maxLength={1000}
+                  showCounter
+                  disabled={loading}
+                />
               )}
             />
 

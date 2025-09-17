@@ -55,6 +55,8 @@ export async function POST(
       emergencyContactName,
       emergencyContactNumber,
       employeeLink,
+      note,
+      designationId,
     } = body;
 
 
@@ -202,6 +204,18 @@ export async function POST(
     }
 
 
+    if (designationId) {
+      const validDesignation = await prismadb.offices.findFirst({
+        where: { id: designationId, departmentId: params.departmentId },
+        select: { id: true },
+      });
+      if (!validDesignation) {
+        return new NextResponse(JSON.stringify({ error: "Invalid designationId (Office not found in this department)" }), { status: 400 });
+      }
+    }
+
+
+
 
 
 
@@ -253,9 +267,16 @@ export async function POST(
         nickname,
         emergencyContactName,
         emergencyContactNumber,
-        employeeLink
-      }
-    })
+        employeeLink,
+        note: note ?? null,
+        designationId: designationId ?? null,
+      },
+      include: {
+        designation: { select: { id: true, name: true } }, // handy for UI
+        images: true,
+      },
+    });
+
 
     return NextResponse.json(employee)
 
@@ -286,12 +307,12 @@ export async function GET(
     const isHeadParam = searchParams.get("isHead");
     const isFeatured =
       isFeaturedParam === "1" || isFeaturedParam === "true" ? true :
-      isFeaturedParam === "0" || isFeaturedParam === "false" ? false :
-      undefined;
+        isFeaturedParam === "0" || isFeaturedParam === "false" ? false :
+          undefined;
     const isHead =
       isHeadParam === "1" || isHeadParam === "true" ? true :
-      isHeadParam === "0" || isHeadParam === "false" ? false :
-      undefined;
+        isHeadParam === "0" || isHeadParam === "false" ? false :
+          undefined;
 
     // status: all | active | archived (default: all)
     const status = (searchParams.get("status") ?? "all").toLowerCase() as
@@ -318,10 +339,10 @@ export async function GET(
     if (q) {
       where.OR = [
         { employeeNo: { contains: q, mode: "insensitive" } },
-        { lastName:   { contains: q, mode: "insensitive" } },
-        { firstName:  { contains: q, mode: "insensitive" } },
+        { lastName: { contains: q, mode: "insensitive" } },
+        { firstName: { contains: q, mode: "insensitive" } },
         { middleName: { contains: q, mode: "insensitive" } },
-        { position:   { contains: q, mode: "insensitive" } },
+        { position: { contains: q, mode: "insensitive" } },
         { contactNumber: { contains: q, mode: "insensitive" } },
         // add more fields as you need
       ];
@@ -334,6 +355,7 @@ export async function GET(
         offices: true,
         employeeType: true,
         eligibility: true,
+        designation: { select: { id: true, name: true } },
       },
       orderBy: {
         updatedAt: "desc", // better for realtime UI
