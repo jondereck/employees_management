@@ -16,8 +16,9 @@ import clsx from 'clsx';
 import Chip from '@/app/(dashboard)/[departmentId]/(routes)/employees/components/chip';
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
-import { ExportTemplate, getAllTemplates, saveTemplateToLocalStorage } from '@/utils/export-templates';
+import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, loadUserTemplates, saveTemplateToLocalStorage } from '@/utils/export-templates';
 import ExportTemplatePicker from './ui/export-template-picker';
+import TemplatePickerBar from './ui/export-template-picker';
 
 
 
@@ -36,25 +37,37 @@ export default function DownloadStyledExcel() {
   const [posRuleReplaceWith, setPosRuleReplaceWith] = useState('');
 
   const [globalTargets, setGlobalTargets] = useState<string[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<ExportTemplate["id"]>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("hrps.export.template") as ExportTemplate["id"]) || "hr-core";
-    }
-    return "hr-core";
-  });
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(undefined);
+
+  const [templates, setTemplates] = useState(getAllTemplates());
+
+  function refreshTemplates() {
+    // If you merge built-ins + user templates inside getAllTemplates, just call it again:
+    setTemplates(getAllTemplates());
+  }
 
 
-  const templates = useMemo(() => getAllTemplates(), []);
 
   function applyTemplate(tpl: ExportTemplate) {
+    setSelectedTemplateId(tpl.id);
     setSelectedColumns(tpl.selectedKeys);
     if (tpl.statusFilter) setStatusFilter(tpl.statusFilter);
     if (tpl.idColumnSource) setIdColumnSource(tpl.idColumnSource);
+
+    // ⬇️ appointment filters from template
     if (tpl.appointmentFilters) {
-      setAppointmentFilters(tpl.appointmentFilters === "all" ? APPOINTMENT_OPTIONS : tpl.appointmentFilters);
+      if (tpl.appointmentFilters === "all") {
+        setAppointmentFilters(APPOINTMENT_OPTIONS);
+      } else {
+        // keep only labels that exist in current options
+        const allowed = new Set(APPOINTMENT_OPTIONS);
+        setAppointmentFilters(tpl.appointmentFilters.filter(x => allowed.has(x)));
+      }
     }
+
     if (tpl.positionReplaceRules) setPositionReplaceRules(tpl.positionReplaceRules);
   }
+
 
 
 
@@ -343,6 +356,22 @@ export default function DownloadStyledExcel() {
     return Array.from(new Set(Object.values(mappings.appointmentMapping))).sort();
   }, [mappings]);
 
+  // Re-apply template appointment filters when mappings arrive
+  useEffect(() => {
+    if (!mappings) return;
+    const lastTplId = localStorage.getItem("hrps.export.template");
+    const tpl = getAllTemplates().find(t => t.id === lastTplId);
+    if (!tpl?.appointmentFilters) return;
+
+    if (tpl.appointmentFilters === "all") {
+      setAppointmentFilters(APPOINTMENT_OPTIONS);
+    } else {
+      const allowed = new Set(APPOINTMENT_OPTIONS);
+      setAppointmentFilters(tpl.appointmentFilters.filter(x => allowed.has(x)));
+    }
+  }, [mappings, APPOINTMENT_OPTIONS.join("|")]);
+
+
   // Appointment filters state (default = all)
   const [appointmentFilters, setAppointmentFilters] = useState<string[]>([]);
   useEffect(() => {
@@ -423,11 +452,7 @@ export default function DownloadStyledExcel() {
     { name: 'Gender', key: 'gender' },
     { name: 'Contact Number', key: 'contactNumber' },
     { name: 'Education', key: 'education' },
-    { name: 'Birthday', key: 'birthday' }, // Will format the birthday
-    { name: 'Age', key: 'age' }, // Calculated from birthday
-    { name: 'Latest Appointment', key: 'latestAppointment' },
-    { name: 'Date Hired', key: 'dateHired' }, // Will format the date
-    { name: 'Year(s) of Service', key: 'yearsOfService' },
+   
     { name: 'Salary Grade', key: 'salaryGrade' },
     { name: 'Retired', key: 'isArchived' },
     { name: 'House No', key: 'houseNo' },
@@ -448,9 +473,11 @@ export default function DownloadStyledExcel() {
     { name: 'QR Path', key: 'qrPath' },
     { name: 'Plantilla', key: 'plantilla' },
     { name: 'Salary', key: 'salaryExport' },
-
-
-
+    { name: 'Birthday', key: 'birthday' }, // Will format the birthday
+    { name: 'Age', key: 'age' }, // Calculated from birthday
+    { name: 'Latest Appointment', key: 'latestAppointment' },
+    { name: 'Date Hired', key: 'dateHired' }, // Will format the date
+    { name: 'Year(s) of Service', key: 'yearsOfService' },
   ];
 
   const defaultSelectedColumns = [
@@ -575,6 +602,7 @@ export default function DownloadStyledExcel() {
         idColumnSource,
         imageExt,   // NEW
         qrExt,
+
       });
 
       const now = new Date();
@@ -649,12 +677,21 @@ export default function DownloadStyledExcel() {
           Save current as template
         </button>
 
-        <ExportTemplatePicker
-  value={selectedTemplateId}
-  templates={templates}         // <- pass it here
-  onApply={applyTemplate}
-  className="mb-3"
-/>
+
+        <TemplatePickerBar
+          className="mb-3"
+          value={selectedTemplateId}
+          templates={templates}
+          onApply={(tpl) => {
+            applyTemplate(tpl);
+            setSelectedTemplateId(tpl.id);
+          }}
+          onChangeSelected={setSelectedTemplateId}
+          clearLastUsedTemplate={clearLastUsedTemplate}
+          clearAllUserTemplates={clearAllUserTemplates}
+          deleteUserTemplate={deleteUserTemplate}
+          refreshTemplates={refreshTemplates}
+        />
 
         {/* ADVANCED (single collapsible with both subsections) */}
         <div className="max-h-[75vh] overflow-y-auto pr-1">

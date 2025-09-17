@@ -285,6 +285,13 @@ export async function generateExcelFile({
   }
 
   if (appointmentFilters !== 'all') {
+  const allowed = new Set(appointmentFilters.map(s => s.toLowerCase()));
+  filteredEmployees = filteredEmployees.filter((emp: any) =>
+    emp.employeeTypeId && allowed.has(String(emp.employeeTypeId).toLowerCase())
+  );
+}
+
+  if (appointmentFilters !== 'all') {
     const allowed = new Set(appointmentFilters.map(s => s.toLowerCase()));
     filteredEmployees = filteredEmployees.filter((emp: any) =>
       emp.employeeTypeId && allowed.has(String(emp.employeeTypeId).toLowerCase())
@@ -387,10 +394,10 @@ export async function generateExcelFile({
   for (let i = 0; i < filteredData.length; i++) {
     const rowNumber = i + 2;
     const birthdateCell = `N${rowNumber}`;
-    const ageCell = `O${rowNumber}`;
+    const ageCell = `AL${rowNumber}`;
     const hiredDateCell = `Q${rowNumber}`;
-    const serviceCell = `R${rowNumber}`;
-    const terminateDateCell = `AE${rowNumber}`;
+    const serviceCell = `AM${rowNumber}`;
+    const terminateDateCell = `AN${rowNumber}`;
 
     worksheet[ageCell] = {
       t: 'n',
