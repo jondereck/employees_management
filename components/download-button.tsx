@@ -424,6 +424,9 @@ export default function DownloadStyledExcel() {
     { name: 'isHead', key: 'isHead' },
     { name: 'Image Path', key: 'imagePath' },
     { name: 'QR Path', key: 'qrPath' },
+    { name: 'Plantilla', key: 'plantilla' },
+    { name: 'Salary', key: 'salaryExport' },
+
 
 
   ];
@@ -548,8 +551,8 @@ export default function DownloadStyledExcel() {
         mappings,
         positionReplaceRules,
         idColumnSource,
-         imageExt,   // NEW
-  qrExt,
+        imageExt,   // NEW
+        qrExt,
       });
 
       const now = new Date();
