@@ -11,7 +11,7 @@ export async function GET(
       where: { id: params.employeeId, departmentId: params.departmentId },
       include: {
         images: true,
-        offices: true,            // if your relation is singular, rename to 'office: true'
+         offices: { include: { billboard: true } },           // if your relation is singular, rename to 'office: true'
         employeeType: true,
         eligibility: true,
         designation: { select: { id: true, name: true } },

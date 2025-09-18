@@ -8,6 +8,7 @@ import Info from "../../components/ui/info";
 import Footer from "../../components/footer";
 import CameraScannerWrapper from "@/components/camera-scanner-wrapper";
 import { notFound } from "next/navigation";
+import EmployeeList from "../../components/ui/employee-list";
 
 export const revalidate = 0;
 
@@ -59,7 +60,7 @@ export default async function EmployeeInvdividualPage({ params }: PageProps) {
           </div>
 
           {/* If you want to show related personnel later */}
-          {/* <EmployeeList title="Related Personnel" items={suggestedPeople} /> */}
+          <EmployeeList title="Related Personnel" items={suggestedPeople} />
         </div>
 
         <CameraScannerWrapper />
