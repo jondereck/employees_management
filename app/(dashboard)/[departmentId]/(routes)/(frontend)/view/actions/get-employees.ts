@@ -1,42 +1,30 @@
-// actions/get-employees.ts
-import type { Employees } from "../types";
-import { getBaseUrl } from "@/lib/base-url";
-import { jsonSafe } from "@/lib/http";
+import { Employees } from "../types";
+import qs from "query-string";
 
-type Query = Record<string, string | number | boolean | null | undefined>;
+const URL = `${process.env.NEXT_PUBLIC_API_URL}/employees`
 
-// overload signature
-export default async function getEmployees(
-  departmentOrQuery: string | Query,
-  maybeQuery?: Query
-): Promise<Employees[]> {
-  const departmentId =
-    typeof departmentOrQuery === "string"
-      ? departmentOrQuery
-      : process.env.HOMEPAGE;
-
-  if (!departmentId) {
-    throw new Error(
-      "Missing departmentId. Pass it as the first argument or set HOMEPAGE."
-    );
-  }
-
-  const q: Query =
-    typeof departmentOrQuery === "string" ? (maybeQuery ?? {}) : departmentOrQuery;
-
-  const base = getBaseUrl();
-  const qs =
-    Object.keys(q).length === 0
-      ? ""
-      : "?" +
-        new URLSearchParams(
-          Object.entries(q).flatMap(([k, v]) =>
-            v === undefined || v === null ? [] : [[k, String(v)]]
-          )
-        ).toString();
-
-  const res = await fetch(`${base}/api/${departmentId}/employees${qs}`, {
-    cache: "no-store",
-  });
-  return (await jsonSafe<Employees[]>(res)) ?? [];
+interface Query {
+  officeId?: string;
+  employeeTypeId?: string;
+  eligibilityId?: string;
+  isFeatured?: boolean;
+  isArchived?: boolean;
 }
+
+const getEmployees = async (query: Query): Promise<Employees[]> => {
+  const url = qs.stringifyUrl({
+    url: URL,
+    query: {
+      officeId: query.officeId,
+      employeeTypeId: query.employeeTypeId,
+      eligibilityId: query.eligibilityId,
+      isFeatured: query.isFeatured,
+      isArchived: query.isArchived
+    },
+  });
+  const res = await fetch(url);
+
+  return res.json();
+};
+
+export default getEmployees;
