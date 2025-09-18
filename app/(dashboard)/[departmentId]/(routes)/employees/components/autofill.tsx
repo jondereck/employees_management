@@ -1,23 +1,23 @@
 "use client";
 
-import {useEffect, useId, useMemo, useState} from "react";
-import {FormItem, FormLabel, FormControl, FormMessage} from "@/components/ui/form";
+import { useEffect, useId, useMemo, useState } from "react";
+import { FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 
-import {Input} from "@/components/ui/input";
-import {Button} from "@/components/ui/button";
-import {Select, SelectTrigger, SelectValue, SelectContent, SelectItem} from "@/components/ui/select";
-import {Popover, PopoverTrigger, PopoverContent} from "@/components/ui/popover";
-import {Calendar} from "@/components/ui/calendar";
-import {cn} from "@/lib/utils";
-import {Calendar as CalendarIcon, Search, X, Loader2} from "lucide-react";
-import {format} from "date-fns";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { Calendar as CalendarIcon, Search, X, Loader2 } from "lucide-react";
+import { format } from "date-fns";
 import { Textarea } from "@/components/ui/textarea";
 
 
 
 /** ---------- Formatting helpers ---------- */
 type FormatMode = "none" | "upper" | "lower" | "title" | "sentence" | "numeric" | "alphanumeric";
-const ALL_MODES: FormatMode[] = ["none","upper","lower","title","sentence","numeric","alphanumeric"];
+const ALL_MODES: FormatMode[] = ["none", "upper", "lower", "title", "sentence", "numeric", "alphanumeric"];
 
 const toTitleCase = (s: string) =>
   s.toLowerCase().split(/\s+/).map(w => (w ? w[0].toUpperCase() + w.slice(1) : "")).join(" ");
@@ -110,6 +110,9 @@ type SelectProps = BaseProps & SelectFetchProps & {
   recentKey?: string;       // e.g. "eligibilityId"
   recentMax?: number;       // e.g. 3
   recentLabel?: string;     // e.g. "Recently used"
+
+  allowClear?: boolean;          // show small X when there is a value
+  clearLabel?: string;
 };
 
 type TextareaProps = BaseProps & {
@@ -132,7 +135,7 @@ type BaseProps = {
   description?: string;
   required?: boolean;
   className?: string;
-  
+
 };
 
 type DatalistProps = BaseProps & {
@@ -178,10 +181,10 @@ type TextProps = BaseProps & {
   placeholder?: string;
   maxLength?: number;
   showCounter?: boolean;
-    formatMode?: FormatMode;         // e.g. "title" | "upper" | "none"
+  formatMode?: FormatMode;         // e.g. "title" | "upper" | "none"
   normalizeWhitespace?: boolean;   // collapse multiple spaces, trim ends
   nameSafe?: boolean;              // allow letters, spaces, hyphen, apostrophe only
-  autoFormatOnBlur?: boolean; 
+  autoFormatOnBlur?: boolean;
 };
 
 type AutoFieldProps =
@@ -269,7 +272,7 @@ function TextField({
 
 
 // NUMBER (string-based to avoid losing leading 0; but constrained)
-function NumberField({label, field, disabled, description, required, className, placeholder, allowDecimal, min, max}: NumberProps) {
+function NumberField({ label, field, disabled, description, required, className, placeholder, allowDecimal, min, max }: NumberProps) {
   return (
     <FormItem className={className}>
       <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
@@ -303,7 +306,7 @@ function NumberField({label, field, disabled, description, required, className, 
 }
 
 // PHONE (PH 11-digit, pretty display with hyphens)
-function PhoneField({label, field, disabled, description, required, className, placeholder = "09XXXXXXXXX"}: PhoneProps) {
+function PhoneField({ label, field, disabled, description, required, className, placeholder = "09XXXXXXXXX" }: PhoneProps) {
   const display = formatPHPretty(field.value ?? "");
   return (
     <FormItem className={className}>
@@ -326,7 +329,7 @@ function PhoneField({label, field, disabled, description, required, className, p
 }
 
 // DATE (shadcn Calendar + Popover)
-function DateField({label, field, disabled, description, required, className, fromYear, toYear, disableFuture, placeholder = "Pick a date"}: DateProps) {
+function DateField({ label, field, disabled, description, required, className, fromYear, toYear, disableFuture, placeholder = "Pick a date" }: DateProps) {
   const currentYear = new Date().getFullYear();
   const fromY = fromYear ?? currentYear - 100;
   const toY = toYear ?? currentYear;
@@ -365,7 +368,7 @@ function DateField({label, field, disabled, description, required, className, fr
 function DatalistField({
   label, field, disabled, description, required, className, placeholder = "Search or enter...",
   endpoint, staticOptions, priorityOptions = [], pinSuggestions, pinnedLabel = "Suggestions",
-  showFormatSwitch, formatMode = "none", formatModes = ALL_MODES, maxLength, showCounter , priorityEndpoint
+  showFormatSwitch, formatMode = "none", formatModes = ALL_MODES, maxLength, showCounter, priorityEndpoint
 }: DatalistProps) {
   const [baseOptions, setBaseOptions] = useState<string[]>([]);
   const [mode, setMode] = useState<FormatMode>(formatMode);
@@ -376,62 +379,62 @@ function DatalistField({
   useEffect(() => setMode(formatMode), [formatMode]);
 
   useEffect(() => {
-  let alive = true;
-  (async () => {
-    try {
-      if (!priorityEndpoint) { setPriority([]); return; }
-      const r = await fetch(priorityEndpoint, { cache: "no-store" });
-      const d = await r.json().catch(() => null);
-      const pri = Array.isArray(d)
-        ? d
-        : d && Array.isArray(d.popular) ? d.popular
-        : d && Array.isArray(d.items) ? d.items
-        : [];
-      if (alive) setPriority(dedupeNormalized(pri));
-    } catch {
-      if (alive) setPriority([]);
-    }
-  })();
-  return () => { alive = false; };
-}, [priorityEndpoint]);
-useEffect(() => {
-  let alive = true;
-  (async () => {
-    try {
-      if (staticOptions?.length) { setBaseOptions(dedupeNormalized(staticOptions)); return; }
-      if (!endpoint) { setBaseOptions([]); return; }
-      setLoading(true);
-      const res = await fetch(endpoint, { cache: "no-store" });
-      const data = await res.json();
-      const arr = Array.isArray(data) ? data : [];
-      if (alive) setBaseOptions(dedupeNormalized(arr));
-    } catch {
-      if (alive) setBaseOptions([]);
-    } finally {
-      if (alive) setLoading(false);
-    }
-  })();
-  return () => { alive = false; };
-}, [endpoint, staticOptions]);
+    let alive = true;
+    (async () => {
+      try {
+        if (!priorityEndpoint) { setPriority([]); return; }
+        const r = await fetch(priorityEndpoint, { cache: "no-store" });
+        const d = await r.json().catch(() => null);
+        const pri = Array.isArray(d)
+          ? d
+          : d && Array.isArray(d.popular) ? d.popular
+            : d && Array.isArray(d.items) ? d.items
+              : [];
+        if (alive) setPriority(dedupeNormalized(pri));
+      } catch {
+        if (alive) setPriority([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [priorityEndpoint]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        if (staticOptions?.length) { setBaseOptions(dedupeNormalized(staticOptions)); return; }
+        if (!endpoint) { setBaseOptions([]); return; }
+        setLoading(true);
+        const res = await fetch(endpoint, { cache: "no-store" });
+        const data = await res.json();
+        const arr = Array.isArray(data) ? data : [];
+        if (alive) setBaseOptions(dedupeNormalized(arr));
+      } catch {
+        if (alive) setBaseOptions([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [endpoint, staticOptions]);
 
-const ordered = useMemo(() => dedupeNormalized([...priority, ...baseOptions]), [priority, baseOptions]);
+  const ordered = useMemo(() => dedupeNormalized([...priority, ...baseOptions]), [priority, baseOptions]);
 
-// datalist id: stable
-const listId = useId(); 
+  // datalist id: stable
+  const listId = useId();
 
- const value = field.value ?? ""; // keep raw while typing; format onBlur
+  const value = field.value ?? ""; // keep raw while typing; format onBlur
   const inputMode = mode === "numeric" ? "numeric" : undefined;
 
   const formattedOptions = useMemo(() => {
-  const seen = new Set<string>(), out: { raw: string; view: string }[] = [];
-  for (const raw of ordered) {                            // <-- changed
-    const clean = normalizeSpaces(raw);
-    const view = applyFormat(clean, mode);
-    const key = view.toLowerCase();
-    if (!seen.has(key)) { seen.add(key); out.push({ raw: clean, view }); }
-  }
-  return out;
-}, [ordered, mode]);        
+    const seen = new Set<string>(), out: { raw: string; view: string }[] = [];
+    for (const raw of ordered) {                            // <-- changed
+      const clean = normalizeSpaces(raw);
+      const view = applyFormat(clean, mode);
+      const key = view.toLowerCase();
+      if (!seen.has(key)) { seen.add(key); out.push({ raw: clean, view }); }
+    }
+    return out;
+  }, [ordered, mode]);
 
   const datalistOptions = formattedOptions;  // 👈 show everything
 
@@ -448,8 +451,10 @@ const listId = useId();
               <SelectContent>
                 {(formatModes ?? ALL_MODES).map((m) => (
                   <SelectItem key={m} value={m}>
-                    {({none:"No formatting", upper:"UPPERCASE", lower:"lowercase", title:"Title Case",
-                       sentence:"Sentence case", numeric:"Numbers only", alphanumeric:"Alphanumeric"} as Record<FormatMode,string>)[m]}
+                    {({
+                      none: "No formatting", upper: "UPPERCASE", lower: "lowercase", title: "Title Case",
+                      sentence: "Sentence case", numeric: "Numbers only", alphanumeric: "Alphanumeric"
+                    } as Record<FormatMode, string>)[m]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -472,8 +477,8 @@ const listId = useId();
             inputMode={inputMode}
             value={value}
             maxLength={maxLength}
-             onChange={(e) => field.onChange(softApplyFormat(e.target.value, mode))}
- onBlur={(e) => field.onChange(applyFormat(normalizeSpaces(e.target.value), mode))}
+            onChange={(e) => field.onChange(softApplyFormat(e.target.value, mode))}
+            onBlur={(e) => field.onChange(applyFormat(normalizeSpaces(e.target.value), mode))}
             className="border-0 shadow-none focus-visible:ring-0 pl-2 pr-16"
             autoCapitalize="off" autoComplete="off" spellCheck={false}
           />
@@ -485,53 +490,53 @@ const listId = useId();
                 </Button>
               ) : null}
           </div>
-         <datalist id={listId}>
-  {datalistOptions.map((o) => (
-    <option key={o.raw} value={o.view} />
-  ))}
-</datalist>
+          <datalist id={listId}>
+            {datalistOptions.map((o) => (
+              <option key={o.raw} value={o.view} />
+            ))}
+          </datalist>
         </div>
       </FormControl>
 
-{pinSuggestions && (priority.length > 0 || (priorityOptions?.length ?? 0) > 0) && (
-  <div className="mt-1 flex flex-wrap items-center gap-2">
-    <span className="text-xs text-muted-foreground">{pinnedLabel}</span>
+      {pinSuggestions && (priority.length > 0 || (priorityOptions?.length ?? 0) > 0) && (
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">{pinnedLabel}</span>
 
-    {/* Chips from fetched priorityEndpoint  ✅ */}
-    {priority.map((p) => {
-      const txt = applyFormat(normalizeSpaces(p), mode);
-      return (
-        <Button
-          key={`pri-${p}`}
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="h-7"
-          onClick={() => field.onChange(txt)}
-        >
-          {txt}
-        </Button>
-      );
-    })}
+          {/* Chips from fetched priorityEndpoint  ✅ */}
+          {priority.map((p) => {
+            const txt = applyFormat(normalizeSpaces(p), mode);
+            return (
+              <Button
+                key={`pri-${p}`}
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7"
+                onClick={() => field.onChange(txt)}
+              >
+                {txt}
+              </Button>
+            );
+          })}
 
-    {/* Chips from prop-based priorityOptions (existing) */}
-    {dedupeNormalized(priorityOptions ?? []).map((p) => {
-      const txt = applyFormat(normalizeSpaces(p), mode);
-      return (
-        <Button
-          key={`prop-${p}`}
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="h-7"
-          onClick={() => field.onChange(txt)}
-        >
-          {txt}
-        </Button>
-      );
-    })}
-  </div>
-)}
+          {/* Chips from prop-based priorityOptions (existing) */}
+          {dedupeNormalized(priorityOptions ?? []).map((p) => {
+            const txt = applyFormat(normalizeSpaces(p), mode);
+            return (
+              <Button
+                key={`prop-${p}`}
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7"
+                onClick={() => field.onChange(txt)}
+              >
+                {txt}
+              </Button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{description}</span>
@@ -549,9 +554,11 @@ function SelectField({
   optionsEndpoint, options,
   // NEW
   priorityEndpoint, priorityOptions = [],
-  pinSuggestions, pinnedLabel = "Suggestions",  recentKey,
+  pinSuggestions, pinnedLabel = "Suggestions", recentKey,
   recentMax = 3,
   recentLabel = "Recently used",
+  allowClear = false,
+  clearLabel = "Clear selection",
 }: SelectProps) {
   const [opts, setOpts] = useState<SelectOption[]>(options ?? []);
   const [loading, setLoading] = useState(false);
@@ -566,15 +573,15 @@ function SelectField({
       // strings or objects
       return data.map((x: any) => {
         if (typeof x === "string") return ({ value: x, label: x });
-        if (x?.value && x?.label)   return ({ value: String(x.value), label: String(x.label) });
-        if (x?.id && x?.name)       return ({ value: String(x.id), label: String(x.name) });
+        if (x?.value && x?.label) return ({ value: String(x.value), label: String(x.label) });
+        if (x?.id && x?.name) return ({ value: String(x.id), label: String(x.name) });
         return null;
       }).filter(Boolean) as SelectOption[];
     }
     // also accept {items:[...]} or {popular:[...]}
     const arr = Array.isArray(data.items) ? data.items
-            : Array.isArray(data.popular) ? data.popular
-            : [];
+      : Array.isArray(data.popular) ? data.popular
+        : [];
     return toOptions(arr);
   };
 
@@ -622,7 +629,7 @@ function SelectField({
       if (!raw) return;
       const saved = JSON.parse(raw) as SelectOption[];
       setRecents(Array.isArray(saved) ? saved.slice(0, recentMax) : []);
-    } catch {}
+    } catch { }
   }, [recentKey, recentMax]);
 
   // NEW: util to persist a recent
@@ -634,51 +641,72 @@ function SelectField({
       const next = [opt, ...list.filter(x => x.value !== opt.value)].slice(0, recentMax);
       localStorage.setItem(`recent:${recentKey}`, JSON.stringify(next));
       setRecents(next);
-    } catch {}
+    } catch { }
   };
 
-  // dedupe by value (priority first)
   const seen = new Set<string>();
-  const ordered = [...pri, ...propPri, ...opts].filter(o => {
+  const ordered = [...pri, ...toOptions(priorityOptions), ...opts].filter(o => {
     const k = o.value.toLowerCase();
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
   });
 
-   const byValue = useMemo(() => {
+  const byValue = useMemo(() => {
     const map = new Map<string, SelectOption>();
     for (const o of ordered) map.set(o.value, o);
     return map;
   }, [ordered]);
 
+  const hasValue = Boolean(field.value);
   return (
     <FormItem className={className}>
       <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
+      <FormControl>
+        <div className="relative">
+          <Select
+            disabled={disabled || loading}
+            value={field.value ?? ""}
+            onValueChange={(v) => {
+              field.onChange(v);
+              const hit = byValue.get(v);
+              if (hit) pushRecent(hit);
+            }}
+          >
+            <SelectTrigger className={cn("w-full", allowClear && hasValue ? "pr-9" : undefined)}>
+              <SelectValue placeholder={loading ? "Loading..." : placeholder} />
+            </SelectTrigger>
 
-        <FormControl>
-       <Select
-          disabled={disabled || loading}
-          value={field.value ?? ""}
-          onValueChange={(v) => {
-            field.onChange(v);
-            const hit = byValue.get(v);
-            if (hit) pushRecent(hit);
-          }}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder={loading ? "Loading..." : placeholder} />
-          </SelectTrigger>
-          <SelectContent className="max-h-52 overflow-y-auto">
-            {ordered.map(opt => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <SelectContent className="max-h-52 overflow-y-auto">
+              {ordered.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Clear (X) button */}
+          {allowClear && hasValue && !disabled && !loading && (
+            <button
+              type="button"
+              aria-label={clearLabel}
+              title={clearLabel}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
+              onMouseDown={(e) => e.preventDefault()}     // stop opening the menu
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                field.onChange("");
+              }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </FormControl>
- <p className="text-xs text-muted-foreground">{description}</p>
+ 
+      <p className="text-xs text-muted-foreground">{description}</p>
       {/* Pinned suggestion chips */}
       {pinSuggestions && (recents.length > 0 || pri.length > 0 || propPri.length > 0) && (
         <div className="mt-2 space-y-1">
@@ -726,7 +754,7 @@ function SelectField({
         </div>
       )}
 
-     
+
       <FormMessage />
     </FormItem>
   );
@@ -734,7 +762,7 @@ function SelectField({
 
 
 // TEXTAREA
- // shadcn textarea
+// shadcn textarea
 
 function TextareaField({
   label, field, disabled, description, required, className,
@@ -751,8 +779,8 @@ function TextareaField({
           value={value}
           rows={rows}
           maxLength={maxLength}
-          onChange={(e:any) => field.onChange(e.target.value)}
-          onBlur={(e:any) => field.onChange(normalizeSpaces(e.target.value))}
+          onChange={(e: any) => field.onChange(e.target.value)}
+          onBlur={(e: any) => field.onChange(normalizeSpaces(e.target.value))}
         />
       </FormControl>
       <div className="flex justify-between text-xs text-muted-foreground">

@@ -1018,10 +1018,14 @@ export const EmployeesForm = ({
                   label="Plantilla Designation"
                   field={field}
                   placeholder="Choose office…"
-                  optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`} // or just "/api/offices"
+                  optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`}
+                  recentKey="designationId"
+                  recentMax={3}
+                  recentLabel="Recently used"
                   disabled={loading}
                   description="Plantilla office record."
                   required={false}
+                  allowClear       
                 />
               )}
             />
