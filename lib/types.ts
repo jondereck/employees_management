@@ -64,6 +64,8 @@ export interface EmployeeWithRelations {
   employeeType: { id: string; name: string; value: string };
   eligibility: { id: string; name: string; value: string };
   images: ImageFile[];
+  designation?: { id: string; name: string } | null;
+  note?: string | null;
 }
 
 export interface EmployeesColumn {

@@ -143,6 +143,9 @@ const employees = useMemo(() => {
       employeeLink: emp.employeeLink ?? "",
       createdAt: emp.createdAt,
       updatedAt: emp.updatedAt,
+      designation: emp.designation ?? null,
+      note: emp.note ?? null,
+      
     })) as EmployeesColumn[];
   } else {
     merged = data ?? [];
