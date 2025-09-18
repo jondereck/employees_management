@@ -2,29 +2,7 @@ import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { departmentId: string; employeeId: string } }
-) {
-  try {
-    const employee = await prismadb.employee.findFirst({
-      where: { id: params.employeeId, departmentId: params.departmentId },
-      include: {
-        images: true,
-         offices: { include: { billboard: true } },           // if your relation is singular, rename to 'office: true'
-        employeeType: true,
-        eligibility: true,
-        designation: { select: { id: true, name: true } },
-      },
-    });
-    return NextResponse.json(employee ?? null, { status: 200 });
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: "Failed to fetch employee", detail: String(e?.message ?? e) },
-      { status: 500 }
-    );
-  }
-}
+
  
 export async function PATCH(
   req: Request,
@@ -186,5 +164,42 @@ export async function PATCH(
   } catch (error) {
     console.log("[EMPLOYEES_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });
+  }
+}
+
+
+
+
+export async function GET(
+  req: Request,
+  { params }: { params: { employeesId: string } }
+) {
+  try {
+
+
+    if (!params.employeesId) {
+      return new NextResponse("Employee id is required", { status: 400 });
+    }
+
+
+    const employee = await prismadb.employee.findUnique({
+      where: {
+        id: params.employeesId,
+
+      },
+      include: {
+        images: true,
+        offices: true,
+        employeeType: true,
+        eligibility: true,
+        designation: { select: { id: true, name: true } },
+      },
+    });
+
+    return NextResponse.json(employee);
+
+  } catch (error) {
+    console.log("[EMPLOYEES_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 })
   }
 }
