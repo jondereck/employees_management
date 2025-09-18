@@ -9,6 +9,8 @@ import EmployeesLoadingSkeleton from "@/components/skeleteon/employees-loading-s
 import CameraScannerWrapper from "@/components/camera-scanner-wrapper";
 
 
+
+
 const EmployeesPage = async ({
   params
 }: {
@@ -60,11 +62,13 @@ const EmployeesPage = async ({
       employeeType: true,
       eligibility: true,
       images: true,
+      designation: { select: { id: true, name: true } },
     },
     orderBy: {
       updatedAt: 'desc'
     }
   });
+
 
   const formattedEmployees: EmployeesColumn[] = employees.map((item) => ({
     id: item.id,
@@ -125,6 +129,11 @@ const EmployeesPage = async ({
     emergencyContactName: item.emergencyContactName,
     emergencyContactNumber: item.emergencyContactNumber,
     employeeLink: item.employeeLink,
+    note: item.note ?? "",
+    designation: item.designation ? { id: item.designation.id, name: item.designation.name } : null,
+
+
+
   }));
 
   return (

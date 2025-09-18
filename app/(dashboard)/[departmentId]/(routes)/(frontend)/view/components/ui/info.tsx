@@ -38,6 +38,7 @@ import { DetailItem } from "./detail-item";
 import { salarySchedule } from "@/utils/salarySchedule";
 
 
+
 type Field = "fullName" | "position" | "office";
 
 
@@ -48,96 +49,98 @@ interface InfoProps {
 const Info = ({
   data,
 }: InfoProps) => {
-const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
-const [selectedFields, setSelectedFields] = useState<Field[]>(["fullName"]);
-const [format, setFormat] = useState<"uppercase" | "lowercase" | "capitalize">("capitalize");
-const [isInfoOpen, setIsInfoOpen] = useState(false);
-const [copied, setCopied] = useState(false);
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [selectedFields, setSelectedFields] = useState<Field[]>(["fullName"]);
+  const [format, setFormat] = useState<"uppercase" | "lowercase" | "capitalize">("capitalize");
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-const savedSalary = Number(data?.salary ?? 0); // ← manual/DB value, if any
+  const hasText = (v?: string | null) => !!v && v.trim().length > 0;
 
-const grade = Number(data?.salaryGrade ?? 0);
-const step = computeStep({
-  dateHired: data?.dateHired,
-  latestAppointment: data?.latestAppointment,
-}) || 1;
+  const savedSalary = Number(data?.salary ?? 0); // ← manual/DB value, if any
 
-const salaryRecord = salarySchedule.find((s) => s.grade === grade);
-const computedSalary = salaryRecord ? (salaryRecord.steps[step - 1] ?? 0) : 0;
+  const grade = Number(data?.salaryGrade ?? 0);
+  const step = computeStep({
+    dateHired: data?.dateHired,
+    latestAppointment: data?.latestAppointment,
+  }) || 1;
 
-// tiny tolerance to avoid rounding issues
-const EPS = 0.5;
-// If saved ≈ computed => AUTO; otherwise MANUAL
-const isManual = !(Math.abs(savedSalary - computedSalary) <= EPS);
+  const salaryRecord = salarySchedule.find((s) => s.grade === grade);
+  const computedSalary = salaryRecord ? (salaryRecord.steps[step - 1] ?? 0) : 0;
 
-const displaySalary = isManual ? savedSalary : computedSalary;
-const formattedSalary = formatSalary(String(displaySalary));
-const salaryMode = isManual ? "MANUAL" : "AUTO";
+  // tiny tolerance to avoid rounding issues
+  const EPS = 0.5;
+  // If saved ≈ computed => AUTO; otherwise MANUAL
+  const isManual = !(Math.abs(savedSalary - computedSalary) <= EPS);
+
+  const displaySalary = isManual ? savedSalary : computedSalary;
+  const formattedSalary = formatSalary(String(displaySalary));
+  const salaryMode = isManual ? "MANUAL" : "AUTO";
 
 
 
 
-const monthlySalary = salaryRecord ? salaryRecord.steps[step - 1] ?? 0 : 0;
+  const monthlySalary = salaryRecord ? salaryRecord.steps[step - 1] ?? 0 : 0;
 
-const annualSalary = calculateAnnualSalary(String(monthlySalary));
-const formattedAddress = addressFormat(data);
+  const annualSalary = calculateAnnualSalary(String(monthlySalary));
+  const formattedAddress = addressFormat(data);
 
-const yearService = calculateYearService(data.dateHired, data.terminateDate);
-const latestAppointmentService = calculateYearServiceLatestAppointment(data.latestAppointment);
+  const yearService = calculateYearService(data.dateHired, data.terminateDate);
+  const latestAppointmentService = calculateYearServiceLatestAppointment(data.latestAppointment);
 
-const formattedDateHired = getBirthday(data.dateHired);
-const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment);
-const formattedTerminateDate = formatTerminateDate(data.terminateDate);
-const calculatedAge = calculateAge(data.birthday);
-const formattedBirthday = getBirthday(data.birthday);
+  const formattedDateHired = getBirthday(data.dateHired);
+  const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment);
+  const formattedTerminateDate = formatTerminateDate(data.terminateDate);
+  const calculatedAge = calculateAge(data.birthday);
+  const formattedBirthday = getBirthday(data.birthday);
 
-const fullName = buildFullName(data);
-const copyFullName = buildCopyFullName(data);
+  const fullName = buildFullName(data);
+  const copyFullName = buildCopyFullName(data);
 
-const copyData: Record<Field, string> = {
-  fullName: copyFullName,
-  office: data.offices?.name || "",
-  position: data.position || "",
-};
+  const copyData: Record<Field, string> = {
+    fullName: copyFullName,
+    office: data.offices?.name || "",
+    position: data.position || "",
+  };
 
-// Load saved copy options
-useEffect(() => {
-  const saved = localStorage.getItem("copyOptions");
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      if (parsed.fields && parsed.format) {
-        setSelectedFields(parsed.fields);
-        setFormat(parsed.format);
-      }
-    } catch {}
-  }
-}, []);
+  // Load saved copy options
+  useEffect(() => {
+    const saved = localStorage.getItem("copyOptions");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.fields && parsed.format) {
+          setSelectedFields(parsed.fields);
+          setFormat(parsed.format);
+        }
+      } catch { }
+    }
+  }, []);
 
-const handleInfoClose = () => {
-  localStorage.setItem("copyOptions", JSON.stringify({ fields: selectedFields, format }));
-  setIsInfoOpen(false);
-};
+  const handleInfoClose = () => {
+    localStorage.setItem("copyOptions", JSON.stringify({ fields: selectedFields, format }));
+    setIsInfoOpen(false);
+  };
 
-const previewText = useMemo(() => {
-  const parts = selectedFields.map((field) => copyData[field]);
-  return applyFormat(parts.join(", "), format);
-}, [selectedFields, format, copyData]);
+  const previewText = useMemo(() => {
+    const parts = selectedFields.map((field) => copyData[field]);
+    return applyFormat(parts.join(", "), format);
+  }, [selectedFields, format, copyData]);
 
-const handleCopy = () => {
-  navigator.clipboard.writeText(previewText);
-  setCopied(true);
-  toast.success("Copied to clipboard!");
-  setTimeout(() => setCopied(false), 2000);
-};
+  const handleCopy = () => {
+    navigator.clipboard.writeText(previewText);
+    setCopied(true);
+    toast.success("Copied to clipboard!");
+    setTimeout(() => setCopied(false), 2000);
+  };
 
 
 
   return (
-   <div
-  className="bg-white p-6 rounded-xl shadow-lg border-4 print:border-0 print:shadow-none print:p-0 print:rounded-none transition-shadow duration-300 hover:shadow-2xl max-w-7xl mx-auto"
-  style={{ borderColor: data?.employeeType?.value }}
->
+    <div
+      className="bg-white p-6 rounded-xl shadow-lg border-4 print:border-0 print:shadow-none print:p-0 print:rounded-none transition-shadow duration-300 hover:shadow-2xl max-w-7xl mx-auto"
+      style={{ borderColor: data?.employeeType?.value }}
+    >
 
       {/* Status Banner */}
       <div
@@ -203,12 +206,25 @@ const handleCopy = () => {
               <span className="font-semibold">Department:</span>
               <span className="text-muted-foreground">{data?.offices?.name}</span>
             </div>
-            {/* Add other fields with tooltips if needed */}
+            <div className="flex items-center  justify-between first-letter:gap-2">
+
+              {/* HR Note — show only when non-empty; supports multi-line */}
+              {hasText(data?.note) && (
+                <DetailItem
+                  label="HR Note"
+                  value={
+                    <span className="whitespace-pre-wrap">
+                      {data!.note as string}
+                    </span>
+                  }
+                />
+              )}
+            </div>
           </div>
 
         </div>
         {/* QR Code and Controls */}
-       <div className="flex flex-col items-center gap-4 mt-4 sm:mt-1 print:hidden">
+        <div className="flex flex-col items-center gap-4 mt-4 sm:mt-1 print:hidden">
           <div className="hidden md:flex gap-3">
             <Button
               onClick={handleCopy}
@@ -231,9 +247,9 @@ const handleCopy = () => {
             </Button>
           </div>
 
-     <div className="transition-transform transform hover:scale-110 cursor-pointer">
-    <QrCodeGenerator departmentId={data.department} employeeId={data.id} />
-  </div>
+          <div className="transition-transform transform hover:scale-110 cursor-pointer">
+            <QrCodeGenerator departmentId={data.department} employeeId={data.id} />
+          </div>
 
           <CopyOptionsModal
             isOpen={isCopyModalOpen}
@@ -250,7 +266,7 @@ const handleCopy = () => {
           <Button
             onClick={() => window.open(data.employeeLink, "_blank")}
 
-             className="group px-4 py-2 sm:px-5 sm:py-2 font-semibold text-white flex items-center gap-3 rounded-md shadow-lg transition-all hover:shadow-xl hover:scale-[1.03]"
+            className="group px-4 py-2 sm:px-5 sm:py-2 font-semibold text-white flex items-center gap-3 rounded-md shadow-lg transition-all hover:shadow-xl hover:scale-[1.03]"
             style={{ backgroundColor: data.employeeType.value }}
             aria-label="Open employee files"
           >
@@ -272,11 +288,14 @@ const handleCopy = () => {
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 text-gray-800">
           <DetailItem label="Bio/Employee No." value={data?.employeeNo || "—"} />
+          {data?.designation?.name?.trim() && (
+            <DetailItem label="Plantilla Office" value={data.designation!.name} />
+          )}
           <DetailItem label="Gender" value={data?.gender || "—"} />
           <DetailItem label="Birthday" value={formattedBirthday || "—"} />
           <DetailItem label="Age" value={calculatedAge || "—"} />
           <DetailItem label="Educational Attainment" value={data?.education || "—"} />
-         <DetailItem label="Contact Number" value={formatContactNumber(data.contactNumber)} />
+          <DetailItem label="Contact Number" value={formatContactNumber(data.contactNumber)} />
           <DetailItem label="Address" value={formattedAddress || "—"} />
           <DetailItem
             label="Emergency Contact Person"
@@ -306,14 +325,14 @@ const handleCopy = () => {
             value={`${yearService.years} Y/s, ${yearService.months} Mon/s, ${yearService.days} Day/s`}
           />
           <DetailItem
-  label="Monthly Salary"
-  value={
-    <span className="inline-flex items-center gap-2">
-      <span>{formattedSalary}</span>
-      <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{salaryMode}</span>
-    </span>
-  }
-/>
+            label="Monthly Salary"
+            value={
+              <span className="inline-flex items-center gap-2">
+                <span>{formattedSalary}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{salaryMode}</span>
+              </span>
+            }
+          />
           <DetailItem label="Annual Salary" value={annualSalary || "—"} />
           <DetailItem label="Latest Appointment" value={formattedLatestAppointment || "—"} />
           <DetailItem

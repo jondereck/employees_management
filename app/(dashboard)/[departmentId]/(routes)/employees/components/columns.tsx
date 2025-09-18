@@ -100,6 +100,9 @@ export type EmployeesColumn = {
   emergencyContactName: string;
   emergencyContactNumber: string;
   employeeLink: string;
+ designation: { id: string; name: string } | null;
+note: string;
+
 }
 
 

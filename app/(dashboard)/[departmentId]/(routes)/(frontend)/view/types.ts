@@ -70,4 +70,6 @@ export interface Employees {
   emergencyContactName: string,
   emergencyContactNumber: string,
   employeeLink: string,
+  note: string;
+  designation: { id: string; name: string } | null;
 }

@@ -1006,10 +1006,10 @@ export const EmployeesForm = ({
           </div>
 
           <Separator />
-          
+
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
             <SalaryInput form={form} loading={loading} maxStep={8} />
-             <FormField
+            <FormField
               control={form.control}
               name="designationId"
               render={({ field }) => (
@@ -1022,6 +1022,7 @@ export const EmployeesForm = ({
                   recentKey="designationId"
                   recentMax={3}
                   recentLabel="Recently used"
+                  pinSuggestions
                   disabled={loading}
                   description="Plantilla office record."
                   required={false}
@@ -1042,7 +1043,7 @@ export const EmployeesForm = ({
                   recentKey="officeId"
                   recentMax={3}
                   recentLabel="Recently used"
-                  pinSuggestions                              
+                  pinSuggestions
                   // feed preloaded options
                   options={[...offices]
                     .sort((a, b) => a.name.localeCompare(b.name))
@@ -1051,7 +1052,7 @@ export const EmployeesForm = ({
                 />
               )}
             />
-           
+
             <FormField
               control={form.control}
               name="employeeTypeId"
