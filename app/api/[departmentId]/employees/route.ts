@@ -353,8 +353,8 @@ export async function GET(
       include: {
         images: true,
         offices: true,
-        employeeType: true,
-        eligibility: true,
+        employeeType: { select: { id: true, name: true, value: true } }, // <-- important
+      eligibility:  { select: { id: true, name: true, value: true } },
         designation: { select: { id: true, name: true } },
       },
       orderBy: {

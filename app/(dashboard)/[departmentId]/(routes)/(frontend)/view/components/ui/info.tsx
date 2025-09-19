@@ -260,25 +260,22 @@ const Info = ({
       </div>
 
 
-      <div className="flex items-center justify-between my-4">
-        {/* Employee Files Button */}
-        {data.employeeLink && (
-          <Button
-            onClick={() => window.open(data.employeeLink, "_blank")}
-
-            className="group px-4 py-2 sm:px-5 sm:py-2 font-semibold text-white flex items-center gap-3 rounded-md shadow-lg transition-all hover:shadow-xl hover:scale-[1.03]"
-            style={{ backgroundColor: data.employeeType.value }}
-            aria-label="Open employee files"
-          >
-            <span className="relative w-6 h-6">
-              <FolderMinus className="absolute inset-0 transition-opacity duration-300 group-hover:opacity-0" />
-              <FolderOpen className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-            </span>
-            <span className="text-base">Employee Files</span>
-          </Button>
-        )}
-      </div>
-
+     <div className="flex items-center justify-between my-4">
+  {data.employeeLink && (
+    <Button
+      onClick={() => window.open(data.employeeLink, "_blank")}
+      className="group px-4 py-2 sm:px-5 sm:py-2 font-semibold text-white flex items-center gap-3 rounded-md shadow-lg transition-all hover:shadow-xl hover:scale-[1.03]"
+      style={{ backgroundColor: data.employeeType?.value ?? "#64748b" }} // slate-500 fallback
+      aria-label="Open employee files"
+    >
+      <span className="relative w-6 h-6">
+        <FolderMinus className="absolute inset-0 transition-opacity duration-300 group-hover:opacity-0" />
+        <FolderOpen className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      </span>
+      <span className="text-base">Employee Files</span>
+    </Button>
+  )}
+</div>
       <Separator />
 
       {/* Cards Sections */}

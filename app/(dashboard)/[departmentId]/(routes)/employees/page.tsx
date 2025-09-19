@@ -68,7 +68,7 @@ const EmployeesPage = async ({
       updatedAt: 'desc'
     }
   });
-
+  
 
   const formattedEmployees: EmployeesColumn[] = employees.map((item) => ({
     id: item.id,
@@ -100,16 +100,20 @@ const EmployeesPage = async ({
     isHead: item.isHead,
     createdAt: format(item.createdAt, "MMMM do, yyyy"),
 
-    eligibility: {
+   eligibility: item.eligibility
+  ? {
       id: item.eligibility.id,
       name: item.eligibility.name,
       value: item.eligibility.value,
-    },
-    employeeType: {
+    }
+  : null,
+employeeType: item.employeeType
+  ? {
       id: item.employeeType.id,
       name: item.employeeType.name,
       value: item.employeeType.value,
-    },
+    }
+  : null,
     offices: {
       id: item.offices.id,
       name: item.offices.name,
@@ -130,7 +134,7 @@ const EmployeesPage = async ({
     emergencyContactNumber: item.emergencyContactNumber,
     employeeLink: item.employeeLink,
     note: item.note ?? "",
-    designation: item.designation ? { id: item.designation.id, name: item.designation.name } : null,
+designation: item.designation ? { id: item.designation.id, name: item.designation.name } : null,
 
 
 

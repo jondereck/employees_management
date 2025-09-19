@@ -17,13 +17,13 @@ export const revalidate = 60;
 const Homepage = async ({
 }) => {
   const employees = await getEmployees({ isFeatured: true });
-  const billboard = await getBillboard(`${process.env.DEFAULTBILLBOARD}`);
+
   
   return (
     <Container>
       <div className="space-y-10 pb-10 overflow-y-auto">
         <Navbar2 />
-        <Billboard data={billboard} offices={billboard}/>
+
       </div>
       <div className="flex flex-col gap-y-8 px-4 sm:px-6 lg:px-8">
       <EmployeeList title="Featured " items={employees} />

@@ -133,15 +133,15 @@ model Employee {
   nickname               String     @default("")
   emergencyContactName   String     @default("")
   emergencyContactNumber String     @default("")
-  employeeTypeId         String
+  employeeTypeId         String?
   employeeLink           String     @default("")
   note                   String?    @db.Text
   designationId          String?
 
   designation   Offices?     @relation("OfficesToDesignation", fields: [designationId], references: [id])
-  employeeType  EmployeeType @relation(fields: [employeeTypeId], references: [id])
-  eligibilityId String
-  eligibility   Eligibility  @relation(fields: [eligibilityId], references: [id])
+  employeeType  EmployeeType? @relation(fields: [employeeTypeId], references: [id])
+  eligibilityId String?
+  eligibility   Eligibility?  @relation(fields: [eligibilityId], references: [id])
 
   isFeatured Boolean @default(false)
   isArchived Boolean @default(false)
