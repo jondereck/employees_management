@@ -144,6 +144,8 @@ export async function generateExcelFile({
     cache: 'no-store',
   });
 
+  
+
   async function fetchStepsForGrade(sg: number): Promise<{ [step: number]: number }> {
     const res = await fetch(`/api/departments/salary?sg=${sg}`, { cache: 'no-store' });
     if (!res.ok) return {};
@@ -395,26 +397,61 @@ export async function generateExcelFile({
     });
   });
 
-  for (let i = 0; i < filteredData.length; i++) {
-    const rowNumber = i + 2;
-    const birthdateCell = `N${rowNumber}`;
-    const ageCell = `AL${rowNumber}`;
-    const hiredDateCell = `Q${rowNumber}`;
-    const serviceCell = `AM${rowNumber}`;
-    const terminateDateCell = `AN${rowNumber}`;
+// Helper to build A1 address from (rowNumber: 1-based, colIndex: 0-based)
+const addr = (rowNumber: number, colIndex: number) =>
+  XLSX.utils.encode_cell({ r: rowNumber - 1, c: colIndex });
+
+// Resolve current column indexes from the runtime headers array
+const idxBirthday       = headers.indexOf("Birthday");
+const idxAge            = headers.indexOf("Age");
+const idxDateHired      = headers.indexOf("Date Hired");
+const idxYearsOfService = headers.indexOf("Year(s) of Service");
+const idxTerminateDate  = headers.indexOf("Terminate Date");
+
+// Write formulas only if the needed columns are actually present/selected
+for (let i = 0; i < filteredData.length; i++) {
+  const rowNumber = i + 2; // header row = 1, data starts at 2
+
+  const birthdateCell =
+    idxBirthday >= 0 ? addr(rowNumber, idxBirthday) : undefined;
+  const ageCell =
+    idxAge >= 0 ? addr(rowNumber, idxAge) : undefined;
+  const hiredDateCell =
+    idxDateHired >= 0 ? addr(rowNumber, idxDateHired) : undefined;
+  const serviceCell =
+    idxYearsOfService >= 0 ? addr(rowNumber, idxYearsOfService) : undefined;
+  const terminateDateCell =
+    idxTerminateDate >= 0 ? addr(rowNumber, idxTerminateDate) : undefined;
+
+  // AGE = DATEDIF(Birthday, Today/Terminate, "Y")
+  if (ageCell && birthdateCell) {
+    const startRef = `IF(${birthdateCell}="","",DATEVALUE(${birthdateCell}))`;
+    const endRef = terminateDateCell
+      ? `IF(${terminateDateCell}="",TODAY(),DATEVALUE(${terminateDateCell}))`
+      : `TODAY()`;
 
     worksheet[ageCell] = {
-      t: 'n',
-      f: `IF(${birthdateCell}="", "", DATEDIF(${birthdateCell}, IF(${terminateDateCell}="", TODAY(), ${terminateDateCell}), "Y"))`,
+      t: "n",
+      f: `IF(${birthdateCell}="","",DATEDIF(${startRef},${endRef},"Y"))`,
       s: worksheet[ageCell]?.s || {},
     };
+  }
+
+  // YEARS OF SERVICE = DATEDIF(Date Hired, Today/Terminate, "Y")
+  if (serviceCell && hiredDateCell) {
+    const startRef = `IF(${hiredDateCell}="","",DATEVALUE(${hiredDateCell}))`;
+    const endRef = terminateDateCell
+      ? `IF(${terminateDateCell}="",TODAY(),DATEVALUE(${terminateDateCell}))`
+      : `TODAY()`;
 
     worksheet[serviceCell] = {
-      t: 'n',
-      f: `IF(${hiredDateCell}="", "", DATEDIF(${hiredDateCell}, IF(${terminateDateCell}="", TODAY(), ${terminateDateCell}), "Y"))`,
+      t: "n",
+      f: `IF(${hiredDateCell}="","",DATEDIF(${startRef},${endRef},"Y"))`,
       s: worksheet[serviceCell]?.s || {},
     };
   }
+}
+
 
   const columnWidths = headers.map((header) => {
     let maxLength = header.length;
