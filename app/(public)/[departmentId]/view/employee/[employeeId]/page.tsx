@@ -148,6 +148,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
       isArchived: true, // 👈 status source (true = inactive)
       dateHired: true,       // 👈 add
       createdAt: true,
+      updatedAt: true,
       offices: { select: { name: true } },
       images: { select: { url: true }, take: 1, orderBy: { createdAt: "desc" } },
     },
@@ -168,10 +169,20 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
   const isInactive = !!publicData.isArchived;
   const isActive = !isInactive;
 
+function formatUpdatedAt(d?: Date | null) {
+  if (!d) return "—";
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  }).format(new Date(d));
+}
+
   const orgName = dept?.name || "LGU Lingayen";
   const workingLine = isInactive
     ? `Previously associated with ${orgName}`
-    : `Currently working at ${orgName}`;
+    : `Currently working at ${orgName} as`;
 
   // Years of service (use dateHired if present, else createdAt)
   function yearsBetween(from: Date, to = new Date()) {
@@ -194,6 +205,8 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
     return trimmed[0].toUpperCase() + ".";
   }
 
+
+  
   return (
 <div className="min-h-screen flex flex-col bg-white">
   <BrandHeader />
@@ -257,11 +270,12 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                 </span>
               </div>
 
-              <p className="mt-1 text-sm font-bold text-muted-foreground break-words">
-                {publicData.position || "—"}
-              </p>
+           
               <p className="mt-1 text-xs font-light">
                 {workingLine}
+              </p>
+                 <p className="mt-1 text-sm font-bold text-muted-foreground break-words">
+                {publicData.position || "—"}
               </p>
             </div>
           </div>
@@ -277,6 +291,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
               Note: This employee is currently <strong>Active</strong>.
             </div>
           )}
+         
 
           {/* Details mini-grid */}
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -304,13 +319,18 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
             </div>
           </div>
 
-          <p className="mt-4 text-[11px] leading-4 text-muted-foreground">
-            Public view • Some details may be limited for privacy.
-          </p>
+   <p className="mt-4 text-[11px] leading-4 text-muted-foreground">
+  Verified by HRMO • Updated: {formatUpdatedAt(publicData.updatedAt)}
+</p>
+
+<p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+  Public view • Some details may be limited for privacy.
+</p>
         </div>
       </div>
     </Container>
   </main>
+  
 
   <ReportIssueBox
   contactEmail={process.env.NEXT_PUBLIC_HR_CONTACT_EMAIL || "hrmo@lingayen.gov.ph"}
