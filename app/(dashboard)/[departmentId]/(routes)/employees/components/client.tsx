@@ -25,6 +25,7 @@ import EmployeeFilters from "./employee-filters";
 import { format } from "date-fns";
 import { FloatingSelectionBar } from "./floating-selection-bar";
 import CsvAttendanceImport from "./csv-attendance-import";
+import { Badge } from "@/components/ui/badge";
 
 
 interface Option { id: string; name: string; }
@@ -54,16 +55,16 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
   const SEARCH_STORAGE_KEY = "employees_search_v1";
   const norm = (s?: string) => (s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 
-const [searchTerm, setSearchTerm] = useState<string>(() => {
-  try {
-    if (typeof window === "undefined") return "";
-    const raw = localStorage.getItem(SEARCH_STORAGE_KEY);
-    const saved = raw ? JSON.parse(raw) : "";
-    return typeof saved === "string" ? saved : "";
-  } catch {
-    return "";
-  }
-});
+  const [searchTerm, setSearchTerm] = useState<string>(() => {
+    try {
+      if (typeof window === "undefined") return "";
+      const raw = localStorage.getItem(SEARCH_STORAGE_KEY);
+      const saved = raw ? JSON.parse(raw) : "";
+      return typeof saved === "string" ? saved : "";
+    } catch {
+      return "";
+    }
+  });
 
   // persist on change
   useEffect(() => {
@@ -94,98 +95,98 @@ const [searchTerm, setSearchTerm] = useState<string>(() => {
   });
   const { employees: swrEmployees = [], isLoading, isError } = useEmployees(departmentId);
 
-  
-const employees = useMemo(() => {
-  let merged: EmployeesColumn[];
 
-  if (swrEmployees.length > 0) {
-    merged = swrEmployees.map((emp) => ({
-      id: emp.id,
-      department: emp.departmentId,
-      employeeNo: emp.employeeNo ?? "",
-      offices: emp.offices,
-      prefix: emp.prefix ?? "",
-      firstName: emp.firstName ?? "",
-      middleName: emp.middleName ?? "",
-      lastName: emp.lastName ?? "",
-      suffix: emp.suffix ?? "",
-      gender: emp.gender ?? "",
-      contactNumber: emp.contactNumber ?? "",
-      position: emp.position ?? "",
-      birthday: emp.birthday ? format(new Date(emp.birthday), "M d, yyyy") : "",
-      education: emp.education ?? "",
-      gsisNo: emp.gsisNo ?? "",
-      tinNo: emp.tinNo ?? "",
-      philHealthNo: emp.philHealthNo ?? "",
-      pagIbigNo: emp.pagIbigNo ?? "",
-      salary: typeof emp.salary === "number" ? String(emp.salary) : emp.salary ?? "",
-      dateHired: emp.dateHired ? format(new Date(emp.dateHired), "M d, yyyy") : "",
-      latestAppointment: emp.latestAppointment ?? "",
-      terminateDate: emp.terminateDate ?? "",
-      isFeatured: !!emp.isFeatured,
-      isHead: !!emp.isHead,
-      isArchived: !!emp.isArchived,
-      eligibility: emp.eligibility,
-      employeeType: emp.employeeType,
-      images: emp.images ?? [],
-      region: emp.region ?? "",
-      province: emp.province ?? "",
-      city: emp.city ?? "",
-      barangay: emp.barangay ?? "",
-      houseNo: emp.houseNo ?? "",
-      salaryGrade: emp.salaryGrade?.toString() ?? "",
-      salaryStep: emp.salaryStep?.toString() ?? "",
-      memberPolicyNo: emp.memberPolicyNo ?? "",
-      age: emp.age ?? "",
-      nickname: emp.nickname ?? "",
-      emergencyContactName: emp.emergencyContactName ?? "",
-      emergencyContactNumber: emp.emergencyContactNumber ?? "",
-      employeeLink: emp.employeeLink ?? "",
-      createdAt: emp.createdAt,
-      updatedAt: emp.updatedAt,
-      designation: emp.designation ?? null,
-      note: emp.note ?? null,
-      
-    })) as EmployeesColumn[];
-  } else {
-    merged = data ?? [];
-  }
+  const employees = useMemo(() => {
+    let merged: EmployeesColumn[];
 
-  return merged.sort((a, b) => {
-    const dateA = new Date((a as any).updatedAt || (a as any).createdAt).getTime();
-    const dateB = new Date((b as any).updatedAt || (b as any).createdAt).getTime();
-    return dateB - dateA;
-  });
-}, [swrEmployees, data]);
+    if (swrEmployees.length > 0) {
+      merged = swrEmployees.map((emp) => ({
+        id: emp.id,
+        department: emp.departmentId,
+        employeeNo: emp.employeeNo ?? "",
+        offices: emp.offices,
+        prefix: emp.prefix ?? "",
+        firstName: emp.firstName ?? "",
+        middleName: emp.middleName ?? "",
+        lastName: emp.lastName ?? "",
+        suffix: emp.suffix ?? "",
+        gender: emp.gender ?? "",
+        contactNumber: emp.contactNumber ?? "",
+        position: emp.position ?? "",
+        birthday: emp.birthday ? format(new Date(emp.birthday), "M d, yyyy") : "",
+        education: emp.education ?? "",
+        gsisNo: emp.gsisNo ?? "",
+        tinNo: emp.tinNo ?? "",
+        philHealthNo: emp.philHealthNo ?? "",
+        pagIbigNo: emp.pagIbigNo ?? "",
+        salary: typeof emp.salary === "number" ? String(emp.salary) : emp.salary ?? "",
+        dateHired: emp.dateHired ? format(new Date(emp.dateHired), "M d, yyyy") : "",
+        latestAppointment: emp.latestAppointment ?? "",
+        terminateDate: emp.terminateDate ?? "",
+        isFeatured: !!emp.isFeatured,
+        isHead: !!emp.isHead,
+        isArchived: !!emp.isArchived,
+        eligibility: emp.eligibility,
+        employeeType: emp.employeeType,
+        images: emp.images ?? [],
+        region: emp.region ?? "",
+        province: emp.province ?? "",
+        city: emp.city ?? "",
+        barangay: emp.barangay ?? "",
+        houseNo: emp.houseNo ?? "",
+        salaryGrade: emp.salaryGrade?.toString() ?? "",
+        salaryStep: emp.salaryStep?.toString() ?? "",
+        memberPolicyNo: emp.memberPolicyNo ?? "",
+        age: emp.age ?? "",
+        nickname: emp.nickname ?? "",
+        emergencyContactName: emp.emergencyContactName ?? "",
+        emergencyContactNumber: emp.emergencyContactNumber ?? "",
+        employeeLink: emp.employeeLink ?? "",
+        createdAt: emp.createdAt,
+        updatedAt: emp.updatedAt,
+        designation: emp.designation ?? null,
+        note: emp.note ?? null,
 
-
-// Unique positions from NON-archived employees only (case-insensitive, keep first casing)
-const activePositionOptions: Option[] = useMemo(() => {
-  const seen = new Set<string>();
-  const list: Option[] = [];
-  for (const e of employees) {
-    if (e.isArchived) continue;                       // <-- exclude archived owners
-    const p = (e.position ?? "").trim();
-    if (!p) continue;
-    const key = p.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      list.push({ id: p, name: p });
+      })) as EmployeesColumn[];
+    } else {
+      merged = data ?? [];
     }
-  }
-  // sort by display name
-  return list.sort((a, b) => a.name.localeCompare(b.name));
-}, [employees]);
+
+    return merged.sort((a, b) => {
+      const dateA = new Date((a as any).updatedAt || (a as any).createdAt).getTime();
+      const dateB = new Date((b as any).updatedAt || (b as any).createdAt).getTime();
+      return dateB - dateA;
+    });
+  }, [swrEmployees, data]);
 
 
-useEffect(() => {
-  setFilters((prev) => {
-    if (prev.positions.length === 0) return prev;
-    const allowed = new Set(activePositionOptions.map(o => o.id));
-    const next = prev.positions.filter(p => allowed.has(p));
-    return next.length === prev.positions.length ? prev : { ...prev, positions: next };
-  });
-}, [activePositionOptions]);
+  // Unique positions from NON-archived employees only (case-insensitive, keep first casing)
+  const activePositionOptions: Option[] = useMemo(() => {
+    const seen = new Set<string>();
+    const list: Option[] = [];
+    for (const e of employees) {
+      if (e.isArchived) continue;                       // <-- exclude archived owners
+      const p = (e.position ?? "").trim();
+      if (!p) continue;
+      const key = p.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push({ id: p, name: p });
+      }
+    }
+    // sort by display name
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [employees]);
+
+
+  useEffect(() => {
+    setFilters((prev) => {
+      if (prev.positions.length === 0) return prev;
+      const allowed = new Set(activePositionOptions.map(o => o.id));
+      const next = prev.positions.filter(p => allowed.has(p));
+      return next.length === prev.positions.length ? prev : { ...prev, positions: next };
+    });
+  }, [activePositionOptions]);
 
 
 
@@ -253,15 +254,31 @@ useEffect(() => {
 
 
 
-
+const { total, inactive, active } = useMemo(() => {
+  const total = filteredData?.length ?? 0;
+  const inactive = (filteredData ?? []).reduce((n, e) => n + (e?.isArchived ? 1 : 0), 0);
+  const active = total - inactive;
+  return { total, active, inactive };
+}, [filteredData]);
   return (
     <div className="flex flex-col min-h-screen px-4 sm:px-4 lg:px-6 py-6 gap-6 bg-gray-50">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <Heading
-          title={`Employees (${filteredData.length})`}
-          description="This count includes retirees/terminated."
-        />
+      <Heading
+  title={`Employees (${total})`}
+  description={
+    <div className="flex gap-2 items-center">
+      <Badge variant="secondary" className="flex items-center gap-1">
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
+        Active: {active}
+      </Badge>
+      <Badge variant="outline" className="flex items-center gap-1">
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" />
+        Inactive: {inactive}
+      </Badge>
+    </div>
+  }
+/>
         <div className="flex items-center gap-3">
           <Button
             onClick={() => router.push(`/${params.departmentId}/employees/new`)}

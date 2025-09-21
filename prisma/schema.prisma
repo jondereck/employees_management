@@ -92,6 +92,9 @@ enum Gender {
 
 model Employee {
   id                     String     @id @default(uuid())
+   publicId        String   @unique @default(uuid()) // opaque identifier for QR
+  publicEnabled   Boolean  @default(false)          // only show when true
+  publicVersion   Int      @default(1)              // bump to rotate (optional)
   employeeNo             String     @default("")
   departmentId           String
   department             Department @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onDelete: Restrict)
