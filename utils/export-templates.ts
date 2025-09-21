@@ -1,6 +1,8 @@
 // utils/export-templates.ts
 import type { Column, IdColumnSource, PositionReplaceRule } from "@/utils/download-excel";
 
+
+
 export type UserTemplate = Omit<ExportTemplate, "id"> & { id: string };
 export type TemplateId = "hr-core" | "plantilla" | "payroll" | "gov-ids";
 
@@ -24,6 +26,7 @@ export type ExportTemplate = {
   idColumnSource?: IdColumnSource;
   positionReplaceRules?: PositionReplaceRule[];
   sheetName?: string;
+    __version__?: number;
 };
 
 export const EXPORT_TEMPLATES: ExportTemplate[] = [
@@ -141,4 +144,113 @@ export function clearAllUserTemplates() {
 
 export function clearLastUsedTemplate() {
   if (typeof window !== "undefined") localStorage.removeItem(LAST_TPL_KEY);
+}
+
+
+export function getUserTemplates(): ExportTemplate[] {
+  return loadUserTemplates();
+}
+export function setUserTemplates(list: ExportTemplate[]) {
+  saveUserTemplates(list);
+}
+
+/** Very light guard so bad JSON files won't crash the app */
+function isTemplateLike(x: any): x is ExportTemplate {
+  return (
+    x &&
+    typeof x === "object" &&
+    typeof x.id === "string" &&
+    typeof x.name === "string" &&
+    Array.isArray(x.selectedKeys)
+  );
+}
+/**
+ * Export templates to a downloadable JSON Blob.
+ * - includeBuiltIns=false (default): only user templates
+ * - includeBuiltIns=true: user templates + built-in EXPORT_TEMPLATES
+ */
+export function exportTemplatesToBlob(opts?: { includeBuiltIns?: boolean }) {
+  const includeBuiltIns = !!opts?.includeBuiltIns;
+  const data = includeBuiltIns ? getAllTemplates() : getUserTemplates();
+
+  const payload = {
+    __kind__: "hrps.export.templates",
+    __version__: 1,
+    exportedAt: new Date().toISOString(),
+    includeBuiltIns,
+    templates: data,
+  };
+
+  return new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+}
+
+/**
+ * Import templates from an already-parsed object (usually JSON).
+ * - If an id collision is found:
+ *    • overwriteOnIdConflict=true  -> overwrite existing user template with same id
+ *    • overwriteOnIdConflict=false -> create a copy with a new id + " (copy)" suffix
+ *
+ * Returns: counts for UX toasting.
+ */
+export function importTemplatesFromObject(
+  obj: any,
+  options?: { overwriteOnIdConflict?: boolean }
+): { added: number; overwritten: number; skipped: number } {
+  const overwrite = !!options?.overwriteOnIdConflict;
+
+  // Accept either a payload { templates: [...] } or a raw array [...]
+  const list: any[] = Array.isArray(obj?.templates)
+    ? obj.templates
+    : Array.isArray(obj)
+    ? obj
+    : [];
+
+  if (!Array.isArray(list)) return { added: 0, overwritten: 0, skipped: 0 };
+
+  const user = getUserTemplates();
+  const byId = new Map(user.map((t) => [t.id, t]));
+
+  let added = 0;
+  let overwritten = 0;
+  let skipped = 0;
+
+  for (const item of list) {
+    if (!isTemplateLike(item)) {
+      skipped++;
+      continue;
+    }
+
+    // Ensure our internal version field is present for future migrations
+    item.__version__ = 1;
+
+    if (byId.has(item.id)) {
+      if (overwrite) {
+        byId.set(item.id, item);
+        overwritten++;
+      } else {
+        // generate a unique id based on your existing genTemplateId scheme
+        const copyId = genTemplateId(item.name || "template");
+        byId.set(copyId, { ...item, id: copyId, name: `${item.name} (copy)` });
+        added++;
+      }
+    } else {
+      byId.set(item.id, item);
+      added++;
+    }
+  }
+
+  const merged = Array.from(byId.values());
+  setUserTemplates(merged);
+
+  // If last-used template points to something that no longer exists, clear it
+  if (typeof window !== "undefined") {
+    const last = localStorage.getItem(LAST_TPL_KEY);
+    if (last && !merged.find((t) => t.id === last)) {
+      localStorage.removeItem(LAST_TPL_KEY);
+    }
+  }
+
+  return { added, overwritten, skipped };
 }

@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { FaFileExcel } from 'react-icons/fa';
+import { FileDown, FileUp, Save } from "lucide-react";
 import Modal from './ui/modal';
 import { generateExcelFile, Mappings, PositionReplaceRule } from '@/utils/download-excel';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
-import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage } from '@/utils/export-templates';
+import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage,exportTemplatesToBlob, importTemplatesFromObject } from '@/utils/export-templates';
 import TemplatePickerBar from './ui/export-template-picker';
 
 
@@ -618,6 +619,44 @@ export default function DownloadStyledExcel() {
       setLoading(false);
     }
   };
+const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+const handleClickImport = () => fileInputRef.current?.click();
+
+const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  e.target.value = ""; // let user choose same file again later
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
+    const { added, overwritten, skipped } = importTemplatesFromObject(json, {
+      overwriteOnIdConflict: false, // set true if you want overwrite behavior
+    });
+    refreshTemplates();
+    toast.success(
+      `Imported: +${added}${overwritten ? `, overwritten ${overwritten}` : ""}${
+        skipped ? `, skipped ${skipped}` : ""
+      }`
+    );
+  } catch (err) {
+    console.error(err);
+    toast.error("Import failed: invalid or corrupted JSON.");
+  }
+};
+
+const handleExport = (includeBuiltIns = false) => {
+  const blob = exportTemplatesToBlob({ includeBuiltIns });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = includeBuiltIns ? "hrps-templates-all.json" : "hrps-templates-user.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+  toast.message("Templates exported");
+};
 
 
   return (
@@ -652,28 +691,74 @@ export default function DownloadStyledExcel() {
         onClose={() => setModalOpen(false)}
       >
 
-        <button
-          onClick={() => {
-            const name = prompt("Template name?");
-            if (!name) return;
+     <div className="flex items-center gap-3 mb-2">
+  <button
+    onClick={() => {
+      const name = prompt("Template name?");
+      if (!name) return;
 
-            const newTpl = saveTemplateToLocalStorage(name, {
-              selectedKeys: selectedColumnsRef.current, // avoid stale closure
-              statusFilter,
-              idColumnSource,
-              appointmentFilters,
-              positionReplaceRules,
-              sheetName: "Sheet1",
-            });
+      const newTpl = saveTemplateToLocalStorage(name, {
+        selectedKeys: selectedColumnsRef.current,
+        statusFilter,
+        idColumnSource,
+        appointmentFilters,
+        positionReplaceRules,
+        sheetName: "Sheet1",
+      });
 
-            refreshTemplates();                 // <-- repopulate from localStorage
-            setSelectedTemplateId(newTpl.id);   // <-- highlight it in the UI
-            toast.success(`Saved template "${name}"`);
-          }}
-          className="text-xs text-blue-600 hover:underline"
-        >
-          Save current as template
-        </button>
+      refreshTemplates();
+      setSelectedTemplateId(newTpl.id);
+      toast.success(`Saved template "${name}"`);
+    }}
+    className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
+    title="Save current selections as a new template"
+  >
+     <Save className="h-4 w-4" />
+    Save Template
+  </button>
+
+  {/* Export user templates */}
+  <button
+    type="button"
+    onClick={() => handleExport(false)}
+    title="Export user templates (.json)"
+    className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
+  >
+    <FileDown className="h-4 w-4" />
+    Export
+  </button>
+
+  {/* Export all templates (built-ins + user) */}
+  <button
+    type="button"
+    onClick={() => handleExport(true)}
+    title="Export all templates (.json)"
+    className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
+  >
+    <FileDown className="h-4 w-4" />
+    Export All
+  </button>
+
+  {/* Import */}
+  <button
+    type="button"
+    onClick={handleClickImport}
+    title="Import templates (.json)"
+    className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
+  >
+    <FileUp className="h-4 w-4" />
+    Import
+  </button>
+
+  {/* Hidden file input */}
+  <input
+    ref={fileInputRef}
+    type="file"
+    accept="application/json"
+    onChange={handleImportFile}
+    className="hidden"
+  />
+</div>
 
 
         <TemplatePickerBar
