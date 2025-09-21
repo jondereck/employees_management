@@ -7,43 +7,36 @@ import Notifications from "@/app/(dashboard)/[departmentId]/(routes)/employees/c
 import { Employees } from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/types";
 import MobileSidebar from "./mobile-sidebar";
 import { MainNav } from "./main-nav";
-import { apiUrlForEmployees } from "@/utils/api";
 
 
 
 
 export const Navbar = async () => {
- const { userId } = auth();
-  if (!userId) redirect("/sign-in");
+  const { userId } = auth();
 
-  const departments = await prismadb.department.findMany({ where: { userId } });
-  const activeDeptId = departments[0]?.id;
-  if (!activeDeptId) {
-    // ...render minimal nav
-    return /* ... */;
+  if (!userId) {
+    redirect("/sign-in");
   }
 
-  const url = apiUrlForEmployees(activeDeptId);
-  const res = await fetch(url, { cache: "no-store" });
+  const department = await prismadb.department.findMany({
+    where: {
+      userId,
+    },
+  })
 
-  let employees: Employees[] = [];
-  try {
-    const ct = res.headers.get("content-type") || "";
-    if (res.ok && ct.includes("application/json")) {
-      employees = await res.json();
-    } else {
-      console.error("Employees API failed:", res.status, await res.text());
-    }
-  } catch (e) {
-    console.error("Employees API parse error:", e);
-  }
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+  // Fetch employee data on the server
+  const res = await fetch(`${apiUrl}/employees`);
+  const employees: Employees[] = await res.json();
+
   return (
     <div className="border-b ">
       <div className="flex items-center lg:justify-between px-4 my-5 md:my-2 h-16 ">
         <MobileSidebar/>
         <Back />
         <div>
-          <DepartmentSwitcher items={departments} className="hidden md:flex px-2" />
+          <DepartmentSwitcher items={department} className="hidden md:flex px-2" />
         </div>
         <MainNav className="hidden md:flex px-2" />
         <div className="ml-auto flex items-center space-x-4">

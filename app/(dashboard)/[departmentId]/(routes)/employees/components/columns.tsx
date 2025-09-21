@@ -84,8 +84,8 @@ export type EmployeesColumn = {
   isFeatured: boolean;
   isHead: boolean;
   isArchived: boolean;
-   eligibility: { id: string; name: string; value: string } | null;
-  employeeType: { id: string; name: string; value: string } | null;
+  eligibility: Eligibility;
+  employeeType: EmployeeType;
   images: Image[]; // Array of Image
   region: string;
   province: string;

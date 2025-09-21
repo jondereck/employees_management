@@ -1,16 +1,11 @@
-import type { Employees } from "../types";
-import { apiUrlForEmployee } from "@/utils/api";
+import { Employees } from "../types";
 
-const getEmployee = async (departmentId: string, id: string): Promise<Employees | null> => {
-  const url = apiUrlForEmployee(departmentId, id);
-  const res = await fetch(url, { cache: "no-store" });
+const URL = `${process.env.NEXT_PUBLIC_API_URL}/employees`
 
-  const ct = res.headers.get("content-type") || "";
-  if (res.ok && ct.includes("application/json")) {
-    return res.json();
-  }
-  console.error("getEmployee failed:", res.status, await res.text());
-  return null;
+const getEmployee = async (id:string): Promise<Employees> => {
+  const res = await fetch(`${URL}/${id}`);
+
+  return res.json();
 };
 
 export default getEmployee;

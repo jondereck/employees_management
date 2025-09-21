@@ -70,13 +70,18 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
 ];
 
 
-const USER_TPL_KEY = "hrps.userTemplates";
-const LAST_TPL_KEY = "hrps.export.template";
 
-function loadUserTemplates(): ExportTemplate[] {
+
+const USER_KEY = "hrps.user.templates";
+const LAST_USED_KEY = "hrps.export.template";
+// Safe read (handles SSR and bad JSON)
+
+
+
+export function loadUserTemplates(): UserTemplate[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(USER_TPL_KEY);
+    const raw = localStorage.getItem(USER_KEY);
     if (!raw) return [];
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr : [];
@@ -85,60 +90,49 @@ function loadUserTemplates(): ExportTemplate[] {
   }
 }
 
-function saveUserTemplates(list: ExportTemplate[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(USER_TPL_KEY, JSON.stringify(list));
-}
-
 export function getAllTemplates(): ExportTemplate[] {
-  // IMPORTANT: always read fresh from localStorage
-  const user = loadUserTemplates();
-  // avoid id collisions: keep first occurrence of an id
-  const merged: ExportTemplate[] = [];
-  const seen = new Set<string>();
-  for (const t of [...EXPORT_TEMPLATES, ...user]) {
-    if (!seen.has(t.id)) {
-      seen.add(t.id);
-      merged.push(t);
-    }
-  }
-  return merged;
+  // merge built-ins + user-defined; user ids won’t clash with fixed ones if you prefix with "user:"
+  const users = loadUserTemplates();
+  return [...EXPORT_TEMPLATES, ...users];
 }
 
-function genTemplateId(name: string) {
-  // simple unique id: slug + timestamp
-  const slug = name.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
-  return `${slug}-${Date.now()}`;
-}
-
+// Your existing saver (slightly hardened)
 export function saveTemplateToLocalStorage(
   name: string,
-  tpl: Omit<ExportTemplate, "id" | "name"> & Partial<Pick<ExportTemplate, "name">>
-): ExportTemplate {
-  const all = loadUserTemplates();
-  const id = genTemplateId(name);
-  const newTpl: ExportTemplate = { id, name, ...tpl };
-
-  // push and persist
-  all.push(newTpl);
-  saveUserTemplates(all);
-
-  // remember last used template id (your effects already read this)
-  if (typeof window !== "undefined") {
-    localStorage.setItem(LAST_TPL_KEY, id);
+  state: {
+    selectedKeys: string[];
+    statusFilter: "all" | "active" | "retired";
+    idColumnSource: "uuid" | "bio" | "employeeNo";
+    appointmentFilters: string[] | "all";
+    positionReplaceRules: PositionReplaceRule[];
+    sheetName?: string;
   }
-  return newTpl;
+) {
+  if (typeof window === "undefined") return;
+  const id = `user:${name.toLowerCase().trim().replace(/\s+/g, "-")}`;
+  const tpl: UserTemplate = { id, name, ...state, sheetName: state.sheetName ?? "Sheet1" };
+  const arr = loadUserTemplates();
+
+  // upsert by id (so saving with the same name overwrites)
+  const idx = arr.findIndex(t => t.id === id);
+  if (idx >= 0) arr[idx] = tpl; else arr.push(tpl);
+
+  localStorage.setItem(USER_KEY, JSON.stringify(arr));
 }
 
 export function deleteUserTemplate(id: string) {
-  const all = loadUserTemplates().filter(t => t.id !== id);
-  saveUserTemplates(all);
+  if (typeof window === "undefined") return;
+  const arr = loadUserTemplates().filter(t => t.id !== id);
+  localStorage.setItem(USER_KEY, JSON.stringify(arr));
 }
-
 export function clearAllUserTemplates() {
-  saveUserTemplates([]);
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(USER_KEY);
+  // optional: also clear the last used key
+  localStorage.removeItem(LAST_USED_KEY);
 }
 
 export function clearLastUsedTemplate() {
-  if (typeof window !== "undefined") localStorage.removeItem(LAST_TPL_KEY);
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LAST_USED_KEY);
 }

@@ -274,136 +274,74 @@ export const EmployeesForm = ({
 
 
 
-// helpers
-const up = (s?: string | null) => (s ?? "").toUpperCase();
-const toNum = (v: unknown, fallback = 0) =>
-  typeof v === "number" ? v : (v ? Number(v) : fallback);
-const toDate = (v?: string | Date | null) => (v ? new Date(v) : undefined);
 
-// a clean empty template that exactly matches EmployeesFormValues
-const EMPTY_DEFAULTS: EmployeesFormValues = {
-  prefix: "",
-  employeeNo: "",
-  lastName: "",
-  firstName: "",
-  middleName: "",
-  suffix: "",
-  images: [
-    {
-      url:
-        "https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg",
-    },
-  ],
-  gender: "",
-  contactNumber: "",
-  position: "",
-  birthday: undefined,
-  age: "",
-  gsisNo: "",
-  tinNo: "",
-  pagIbigNo: "",
-  philHealthNo: "",
-  salary: 0,
-  salaryGrade: "0",
+  const form = useForm<EmployeesFormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: initialData
+      ? {
+        ...initialData,
+        firstName: initialData.firstName.toUpperCase(),
+        middleName: initialData.middleName.toUpperCase(),
+        lastName: initialData.lastName.toUpperCase(),
+        province: initialData.province.toUpperCase(),
+        city: initialData.city.toUpperCase(),
+        barangay: initialData.barangay.toUpperCase(),
+        street: initialData.street.toUpperCase(),
 
-  dateHired: undefined,
-  latestAppointment: undefined,
-  terminateDate: "",
-  isFeatured: false,
-  isArchived: false,
-  isHead: false,
-  employeeTypeId: "",   // <- empty string instead of null
-  officeId: "",
-  eligibilityId: "",
-  designationId: null,  // <- if your schema allows null here
-  houseNo: "",
-  education: "",
-  region: "",
-  province: "",
-  city: "",
-  barangay: "",
-  street: "",
-  memberPolicyNo: "",
-  nickname: "",
-  emergencyContactName: "",
-  emergencyContactNumber: "",
-  employeeLink: "",
-  note: "",
-};
+        salary: Number(initialData.salary ?? 0),
+        salaryGrade: String(initialData.salaryGrade ?? "1"), // ✅ cast to string
 
-// map initialData -> EmployeesFormValues exactly
-const fromInitial = (initialData: any): EmployeesFormValues => ({
-  prefix: up(initialData.prefix),
-  employeeNo: initialData.employeeNo ?? "",
-  lastName: up(initialData.lastName),
-  firstName: up(initialData.firstName),
-  middleName: up(initialData.middleName),
-  suffix: up(initialData.suffix),
-
-  images:
-    Array.isArray(initialData.images) && initialData.images.length > 0
-      ? initialData.images.map((i: { url: string }) => ({ url: i.url }))
-      : EMPTY_DEFAULTS.images,
-
-  gender: initialData.gender ?? "",
-  contactNumber: initialData.contactNumber ?? "",
-  position: up(initialData.position),
-
-  birthday: toDate(initialData.birthday),
-  age: initialData.age ?? "",
-
-  gsisNo: initialData.gsisNo ?? "",
-  tinNo: initialData.tinNo ?? "",
-  pagIbigNo: initialData.pagIbigNo ?? "",
-  philHealthNo: initialData.philHealthNo ?? "",
-
-  salary: toNum(initialData.salary, 0),
-  salaryGrade: String(initialData.salaryGrade ?? "1"),
-
-
-  dateHired: toDate(initialData.dateHired),
-  latestAppointment: toDate(initialData.latestAppointment),
-  terminateDate: initialData.terminateDate ?? "",
-
-  isFeatured: !!initialData.isFeatured,
-  isArchived: !!initialData.isArchived,
-  isHead: !!initialData.isHead,
-
-  
-  // relation FKs (coerce null -> "")
-  employeeTypeId:
-    initialData.employeeType?.id ?? initialData.employeeTypeId ?? "",
-  officeId:
-    initialData.offices?.id ?? initialData.officeId ?? "",
-  eligibilityId:
-    initialData.eligibility?.id ?? initialData.eligibilityId ?? "",
-  designationId:
-    initialData.designation?.id ??
-    initialData.designationId ??
-    null, // keep null if schema allows null
-
-  // address
-  houseNo: up(initialData.houseNo),
-  education: initialData.education ?? "",
-  region: up(initialData.region),
-  province: up(initialData.province),
-  city: up(initialData.city),
-  barangay: up(initialData.barangay),
-  street: up(initialData.street),
-
-  memberPolicyNo: initialData.memberPolicyNo ?? "",
-  nickname: up(initialData.nickname),
-  emergencyContactName: up(initialData.emergencyContactName),
-  emergencyContactNumber: initialData.emergencyContactNumber ?? "",
-  employeeLink: initialData.employeeLink ?? "",
-  note: initialData.note ?? "",
-});
-
-const form = useForm<EmployeesFormValues>({
-  resolver: zodResolver(formSchema),
-  defaultValues: initialData ? fromInitial(initialData) : EMPTY_DEFAULTS,
-});
-
+        dateHired: initialData.dateHired ? new Date(initialData.dateHired) : undefined,
+        latestAppointment: initialData.latestAppointment ? new Date(initialData.latestAppointment) : undefined,
+      }
+      : {
+        prefix: '',
+        employeeNo: '',
+        lastName: '',
+        firstName: '',
+        middleName: '',
+        suffix: '',
+        images: [
+          {
+            url: 'https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg',
+          },
+        ],
+        gender: '',
+        contactNumber: '',
+        position: '',
+        birthday: undefined,
+        age: '',
+        gsisNo: '',
+        tinNo: '',
+        pagIbigNo: '',
+        philHealthNo: '',
+        salary: 0,
+        salaryGrade: "0", // ✅ make it string here too
+        dateHired: undefined,
+        latestAppointment: undefined,
+        terminateDate: '',
+        isFeatured: false,
+        isArchived: false,
+        isHead: false,
+        employeeTypeId: '',
+        officeId: '',
+        eligibilityId: '',
+        houseNo: '',
+        education: '',
+        region: '',
+        province: '',
+        city: '',
+        barangay: '',
+        street: '',
+        memberPolicyNo: '',
+        nickname: '',
+        emergencyContactName: '',
+        emergencyContactNumber: '',
+        employeeLink: '',
+        designationId: null,
+        note: "",
+      },
+  });
 
 
   const [calculatedAge, setCalculatedAge] = useState(0);
@@ -1088,8 +1026,6 @@ const form = useForm<EmployeesFormValues>({
                   disabled={loading}
                   description="Plantilla office record."
                   required={false}
-                  allowClear
-                  
                 />
               )}
             />

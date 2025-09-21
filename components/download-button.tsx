@@ -2,15 +2,22 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-
+import * as XLSX from 'xlsx-js-style';
 import { FaFileExcel } from 'react-icons/fa';
 import Modal from './ui/modal';
+import { officeMapping, eligibilityMapping, appointmentMapping } from "@/utils/employee-mappings";
 import { generateExcelFile, Mappings, PositionReplaceRule } from '@/utils/download-excel';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import clsx from 'clsx';
+import Chip from '@/app/(dashboard)/[departmentId]/(routes)/employees/components/chip';
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
-import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage } from '@/utils/export-templates';
+import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, loadUserTemplates, saveTemplateToLocalStorage } from '@/utils/export-templates';
+import ExportTemplatePicker from './ui/export-template-picker';
 import TemplatePickerBar from './ui/export-template-picker';
 
 
@@ -215,7 +222,6 @@ export default function DownloadStyledExcel() {
   // Load unique positions when modal opens
   useEffect(() => {
     if (!modalOpen) return;
-    refreshTemplates();
     (async () => {
       try {
         const res = await fetch('/api/backup-employee?' + Date.now(), { cache: 'no-store' });
@@ -446,13 +452,12 @@ export default function DownloadStyledExcel() {
     { name: 'Gender', key: 'gender' },
     { name: 'Contact Number', key: 'contactNumber' },
     { name: 'Education', key: 'education' },
-
+   
     { name: 'Salary Grade', key: 'salaryGrade' },
     { name: 'Retired', key: 'isArchived' },
     { name: 'House No', key: 'houseNo' },
     { name: 'Street', key: 'street' },
     { name: 'Barangay', key: 'barangay' },
-    { name: 'Comma', key: 'comma' },
     { name: 'City', key: 'city' },
     { name: 'Province', key: 'province' },
     { name: 'GSIS No', key: 'gsisNo' },
@@ -656,19 +661,16 @@ export default function DownloadStyledExcel() {
           onClick={() => {
             const name = prompt("Template name?");
             if (!name) return;
-
-            const newTpl = saveTemplateToLocalStorage(name, {
-              selectedKeys: selectedColumnsRef.current, // avoid stale closure
+            saveTemplateToLocalStorage(name, {
+              selectedKeys: selectedColumns,
               statusFilter,
               idColumnSource,
               appointmentFilters,
               positionReplaceRules,
               sheetName: "Sheet1",
             });
-
-            refreshTemplates();                 // <-- repopulate from localStorage
-            setSelectedTemplateId(newTpl.id);   // <-- highlight it in the UI
-            toast.success(`Saved template "${name}"`);
+            // refresh list in UI if your picker reads it once
+            // simplest: force a reload or re-read getAllTemplates()
           }}
           className="text-xs text-blue-600 hover:underline"
         >

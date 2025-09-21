@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx-js-style';
-
+import { officeMapping, eligibilityMapping, appointmentMapping } from '@/utils/employee-mappings';
 
 export type Column = { name: string; key: string };
 
@@ -187,9 +187,6 @@ export async function generateExcelFile({
     return stepsByGrade[grade]?.[step];
   }
 
-  const hasText = (v: unknown) =>
-  v != null && String(v).trim().length > 0;
-
   const updatedData = data.employees.map((row: any) => {
     // --- map IDs to labels ---
 
@@ -206,7 +203,6 @@ export async function generateExcelFile({
     row.appointment = row.employeeTypeId; // label string after mapping
     row.eligibility = row.eligibilityId;  // label string after mapping
     row.status = row.isArchived ? "Retired" : "Active";
-    row.comma = (hasText(row.barangay) && hasText(row.city)) ? "," : "";
 
 
     // --- Plantilla: designation name or fallback to office name ---
