@@ -1,16 +1,12 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider          = "postgresql"
-  url               = env("DATABASE_URL")
-  directUrl         = env("DATABASE_URL_UNPOOLED")
-  // shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
-  relationMode      = "prisma"
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  directUrl    = env("DATABASE_URL_UNPOOLED")
+  relationMode = "foreignKeys"   // <-- enforce at the DB level
 }
 
 model Department {
@@ -29,7 +25,7 @@ model Department {
 model Billboard {
   id           String     @id @default(uuid())
   departmentId String
-  department   Department @relation("DepartmentToBillboard", fields: [departmentId], references: [id])
+  department   Department @relation("DepartmentToBillboard", fields: [departmentId], references: [id], onDelete: Restrict)
   label        String
   imageUrl     String
   offices      Offices[]
@@ -42,9 +38,9 @@ model Billboard {
 model Offices {
   id                  String     @id @default(uuid())
   departmentId        String
-  department          Department @relation("DepartmentToOffices", fields: [departmentId], references: [id])
+  department          Department @relation("DepartmentToOffices", fields: [departmentId], references: [id], onDelete: Restrict)
   billboardId         String
-  billboard           Billboard  @relation(fields: [billboardId], references: [id])
+  billboard           Billboard  @relation(fields: [billboardId], references: [id], onDelete: Restrict)
   employee            Employee[] @relation("OfficesToEmployee")
   designatedEmployees Employee[] @relation("OfficesToDesignation")
 
@@ -59,7 +55,7 @@ model Offices {
 model EmployeeType {
   id           String     @id @default(uuid())
   departmentId String
-  department   Department @relation("DepartmentToEmployeeType", fields: [departmentId], references: [id])
+  department   Department @relation("DepartmentToEmployeeType", fields: [departmentId], references: [id], onDelete: Restrict)
   employee     Employee[] @relation()
   name         String
   value        String
@@ -78,9 +74,9 @@ enum EligibilityTypes {
 model Eligibility {
   id               String           @id @default(uuid())
   departmentId     String
-  department       Department       @relation("DepartmentToEligibility", fields: [departmentId], references: [id])
+  department       Department       @relation("DepartmentToEligibility", fields: [departmentId], references: [id], onDelete: Restrict)
   employee         Employee[]
-  eligibilityTypes EligibilityTypes // No default value for the enum field
+  eligibilityTypes EligibilityTypes
   name             String
   value            String
   createdAt        DateTime         @default(now())
@@ -98,9 +94,11 @@ model Employee {
   id                     String     @id @default(uuid())
   employeeNo             String     @default("")
   departmentId           String
-  department             Department @relation("DepartmentToEmployee", fields: [departmentId], references: [id])
+  department             Department @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onDelete: Restrict)
+
   officeId               String
-  offices                Offices    @relation("OfficesToEmployee", fields: [officeId], references: [id])
+  offices                Offices    @relation("OfficesToEmployee", fields: [officeId], references: [id], onDelete: Restrict)
+
   prefix                 String     @default("")
   lastName               String     @db.Text()
   firstName              String     @db.Text()
@@ -118,7 +116,6 @@ model Employee {
   barangay               String     @default("")
   houseNo                String     @default("")
   street                 String     @default("")
-  // zipCode        String
   gsisNo                 String
   tinNo                  String
   philHealthNo           String
@@ -134,14 +131,16 @@ model Employee {
   emergencyContactName   String     @default("")
   emergencyContactNumber String     @default("")
   employeeTypeId         String
-  employeeLink           String     @default("")
-  note                   String?    @db.Text
-  designationId          String?
+  employeeType           EmployeeType @relation(fields: [employeeTypeId], references: [id], onDelete: Restrict)
 
-  designation   Offices?     @relation("OfficesToDesignation", fields: [designationId], references: [id])
-  employeeType  EmployeeType @relation(fields: [employeeTypeId], references: [id])
-  eligibilityId String
-  eligibility   Eligibility  @relation(fields: [eligibilityId], references: [id])
+  note                   String?    @db.Text
+  employeeLink           String     @default("")
+
+  designationId          String?
+  designation            Offices?     @relation("OfficesToDesignation", fields: [designationId], references: [id], onDelete: SetNull)
+
+  eligibilityId          String
+  eligibility            Eligibility  @relation(fields: [eligibilityId], references: [id], onDelete: Restrict)
 
   isFeatured Boolean @default(false)
   isArchived Boolean @default(false)
@@ -162,9 +161,9 @@ model Employee {
 
 model Image {
   id         String   @id @default(uuid())
-  employeeId String // Foreign Key to Product
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  url        String // URL of the image
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade) // keep cascade delete for images
+  url        String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -179,3 +178,5 @@ model Salary {
 
   @@unique([grade, step])
 }
+
+

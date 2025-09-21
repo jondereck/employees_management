@@ -565,25 +565,115 @@ function SelectField({
   const [pri, setPri] = useState<SelectOption[]>([]);
 
   const [recents, setRecents] = useState<SelectOption[]>([]);
+  const normalizeOpt = (v: any) => String(v ?? "").trim();
+const normalizeLabel = (v: any) => String(v ?? "").trim();
 
-  // helper: normalize any payload into SelectOption[]
-  const toOptions = (data: any): SelectOption[] => {
-    if (!data) return [];
-    if (Array.isArray(data)) {
-      // strings or objects
-      return data.map((x: any) => {
-        if (typeof x === "string") return ({ value: x, label: x });
-        if (x?.value && x?.label) return ({ value: String(x.value), label: String(x.label) });
-        if (x?.id && x?.name) return ({ value: String(x.id), label: String(x.name) });
-        return null;
-      }).filter(Boolean) as SelectOption[];
+// 1) Normalize helpers stay as you wrote:
+const normV = (v: any) => String(v ?? "").trim();
+const normL = (v: any) => String(v ?? "").trim();
+
+// 2) Build a normalized "base" from the authoritative list (opts)
+const base = useMemo(() => {
+  const seen = new Set<string>();
+  const nn: SelectOption[] = [];
+  for (const o of toOptions(opts)) {
+    const value = normV(o.value);
+    const label = normL(o.label);
+    const k = value.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    nn.push({ value, label });
+  }
+  return nn;
+}, [opts]);
+
+// 3) Index base by label (lowercased) -> value (ID)
+const valueByLabel = useMemo(() => {
+  const m = new Map<string, string>();
+  for (const o of base) m.set(o.label.toLowerCase(), o.value);
+  return m;
+}, [base]);
+
+// 4) Normalize priority lists AND "snap" label-only items to base IDs
+const fixToBaseIds = (list: any): SelectOption[] => {
+  const out: SelectOption[] = [];
+  for (const o of toOptions(list)) {
+    const label = normL(o.label);
+    let value = normV(o.value);
+    // if value looks like a label (e.g. "Casual") and we have a matching base label, reuse the base ID
+    const maybe = valueByLabel.get(label.toLowerCase());
+    if (maybe) value = maybe;
+    out.push({ value, label });
+  }
+  return out;
+};
+
+const priFixed = useMemo(() => fixToBaseIds(pri), [pri, valueByLabel]);
+const propPriFixed = useMemo(() => fixToBaseIds(priorityOptions), [priorityOptions, valueByLabel]);
+
+// 5) Merge (priority first), then dedupe by value (ID)
+const ordered = useMemo(() => {
+  const seen = new Set<string>();
+  const merged = [...priFixed, ...propPriFixed, ...base];
+  const out: SelectOption[] = [];
+  for (const o of merged) {
+    const value = normV(o.value);
+    const label = normL(o.label);
+    const k = value.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ value, label });
+  }
+  return out;
+}, [priFixed, propPriFixed, base]);
+
+
+function toOptions(data: any): SelectOption[] {
+  if (!data) return [];
+  const make = (x: any): SelectOption | null => {
+    // strings
+    if (typeof x === "string") {
+      const v = normalizeOpt(x);
+      if (!v) return null;
+      return { value: v, label: v };
     }
-    // also accept {items:[...]} or {popular:[...]}
-    const arr = Array.isArray(data.items) ? data.items
-      : Array.isArray(data.popular) ? data.popular
-        : [];
-    return toOptions(arr);
+    // { value, label }
+    if (x && (x.value ?? x.label)) {
+      const value = normalizeOpt(x.value);
+      const label = normalizeLabel(x.label ?? x.value);
+      if (!value) return null;
+      return { value, label };
+    }
+    // { id, name }
+    if (x && (x.id ?? x.name)) {
+      const value = normalizeOpt(x.id);
+      const label = normalizeLabel(x.name ?? x.id);
+      if (!value) return null;
+      return { value, label };
+    }
+    return null;
   };
+
+  const arr = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.popular)
+        ? data.popular
+        : [];
+
+  const seen = new Set<string>();
+  const out: SelectOption[] = [];
+  for (const raw of arr) {
+    const opt = make(raw);
+    if (!opt) continue;
+    const key = opt.value.toLowerCase(); // dedupe by normalized value
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(opt);
+  }
+  return out;
+}
 
   // fetch main options (if endpoint provided)
   useEffect(() => {
@@ -632,47 +722,50 @@ function SelectField({
     } catch { }
   }, [recentKey, recentMax]);
 
-  // NEW: util to persist a recent
-  const pushRecent = (opt: SelectOption) => {
-    if (!recentKey) return;
-    try {
-      const raw = localStorage.getItem(`recent:${recentKey}`);
-      const list: SelectOption[] = raw ? JSON.parse(raw) : [];
-      const next = [opt, ...list.filter(x => x.value !== opt.value)].slice(0, recentMax);
-      localStorage.setItem(`recent:${recentKey}`, JSON.stringify(next));
-      setRecents(next);
-    } catch { }
-  };
+const pushRecent = (opt: SelectOption) => {
+  if (!recentKey) return;
+  try {
+    const raw = localStorage.getItem(`recent:${recentKey}`);
+    const list: SelectOption[] = raw ? JSON.parse(raw) : [];
+    const norm = {
+      value: normalizeOpt(opt.value),
+      label: normalizeLabel(opt.label),
+    };
+    const next = [norm, ...list.filter(x => normalizeOpt(x.value).toLowerCase() !== norm.value.toLowerCase())]
+      .slice(0, recentMax);
+    localStorage.setItem(`recent:${recentKey}`, JSON.stringify(next));
+    setRecents(next);
+  } catch {}
+};
 
-  const seen = new Set<string>();
-  const ordered = [...pri, ...toOptions(priorityOptions), ...opts].filter(o => {
-    const k = o.value.toLowerCase();
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+const byValue = useMemo(() => {
+  const m = new Map<string, SelectOption>();
+  for (const o of ordered) m.set(o.value.toLowerCase(), o);
+  return m;
+}, [ordered]);
 
-  const byValue = useMemo(() => {
-    const map = new Map<string, SelectOption>();
-    for (const o of ordered) map.set(o.value, o);
-    return map;
-  }, [ordered]);
-
+useEffect(() => {
+  // quick sanity log
+  console.table(ordered);
+}, [ordered]);
   const hasValue = Boolean(field.value);
+  const currentValue = field.value == null ? "" : String(field.value).trim();
   return (
     <FormItem className={className}>
       <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
       <FormControl>
         <div className="relative">
-          <Select
-            disabled={disabled || loading}
-            value={field.value ?? ""}
-            onValueChange={(v) => {
-              field.onChange(v);
-              const hit = byValue.get(v);
-              if (hit) pushRecent(hit);
-            }}
-          >
+         
+<Select
+  disabled={disabled || loading}
+  value={currentValue}
+  onValueChange={(v) => {
+    const nv = String(v).trim();                 // <- normalize stored value
+    field.onChange(nv);
+    const hit = byValue.get(nv.toLowerCase());   // <- normalize lookup key
+    if (hit) pushRecent(hit);
+  }}
+>
             <SelectTrigger className={cn("w-full", allowClear && hasValue ? "pr-9" : undefined)}>
               <SelectValue placeholder={loading ? "Loading..." : placeholder} />
             </SelectTrigger>
