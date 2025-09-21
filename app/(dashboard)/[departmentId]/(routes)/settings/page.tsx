@@ -6,6 +6,7 @@ import SettingsFooter from "./components/settings-footer";
 import { Separator } from "@/components/ui/separator";
 import CsvAttendanceImport from "../employees/components/csv-attendance-import";
 import NeonUsageCard from "@/components/neon-usage-card";
+import TogglePublicButton from "./components/toggle-public-button";
 
 interface settingsPageProps {
   params: {
@@ -21,6 +22,14 @@ const SettingsPage = async ({
   if (!userId) {
     redirect("/sign-in");
   }
+
+
+  
+// You'll need to fetch an employee or decide which one this refers to:
+const employee = await prismadb.employee.findFirst({
+  where: { departmentId: params.departmentId },
+  select: { id: true, publicEnabled: true },
+});
 
   const department = await prismadb.department.findFirst({
     where: {
@@ -39,7 +48,15 @@ const SettingsPage = async ({
     <div className="flex-1 space-y-4 p-8 pt-6">
       <SettingsForm initialData={department} />
     </div>
-    <Separator/>
+    <Separator />
+
+    {employee && (
+  <TogglePublicButton
+    departmentId={params.departmentId}
+    employeeId={employee.id}
+    initialEnabled={!!employee.publicEnabled}
+  />
+)}
     <div className="flex justify-center p-2 ">
       <SettingsFooter />
     </div>

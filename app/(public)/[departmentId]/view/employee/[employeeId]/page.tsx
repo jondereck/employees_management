@@ -10,6 +10,7 @@ import Info from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/
 import Footer from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/components/footer";
 import CameraScannerWrapper from "@/components/camera-scanner-wrapper";
 import prismadb from "@/lib/prismadb";
+import TogglePublicButton from "@/app/(dashboard)/[departmentId]/(routes)/settings/components/toggle-public-button";
 
 export const revalidate = 0;
 
@@ -74,7 +75,21 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                     before:border-y-transparent before:border-l-primary">
                     Employee Information
                   </h2>
+                  <div className="mb-4 flex items-center gap-2">
+  <TogglePublicButton
+    departmentId={params.departmentId}
+    employeeId={employee.id}
+    initialEnabled={!!employee.publicEnabled}
+  />
+  <span className={`text-xs px-2 py-1 rounded-full ${employee.publicEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"}`}>
+    {employee.publicEnabled ? "Public enabled" : "Public disabled"}
+  </span>
+</div>
                   <Info data={employee} />
+
+                  <div className="flex items-center gap-2 mb-4">
+  
+</div>
                 </div>
               </div>
             </div>
@@ -122,6 +137,8 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
   return (
     <div className="bg-white">
+
+      
       <Container>
         <div className="px-4 py-10 sm:px-6 lg:px-8 mx-auto max-w-xl">
           <div className="flex items-center gap-4">
