@@ -354,7 +354,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
               {/* Name + meta */}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl font-bold truncate">
+                  <h1 className="text-xl sm:text-2xl font-bold ">
                     {publicData.firstName} {getMiddleInitial(publicData.middleName)}{" "}
                     {publicData.lastName} {publicData.suffix || ""}
                   </h1>
