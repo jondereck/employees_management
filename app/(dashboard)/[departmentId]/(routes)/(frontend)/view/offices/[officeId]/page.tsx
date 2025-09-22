@@ -1,83 +1,76 @@
+// app/[departmentId]/view/offices/[officeId]/page.tsx
 import getEligibility from "../../actions/get-eligibility";
 import getEmployeeType from "../../actions/get-employee-type";
 import getEmployees from "../../actions/get-employees";
 import getOffice from "../../actions/get-office";
-import getOffices from "../../actions/get-offices";
 import { getEmployeeTypeCountsByOffice } from "../../actions/get-employee-type-by-offices";
 import Billboard from "../../components/billboard";
 import Footer from "../../components/footer";
 import Navbar2 from "../../components/navbar";
-import SearchInput from "../../components/search-bar";
 import Container from "../../components/ui/container";
-import EmployeeCard from "../../components/ui/employee-card";
-import NoResults from "../../components/ui/no-results";
 import Filter from "./components/filter";
 import MobileFilter from "./components/mobile-filter";
 import { getEligibilityCountsByOffice } from "../../actions/get-eligibility-by-offices";
 import EmployeeList from "./components/employee-list-view";
 import { getEmployeeCountsByOffice } from "../../actions/get-employee-counts-office";
-import SetLoadingClient from "./components/set-loading-client";
-
-
 
 export const revalidate = 0;
 
 interface OfficesPageProps {
   params: {
-    officeId: string
-  },
+    officeId: string;
+    departmentId: string;
+  };
   searchParams: {
-    employeeTypeId: string;
-    eligibilityId: string;
-
-  }
+    employeeTypeId?: string;
+    eligibilityId?: string;
+  };
 }
 
-const OfficesPage = async ({
-  params,
-  searchParams
-}: OfficesPageProps) => {
-  const officeId = params.officeId;
+const OfficesPage = async ({ params }: OfficesPageProps) => {
+  const { officeId } = params;
 
-
+  // Totals
   const employeeCounts = await getEmployeeCountsByOffice(officeId);
-  const totalEmployeeCount = employeeCounts.find((count) => count.id === officeId)?.count || 0;
+  const totalEmployeeCount =
+    employeeCounts.find((c) => c.id === officeId)?.count ?? 0;
 
   const total = await getEmployeeTypeCountsByOffice(officeId);
   const totalEligibility = await getEligibilityCountsByOffice(officeId);
 
-
+  // ✅ ONLY active employees in this office
   const employees = await getEmployees({
-    officeId: params.officeId,
-    employeeTypeId: searchParams.employeeTypeId,
-    eligibilityId: searchParams.eligibilityId,
+    officeId,
+    status: "active",
   });
 
   const employeeType = await getEmployeeType();
   const eligibility = await getEligibility();
-  const office = await getOffice(params.officeId);
-
+  const office = await getOffice(officeId);
 
   return (
     <div className="bg-white">
       <Container>
         <Navbar2 />
 
-        <Billboard
-          data={office.billboard}
-          offices={office}
-        />
-        <div className="mx-8 mb-5 lg:text-2xl text-sm flex font-semibold border-b-2 ">
-          {/* Display total employee count */}
+        {/* Guard in case office or billboard is null */}
+        {!!office?.billboard && (
+          <Billboard data={office.billboard} offices={office} />
+        )}
+
+        <div className="mx-8 mb-5 lg:text-2xl text-sm flex font-semibold border-b-2">
           <p className="font-bold">
-            Total Employee(s): {typeof totalEmployeeCount === 'object' ? totalEmployeeCount._all : totalEmployeeCount}
+            Total Employee(s):{" "}
+            {typeof totalEmployeeCount === "object"
+              ? // if your count resolver returns {_all}
+              
+                totalEmployeeCount._all
+              : totalEmployeeCount}
           </p>
         </div>
 
         <div className="px-4 sm:px-6 lg:px-8 pb-24">
           <div className="lg:grid lg:grid-cols-5 lg:gap-x-8">
-
-
             <MobileFilter
               employeeType={employeeType}
               eligibility={eligibility}
@@ -102,7 +95,8 @@ const OfficesPage = async ({
                 data={eligibility}
               />
             </div>
-            <div className="mt-6 lg:col-span-4 lg:mt-0">
+
+            <div className="mt-6 lg:col-span-4 lg:mt=0">
               <EmployeeList items={employees} />
             </div>
           </div>
@@ -112,6 +106,6 @@ const OfficesPage = async ({
       </Container>
     </div>
   );
-}
+};
 
 export default OfficesPage;

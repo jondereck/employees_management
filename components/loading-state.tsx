@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-
+import Image from "next/image"; // ✅ add this
 const quotes = [
   "Initializing......",
   "Fetching user data......",
@@ -71,17 +71,18 @@ export default function LoadingState({ progress = 0 }: { progress?: number }) {
           </svg>
 
           {/* ✅ Add logo and percentage overlay here */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <img
+        <div className="absolute inset-0 flex items-center justify-center">
+            <Image
               src="/icon-192x192.png"
               alt="Logo"
-              className="w-10 h-10 opacity-20 absolute"
+              width={40}
+              height={40}
+              className="opacity-20 absolute w-10 h-10"
+              priority={false}
             />
             <span
-              className="relative z-10 text-green-700 font-bold text-md "
-              style={{
-                WebkitTextStroke: "0.2px green", // outline effect
-              }}
+              className="relative z-10 text-green-700 font-bold text-md"
+              style={{ WebkitTextStroke: "0.2px green" }}
             >
               {progress}%
             </span>
@@ -120,6 +121,8 @@ export default function LoadingState({ progress = 0 }: { progress?: number }) {
       </div>
 
     </div>
+
+    
 
   );
 }

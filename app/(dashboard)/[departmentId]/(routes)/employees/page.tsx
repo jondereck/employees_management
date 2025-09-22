@@ -61,7 +61,13 @@ const EmployeesPage = async ({
       offices: true,
       employeeType: true,
       eligibility: true,
-      images: true,
+     images: {
+      orderBy: [
+        { updatedAt: "desc" },   // primary
+        { createdAt: "desc" },   // fallback if updatedAt is null
+      ],
+      select: { id: true, url: true, createdAt: true, updatedAt: true }, // optional trim
+    },
       designation: { select: { id: true, name: true } },
     },
     orderBy: {
@@ -98,7 +104,7 @@ const EmployeesPage = async ({
     isFeatured: item.isFeatured,
     isArchived: item.isArchived,
     isHead: item.isHead,
-    createdAt: format(item.createdAt, "MMMM do, yyyy"),
+   
 
     eligibility: {
       id: item.eligibility.id,
@@ -131,8 +137,9 @@ const EmployeesPage = async ({
     employeeLink: item.employeeLink,
     note: item.note ?? "",
     designation: item.designation ? { id: item.designation.id, name: item.designation.name } : null,
-
-
+    publicEnabled: item.publicEnabled,
+     createdAt: item.createdAt?.toISOString() ?? null,
+  updatedAt: item.updatedAt?.toISOString() ?? null,
 
   }));
 

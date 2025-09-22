@@ -52,3 +52,21 @@ export function columnLetterFromHeader(headers: string[], name: string): string 
   if (idx === -1) throw new Error(`Header not found: ${name}`);
   return XLSX.utils.encode_col(idx); // e.g., 13 -> 'N'
 }
+
+
+export function formatUpdatedAt(
+  value?: string | Date | null,
+  opts?: { tz?: string }
+): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+
+  const tz = opts?.tz ?? "Asia/Manila";
+  return new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    hour12: true,
+    timeZone: tz,
+  }).format(d);
+}

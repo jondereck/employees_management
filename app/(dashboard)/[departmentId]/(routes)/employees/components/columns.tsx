@@ -102,7 +102,8 @@ export type EmployeesColumn = {
   employeeLink: string;
  designation: { id: string; name: string } | null;
 note: string;
-
+createdAt: string | Date | null;
+  updatedAt: string | Date | null;
 }
 
 

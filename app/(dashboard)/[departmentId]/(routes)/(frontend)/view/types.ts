@@ -73,4 +73,6 @@ export interface Employees {
   note: string;
   designation: { id: string; name: string } | null;
   publicEnabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }

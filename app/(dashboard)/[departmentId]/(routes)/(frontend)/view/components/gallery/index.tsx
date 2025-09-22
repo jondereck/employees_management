@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Image as ImageType } from "../../../../employees/components/columns";
 
@@ -22,7 +22,11 @@ const Gallery = ({
 }: GalleryProps) => {
   const [loadingAction, setLoadingAction] = useState<{ id: string; type: "copy" | "download" } | null>(null);
   const isImageLoading = (id: string) => loadingAction?.id === id;
+  const [activeIndex, setActiveIndex] = useState(0);
 
+  useEffect(() => {
+    setActiveIndex(0);        // ← show newest whenever images prop changes
+}, [images]);
 
   const removeBackground = async (imageUrl: string): Promise<string | null> => {
     const formData = new FormData();
@@ -147,7 +151,7 @@ const Gallery = ({
 
 
   return (
-    <Tab.Group as="div" className="flex flex-col-reverse">
+    <Tab.Group as="div" className="flex flex-col-reverse" selectedIndex={activeIndex} onChange={setActiveIndex}>
       {/* Tab List - Horizontal scroll on small screens */}
       <div className="mt-2 mb-4 px-2 overflow-x-auto">
         <Tab.List className="flex gap-2 min-w-max">

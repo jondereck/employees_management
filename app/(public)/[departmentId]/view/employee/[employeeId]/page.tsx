@@ -1,4 +1,6 @@
 // app/(dashboard)/[departmentId]/(routes)/(frontend)/view/employee/[employeeId]/page.tsx
+
+
 import { auth, currentUser } from "@clerk/nextjs/server";
 import Image from "next/image";
 import prismadb from "@/lib/prismadb";
@@ -14,6 +16,10 @@ import TogglePublicButton from "@/app/(dashboard)/[departmentId]/(routes)/settin
 import BrandHeader from "@/components/public/brand-header";
 import PublicFooter from "@/components/public/footer";
 import ReportIssueBox from "@/components/public/report-issue-box";
+import EmployeeList from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/employee-list";
+import AdminHeaderCard from "@/app/(public)/components/admin/admin-header-card";
+import ActionBar from "@/app/(public)/components/admin/action-bar";
+import { use } from "react";
 
 export const revalidate = 0;
 
@@ -45,6 +51,7 @@ interface EmployeeInvdividualPageProps {
   params: {
     departmentId: string;
     employeeId: string;
+    officeId: string;
   };
 }
 
@@ -58,10 +65,18 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
    *  ========================== */
   if (isAdmin) {
     const employee = await getEmployee(params.employeeId);
-    const suggestedPeople = await getEmployees({
-      officeId: employee?.offices?.id,
-    });
 
+   const officeId = employee?.offices?.id ?? employee?.offices ?? undefined;
+
+let suggestedPeople = await getEmployees({
+  officeId,          // 👈 same office only
+  status: "active",  // only active
+});
+
+// (optional) exclude the current employee + cap the list
+suggestedPeople = suggestedPeople
+  .filter(p => p.id !== employee.id)
+  .slice(0, 8);
 
 
 
@@ -70,53 +85,38 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
         <Container>
           <div className="px-4 py-10 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row lg:items-start lg:gap-x-12">
-              {/* Profile Image / Gallery */}
+              {/* Left: Profile Image / Gallery */}
               <div className="w-full max-w-xs mx-auto lg:mx-0">
                 <div className="overflow-hidden rounded-xl border shadow-sm bg-white">
                   <Gallery images={employee.images} />
                 </div>
               </div>
 
-              {/* Profile Info */}
+              {/* Right: Profile Info */}
               <div className="mt-8 lg:mt-0 flex-1">
-                <div className="bg-white rounded-xl shadow-sm border p-6">
-                  <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold mb-6 relative inline-block px-4 sm:px-6 py-2 bg-primary text-white rounded-r-lg shadow-md 
-                    before:absolute before:content-[''] before:left-0 before:top-1/2 before:-translate-y-1/2 before:-ml-3 sm:before:-ml-4 
-                    before:border-y-[10px] sm:before:border-y-[12px] 
-                    before:border-l-[10px] sm:before:border-l-[12px] 
-                    before:border-y-transparent before:border-l-primary">
-                    Employee Information
-                  </h2>
+                <AdminHeaderCard
+                  departmentId={params.departmentId}
+                  employeeId={employee.id}
+                  publicEnabled={!!employee.publicEnabled}
 
-                  <div className="mb-4 flex items-center gap-2">
-                    <TogglePublicButton
-                      departmentId={params.departmentId}
-                      employeeId={employee.id}
-                      initialEnabled={!!employee.publicEnabled}
-                    />
+                />
 
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${employee.publicEnabled
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-700"
-                        }`}
-                    >
-                      {employee.publicEnabled ? "Public enabled" : "Public disabled"}
-                    </span>
-                  </div>
-
+                {/* Details card */}
+                <div className="mt-6 bg-white rounded-xl shadow-sm border p-6">
                   <Info data={employee} />
                 </div>
               </div>
+
             </div>
 
-            {/* Optional: Related personnel list */}
-            {/* <EmployeeList title="Related Personnel" items={suggestedPeople} /> */}
+            {/* Optional: Related personnel */}
+            <EmployeeList title="Related Personnel" items={suggestedPeople} />
           </div>
 
           <CameraScannerWrapper />
           <Footer />
         </Container>
+
       </div>
     );
   }
@@ -169,15 +169,15 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
   const isInactive = !!publicData.isArchived;
   const isActive = !isInactive;
 
-function formatUpdatedAt(d?: Date | null) {
-  if (!d) return "—";
-  return new Intl.DateTimeFormat("en-PH", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  }).format(new Date(d));
-}
+  function formatUpdatedAt(d?: Date | null) {
+    if (!d) return "—";
+    return new Intl.DateTimeFormat("en-PH", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    }).format(new Date(d));
+  }
 
   const orgName = dept?.name || "LGU Lingayen";
   const workingLine = isInactive
@@ -206,148 +206,148 @@ function formatUpdatedAt(d?: Date | null) {
   }
 
 
-  
+
   return (
-<div className="min-h-screen flex flex-col bg-white">
-  <BrandHeader />
+    <div className="min-h-screen flex flex-col bg-white">
+      <BrandHeader />
 
-  {/* MAIN grows to fill remaining height */}
-  <main className="flex-1 bg-[radial-gradient(ellipse_at_top,theme(colors.slate.50),white)]">
-    <Container>
-      <div className="px-4 py-10 sm:px-6 lg:px-8 mx-auto max-w-xl">
-        {/* Header card */}
-        <div className="relative overflow-hidden rounded-2xl border shadow-sm bg-white p-5 sm:p-6">
-          {/* Watermark */}
-          <div aria-hidden className="pointer-events-none absolute inset-0">
-            <div className="absolute -right-10 -bottom-10 opacity-10">
-              <Image
-                src="/logo.png"
-                alt=""
-                width={240}
-                height={240}
-                className="select-none"
-                priority={false}
-              />
-            </div>
-          </div>
+      {/* MAIN grows to fill remaining height */}
+      <main className="flex-1 bg-[radial-gradient(ellipse_at_top,theme(colors.slate.50),white)]">
 
-          <div className="flex items-start gap-4">
-            {/* Photo */}
-            <div className="shrink-0">
-              {headshot ? (
+        <div className="px-4 py-10 sm:px-6 lg:px-8 mx-auto max-w-xl">
+          {/* Header card */}
+          <div className="relative overflow-hidden rounded-2xl border shadow-sm bg-white p-5 sm:p-6">
+            {/* Watermark */}
+            <div aria-hidden className="pointer-events-none absolute inset-0">
+              <div className="absolute -right-10 -bottom-10 opacity-10">
                 <Image
-                  src={headshot}
-                  alt={`${publicData.firstName} ${publicData.middleName} ${publicData.lastName} ${publicData.suffix || ""}`}
-                  width={88}
-                  height={88}
-                  className="rounded-xl object-cover aspect-square"
-                  priority
+                  src="/logo.png"
+                  alt=""
+                  width={240}
+                  height={240}
+                  className="select-none"
+                  priority={false}
                 />
-              ) : (
-                <div
-                  aria-hidden
-                  className="w-[88px] h-[88px] rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-xs"
-                >
-                  No photo
-                </div>
-              )}
+              </div>
             </div>
 
-            {/* Name + meta */}
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-bold truncate">
-                  {publicData.firstName} {getMiddleInitial(publicData.middleName)}{" "}
-                  {publicData.lastName} {publicData.suffix || ""}
-                </h1>
-
-                {/* Public link chip */}
-                <span
-                  className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700"
-                  title="This profile is visible via public link."
-                >
-                  Public link
-                </span>
+            <div className="flex items-start gap-4">
+              {/* Photo */}
+              <div className="shrink-0">
+                {headshot ? (
+                  <Image
+                    src={headshot}
+                    alt={`${publicData.firstName} ${publicData.middleName} ${publicData.lastName} ${publicData.suffix || ""}`}
+                    width={88}
+                    height={88}
+                    className="rounded-xl object-cover aspect-square"
+                    priority
+                  />
+                ) : (
+                  <div
+                    aria-hidden
+                    className="w-[88px] h-[88px] rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-xs"
+                  >
+                    No photo
+                  </div>
+                )}
               </div>
 
-           
-              <p className="mt-1 text-xs font-light">
-                {workingLine}
-              </p>
-                 <p className="mt-1 text-sm font-bold text-muted-foreground break-words">
-                {publicData.position || "—"}
-              </p>
+              {/* Name + meta */}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl sm:text-2xl font-bold truncate">
+                    {publicData.firstName} {getMiddleInitial(publicData.middleName)}{" "}
+                    {publicData.lastName} {publicData.suffix || ""}
+                  </h1>
+
+                  {/* Public link chip */}
+                  <span
+                    className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700"
+                    title="This profile is visible via public link."
+                  >
+                    Public link
+                  </span>
+                </div>
+
+
+                <p className="mt-1 text-xs font-light">
+                  {workingLine}
+                </p>
+                <p className="mt-1 text-sm font-bold text-muted-foreground break-words">
+                  {publicData.position || "—"}
+                </p>
+              </div>
             </div>
+
+            {/* Status banner */}
+            {isInactive && (
+              <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                Note: This employee is currently <strong>Inactive</strong>.
+              </div>
+            )}
+            {!isInactive && (
+              <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                Note: This employee is currently <strong>Active</strong>.
+              </div>
+            )}
+
+
+            {/* Details mini-grid */}
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-lg border p-3">
+                <dl className="text-sm">
+                  <dt className="text-muted-foreground">Employee No.</dt>
+                  <dd className="font-medium">{publicData.employeeNo || "—"}</dd>
+                </dl>
+              </div>
+
+              <div className="rounded-lg border p-3">
+                <dl className="text-sm">
+                  <dt className="text-muted-foreground">Office</dt>
+                  <dd className="font-medium">{publicData.offices?.name || "—"}</dd>
+                </dl>
+              </div>
+
+              <div className="rounded-lg border p-3">
+                <dl className="text-sm">
+                  <dt className="text-muted-foreground">Years of Service</dt>
+                  <dd className="font-medium">
+                    {typeof yearsOfService === "number" ? `${yearsOfService}+ years` : "—"}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+
+            <p className="mt-4 text-[11px] leading-4 text-muted-foreground">
+              Verified by HRMO • Updated: {formatUpdatedAt(publicData.updatedAt)}
+            </p>
+
+            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+              Public view • Some details may be limited for privacy.
+            </p>
           </div>
-
-          {/* Status banner */}
-          {isInactive && (
-            <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              Note: This employee is currently <strong>Inactive</strong>.
-            </div>
-          )}
-          {!isInactive && (
-            <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-              Note: This employee is currently <strong>Active</strong>.
-            </div>
-          )}
-         
-
-          {/* Details mini-grid */}
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="rounded-lg border p-3">
-              <dl className="text-sm">
-                <dt className="text-muted-foreground">Employee No.</dt>
-                <dd className="font-medium">{publicData.employeeNo || "—"}</dd>
-              </dl>
-            </div>
-
-            <div className="rounded-lg border p-3">
-              <dl className="text-sm">
-                <dt className="text-muted-foreground">Office</dt>
-                <dd className="font-medium">{publicData.offices?.name || "—"}</dd>
-              </dl>
-            </div>
-
-            <div className="rounded-lg border p-3">
-              <dl className="text-sm">
-                <dt className="text-muted-foreground">Years of Service</dt>
-                <dd className="font-medium">
-                  {typeof yearsOfService === "number" ? `${yearsOfService}+ years` : "—"}
-                </dd>
-              </dl>
-            </div>
-          </div>
-
-   <p className="mt-4 text-[11px] leading-4 text-muted-foreground">
-  Verified by HRMO • Updated: {formatUpdatedAt(publicData.updatedAt)}
-</p>
-
-<p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-  Public view • Some details may be limited for privacy.
-</p>
         </div>
-      </div>
-    </Container>
-  </main>
-  
 
-  <ReportIssueBox
-  contactEmail={process.env.NEXT_PUBLIC_HR_CONTACT_EMAIL || "hrmo@lingayen.gov.ph"}
-  messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"} // your Page username or ID
-  employeeName={`${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName}`.replace(/\s+/g, " ").trim()}
-  employeeNo={publicData.employeeNo}
-/>
+      </main>
 
-  <PublicFooter
-    systemName="HR Profiling System"
-    creatorName="made with ❤️ by Niffy"
-    creatorLink="https://www.linkedin.com/in/jdnifas/"
-    systemLogo={{ src: "/icon-192x192.png", alt: "HRPS Logo", title: "HR Profiling System" }}
-    hrLogo={{ src: "/hrmo-logo.png", alt: "HRMO Logo", title: "Human Resource Management Office" }}
-    lguLogo={{ src: "/logo.png", alt: "LGU Lingayen Seal", title: "Municipality of Lingayen" }}
-  />
-</div>
+
+      <ReportIssueBox
+        contactEmail={process.env.NEXT_PUBLIC_HR_CONTACT_EMAIL || "hrmo@lingayen.gov.ph"}
+        messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"} // your Page username or ID
+        employeeName={`${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName}`.replace(/\s+/g, " ").trim()}
+        employeeNo={publicData.employeeNo}
+      />
+
+      <PublicFooter
+        systemName="HR Profiling System"
+        creatorName="made with ❤️ by Niffy"
+        creatorLink="https://www.linkedin.com/in/jdnifas/"
+        systemLogo={{ src: "/icon-192x192.png", alt: "HRPS Logo", title: "HR Profiling System" }}
+        hrLogo={{ src: "/hrmo-logo.png", alt: "HRMO Logo", title: "Human Resource Management Office" }}
+        lguLogo={{ src: "/logo.png", alt: "LGU Lingayen Seal", title: "Municipality of Lingayen" }}
+      />
+    </div>
 
   );
 }
