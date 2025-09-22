@@ -306,7 +306,13 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
       <main className="flex-1 ">
         <div className="px-4 py-10 sm:px-6 lg:px-8 mx-auto max-w-auto">
           {/* Header card */}
-          <div className="relative overflow-hidden rounded-2xl border shadow-sm bg-white p-5 sm:p-6">
+          <div
+            className="relative overflow-hidden rounded-2xl border shadow-sm bg-white p-5 sm:p-6"
+            style={{
+              borderColor: normalizeHex(publicData.employeeType?.value) ?? "#e5e7eb",
+              // fallback gray-200 if no color
+            }}
+          >
             {/* Watermark */}
             <div aria-hidden className="pointer-events-none absolute inset-0">
               <div className="absolute -right-10 -bottom-10 opacity-10">
@@ -321,24 +327,25 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
               </div>
             </div>
 
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-2 border">
               {/* Photo */}
               <div className="shrink-0">
                 {headshot ? (
-                  <div className="relative overflow-hidden rounded-xl
-                    w-20 h-20        /* <640px */
-                    sm:w-32 sm:h-32  /* ≥640px */
-                    lg:w-42 lg:h-42  /* ≥1024px */
-                    xl:w-52 xl:h-52  /* ≥1280px */">
-                    <Image
-                      src={headshot}
-                      alt={`${publicData.firstName} ${publicData.middleName} ${publicData.lastName} ${publicData.suffix || ""}`}
-                      fill
-                      sizes="(min-width:1280px) 8rem, (min-width:1024px) 7rem, (min-width:640px) 6rem, 5rem"
-                      className="object-cover"
-                      priority
-                    />
-                  </div>
+                <div className="relative overflow-hidden rounded-xl
+                w-32 h-32
+                sm:w-40 sm:h-40
+                lg:w-44 lg:h-44
+                xl:w-52 xl:h-52">
+  <Image
+    src={headshot}
+    alt="..."
+    fill
+    sizes="(min-width:1280px) 13rem, (min-width:1024px) 11rem, (min-width:640px) 10rem, 8rem"
+    className="object-cover block"
+    priority
+  />
+</div>
+
                 ) : (
                   <div
                     aria-hidden
@@ -353,28 +360,8 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
               {/* Name + meta */}
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl font-bold ">
-                    {publicData.firstName} {getMiddleInitial(publicData.middleName)}{" "}
-                    {publicData.lastName} {publicData.suffix || ""}
-                  </h1>
-
-                  {/* Public link chip */}
-                  <span
-                    className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700"
-                    title="This profile is visible via public link."
-                  >
-                    Public link
-                  </span>
-                </div>
-
-                <p className="mt-1 text-xs font-light">{workingLine}</p>
-
-                {/* Position + Employment Type chip */}
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-bold text-muted-foreground break-words">
-                    {publicData.position || "—"}
-                  </p>
+                {/* TOP: Chips */}
+                <div className="flex items-center mt-2 gap-2 mb-1">
                   {employmentType && (
                     <span
                       className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border"
@@ -384,8 +371,32 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                       {employmentType}
                     </span>
                   )}
+                  {/* <span
+    className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700"
+    title="This profile is visible via public link."
+  >
+    Public link
+  </span> */}
+                </div>
+
+
+                {/* FULL NAME */}
+                <h1 className="text-md sm:text-xl font-bold">
+                  {publicData.firstName} {getMiddleInitial(publicData.middleName)}{" "}
+                  {publicData.lastName} {publicData.suffix || ""}
+                </h1>
+
+                {/* Working line */}
+                <p className="mt-1 text-xs sm:text-md font-light">{workingLine}</p>
+
+                {/* Position */}
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-sm sm:text-md font-bold text-muted-foreground break-words">
+                    {publicData.position || "—"}
+                  </p>
                 </div>
               </div>
+
             </div>
 
             {/* Status banner */}
@@ -415,21 +426,6 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                 </dl>
               </div>
 
-              {/* ⟵ UPDATED: smarter Years of Service */}
-              <div className="rounded-lg border p-3">
-                <dl className="text-sm">
-                  <dt className="text-muted-foreground">Years of Service</dt>
-                  <dd className="font-medium">
-                    {tenureLabel}
-                    {startDate && tenureLabel !== "—" && (
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        (since {formatDateShort(startDate)})
-                      </span>
-                    )}
-                  </dd>
-                </dl>
-              </div>
-
               {/* Optional: show Start Date explicitly (can remove if you don’t want) */}
               <div className="rounded-lg border p-3">
                 <dl className="text-sm">
@@ -439,6 +435,21 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                   </dd>
                 </dl>
               </div>
+              {/* ⟵ UPDATED: smarter Years of Service */}
+              <div className="rounded-lg border p-3">
+                <dl className="text-sm">
+                  <dt className="text-muted-foreground">Service Rendered</dt>
+                  <dd className="font-medium">
+                    {tenureLabel}
+                    {startDate && tenureLabel !== "—" && (
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        {/* (since {formatDateShort(startDate)}) */}
+                      </span>
+                    )}
+                  </dd>
+                </dl>
+              </div>
+
             </div>
 
             <p className="mt-4 text-[11px] leading-4 text-muted-foreground">
