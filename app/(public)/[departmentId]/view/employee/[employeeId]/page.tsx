@@ -66,17 +66,17 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
   if (isAdmin) {
     const employee = await getEmployee(params.employeeId);
 
-   const officeId = employee?.offices?.id ?? employee?.offices ?? undefined;
+    const officeId = employee?.offices?.id ?? employee?.offices ?? undefined;
 
-let suggestedPeople = await getEmployees({
-  officeId,          // 👈 same office only
-  status: "active",  // only active
-});
+    let suggestedPeople = await getEmployees({
+      officeId,          // 👈 same office only
+      status: "active",  // only active
+    });
 
-// (optional) exclude the current employee + cap the list
-suggestedPeople = suggestedPeople
-  .filter(p => p.id !== employee.id)
-  .slice(0, 8);
+    // (optional) exclude the current employee + cap the list
+    suggestedPeople = suggestedPeople
+      .filter(p => p.id !== employee.id)
+      .slice(0, 8);
 
 
 
@@ -151,6 +151,7 @@ suggestedPeople = suggestedPeople
       updatedAt: true,
       offices: { select: { name: true } },
       images: { select: { url: true }, take: 1, orderBy: { createdAt: "desc" } },
+      employeeType: { select: { name: true, value: true } },
     },
   });
 
@@ -164,6 +165,63 @@ suggestedPeople = suggestedPeople
       </div>
     );
   }
+  function normalizeHex(input?: string | null): string | null {
+    if (!input) return null;
+    const raw = input.trim();
+    const m = raw.startsWith('#') ? raw.slice(1) : raw;
+    if (!/^([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(m)) return null;
+    const hex = m.length === 3 ? m.split('').map(c => c + c).join('') : m;
+    return `#${hex.toUpperCase()}`;
+  }
+
+  function hexToRgb(hex: string) {
+    const m = hex.replace('#', '');
+    const int = parseInt(m, 16);
+    return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
+  }
+
+  function srgbToLin(v: number) {
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  function relLuminance({ r, g, b }: { r: number; g: number; b: number }) {
+    const R = srgbToLin(r), G = srgbToLin(g), B = srgbToLin(b);
+    return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  }
+
+  /** Mix foreground color over white at given alpha (0–1) */
+  function mixOverWhite(rgb: { r: number; g: number; b: number }, alpha: number) {
+    return {
+      r: Math.round(rgb.r * alpha + 255 * (1 - alpha)),
+      g: Math.round(rgb.g * alpha + 255 * (1 - alpha)),
+      b: Math.round(rgb.b * alpha + 255 * (1 - alpha)),
+    };
+  }
+
+  /** Build styles with readable text based on the *tinted* background */
+  function buildBadgeStyle(colorHex?: string | null): React.CSSProperties | undefined {
+    const hex = normalizeHex(colorHex || undefined);
+    if (!hex) return undefined;
+
+    const rgb = hexToRgb(hex);
+    const bgAlpha = 0.14; // tint strength
+    const bgMixed = mixOverWhite(rgb, bgAlpha);             // actual visible bg
+    const L = relLuminance(bgMixed);
+
+    // For very light backgrounds, use a dark text; else white
+    const textColor = L > 0.6 ? '#0F172A' /* slate-900 */ : '#FFFFFF';
+
+    // Slightly stronger border for light tints
+    const borderAlpha = 0.45;
+
+    return {
+      backgroundColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${bgAlpha})`,
+      borderColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${borderAlpha})`,
+      color: textColor,
+    };
+  }
+
 
   const headshot = publicData.images?.[0]?.url ?? null;
   const isInactive = !!publicData.isArchived;
@@ -179,24 +237,58 @@ suggestedPeople = suggestedPeople
     }).format(new Date(d));
   }
 
+  // ⟵ NEW: pretty date for “since …”
+  function formatDateShort(d?: Date | string | null) {
+    if (!d) return "—";
+    return new Intl.DateTimeFormat("en-PH", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "short",
+    }).format(new Date(d));
+  }
   const orgName = dept?.name || "LGU Lingayen";
   const workingLine = isInactive
-    ? `Previously associated with ${orgName}`
+    ? `Previously associated with ${orgName} as`
     : `Currently working at ${orgName} as`;
+  function diffInMonths(from: Date, to = new Date()) {
+    // counts whole months between dates
+    let months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+    if (to.getDate() < from.getDate()) months -= 1; // only full months
+    return Math.max(0, months);
+  }
 
-  // Years of service (use dateHired if present, else createdAt)
   function yearsBetween(from: Date, to = new Date()) {
     const y = to.getFullYear() - from.getFullYear();
-    // Ensure we only count completed years
     const hasHadAnniversary =
       to.getMonth() > from.getMonth() ||
       (to.getMonth() === from.getMonth() && to.getDate() >= from.getDate());
     return hasHadAnniversary ? y : y - 1;
   }
 
+  // ⟵ NEW: one function that returns a human label
+  function getTenureLabel(from?: Date | string | null): string {
+    if (!from) return "—";
+    const start = new Date(from);
+    if (Number.isNaN(start.getTime())) return "—";
+
+    const years = Math.max(0, yearsBetween(start));
+    if (years >= 2) return `${years} years`;
+    if (years === 1) return `1 year`; // singular
+
+    // Under 1 year → show months (e.g., “8 months”); 0 months → “< 1 month”
+    const months = diffInMonths(start);
+    if (months >= 1) return `${months} month${months > 1 ? "s" : ""}`;
+    return "< 1 month";
+  }
+
   const startDate = publicData.dateHired ?? publicData.createdAt;
-  const yearsOfService =
-    startDate ? Math.max(0, yearsBetween(new Date(startDate))) : null;
+  const tenureLabel = getTenureLabel(startDate);
+
+  const employmentType = publicData.employeeType?.name ?? null;
+  const typeHex = publicData.employeeType?.value ?? null; // 👈 your DB HEX
+  const isJobOrder = employmentType
+    ? /job\s*order/i.test(employmentType)
+    : false;
 
   function getMiddleInitial(name?: string | null): string {
     if (!name) return "";
@@ -211,10 +303,8 @@ suggestedPeople = suggestedPeople
     <div className="min-h-screen flex flex-col bg-white">
       <BrandHeader />
 
-      {/* MAIN grows to fill remaining height */}
-      <main className="flex-1 bg-[radial-gradient(ellipse_at_top,theme(colors.slate.50),white)]">
-
-        <div className="px-4 py-10 sm:px-6 lg:px-8 mx-auto max-w-xl">
+      <main className="flex-1 ">
+        <div className="px-4 py-10 sm:px-6 lg:px-8 mx-auto max-w-auto">
           {/* Header card */}
           <div className="relative overflow-hidden rounded-2xl border shadow-sm bg-white p-5 sm:p-6">
             {/* Watermark */}
@@ -235,23 +325,31 @@ suggestedPeople = suggestedPeople
               {/* Photo */}
               <div className="shrink-0">
                 {headshot ? (
-                  <Image
-                    src={headshot}
-                    alt={`${publicData.firstName} ${publicData.middleName} ${publicData.lastName} ${publicData.suffix || ""}`}
-                    width={88}
-                    height={88}
-                    className="rounded-xl object-cover aspect-square"
-                    priority
-                  />
+                  <div className="relative overflow-hidden rounded-xl
+                    w-20 h-20        /* <640px */
+                    sm:w-32 sm:h-32  /* ≥640px */
+                    lg:w-42 lg:h-42  /* ≥1024px */
+                    xl:w-52 xl:h-52  /* ≥1280px */">
+                    <Image
+                      src={headshot}
+                      alt={`${publicData.firstName} ${publicData.middleName} ${publicData.lastName} ${publicData.suffix || ""}`}
+                      fill
+                      sizes="(min-width:1280px) 8rem, (min-width:1024px) 7rem, (min-width:640px) 6rem, 5rem"
+                      className="object-cover"
+                      priority
+                    />
+                  </div>
                 ) : (
                   <div
                     aria-hidden
-                    className="w-[88px] h-[88px] rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-xs"
+                    className="rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-xs
+                 w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 xl:w-32 xl:h-32"
                   >
                     No photo
                   </div>
                 )}
               </div>
+
 
               {/* Name + meta */}
               <div className="min-w-0 flex-1">
@@ -270,28 +368,36 @@ suggestedPeople = suggestedPeople
                   </span>
                 </div>
 
+                <p className="mt-1 text-xs font-light">{workingLine}</p>
 
-                <p className="mt-1 text-xs font-light">
-                  {workingLine}
-                </p>
-                <p className="mt-1 text-sm font-bold text-muted-foreground break-words">
-                  {publicData.position || "—"}
-                </p>
+                {/* Position + Employment Type chip */}
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-bold text-muted-foreground break-words">
+                    {publicData.position || "—"}
+                  </p>
+                  {employmentType && (
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border"
+                      style={buildBadgeStyle(typeHex)}
+                      title="Employment Type"
+                    >
+                      {employmentType}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Status banner */}
-            {isInactive && (
+            {isInactive ? (
               <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                Note: This employee is currently <strong>Inactive</strong>.
+                This employee is currently <strong>Inactive</strong>.
               </div>
-            )}
-            {!isInactive && (
+            ) : (
               <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-                Note: This employee is currently <strong>Active</strong>.
+                This employee is currently <strong>Active</strong>.
               </div>
             )}
-
 
             {/* Details mini-grid */}
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -309,11 +415,27 @@ suggestedPeople = suggestedPeople
                 </dl>
               </div>
 
+              {/* ⟵ UPDATED: smarter Years of Service */}
               <div className="rounded-lg border p-3">
                 <dl className="text-sm">
                   <dt className="text-muted-foreground">Years of Service</dt>
                   <dd className="font-medium">
-                    {typeof yearsOfService === "number" ? `${yearsOfService}+ years` : "—"}
+                    {tenureLabel}
+                    {startDate && tenureLabel !== "—" && (
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        (since {formatDateShort(startDate)})
+                      </span>
+                    )}
+                  </dd>
+                </dl>
+              </div>
+
+              {/* Optional: show Start Date explicitly (can remove if you don’t want) */}
+              <div className="rounded-lg border p-3">
+                <dl className="text-sm">
+                  <dt className="text-muted-foreground">Start Date</dt>
+                  <dd className="font-medium">
+                    {startDate ? formatUpdatedAt(startDate) : "—"}
                   </dd>
                 </dl>
               </div>
@@ -322,19 +444,16 @@ suggestedPeople = suggestedPeople
             <p className="mt-4 text-[11px] leading-4 text-muted-foreground">
               Verified by HRMO • Updated: {formatUpdatedAt(publicData.updatedAt)}
             </p>
-
             <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
               Public view • Some details may be limited for privacy.
             </p>
           </div>
         </div>
-
       </main>
-
 
       <ReportIssueBox
         contactEmail={process.env.NEXT_PUBLIC_HR_CONTACT_EMAIL || "hrmo@lingayen.gov.ph"}
-        messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"} // your Page username or ID
+        messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"}
         employeeName={`${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName}`.replace(/\s+/g, " ").trim()}
         employeeNo={publicData.employeeNo}
       />
@@ -348,6 +467,5 @@ suggestedPeople = suggestedPeople
         lguLogo={{ src: "/logo.png", alt: "LGU Lingayen Seal", title: "Municipality of Lingayen" }}
       />
     </div>
-
   );
 }

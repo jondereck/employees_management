@@ -46,7 +46,7 @@ export default function PublicFooter({
         className,
       ].join(" ")}
     >
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-5">
+      <div className="mx-auto  px-4 sm:px-6 lg:px-8 py-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           {/* Left: system + logos */}
           <div className="flex items-center gap-3 min-w-0">
