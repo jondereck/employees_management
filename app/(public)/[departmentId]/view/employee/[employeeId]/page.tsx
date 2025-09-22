@@ -302,7 +302,6 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <BrandHeader />
-
       <main className="flex-1 ">
         <div className="px-4 py-10 sm:px-6 lg:px-8 mx-auto max-w-auto">
           {/* Header card */}
@@ -331,20 +330,20 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
               {/* Photo */}
               <div className="shrink-0">
                 {headshot ? (
-                <div className="relative overflow-hidden rounded-xl
+                  <div className="relative overflow-hidden rounded-xl
                 w-32 h-32
                 sm:w-40 sm:h-40
                 lg:w-44 lg:h-44
                 xl:w-52 xl:h-52">
-  <Image
-    src={headshot}
-    alt="..."
-    fill
-    sizes="(min-width:1280px) 13rem, (min-width:1024px) 11rem, (min-width:640px) 10rem, 8rem"
-    className="object-cover block"
-    priority
-  />
-</div>
+                    <Image
+                      src={headshot}
+                      alt="..."
+                      fill
+                      sizes="(min-width:1280px) 13rem, (min-width:1024px) 11rem, (min-width:640px) 10rem, 8rem"
+                      className="object-cover block"
+                      priority
+                    />
+                  </div>
 
                 ) : (
                   <div
@@ -446,6 +445,27 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                         {/* (since {formatDateShort(startDate)}) */}
                       </span>
                     )}
+                  </dd>
+                </dl>
+              </div>
+              {/* Awards & Recognition (Ongoing) */}
+              <div
+                className="rounded-lg border p-3"
+
+              >
+                <dl className="text-sm">
+                  <dt className="text-muted-foreground">Awards and Recognition</dt>
+                  <dd className="font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="i">Ongoing development</span>
+                      {/* tiny dot indicator */}
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    </span>
+
+                    {/* optional hint line */}
+                    <span className="block mt-1 text-xs text-muted-foreground">
+                      This section will display employee awards, citations, and recognitions once available.
+                    </span>
                   </dd>
                 </dl>
               </div>
