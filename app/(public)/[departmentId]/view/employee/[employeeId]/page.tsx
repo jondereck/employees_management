@@ -20,6 +20,10 @@ import EmployeeList from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/v
 import AdminHeaderCard from "@/app/(public)/components/admin/admin-header-card";
 import ActionBar from "@/app/(public)/components/admin/action-bar";
 import { use } from "react";
+import Timeline from "@/app/(public)/components/timeline";
+import AwardsGallery from "@/app/(public)/components/awards-gallery";
+import AddTimelineEvent from "@/app/(public)/components/admin/add-timeline-event";
+import AddAward from "@/app/(public)/components/admin/add-award";
 
 export const revalidate = 0;
 
@@ -83,6 +87,10 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
     return (
       <div className="bg-white">
         <Container>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+  <AddTimelineEvent employeeId={employee.id} />
+  <AddAward employeeId={employee.id} />
+</div>
           <div className="px-4 py-10 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row lg:items-start lg:gap-x-12">
               {/* Left: Profile Image / Gallery */}
@@ -132,6 +140,8 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
    *  ========================== */
 
   // Pull only safe, displayable fields + isArchived for the status
+
+    const employeeId = params.employeeId; 
   const publicData = await prismadb.employee.findFirst({
     where: {
       id: params.employeeId,
@@ -448,28 +458,20 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                   </dd>
                 </dl>
               </div>
+
+               <section className="rounded-lg border p-4">
+        <h3 className="mb-3 text-base font-semibold">Service Timeline</h3>
+        <Timeline employeeId={employeeId} />
+      </section>
+
+      <section className="rounded-lg border p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold">Awards & Recognition</h3>
+        </div>
+        <AwardsGallery employeeId={employeeId} />
+      </section>
               {/* Awards & Recognition (Ongoing) */}
-              <div
-                className="rounded-lg border p-3"
-
-              >
-                <dl className="text-sm">
-                  <dt className="text-muted-foreground">Awards and Recognition</dt>
-                  <dd className="font-medium">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="i">Ongoing development</span>
-                      {/* tiny dot indicator */}
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                    </span>
-
-                    {/* optional hint line */}
-                    <span className="block mt-1 text-xs text-muted-foreground">
-                      This section will display employee awards, citations, and recognitions once available.
-                    </span>
-                  </dd>
-                </dl>
-              </div>
-
+            
             </div>
 
             <p className="mt-4 text-[11px] leading-4 text-muted-foreground">

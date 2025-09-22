@@ -6,31 +6,29 @@ datasource db {
   provider     = "postgresql"
   url          = env("DATABASE_URL")
   directUrl    = env("DATABASE_URL_UNPOOLED")
-  relationMode = "foreignKeys"   // <-- enforce at the DB level
+  relationMode = "foreignKeys"
 }
 
 model Department {
-  id           String         @id @default(uuid())
-  name         String
-  userId       String
-  billboards   Billboard[]    @relation("DepartmentToBillboard")
-  offices      Offices[]      @relation("DepartmentToOffices")
-  employeeType EmployeeType[] @relation("DepartmentToEmployeeType")
-  eligibility  Eligibility[]  @relation("DepartmentToEligibility")
-  employee     Employee[]     @relation("DepartmentToEmployee")
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id         String      @id @default(uuid())
+  name       String
+  userId     String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  billboards Billboard[] @relation("DepartmentToBillboard")
+  employee   Employee[]  @relation("DepartmentToEmployee")
+  offices    Offices[]   @relation("DepartmentToOffices")
 }
 
 model Billboard {
   id           String     @id @default(uuid())
   departmentId String
-  department   Department @relation("DepartmentToBillboard", fields: [departmentId], references: [id], onDelete: Restrict)
   label        String
   imageUrl     String
-  offices      Offices[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  department   Department @relation("DepartmentToBillboard", fields: [departmentId], references: [id], onUpdate: NoAction, map: "billboard_departmentid_fkey")
+  offices      Offices[]
 
   @@index([departmentId])
 }
@@ -38,15 +36,14 @@ model Billboard {
 model Offices {
   id                  String     @id @default(uuid())
   departmentId        String
-  department          Department @relation("DepartmentToOffices", fields: [departmentId], references: [id], onDelete: Restrict)
   billboardId         String
-  billboard           Billboard  @relation(fields: [billboardId], references: [id], onDelete: Restrict)
-  employee            Employee[] @relation("OfficesToEmployee")
+  name                String
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
   designatedEmployees Employee[] @relation("OfficesToDesignation")
-
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  employee            Employee[] @relation("OfficesToEmployee")
+  billboard           Billboard  @relation(fields: [billboardId], references: [id], onUpdate: NoAction, map: "offices_billboardid_fkey")
+  department          Department @relation("DepartmentToOffices", fields: [departmentId], references: [id], onUpdate: NoAction, map: "offices_departmentid_fkey")
 
   @@index([departmentId])
   @@index([billboardId])
@@ -55,56 +52,35 @@ model Offices {
 model EmployeeType {
   id           String     @id @default(uuid())
   departmentId String
-  department   Department @relation("DepartmentToEmployeeType", fields: [departmentId], references: [id], onDelete: Restrict)
-  employee     Employee[] @relation()
   name         String
   value        String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  employee     Employee[]
 
   @@index([departmentId])
-}
-
-enum EligibilityTypes {
-  None
-  Professional
-  SubProffessional
 }
 
 model Eligibility {
   id               String           @id @default(uuid())
   departmentId     String
-  department       Department       @relation("DepartmentToEligibility", fields: [departmentId], references: [id], onDelete: Restrict)
-  employee         Employee[]
   eligibilityTypes EligibilityTypes
   name             String
   value            String
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
+  employee         Employee[]
 
   @@index([departmentId])
 }
 
-enum Gender {
-  Male
-  Female
-}
-
 model Employee {
-  id                     String     @id @default(uuid())
-   publicId        String   @unique @default(uuid()) // opaque identifier for QR
-  publicEnabled   Boolean  @default(false)          // only show when true
-  publicVersion   Int      @default(1)              // bump to rotate (optional)
-  employeeNo             String     @default("")
+  id                     String            @id @default(uuid())
   departmentId           String
-  department             Department @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onDelete: Restrict)
-
   officeId               String
-  offices                Offices    @relation("OfficesToEmployee", fields: [officeId], references: [id], onDelete: Restrict)
-
-  prefix                 String     @default("")
-  lastName               String     @db.Text()
-  firstName              String     @db.Text()
+  prefix                 String            @default("")
+  lastName               String
+  firstName              String
   middleName             String
   suffix                 String
   gender                 Gender
@@ -112,48 +88,50 @@ model Employee {
   position               String
   education              String
   birthday               DateTime
-  age                    String     @default("")
-  region                 String     @default("")
-  province               String     @default("")
-  city                   String     @default("")
-  barangay               String     @default("")
-  houseNo                String     @default("")
-  street                 String     @default("")
+  age                    String            @default("")
+  region                 String            @default("")
+  province               String            @default("")
+  city                   String            @default("")
+  barangay               String            @default("")
+  houseNo                String            @default("")
+  street                 String            @default("")
   gsisNo                 String
   tinNo                  String
   philHealthNo           String
   pagIbigNo              String
   salary                 Float
   dateHired              DateTime
-  latestAppointment      String     @default("")
-  terminateDate          String     @default("")
-  salaryGrade            Int?       @default(0)
-  salaryStep             Int?       @default(0)
-  memberPolicyNo         String     @default("")
-  nickname               String     @default("")
-  emergencyContactName   String     @default("")
-  emergencyContactNumber String     @default("")
+  latestAppointment      String            @default("")
+  terminateDate          String            @default("")
+  memberPolicyNo         String            @default("")
   employeeTypeId         String
-  employeeType           EmployeeType @relation(fields: [employeeTypeId], references: [id], onDelete: Restrict)
-
-  note                   String?    @db.Text
-  employeeLink           String     @default("")
-
-  designationId          String?
-  designation            Offices?     @relation("OfficesToDesignation", fields: [designationId], references: [id], onDelete: SetNull)
-
   eligibilityId          String
-  eligibility            Eligibility  @relation(fields: [eligibilityId], references: [id], onDelete: Restrict)
-
-  isFeatured Boolean @default(false)
-  isArchived Boolean @default(false)
-  isHead     Boolean @default(false)
-  isAwardee  Boolean @default(false)
-
-  images Image[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isFeatured             Boolean           @default(false)
+  isArchived             Boolean           @default(false)
+  isHead                 Boolean           @default(false)
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  emergencyContactName   String            @default("")
+  emergencyContactNumber String            @default("")
+  isAwardee              Boolean           @default(false)
+  nickname               String            @default("")
+  employeeNo             String            @default("")
+  employeeLink           String            @default("")
+  salaryStep             Int?              @default(0)
+  salaryGrade            Int?              @default(0)
+  designationId          String?
+  note                   String?
+  publicId               String            @unique @default(dbgenerated("gen_random_uuid()"))
+  publicEnabled          Boolean           @default(false)
+  publicVersion          Int               @default(1)
+  awards                 Award[]
+  department             Department        @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onUpdate: NoAction, map: "employee_departmentid_fkey")
+  designation            Offices?          @relation("OfficesToDesignation", fields: [designationId], references: [id], onUpdate: NoAction, map: "employee_designationid_fkey")
+  eligibility            Eligibility       @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
+  employeeType           EmployeeType      @relation(fields: [employeeTypeId], references: [id], onUpdate: NoAction, map: "employee_employeetypeid_fkey")
+  offices                Offices           @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
+  employmentEvents       EmploymentEvent[]
+  images                 Image[]
 
   @@index([departmentId])
   @@index([officeId])
@@ -165,10 +143,10 @@ model Employee {
 model Image {
   id         String   @id @default(uuid())
   employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade) // keep cascade delete for images
   url        String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "image_employeeid_fkey")
 
   @@index([employeeId])
 }
@@ -182,4 +160,50 @@ model Salary {
   @@unique([grade, step])
 }
 
+model EmploymentEvent {
+  id         String              @id @default(dbgenerated("gen_random_uuid()"))
+  employeeId String
+  type       EmploymentEventType
+  details    String?
+  occurredAt DateTime
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  employee   Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
+  @@index([employeeId, occurredAt])
+}
+
+model Award {
+  id          String   @id @default(dbgenerated("gen_random_uuid()"))
+  employeeId  String
+  title       String
+  description String?
+  givenAt     DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+}
+
+enum EligibilityTypes {
+  None
+  Professional
+  SubProffessional
+}
+
+enum Gender {
+  Male
+  Female
+}
+
+enum EmploymentEventType {
+  HIRED
+  PROMOTED
+  TRANSFERRED
+  REASSIGNED
+  AWARDED
+  CONTRACT_RENEWAL
+  TERMINATED
+  OTHER
+}
