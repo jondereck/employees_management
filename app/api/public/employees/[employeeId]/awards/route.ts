@@ -5,7 +5,7 @@ export async function GET(
   _req: Request,
   { params }: { params: { employeeId: string } }
 ) {
-  // only allow public profiles (optional but recommended)
+  // ✅ optional: restrict to employees with public profile
   const emp = await prismadb.employee.findUnique({
     where: { id: params.employeeId },
     select: { publicEnabled: true },
@@ -17,16 +17,18 @@ export async function GET(
     orderBy: { givenAt: "desc" },
   });
 
-  // Map to the UI shape
-  const data = rows.map(r => ({
-    id: r.id,
-    title: r.title,
-    issuer: null,                 // not in schema → null
-    date: r.givenAt.toISOString(),
-    thumbnail: null,              // not in schema → null
-    fileUrl: null,                // not in schema → null
-    tags: [] as string[],         // not in schema → []
-  }));
+  // ✅ Map directly from DB to UI shape
+const data = rows.map(r => ({
+  id: r.id,
+  title: r.title,
+  issuer: r.issuer,
+  date: r.givenAt.toISOString(),
+  thumbnail: r.thumbnail,
+  fileUrl: r.fileUrl,
+  tags: r.tags ?? [],
+  description: r.description,
+}));
+
 
   return NextResponse.json(data, { status: 200 });
 }

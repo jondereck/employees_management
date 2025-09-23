@@ -178,6 +178,10 @@ model Award {
   employeeId  String
   title       String
   description String?
+  issuer      String? // <-- add
+  thumbnail   String? // <-- add
+  fileUrl     String? // <-- add
+  tags        String[] @default([]) // NEW (Postgres text[])   // <-- store comma-separated, or use Json
   givenAt     DateTime
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

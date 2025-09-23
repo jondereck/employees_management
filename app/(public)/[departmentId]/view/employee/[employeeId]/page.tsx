@@ -88,9 +88,9 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
       <div className="bg-white">
         <Container>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
-  <AddTimelineEvent employeeId={employee.id} />
-  <AddAward employeeId={employee.id} />
-</div>
+            <AddTimelineEvent employeeId={employee.id} />
+            <AddAward employeeId={employee.id} />
+          </div>
           <div className="px-4 py-10 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row lg:items-start lg:gap-x-12">
               {/* Left: Profile Image / Gallery */}
@@ -141,7 +141,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
   // Pull only safe, displayable fields + isArchived for the status
 
-    const employeeId = params.employeeId; 
+  const employeeId = params.employeeId;
   const publicData = await prismadb.employee.findFirst({
     where: {
       id: params.employeeId,
@@ -459,19 +459,19 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                 </dl>
               </div>
 
-               <section className="rounded-lg border p-4">
-        <h3 className="mb-3 text-base font-semibold">Service Timeline</h3>
-        <Timeline employeeId={employeeId} />
-      </section>
+              <section className="rounded-lg border p-4">
+                <h3 className="mb-3 text-base font-semibold">Service Timeline</h3>
+                <Timeline employeeId={employeeId} />
+              </section>
 
-      <section className="rounded-lg border p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-base font-semibold">Awards & Recognition</h3>
-        </div>
-        <AwardsGallery employeeId={employeeId} />
-      </section>
+              <section className="rounded-lg border p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-base font-semibold">Awards & Recognition</h3>
+                </div>
+                <AwardsGallery employeeId={employeeId} />
+              </section>
               {/* Awards & Recognition (Ongoing) */}
-            
+
             </div>
 
             <p className="mt-4 text-[11px] leading-4 text-muted-foreground">
