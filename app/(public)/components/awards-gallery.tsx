@@ -24,7 +24,7 @@ type Award = {
 function AwardsSkeleton() {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
-      {[1,2,3].map(i => (
+      {[1, 2, 3].map(i => (
         <div key={i} className="rounded-lg border p-3">
           <div className="aspect-[4/3] w-full rounded bg-muted mb-3" />
           <div className="h-4 w-2/3 bg-muted rounded mb-2" />
@@ -40,6 +40,21 @@ export default function AwardsGallery({ employeeId, version = 0 }: AwardsGallery
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<Award | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  // small helpers in AwardsGallery
+  const isImageLike = (u?: string | null) => {
+  if (!u) return false;
+  try {
+    const url = new URL(u);
+    if (/^lh\d+\.googleusercontent\.com$/i.test(url.hostname)) return true;
+    return /\.(png|jpe?g|webp|gif|svg)$/i.test(url.pathname.split("?")[0]);
+  } catch {
+    return false;
+  }
+};
+
+const isGooglePhotosShare = (u?: string) =>
+  !!u && /^(https?:\/\/)?(photos\.app\.goo\.gl|photos\.google\.com)\//i.test(u);
+
 
   // confirm modal state
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -104,7 +119,21 @@ export default function AwardsGallery({ employeeId, version = 0 }: AwardsGallery
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {awards.map(a => {
-          const cover = a.thumbnail || a.fileUrl || "/placeholder.svg";
+        const cover =
+  (isImageLike(a.thumbnail) && a.thumbnail) ||
+  (isImageLike(a.fileUrl) && a.fileUrl) ||
+  "/placeholder.svg";
+
+{isImageLike(cover) ? (
+  <Image src={cover} alt={a.title} fill className="object-cover" />
+) : (
+  <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+    No preview • {a.fileUrl && (
+      <a className="underline ml-1" href={a.fileUrl} target="_blank" rel="noreferrer">Open</a>
+    )}
+  </div>
+)}
+
           return (
             <div key={a.id} className="rounded-lg border overflow-hidden">
               <button
@@ -186,7 +215,7 @@ export default function AwardsGallery({ employeeId, version = 0 }: AwardsGallery
                     src={active.fileUrl || active.thumbnail!}
                     alt={active.title}
                     fill
-                    className="object-contain bg-black/5"
+                    className=" bg-black/5"
                     priority
                   />
                 </div>

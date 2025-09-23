@@ -37,6 +37,21 @@ export default function AddAward({
   const isEdit = !!initial?.id;
   const [loading, setLoading] = useState(false);
 
+  const isImageLike = (u?: string | null) => {
+  if (!u) return false;
+  try {
+    const url = new URL(u);
+    if (/^lh\d+\.googleusercontent\.com$/i.test(url.hostname)) return true;
+    return /\.(png|jpe?g|webp|gif|svg)$/i.test(url.pathname.split("?")[0]);
+  } catch {
+    return false;
+  }
+};
+
+const isGooglePhotosShare = (u?: string) =>
+  !!u && /^(https?:\/\/)?(photos\.app\.goo\.gl|photos\.google\.com)\//i.test(u);
+
+
   const [form, setForm] = useState(() => ({
     title: initial?.title ?? "",
     issuer: initial?.issuer ?? "Municipality of Lingayen",
@@ -136,14 +151,83 @@ export default function AddAward({
         </div>
       </div>
 
-      <div>
-        <label className="text-xs text-muted-foreground">Thumbnail URL</label>
-        <Input value={form.thumbnail ?? ""} onChange={e=>setForm(s=>({ ...s, thumbnail: e.target.value }))} placeholder="https://…/thumb.jpg"/>
-      </div>
-      <div>
-        <label className="text-xs text-muted-foreground">Certificate URL (image/pdf)</label>
-        <Input value={form.fileUrl ?? ""} onChange={e=>setForm(s=>({ ...s, fileUrl: e.target.value }))} placeholder="https://…/full.jpg"/>
-      </div>
+    <div>
+  <label className="text-xs text-muted-foreground">Thumbnail URL</label>
+  <div className="flex gap-2">
+    <Input
+      value={form.thumbnail ?? ""}
+      onChange={(e)=>setForm(s=>({ ...s, thumbnail: e.target.value }))}
+      placeholder="https://… (image url or Google Photos share link)"
+    />
+    {isGooglePhotosShare(form.thumbnail ?? "") && (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={async () => {
+          try {
+            const r = await fetch(
+              `/api/tools/resolve-google-photos?url=${encodeURIComponent(form.thumbnail!)}`
+            );
+            const j = await r.json();
+            if (!r.ok) throw new Error(j?.error || "Failed to resolve");
+            setForm(s => ({ ...s, thumbnail: j.url }));
+          } catch (e: any) {
+            toast.error(e?.message || "Could not extract image URL");
+          }
+        }}
+      >
+        Convert
+      </Button>
+    )}
+  </div>
+  {/* optional inline hint */}
+  {!isImageLike(form.thumbnail) && form.thumbnail && (
+    <p className="mt-1 text-xs text-muted-foreground">
+      This doesn&apos;t look like a direct image. If it&apos;s a Google Photos link,
+      click <span className="font-medium">Convert</span>.
+    </p>
+  )}
+</div>
+
+ <div>
+  <label className="text-xs text-muted-foreground">Certificate URL (image/pdf)</label>
+  <div className="flex gap-2">
+    <Input
+      value={form.fileUrl ?? ""}
+      onChange={(e)=>setForm(s=>({ ...s, fileUrl: e.target.value }))}
+      placeholder="https://… (image or PDF, or Google Photos share link)"
+    />
+    {isGooglePhotosShare(form.fileUrl ?? "") && (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={async () => {
+          try {
+            const r = await fetch(
+              `/api/tools/resolve-google-photos?url=${encodeURIComponent(form.fileUrl!)}`
+            );
+            if (!r.ok) throw new Error(await r.text());
+            const j = await r.json();
+            setForm(s => ({ ...s, fileUrl: j.url }));
+          } catch (e: any) {
+            toast.error(e?.message || "Could not extract image URL");
+          }
+        }}
+      >
+        Convert
+      </Button>
+    )}
+  </div>
+
+  {/* gentle hint */}
+  {!isImageLike(form.fileUrl) && form.fileUrl && (
+    <p className="mt-1 text-xs text-muted-foreground">
+      If this is a Google Photos link, click <span className="font-medium">Convert</span>. 
+      PDFs and non-image links will open in a new tab.
+    </p>
+  )}
+</div>
+
 
       <div className="flex items-center justify-end gap-2">
         {isEdit && (
