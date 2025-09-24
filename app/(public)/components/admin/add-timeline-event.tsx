@@ -24,7 +24,7 @@ type Props = {
   hideHeader?: boolean;
 };
 
-const TYPES: TimelineRecord["type"][] =
+const TYPES: TimelineRecord["type"][] = 
   ["HIRED", "PROMOTION", "TRANSFER", "TRAINING", "AWARD", "RECOGNITION", "SEPARATION"];
 
 export default function AddTimelineEvent({

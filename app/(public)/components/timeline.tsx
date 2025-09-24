@@ -26,7 +26,7 @@ const iconMap: Record<Event["type"], JSX.Element> = {
   TRAINING: <GraduationCap className="h-4 w-4" />,
   AWARD: <AwardIcon className="h-4 w-4" />,
   RECOGNITION: <AwardIcon className="h-4 w-4" />,
-  SEPARATION: <CalendarIcon className="h-4 w-4" />,
+  SEPARATION: <CalendarIcon className="h-4 w-4" />, 
 };
 
 export default function Timeline({

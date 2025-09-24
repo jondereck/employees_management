@@ -24,6 +24,8 @@ import Timeline from "@/app/(public)/components/timeline";
 import AwardsGallery from "@/app/(public)/components/awards-gallery";
 import AddTimelineEvent from "@/app/(public)/components/admin/add-timeline-event";
 import AddAward from "@/app/(public)/components/admin/add-award";
+import PublicTimeline from "@/app/(public)/components/public-timeline";
+import PublicAwardsGallery from "@/app/(public)/components/public-awards.gallery";
 
 export const revalidate = 0;
 
@@ -461,14 +463,14 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
               <section className="rounded-lg border p-4">
                 <h3 className="mb-3 text-base font-semibold">Service Timeline</h3>
-                <Timeline employeeId={employeeId} />
+              <PublicTimeline employeeId={employeeId} />
               </section>
 
               <section className="rounded-lg border p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-base font-semibold">Awards & Recognition</h3>
                 </div>
-                <AwardsGallery employeeId={employeeId} />
+                <PublicAwardsGallery employeeId={employeeId} />
               </section>
               {/* Awards & Recognition (Ongoing) */}
 

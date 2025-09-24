@@ -132,12 +132,13 @@ model Employee {
   offices                Offices           @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
   employmentEvents       EmploymentEvent[]
   images                 Image[]
-
+  changeRequests   ChangeRequest[]   @relation("EmployeeToChangeRequests")
   @@index([departmentId])
   @@index([officeId])
   @@index([employeeTypeId])
   @@index([eligibilityId])
   @@index([designationId])
+  
 }
 
 model Image {
@@ -168,6 +169,7 @@ model EmploymentEvent {
   occurredAt DateTime
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
+  deletedAt   DateTime?  
   employee   Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId, occurredAt])
@@ -185,6 +187,7 @@ model Award {
   givenAt     DateTime
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?  
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
@@ -210,4 +213,49 @@ enum EmploymentEventType {
   CONTRACT_RENEWAL
   TERMINATED
   OTHER
+}
+
+// --- NEW enums ---
+enum ChangeEntity {
+  AWARD
+  TIMELINE
+}
+
+enum ChangeAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum ChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ChangeRequest {
+  id             String        @id @default(uuid())
+  departmentId   String
+  employeeId     String
+  employee       Employee      @relation("EmployeeToChangeRequests", fields: [employeeId], references: [id], onDelete: Cascade)
+  entityType     ChangeEntity
+  entityId       String?       // null for CREATE (no record yet)
+  action         ChangeAction
+  status         ChangeStatus  @default(PENDING)
+
+  oldValues      Json?         // snapshot of current values (for UPDATE/DELETE)
+  newValues      Json?         // proposed values (for CREATE/UPDATE)
+  note           String?
+  submittedName  String?
+  submittedEmail String?
+  ipHash         String?       // for basic rate-limiting
+
+  reviewedAt     DateTime?
+  approvedById   String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([departmentId, status, createdAt])
+  @@index([employeeId])
+  @@index([entityType, entityId])
 }
