@@ -18,7 +18,7 @@ type Award = {
   description?: string | null;
 };
 
-export default function AwardEditModal({ employeeId, award, open, onOpenChange }:{
+export default function AwardEditModal({ employeeId, award, open, onOpenChange }: {
   employeeId: string;
   award: Award | null;
   open: boolean;
@@ -51,6 +51,22 @@ export default function AwardEditModal({ employeeId, award, open, onOpenChange }
     }
   }, [award]);
 
+  const todayYMD = new Date().toISOString().slice(0, 10);
+  const toISODate = (raw: string) => {
+    const s = (raw || "").trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T00:00:00.000Z").toISOString();
+    const m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/); // MM-DD-YYYY or MM/DD/YYYY
+    if (m) return new Date(`${m[3]}-${m[1]}-${m[2]}T00:00:00.000Z`).toISOString();
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  };
+  const notFuture = (iso: string) => {
+    const d = new Date(iso), t = new Date();
+    d.setHours(0, 0, 0, 0); t.setHours(0, 0, 0, 0);
+    return d.getTime() <= t.getTime();
+  };
+
   const submit = async () => {
     if (!award) return;
     setLoading(true);
@@ -62,7 +78,7 @@ export default function AwardEditModal({ employeeId, award, open, onOpenChange }
       if ((form.description || undefined) !== (award.description ?? undefined)) payload.description = form.description || null;
       if ((form.fileUrl || undefined) !== (award.fileUrl ?? undefined)) payload.fileUrl = form.fileUrl || null;
       if ((form.thumbnail || undefined) !== (award.thumbnail ?? undefined)) payload.thumbnail = form.thumbnail || null;
-      const tagsArray = form.tags.trim() ? form.tags.split(",").map(t=>t.trim()).filter(Boolean) : [];
+      const tagsArray = form.tags.trim() ? form.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
       if (JSON.stringify(tagsArray) !== JSON.stringify(award.tags ?? [])) payload.tags = tagsArray;
       if (form.note.trim()) payload.note = form.note.trim();
 
@@ -70,6 +86,12 @@ export default function AwardEditModal({ employeeId, award, open, onOpenChange }
         toast.info("No changes to submit");
         return;
       }
+      const iso = toISODate(form.givenAt);
+      if (!iso || !notFuture(iso)) {
+        toast.error("Date given cannot be in the future");
+        return;
+      }
+      payload.givenAt = iso;
 
       const res = await fetch(`/api/public/employees/${employeeId}/awards/${award.id}/request-edit`, {
         method: "POST",
@@ -95,35 +117,40 @@ export default function AwardEditModal({ employeeId, award, open, onOpenChange }
         <div className="space-y-3 mt-3">
           <div>
             <label className="text-xs text-muted-foreground">Title</label>
-            <Input value={form.title} onChange={e=>setForm(s=>({...s, title: e.target.value}))} />
+            <Input value={form.title} onChange={e => setForm(s => ({ ...s, title: e.target.value }))} />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Issuer</label>
-            <Input value={form.issuer} onChange={e=>setForm(s=>({...s, issuer: e.target.value}))} />
+            <Input value={form.issuer} onChange={e => setForm(s => ({ ...s, issuer: e.target.value }))} />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Date Given (ISO)</label>
-            <Input value={form.givenAt} onChange={e=>setForm(s=>({...s, givenAt: e.target.value}))} />
+            <Input
+              type="date"
+              max={todayYMD}               // ⛔ prevent picking future dates
+              value={form.givenAt}
+              onChange={(e) => setForm((s) => ({ ...s, givenAt: e.target.value }))}
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Certificate URL (image/pdf)</label>
-            <Input value={form.fileUrl} onChange={e=>setForm(s=>({...s, fileUrl: e.target.value}))} placeholder="https://…" />
+            <Input value={form.fileUrl} onChange={e => setForm(s => ({ ...s, fileUrl: e.target.value }))} placeholder="https://…" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Thumbnail URL</label>
-            <Input value={form.thumbnail} onChange={e=>setForm(s=>({...s, thumbnail: e.target.value}))} placeholder="https://…" />
+            <Input value={form.thumbnail} onChange={e => setForm(s => ({ ...s, thumbnail: e.target.value }))} placeholder="https://…" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Tags (comma-separated)</label>
-            <Input value={form.tags} onChange={e=>setForm(s=>({...s, tags: e.target.value}))} />
+            <Input value={form.tags} onChange={e => setForm(s => ({ ...s, tags: e.target.value }))} />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Notes to HRMO (optional)</label>
-            <Textarea value={form.note} onChange={e=>setForm(s=>({...s, note: e.target.value}))} />
+            <Textarea value={form.note} onChange={e => setForm(s => ({ ...s, note: e.target.value }))} />
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={()=>onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={submit} disabled={loading}>{loading ? "Submitting…" : "Submit for approval"}</Button>
         </div>
       </DialogContent>

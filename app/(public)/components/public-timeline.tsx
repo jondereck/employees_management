@@ -95,7 +95,7 @@ export default function PublicTimeline({ employeeId, version = 0 }: PublicTimeli
   return (
     <>
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-base font-semibold">Service Timeline</h3>
+    
         <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>Suggest new timeline</Button>
       </div>
 

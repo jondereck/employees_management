@@ -34,38 +34,48 @@ export default function TimelineCreateModal({ employeeId, open, onOpenChange }: 
     "OTHER",
   ] as const;
   
+const todayYMD = new Date().toISOString().slice(0, 10);
 
-  const toISODate = (raw: string) => {
-    const s = raw.trim();
-    if (!s) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T00:00:00.000Z").toISOString();
-    const m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/); // MM-DD-YYYY or MM/DD/YYYY
-    if (m) return new Date(`${m[3]}-${m[1]}-${m[2]}T00:00:00.000Z`).toISOString();
-    const d = new Date(s);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
-  };
+const toISODate = (raw: string) => {
+  const s = (raw || "").trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T00:00:00.000Z").toISOString();
+  const m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/); // MM-DD-YYYY or MM/DD/YYYY
+  if (m) return new Date(`${m[3]}-${m[1]}-${m[2]}T00:00:00.000Z`).toISOString();
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
+const notFuture = (iso: string) => {
+  const d = new Date(iso);
+  const t = new Date();
+  d.setHours(0,0,0,0);
+  t.setHours(0,0,0,0);
+  return d.getTime() <= t.getTime();
+};
+
 
   const submit = async () => {
-    if (!TYPE_OPTIONS.includes(form.type as any)) {
-      toast.error("Select a valid event type");
-      return;
-    }
-    const occurredAtISO = toISODate(form.occurredAt);
-    if (!occurredAtISO) {
-      toast.error("Enter a valid date");
-      return;
-    }
+      const occurredAtISO = toISODate(form.occurredAt);
+if (!occurredAtISO) {
+  toast.error("Please enter a valid date");
+  return;
+}
+if (!notFuture(occurredAtISO)) {
+  toast.error("Timeline date cannot be in the future");
+  return;
+}
 
-    const res = await fetch(`/api/public/employees/${employeeId}/timeline/request-create`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: form.type,                 // must be enum string
-        occurredAt: occurredAtISO,       // ISO
-        details: form.details?.trim() || undefined,
-        note: form.note?.trim() || undefined,
-      }),
-    });
+const res = await fetch(`/api/public/employees/${employeeId}/timeline/request-create`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    type: form.type,               // keep your enum string as-is
+    occurredAt: occurredAtISO,     // ✅ validated ISO
+    details: form.details?.trim() || undefined,
+    note: form.note?.trim() || undefined,
+  }),
+});
 
     const j = await res.json();
     if (!res.ok) {
@@ -104,12 +114,13 @@ export default function TimelineCreateModal({ employeeId, open, onOpenChange }: 
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Date (ISO)</label>
-            <Input
-              type="date"
-              value={form.occurredAt}
-              onChange={(e) => setForm((s) => ({ ...s, occurredAt: e.target.value }))}
-              placeholder="YYYY-MM-DD"
-            />
+         <Input
+  type="date"
+  max={todayYMD}                           // ⛔ prevents picking future dates
+  value={form.occurredAt}
+  onChange={(e) => setForm(s => ({ ...s, occurredAt: e.target.value }))}
+  placeholder="YYYY-MM-DD"
+/>
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Details (optional)</label>

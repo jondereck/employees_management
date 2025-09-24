@@ -1,7 +1,24 @@
 import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
+import type { EmploymentEventType, Prisma } from "@prisma/client";
+
+const UI_TO_DB: Record<string, EmploymentEventType> = {
+  HIRED: "HIRED",
+  PROMOTION: "PROMOTED",
+  PROMOTED: "PROMOTED",
+  TRANSFER: "TRANSFERRED",
+  TRANSFERRED: "TRANSFERRED",
+  REASSIGNED: "REASSIGNED",
+  AWARD: "AWARDED",
+  AWARDED: "AWARDED",
+  SEPARATION: "TERMINATED",
+  TERMINATED: "TERMINATED",
+  CONTRACT_RENEWAL: "CONTRACT_RENEWAL",
+  OTHER: "OTHER",
+  TRAINING: "OTHER",
+};
+const uiToDb = (v?: string | null): EmploymentEventType => UI_TO_DB[(v ?? "").toUpperCase()] ?? "OTHER";
 
 const DateLike = z.union([
   z.string().datetime(),
@@ -9,13 +26,9 @@ const DateLike = z.union([
   z.string().regex(/^\d{2}[-/]\d{2}[-/]\d{4}$/),
 ]);
 const Schema = z.object({
-  title: z.string().min(1).max(200).optional(),
-  issuer: z.string().max(200).optional().nullable(),
-  givenAt: DateLike.optional(),
-  description: z.string().max(2000).optional().nullable(),
-  fileUrl: z.string().url().optional().nullable(),
-  thumbnail: z.string().url().optional().nullable(),
-  tags: z.array(z.string()).optional(),
+  type: z.string().optional(),
+  occurredAt: DateLike.optional(),
+  details: z.string().max(1000).optional(),
   note: z.string().max(500).optional(),
   submittedName: z.string().max(120).optional(),
   submittedEmail: z.string().email().optional(),
@@ -33,7 +46,7 @@ function assertNotFuture(iso: string) {
   return d.getTime() <= t.getTime();
 }
 
-export async function POST(req: Request, { params }: { params: { employeeId: string; awardId: string } }) {
+export async function POST(req: Request, { params }: { params: { employeeId: string; eventId: string } }) {
   try {
     const body = await req.json();
     const parsed = Schema.safeParse(body);
@@ -45,31 +58,27 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     });
     if (!emp?.publicEnabled) return NextResponse.json({ error: "Public suggestions disabled" }, { status: 403 });
 
-    const award = await prismadb.award.findFirst({
-      where: { id: params.awardId, employeeId: emp.id },
+    const event = await prismadb.employmentEvent.findFirst({
+      where: { id: params.eventId, employeeId: emp.id },
       select: { id: true },
     });
-    if (!award) return NextResponse.json({ error: "Award not found" }, { status: 404 });
+    if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
     const nv: any = {};
-    if (parsed.data.title !== undefined) nv.title = parsed.data.title ?? "";
-    if (parsed.data.issuer !== undefined) nv.issuer = parsed.data.issuer ?? null;
-    if (parsed.data.givenAt !== undefined) {
-      const iso = toISO(parsed.data.givenAt);
+    if (parsed.data.type !== undefined) nv.type = uiToDb(parsed.data.type);
+    if (parsed.data.occurredAt !== undefined) {
+      const iso = toISO(parsed.data.occurredAt);
       if (!assertNotFuture(iso)) return NextResponse.json({ error: "Date cannot be in the future" }, { status: 400 });
-      nv.givenAt = iso;
+      nv.occurredAt = iso;
     }
-    if (parsed.data.description !== undefined) nv.description = parsed.data.description ?? null;
-    if (parsed.data.fileUrl !== undefined) nv.fileUrl = parsed.data.fileUrl ?? null;
-    if (parsed.data.thumbnail !== undefined) nv.thumbnail = parsed.data.thumbnail ?? null;
-    if (parsed.data.tags !== undefined) nv.tags = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
+    if (parsed.data.details !== undefined) nv.details = parsed.data.details ?? null;
 
     await prismadb.changeRequest.create({
       data: {
         departmentId: emp.departmentId,
         employeeId: emp.id,
-        entityType: "AWARD",
-        entityId: award.id,
+        entityType: "TIMELINE",
+        entityId: event.id,
         action: "UPDATE",
         status: "PENDING",
         newValues: nv as Prisma.InputJsonValue,
@@ -81,7 +90,7 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error("[PUBLIC_AWARD_REQUEST_EDIT]", e);
+    console.error("[PUBLIC_TIMELINE_REQUEST_EDIT]", e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

@@ -26,25 +26,24 @@ export default function AwardCreateModal({ employeeId, open, onOpenChange }:{
 
   const isProbablyUrl = (s?: string) =>
   !!s && /^https?:\/\/[^\s]+$/i.test(s.trim());
+  
+  const todayYMD = new Date().toISOString().slice(0, 10);
+  const toISODate = (raw: string) => {
+    const s = (raw || "").trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T00:00:00.000Z").toISOString();
+    const m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/); // MM-DD-YYYY or MM/DD/YYYY
+    if (m) return new Date(`${m[3]}-${m[1]}-${m[2]}T00:00:00.000Z`).toISOString();
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  };
+  const notFuture = (iso: string) => {
+    const d = new Date(iso), t = new Date();
+    d.setHours(0, 0, 0, 0); t.setHours(0, 0, 0, 0);
+    return d.getTime() <= t.getTime();
+  };
 
-const toISODate = (raw: string) => {
-  const s = raw.trim();
-  if (!s) return null;
-  // YYYY-MM-DD -> ISO
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    return new Date(s + "T00:00:00.000Z").toISOString();
-  }
-  // MM-DD-YYYY or MM/DD/YYYY -> ISO
-  const mmddyyyy = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
-  if (mmddyyyy) {
-    const [, mm, dd, yyyy] = mmddyyyy;
-    return new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`).toISOString();
-  }
-  // Fallback: try Date()
-  const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) return d.toISOString();
-  return null;
-};
+
 
 const submit = async () => {
   if (!form.title.trim()) {
@@ -52,10 +51,11 @@ const submit = async () => {
     return;
   }
   const iso = toISODate(form.givenAt);
-  if (!iso) {
-    toast.error("Please enter a valid date");
-    return;
-  }
+      if (!iso || !notFuture(iso)) {
+        toast.error("Date given cannot be in the future");
+        return;
+      }
+  
 
   const payload: any = {
     title: form.title.trim(),
@@ -110,11 +110,10 @@ const submit = async () => {
            <label className="text-xs text-muted-foreground">Date Given</label>
 <Input
   type="date"
+  max={todayYMD}               // ⛔ prevent picking future dates
   value={form.givenAt}
   onChange={(e) => setForm((s) => ({ ...s, givenAt: e.target.value }))}
-  placeholder="YYYY-MM-DD"
 />
-<p className="text-[11px] text-muted-foreground">Use the picker. If you paste, formats like 2000-03-28 or 03/28/2000 both work.</p>
 
           </div>
           <div>

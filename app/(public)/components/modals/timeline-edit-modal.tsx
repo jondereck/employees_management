@@ -24,7 +24,38 @@ export default function TimelineEditModal({ employeeId, event, open, onOpenChang
     }
   }, [event]);
 
+  const todayYMD = new Date().toISOString().slice(0, 10);
+
+const toISODate = (raw: string) => {
+  const s = (raw || "").trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + "T00:00:00.000Z").toISOString();
+  const m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/); // MM-DD-YYYY or MM/DD/YYYY
+  if (m) return new Date(`${m[3]}-${m[1]}-${m[2]}T00:00:00.000Z`).toISOString();
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
+const notFuture = (iso: string) => {
+  const d = new Date(iso);
+  const t = new Date();
+  d.setHours(0,0,0,0);
+  t.setHours(0,0,0,0);
+  return d.getTime() <= t.getTime();
+};
+
+
   const submit = async () => {
+    const occurredAtISO = toISODate(form.occurredAt);
+if (!occurredAtISO) {
+  toast.error("Please enter a valid date");
+  return;
+}
+if (!notFuture(occurredAtISO)) {
+  toast.error("Timeline date cannot be in the future");
+  return;
+}
+
     if (!event) return;
     setLoading(true);
     try {
@@ -67,7 +98,13 @@ export default function TimelineEditModal({ employeeId, event, open, onOpenChang
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Date (ISO)</label>
-            <Input value={form.occurredAt} onChange={e=>setForm(s=>({...s, occurredAt: e.target.value}))} />
+           <Input
+  type="date"
+  max={todayYMD}                           // ⛔ prevents picking future dates
+  value={form.occurredAt}
+  onChange={(e) => setForm(s => ({ ...s, occurredAt: e.target.value }))}
+  placeholder="YYYY-MM-DD"
+/>
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Details (optional)</label>
