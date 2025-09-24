@@ -13,7 +13,7 @@ const OptionalString = z.union([z.string(), z.null(), z.undefined()]).transform(
   return undefined;
 });
 
-// accept "YYYY-MM-DD" or ISO
+// accept "YYYY-MM-DD" or ISO -> Date
 const DateInput = z.preprocess((v) => {
   if (v instanceof Date) return v;
   if (typeof v === "string") {
@@ -37,7 +37,7 @@ const TagsInput = z.union([z.array(z.string()), z.string(), z.null(), z.undefine
 const PatchBody = z.object({
   title: z.string().trim().min(1).optional(),
   date: DateInput.optional(),
-  description: OptionalString,   // → string | undefined
+  description: OptionalString,
   issuer: OptionalString,
   thumbnail: OptionalString,
   fileUrl: OptionalString,
@@ -54,6 +54,17 @@ export async function PATCH(req: Request, { params }: Params) {
     const body = await req.json();
     const data = PatchBody.parse(body);
 
+    // 🔒 Future-date guard (server-side)
+    if (data.date) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const d = new Date(data.date);
+      d.setHours(0, 0, 0, 0);
+      if (d.getTime() > today.getTime()) {
+        return new NextResponse("Date cannot be in the future.", { status: 400 });
+      }
+    }
+
     // ownership
     const found = await prismadb.award.findFirst({
       where: { id: awardId, employeeId },
@@ -62,13 +73,13 @@ export async function PATCH(req: Request, { params }: Params) {
     if (!found) return new NextResponse("Not found", { status: 404 });
 
     const updateData: any = {};
-    if (data.title !== undefined) updateData.title = data.title;
-    if (data.date !== undefined) updateData.givenAt = data.date;
+    if (data.title !== undefined)       updateData.title = data.title;
+    if (data.date !== undefined)        updateData.givenAt = data.date;            // Date obj
     if (data.description !== undefined) updateData.description = data.description ?? null;
-    if (data.issuer !== undefined) updateData.issuer = data.issuer ?? null;
-    if (data.thumbnail !== undefined) updateData.thumbnail = data.thumbnail ?? null;
-    if (data.fileUrl !== undefined) updateData.fileUrl = data.fileUrl ?? null;
-    if (data.tags !== undefined) updateData.tags = data.tags;
+    if (data.issuer !== undefined)      updateData.issuer = data.issuer ?? null;
+    if (data.thumbnail !== undefined)   updateData.thumbnail = data.thumbnail ?? null;
+    if (data.fileUrl !== undefined)     updateData.fileUrl = data.fileUrl ?? null;
+    if (data.tags !== undefined)        updateData.tags = data.tags;
 
     if (!Object.keys(updateData).length) {
       return new NextResponse("No fields to update", { status: 400 });
@@ -77,9 +88,29 @@ export async function PATCH(req: Request, { params }: Params) {
     const updated = await prismadb.award.update({
       where: { id: awardId },
       data: updateData,
+      select: {
+        id: true,
+        title: true,
+        issuer: true,
+        description: true,
+        thumbnail: true,
+        fileUrl: true,
+        tags: true,
+        givenAt: true,
+      },
     });
 
-    return NextResponse.json(updated);
+    // 🔁 Return UI-friendly shape so your editor pre-fills correctly
+    return NextResponse.json({
+      id: updated.id,
+      title: updated.title,
+      issuer: updated.issuer,
+      description: updated.description,
+      date: updated.givenAt.toISOString().slice(0, 10), // "YYYY-MM-DD"
+      thumbnail: updated.thumbnail,
+      fileUrl: updated.fileUrl,
+      tags: updated.tags ?? [],
+    });
   } catch (e: any) {
     return new NextResponse(e.message ?? "Server error", { status: 500 });
   }

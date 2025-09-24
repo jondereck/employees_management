@@ -19,6 +19,7 @@ type Award = {
   fileUrl?: string | null;
   tags: string[];
   description?: string | null;
+  
 };
 
 function AwardsSkeleton() {
@@ -51,9 +52,6 @@ export default function AwardsGallery({ employeeId, version = 0 }: AwardsGallery
     return false;
   }
 };
-
-const isGooglePhotosShare = (u?: string) =>
-  !!u && /^(https?:\/\/)?(photos\.app\.goo\.gl|photos\.google\.com)\//i.test(u);
 
 
   // confirm modal state
@@ -227,19 +225,40 @@ const isGooglePhotosShare = (u?: string) =>
       </Dialog>
 
       {/* EDIT DIALOG */}
-      <ShadDialog open={editOpen} onOpenChange={setEditOpen}>
-        <ShadContent className="max-w-2xl">
-          {active && (
-            <AddAward
-              employeeId={employeeId}
-              initial={active}
-              onSaved={(saved) => { upsertLocal(saved); setEditOpen(false); setOpen(false); }}
-              onDeleted={(deletedId) => { removeLocal(deletedId); setEditOpen(false); setOpen(false); }}
-              hideHeader
-            />
-          )}
-        </ShadContent>
-      </ShadDialog>
+     <ShadDialog
+  open={editOpen}
+  onOpenChange={(o) => {
+    setEditOpen(o);
+    if (!o) setActive(null);      // prevent re-open / stale initial
+  }}
+>
+  <ShadContent className="max-w-2xl">
+    {active && (
+      <AddAward
+        employeeId={employeeId}
+        initial={{ ...active, date: (active.date || "").slice(0,10) }}
+        onSaved={(saved) => {
+          setAwards(prev => {
+            const list = prev ?? [];
+            const i = list.findIndex(x => x.id === saved.id);
+            const normalized = { ...saved, date: (saved.date||"").slice(0,10) };
+            if (i >= 0) { const next = list.slice(); next[i] = normalized; return next; }
+            return [normalized, ...list];
+          });
+          setEditOpen(false);      // 🔥 close the EDIT modal
+          setActive(null);         // 🔥 clear selection
+        }}
+        onDeleted={(id) => {
+          setAwards(prev => (prev ?? []).filter(x => x.id !== id));
+          setEditOpen(false);      // 🔥 close the EDIT modal
+          setActive(null);
+        }}
+        hideHeader
+      />
+    )}
+  </ShadContent>
+</ShadDialog>
+
 
       {/* CONFIRM DELETE MODAL */}
       <AlertModal

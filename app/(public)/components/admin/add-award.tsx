@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,11 +54,11 @@ const isGooglePhotosShare = (u?: string) =>
   !!u && /^(https?:\/\/)?(photos\.app\.goo\.gl|photos\.google\.com)\//i.test(u);
 
   const today = useMemo(() => new Date().toISOString().slice(0,10), []);
-  
+
 const [form, setForm] = useState(() => ({
   title: initial?.title ?? "",
   issuer: initial?.issuer ?? "Municipality of Lingayen",
-  date: (initial?.date ?? new Date().toISOString().slice(0, 10)),
+     date: ((initial?.date ?? today)).slice(0, 10),
   description: initial?.description ?? "",        // 🔥 add
   thumbnail: initial?.thumbnail ?? "",
   fileUrl: initial?.fileUrl ?? "",
@@ -66,10 +66,23 @@ const [form, setForm] = useState(() => ({
 }));
 
 
+  useEffect(() => {
+    setForm({
+      title: initial?.title ?? "",
+      issuer: initial?.issuer ?? "Municipality of Lingayen",
+      date: ((initial?.date ?? today)).slice(0, 10),
+      description: initial?.description ?? "",
+      thumbnail: initial?.thumbnail ?? "",
+      fileUrl: initial?.fileUrl ?? "",
+      tags: (initial?.tags ?? []).join(", "),
+    });
+  }, [initial?.id, today]);
+
+
 const payload = useMemo(() => ({
   title: form.title.trim(),
   issuer: form.issuer?.trim() || null,
-  date: form.date, // yyyy-mm-dd
+    date: form.date.slice(0,10),   // yyyy-mm-dd
   description: form.description?.trim() || null,  // 🔥 add
   thumbnail: form.thumbnail?.trim() || null,
   fileUrl: form.fileUrl?.trim() || null,
@@ -81,6 +94,10 @@ const payload = useMemo(() => ({
     if (!payload.title) {
       toast.error("Title is required.");
       return;
+    }
+
+        if (payload.date > today) {
+      return toast.error("Date cannot be in the future.");
     }
     try {
       setLoading(true);
@@ -99,7 +116,7 @@ const payload = useMemo(() => ({
       const saved: AwardRecord = await res.json();
       toast.success(isEdit ? "Award updated" : "Award created");
 
-      onSaved?.(saved);
+     onSaved?.({ ...saved, date: (saved.date ?? form.date).slice(0, 10) });
       if (!isEdit) {
         // reset only on create
         setForm(f => ({ ...f, title: "", thumbnail: "", fileUrl: "", tags: "" }));

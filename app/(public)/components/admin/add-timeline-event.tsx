@@ -37,12 +37,13 @@ export default function AddTimelineEvent({
 }: Props) {
   const isEdit = !!initial?.id;
   const [loading, setLoading] = useState(false);
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const [form, setForm] = useState(() => ({
     type: initial?.type ?? "TRAINING",
     title: initial?.title ?? "",
     description: initial?.description ?? "",
-    date: (initial?.date ?? new Date().toISOString().slice(0, 10)).slice(0, 10),
+    date: ((initial?.date ?? today)).slice(0, 10),
     attachment: initial?.attachment ?? "",
   }));
 
@@ -51,7 +52,7 @@ export default function AddTimelineEvent({
       type: initial?.type ?? "TRAINING",
       title: initial?.title ?? "",
       description: initial?.description ?? "",
-      date: (initial?.date ?? new Date().toISOString().slice(0, 10)).slice(0, 10),
+      date: ((initial?.date ?? today)).slice(0, 10),
       attachment: initial?.attachment ?? "",
     });
   }, [initial?.id])
@@ -65,11 +66,16 @@ export default function AddTimelineEvent({
   }), [form]);
 
   async function handleSubmit() {
-   
+
     if (!payload.title) {
       toast.error("Title is required.");
       return;
     }
+
+    if (payload.date > today) {
+      return toast.error("Date cannot be in the future.");
+    }
+
     try {
       setLoading(true);
       const url = isEdit
@@ -82,13 +88,13 @@ export default function AddTimelineEvent({
         body: JSON.stringify(payload),
       });
 
-     
+
       if (!res.ok) throw new Error(await res.text());
 
-       const saved: TimelineRecord = await res.json();
-    onSaved?.({ ...saved, date: (saved.date ?? form.date).slice(0, 10) });
+      const saved: TimelineRecord = await res.json();
+      onSaved?.({ ...saved, date: (saved.date ?? form.date).slice(0, 10) });
       toast.success(isEdit ? "Event updated" : "Event added");
-   
+
 
       if (!isEdit) {
         setForm(f => ({ ...f, title: "", description: "", attachment: "" }));
