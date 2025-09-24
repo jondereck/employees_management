@@ -89,10 +89,6 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
     return (
       <div className="bg-white">
         <Container>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <AddTimelineEvent employeeId={employee.id} />
-            <AddAward employeeId={employee.id} />
-          </div>
           <div className="px-4 py-10 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row lg:items-start lg:gap-x-12">
               {/* Left: Profile Image / Gallery */}
