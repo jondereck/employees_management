@@ -20,7 +20,7 @@ export default function TimelineDeleteModal({ employeeId, eventId, open, onOpenC
     if (reason.trim().length < 5) { toast.error("Please provide a brief reason"); return; }
     setLoading(true);
     try {
-      const res = await fetch(`/api/public/employees/${employeeId}/timeline/${eventId}/request-delete`, {
+     const res = await fetch(`/api/public/employees/${employeeId}/timeline/request-create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),

@@ -1,35 +1,55 @@
 import { NextResponse } from "next/server";
-import prismadb from "@/lib/prismadb";
+import prisma from "@/lib/prismadb";
+import { z } from "zod";
+import { hashIp } from "@/lib/hash-ip";
+import { Prisma } from "@prisma/client";
 
-export async function POST(_req: Request, { params }: { params: { employeeId: string; eventId: string } }) {
+const DeleteSchema = z.object({
+  reason: z.string().min(5).max(500),
+  submittedName: z.string().max(120).optional(),
+  submittedEmail: z.string().email().optional(),
+});
+
+export async function POST(req: Request, { params }: { params: { employeeId: string; awardId: string } }) {
   try {
-    const emp = await prismadb.employee.findUnique({
-      where: { id: params.employeeId },
-      select: { id: true, departmentId: true, publicEnabled: true },
-    });
-    if (!emp?.publicEnabled) return NextResponse.json({ error: "Public suggestions disabled" }, { status: 403 });
+    const body = await req.json();
+    const parsed = DeleteSchema.safeParse(body);
+    if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
 
-    const event = await prismadb.employmentEvent.findFirst({
-      where: { id: params.eventId, employeeId: emp.id },
-      select: { id: true },
+    const award = await prisma.award.findFirst({
+      where: { id: params.awardId, employeeId: params.employeeId, deletedAt: null },
+      select: {
+        id: true, title: true, issuer: true, givenAt: true,
+        employee: { select: { departmentId: true, id: true, publicEnabled: true } },
+      },
     });
-    if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    if (!award || !award.employee.publicEnabled) {
+      return NextResponse.json({ error: "Not available for public deletions" }, { status: 404 });
+    }
 
-    await prismadb.changeRequest.create({
+    const ipHash = hashIp(req.headers.get("x-forwarded-for") || "0.0.0.0");
+    const cr = await prisma.changeRequest.create({
       data: {
-        departmentId: emp.departmentId,
-        employeeId: emp.id,
-        entityType: "TIMELINE",
-        entityId: event.id,
+        departmentId: award.employee.departmentId,
+        employeeId: award.employee.id,
+        entityType: "AWARD",
+        entityId: award.id,
         action: "DELETE",
         status: "PENDING",
-        newValues: {},
+        oldValues: { title: award.title, issuer: award.issuer, givenAt: award.givenAt } as Prisma.InputJsonValue,
+        newValues: Prisma.DbNull,
+        note: parsed.data.reason,
+        submittedName: parsed.data.submittedName,
+        submittedEmail: parsed.data.submittedEmail,
+        ipHash,
       },
     });
 
-    return NextResponse.json({ ok: true });
+    // TODO: notify admins
+
+    return NextResponse.json({ ok: true, requestId: cr.id });
   } catch (e) {
-    console.error("[PUBLIC_TIMELINE_REQUEST_DELETE]", e);
+    console.error(e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

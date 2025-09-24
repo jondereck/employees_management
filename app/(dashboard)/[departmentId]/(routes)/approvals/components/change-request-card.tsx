@@ -73,19 +73,32 @@ export default function ChangeRequestCard({
 
   return (
     <Card className="border rounded-xl p-4 space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="text-sm text-muted-foreground">{empName} • {cr.employee?.offices?.name ?? "—"}</div>
-          <h3 className="text-base font-semibold">{title}</h3>
-          {cr.note && (
-            <p className="text-xs text-muted-foreground mt-1">Note: {cr.note}</p>
-          )}
-          {(cr.submittedName || cr.submittedEmail) && (
-            <p className="text-xs text-muted-foreground">From: {cr.submittedName ?? "Anonymous"}{cr.submittedEmail ? ` • ${cr.submittedEmail}` : ""}</p>
-          )}
-        </div>
-        <Badge variant="secondary">PENDING</Badge>
-      </div>
+<div className="flex items-start justify-between gap-2">
+  <div>
+    <div className="text-sm text-muted-foreground">
+      {empName} • {cr.employee?.offices?.name ?? "—"}
+    </div>
+    <h3 className="text-base font-semibold">{title}</h3>
+    {cr.note && (
+      <p className="text-xs text-muted-foreground mt-1">Note: {cr.note}</p>
+    )}
+    {(cr.submittedName || cr.submittedEmail) && (
+      <p className="text-xs text-muted-foreground">
+        From: {cr.submittedName ?? "Anonymous"}
+        {cr.submittedEmail ? ` • ${cr.submittedEmail}` : ""}
+      </p>
+    )}
+  </div>
+
+  {/* ✅ show real status, not hard-coded */}
+  <Badge variant={
+    cr.status === "PENDING"   ? "secondary" :
+    cr.status === "APPROVED"  ? "default"   :
+    /* REJECTED or others */     "destructive"
+  }>
+    {cr.status}
+  </Badge>
+</div>
 
       {/* Diff table */}
       <div className="overflow-x-auto border rounded-lg">
@@ -120,10 +133,21 @@ export default function ChangeRequestCard({
         </table>
       </div>
 
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={onReject} disabled={!!loading || isPending}>{loading === "reject" ? "Rejecting…" : "Reject"}</Button>
-        <Button onClick={onApprove} disabled={!!loading || isPending}>{loading === "approve" ? "Approving…" : "Approve"}</Button>
-      </div>
+     <div className="flex justify-end gap-2">
+  <Button
+    variant="outline"
+    onClick={onReject}
+    disabled={!!loading || isPending || cr.status !== "PENDING"}
+  >
+    {loading === "reject" ? "Rejecting…" : "Reject"}
+  </Button>
+  <Button
+    onClick={onApprove}
+    disabled={!!loading || isPending || cr.status !== "PENDING"}
+  >
+    {loading === "approve" ? "Approving…" : "Approve"}
+  </Button>
+</div>
     </Card>
   );
 }

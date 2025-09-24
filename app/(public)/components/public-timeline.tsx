@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarIcon, Award as AwardIcon, ArrowUpRight, Landmark, GraduationCap, UserCheck, Pencil, Trash } from "lucide-react";
+import { CalendarIcon, Award as AwardIcon, ArrowUpRight, Landmark, GraduationCap, UserCheck, Pencil, Trash, Plus, Calendar, CalendarCheck, BadgeCheck, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -11,6 +11,28 @@ import TimelineEditModal from "@/app/(public)/components/modals/timeline-edit-mo
 import TimelineDeleteModal from "@/app/(public)/components/modals/timeline-delete-modal";
 import AwardEditModal from "@/app/(public)/components/modals/award-edit-modal";
 import AwardDeleteModal from "@/app/(public)/components/modals/award-delete-modal";
+import { toast } from "sonner";
+
+type Basics = {
+  dateHired: string;       // ISO from API
+  position: string;
+  officeName: string;
+  employeeTypeName: string;
+};
+
+type Prefill = {
+  type: "HIRED" | "PROMOTED" | "TRANSFERRED" | "REASSIGNED" | "AWARDED" | "CONTRACT_RENEWAL" | "TERMINATED" | "OTHER";
+  occurredAt: string;      // YYYY-MM-DD for <input type="date">
+  details: string;
+  note?: string;
+};
+
+function toDateInputValue(iso: string) {
+  try { return new Date(iso).toISOString().slice(0, 10); } catch { return ""; }
+}
+function toISOAtMidnight(dateStrYYYYMMDD: string) {
+  return new Date(`${dateStrYYYYMMDD}T00:00:00.000Z`).toISOString();
+}
 
 export type PublicTimelineProps = { employeeId: string; version?: number };
 export type PublicItem = {
@@ -55,6 +77,56 @@ export default function PublicTimeline({ employeeId, version = 0 }: PublicTimeli
   const [awardDeleteOpen, setAwardDeleteOpen] = useState(false);
   const [active, setActive] = useState<PublicItem | null>(null);
 
+const [prefill, setPrefill] = useState<Prefill | null>(null);
+const [quickLoading, setQuickLoading] = useState(false);
+
+useEffect(() => {
+  let ignore = false;
+  (async () => {
+    try {
+      const res = await fetch(`/api/public/employees/${employeeId}/basics`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to load employee basics");
+      const b: Basics = await res.json();
+
+      if (ignore) return;
+      const occurredAt = toDateInputValue(b.dateHired);
+      const details = `Hired as ${b.position} (${b.employeeTypeName}) in ${b.officeName}.`;
+      setPrefill({ type: "HIRED", occurredAt, details });
+    } catch {
+      setPrefill(null); // okay lang kahit di ma-load; may CTA pa rin
+    }
+  })();
+  return () => { ignore = true; };
+}, [employeeId]);
+
+const quickCreate = async () => {
+  if (!prefill?.occurredAt) {
+    setCreateOpen(true); // kung walang prefill, buksan na lang modal
+    return;
+  }
+  try {
+    setQuickLoading(true);
+    const res = await fetch(`/api/public/employees/${employeeId}/timeline/request-create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "HIRED",
+        occurredAt: toISOAtMidnight(prefill.occurredAt),
+        details: prefill.details,
+      }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j?.error || "Submit failed");
+
+    toast.success("Submitted default ‘HIRED’ entry for HRMO approval");
+    // TODO: refetch timeline here kung may SWR/React Query ka; or window.location.reload()
+  } catch (e: any) {
+    toast.error(e?.message || "Something went wrong");
+  } finally {
+    setQuickLoading(false);
+  }
+};
+
   const byDateDesc = (a: {occurredAt: string}, b: {occurredAt: string}) =>
     new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime();
 
@@ -82,20 +154,89 @@ export default function PublicTimeline({ employeeId, version = 0 }: PublicTimeli
   }, [employeeId, version]);
 
   if (items === null) return <TimelineSkeleton />;
-  if (items.length === 0) return (
-    <>
-      <div className="mb-3 flex items-center justify-between">
-        <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>Suggest new timeline</Button>
+if (items.length === 0) return (
+  <>
+    <div className="mb-3 flex items-center justify-between">
+      <span className="text-xs text-muted-foreground">
+        Keep your record up to date — submissions go to HRMO for approval.
+      </span>
+      <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Plus className="mr-2 h-4 w-4" />
+        Add timeline entry
+      </Button>
+    </div>
+
+    <div className="rounded-xl border border-dashed bg-muted/20 p-6">
+      <div className="flex items-start gap-4">
+        <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+          <CalendarCheck className="h-5 w-5 text-muted-foreground" />
+        </div>
+
+        <div className="flex-1">
+          <h3 className="text-base font-semibold">Suggested from HR records</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            We’ll prefill your first timeline entry using your Date Hired, Office, and Employee Type.
+          </p>
+
+          {prefill ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-md border bg-white p-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Date Hired:</span>
+                  <span className="ml-auto">{prefill.occurredAt}</span>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <BadgeCheck className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Type:</span>
+                  <span className="ml-auto">HIRED</span>
+                </div>
+              </div>
+
+              <div className="rounded-md border bg-white p-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Details:</span>
+                </div>
+                <p className="mt-1 text-muted-foreground">{prefill.details}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-muted-foreground">
+              We couldn’t load your default details right now, but you can still add one below.
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button onClick={quickCreate} disabled={quickLoading}>
+              {quickLoading ? "Submitting…" : "One-click add ‘HIRED’ entry"}
+            </Button>
+            <Button variant="outline" onClick={() => setCreateOpen(true)}>
+              Edit before submitting
+            </Button>
+          </div>
+
+          <p className="mt-2 text-xs text-muted-foreground">
+            HRMO will review and approve your submission.
+          </p>
+        </div>
       </div>
-      <p className="text-sm text-muted-foreground">No timeline data yet.</p>
-      <TimelineCreateModal employeeId={employeeId} open={createOpen} onOpenChange={setCreateOpen} />
-    </>
-  );
+    </div>
+
+    <TimelineCreateModal
+      employeeId={employeeId}
+      open={createOpen}
+      onOpenChange={setCreateOpen}
+      initial={prefill ?? undefined} // ⬅️ prefill the modal
+    />
+  </>
+);
+
 
   return (
     <>
       <div className="mb-3 flex items-center justify-between">
-    
+        <h3 className="text-base font-semibold">Service Timeline</h3>
         <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>Suggest new timeline</Button>
       </div>
 

@@ -462,7 +462,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
               </div>
 
               <section className="rounded-lg border p-4">
-                <h3 className="mb-3 text-base font-semibold">Service Timeline</h3>
+         
               <PublicTimeline employeeId={employeeId} />
               </section>
 

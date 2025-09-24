@@ -1,72 +1,166 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prismadb";
+import type { EmploymentEventType } from "@prisma/client";
 
-export async function POST(_req: Request, { params }: { params: { departmentId: string; id: string } }) {
+/* ---------------- helpers ---------------- */
+
+type CanonicalAction = "CREATE" | "UPDATE" | "DELETE";
+
+function normalizeAction(a: unknown): CanonicalAction {
+  const s = String(a);
+  if (s === "EDIT") return "UPDATE"; // tolerate old values
+  if (s === "CREATE" || s === "UPDATE" || s === "DELETE") return s;
+  return "UPDATE";
+}
+
+function uiToDbEventType(ui?: string | null): EmploymentEventType | undefined {
+  if (!ui) return undefined;
+  const u = ui.toUpperCase();
+  const map: Record<string, EmploymentEventType> = {
+    HIRED: "HIRED",
+    PROMOTION: "PROMOTED",
+    PROMOTED: "PROMOTED",
+    TRANSFER: "TRANSFERRED",
+    TRANSFERRED: "TRANSFERRED",
+    TRAINING: "OTHER",              // display bucket only
+    REASSIGNED: "REASSIGNED",
+    AWARD: "AWARDED",
+    RECOGNITION: "AWARDED",
+    "CONTRACT RENEWAL": "CONTRACT_RENEWAL",
+    CONTRACT_RENEWAL: "CONTRACT_RENEWAL",
+    TERMINATED: "TERMINATED",
+    SEPARATION: "TERMINATED",
+    OTHER: "OTHER",
+  };
+  return map[u];
+}
+
+function toDate(v: any) {
+  if (!v) return undefined;
+  const s = String(v);
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00.000Z` : s;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+function normalizeDetails(v: any): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === "") return null;
+  if (typeof v === "string") return v;
+  try { return JSON.stringify(v); } catch { return String(v); }
+}
+
+/* ---------------- route ---------------- */
+
+export async function POST(
+  _req: Request,
+  { params }: { params: { departmentId: string; id: string } }
+) {
   const { userId } = auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const cr = await prisma.changeRequest.findFirst({ where: { id: params.id, departmentId: params.departmentId, status: "PENDING" } });
+  // Only approve PENDING changes for the same department
+  const cr = await prisma.changeRequest.findFirst({
+    where: { id: params.id, departmentId: params.departmentId, status: "PENDING" },
+  });
   if (!cr) return NextResponse.json({ error: "Not found or already processed" }, { status: 404 });
 
-  await prisma.$transaction(async (tx) => {
-    if (cr.entityType === "AWARD") {
-      if (cr.action === "CREATE") {
-        const data = (cr.newValues ?? {}) as any;
-        await tx.award.create({
-          data: {
-            employeeId: cr.employeeId,
-            title: data.title,
-            issuer: data.issuer ?? null,
-            givenAt: new Date(data.givenAt),
-            description: data.description ?? null,
-            fileUrl: data.fileUrl ?? null,
-            thumbnail: data.thumbnail ?? null,
-            tags: Array.isArray(data.tags) ? data.tags : [],
-          },
-        });
-      } else if (cr.action === "UPDATE") {
-        await tx.award.update({
-          where: { id: cr.entityId! },
-          data: cr.newValues as any,
-        });
-      } else if (cr.action === "DELETE") {
-        await tx.award.update({
-          where: { id: cr.entityId! },
-          data: { deletedAt: new Date() },
-        });
-      }
-    } else if (cr.entityType === "TIMELINE") {
-      if (cr.action === "CREATE") {
-        const data = (cr.newValues ?? {}) as any;
-        await tx.employmentEvent.create({
-          data: {
-            employeeId: cr.employeeId,
-            type: data.type,                // must be one of EmploymentEventType
-            occurredAt: new Date(data.occurredAt),
-            details: data.details ?? null,
-          },
-        });
-      } else if (cr.action === "UPDATE") {
-        await tx.employmentEvent.update({
-          where: { id: cr.entityId! },
-          data: cr.newValues as any,
-        });
-      } else if (cr.action === "DELETE") {
-        await tx.employmentEvent.update({
-          where: { id: cr.entityId! },
-          data: { deletedAt: new Date() },
-        });
-      }
-    }
+  const action = normalizeAction(cr.action);
+  const nv = (cr.newValues ?? {}) as any;
 
-    await tx.changeRequest.update({
-      where: { id: cr.id },
-      data: { status: "APPROVED", reviewedAt: new Date(), approvedById: userId },
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (cr.entityType === "AWARD") {
+        if (action === "CREATE") {
+          await tx.award.create({
+            data: {
+              employeeId: cr.employeeId,
+              title: nv.title,
+              issuer: nv.issuer ?? null,
+              givenAt: toDate(nv.givenAt)!,
+              description: nv.description ?? null,
+              fileUrl: nv.fileUrl ?? null,
+              thumbnail: nv.thumbnail ?? null,
+              tags: Array.isArray(nv.tags) ? nv.tags : [],
+            },
+          });
+        } else if (action === "UPDATE") {
+          // validate ownership
+          const aw = await tx.award.findUnique({
+            where: { id: cr.entityId! },
+            select: { id: true, employeeId: true },
+          });
+          if (!aw || aw.employeeId !== cr.employeeId) {
+            throw new Error("Award not found for employee");
+          }
+          const patch: any = {};
+          if (nv.title        !== undefined) patch.title = nv.title;
+          if (nv.issuer       !== undefined) patch.issuer = nv.issuer ?? null;
+          if (nv.givenAt      !== undefined) patch.givenAt = toDate(nv.givenAt);
+          if (nv.description  !== undefined) patch.description = nv.description ?? null;
+          if (nv.fileUrl      !== undefined) patch.fileUrl = nv.fileUrl ?? null;
+          if (nv.thumbnail    !== undefined) patch.thumbnail = nv.thumbnail ?? null;
+          if (nv.tags         !== undefined) patch.tags = Array.isArray(nv.tags) ? nv.tags : [];
+          await tx.award.update({ where: { id: aw.id }, data: patch });
+        } else if (action === "DELETE") {
+          // HARD DELETE (no deletedAt needed)
+          const aw = await tx.award.findUnique({
+            where: { id: cr.entityId! },
+            select: { id: true, employeeId: true },
+          });
+          if (!aw || aw.employeeId !== cr.employeeId) {
+            throw new Error("Award not found for employee");
+          }
+          await tx.award.delete({ where: { id: aw.id } });
+        }
+      }
+
+      if (cr.entityType === "TIMELINE") {
+        if (action === "CREATE") {
+          await tx.employmentEvent.create({
+            data: {
+              employeeId: cr.employeeId,
+              type: uiToDbEventType(nv.type)!,          // map UI → Prisma enum
+              occurredAt: toDate(nv.occurredAt)!,
+              details: normalizeDetails(nv.details) ?? null,
+            },
+          });
+        } else if (action === "UPDATE") {
+          const ev = await tx.employmentEvent.findUnique({
+            where: { id: cr.entityId! },
+            select: { id: true, employeeId: true },
+          });
+          if (!ev || ev.employeeId !== cr.employeeId) {
+            throw new Error("EmploymentEvent not found for employee");
+          }
+          const patch: any = {};
+          if (nv.type       !== undefined) patch.type = uiToDbEventType(nv.type);
+          if (nv.occurredAt !== undefined) patch.occurredAt = toDate(nv.occurredAt);
+          if (nv.details    !== undefined) patch.details = normalizeDetails(nv.details);
+          await tx.employmentEvent.update({ where: { id: ev.id }, data: patch });
+        } else if (action === "DELETE") {
+          // HARD DELETE to avoid soft-delete columns
+          const ev = await tx.employmentEvent.findUnique({
+            where: { id: cr.entityId! },
+            select: { id: true, employeeId: true },
+          });
+          if (!ev || ev.employeeId !== cr.employeeId) {
+            throw new Error("EmploymentEvent not found for employee");
+          }
+          await tx.employmentEvent.delete({ where: { id: ev.id } });
+        }
+      }
+
+      await tx.changeRequest.update({
+        where: { id: cr.id },
+        data: { status: "APPROVED", reviewedAt: new Date(), approvedById: userId },
+      });
     });
-  });
 
-  // TODO: notify requester (email) and admins if needed
-
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, status: "APPROVED" });
+  } catch (e: any) {
+    console.error("Approve failed:", e);
+    return NextResponse.json({ error: e?.message || "Approve failed" }, { status: 500 });
+  }
 }
