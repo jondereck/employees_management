@@ -10,19 +10,22 @@ const uiToEnum = (t: string): EmploymentEventType => {
     case "PROMOTION": return "PROMOTED";
     case "TRANSFER": return "TRANSFERRED";
     case "AWARD": return "AWARDED";
-    case "RECOGNITION": return "AWARDED"; // or "OTHER"
+    case "RECOGNITION": return "AWARDED";   // or OTHER
     case "SEPARATION": return "TERMINATED";
-    case "TRAINING": return "OTHER"; // or add a new enum in proper path
+    case "TRAINING": return "OTHER";
     default: return "OTHER";
   }
 };
 
-const buildDetails = (title?: string, description?: string, attachment?: string) => {
-  const lines: string[] = [];
-  if (title) lines.push(`Title: ${title}`);
-  if (description) lines.push(`Notes: ${description}`);
-  if (attachment) lines.push(`Attachment: ${attachment}`);
-  return lines.length ? lines.join("\n") : null;
+const enumToUi = (t: EmploymentEventType) => {
+  switch (t) {
+    case "HIRED": return "HIRED";
+    case "PROMOTED": return "PROMOTION";
+    case "TRANSFERRED": return "TRANSFER";
+    case "AWARDED": return "AWARD";
+    case "TERMINATED": return "SEPARATION";
+    default: return "TRAINING";
+  }
 };
 
 export async function PATCH(req: Request, { params }: Params) {
@@ -33,41 +36,84 @@ export async function PATCH(req: Request, { params }: Params) {
     }
 
     const body = await req.json();
-    // expected from your UI form:
-    // { type: "HIRED"|"PROMOTION"|..., title: string, description?: string, date: "yyyy-mm-dd", attachment?: string }
-    const typeRaw = (body.type ?? "").toString();
-    const title = (body.title ?? "").trim();
-    const description = body.description?.trim();
-    const date = (body.date ?? "").trim();
-    const attachment = body.attachment?.trim();
+    const typeRaw = String(body.type ?? "");
+    const title = String(body.title ?? "").trim();
+    const description = String(body.description ?? "").trim();
+    const date = String(body.date ?? "").slice(0, 10); // yyyy-mm-dd
+    const attachment = String(body.attachment ?? "").trim();
 
-    if (!typeRaw) return new NextResponse("Type required", { status: 400 });
     if (!title) return new NextResponse("Title required", { status: 400 });
-    if (!date) return new NextResponse("Date required", { status: 400 });
+    if (!date)  return new NextResponse("Date required", { status: 400 });
 
     const occurredAt = new Date(date);
-    if (isNaN(occurredAt.getTime())) {
+    if (Number.isNaN(occurredAt.getTime())) {
       return new NextResponse("Invalid date", { status: 400 });
     }
 
-    const type = uiToEnum(typeRaw);
-    const details = buildDetails(title, description, attachment);
+    // Detect source table by id
+    const [eventRow, awardRow] = await Promise.all([
+      prismadb.employmentEvent.findFirst({
+        where: { id: eventId, employeeId },
+        select: { id: true, type: true },
+      }),
+      prismadb.award.findFirst({
+        where: { id: eventId, employeeId },
+        select: { id: true },
+      }),
+    ]);
 
-    // ownership check
-    const found = await prismadb.employmentEvent.findFirst({
-      where: { id: eventId, employeeId },
-      select: { id: true },
-    });
-    if (!found) return new NextResponse("Not found", { status: 404 });
+    if (eventRow) {
+      // Update EmploymentEvent (store UI fields as JSON in `details`)
+      const updated = await prismadb.employmentEvent.update({
+        where: { id: eventId },
+        data: {
+          type: typeRaw ? uiToEnum(typeRaw) : eventRow.type,
+          occurredAt,
+          details: JSON.stringify({
+            title,
+            description,
+            attachment: attachment || null,
+          }),
+        },
+        select: { id: true, type: true, occurredAt: true },
+      });
 
-    const updated = await prismadb.employmentEvent.update({
-      where: { id: eventId },
-      data: { type, details, occurredAt },
-    });
+      return NextResponse.json({
+        id: updated.id,
+        type: enumToUi(updated.type),
+        title,
+        description,
+        date,                            // already yyyy-mm-dd
+        attachment: attachment || null,
+      });
+    }
 
-    return NextResponse.json(updated);
+    if (awardRow) {
+      // Update Award (keep issuer/thumbnail/tags as-is)
+      const updated = await prismadb.award.update({
+        where: { id: eventId },
+        data: {
+          title,
+          description: description || null,
+          fileUrl: attachment || null,
+          givenAt: occurredAt,
+        },
+        select: { id: true, title: true, description: true, fileUrl: true, givenAt: true },
+      });
+
+      return NextResponse.json({
+        id: updated.id,
+        type: "AWARD",
+        title: updated.title,
+        description: updated.description ?? "",
+        date: updated.givenAt.toISOString().slice(0, 10),
+        attachment: updated.fileUrl ?? null,
+      });
+    }
+
+    return new NextResponse("Not found", { status: 404 });
   } catch (e: any) {
-    return new NextResponse(e.message ?? "Server error", { status: 500 });
+    return new NextResponse(e?.message ?? "Server error", { status: 500 });
   }
 }
 
@@ -78,15 +124,22 @@ export async function DELETE(_req: Request, { params }: Params) {
       return new NextResponse("employeeId & eventId required", { status: 400 });
     }
 
-    const found = await prismadb.employmentEvent.findFirst({
-      where: { id: eventId, employeeId },
-      select: { id: true },
-    });
-    if (!found) return new NextResponse("Not found", { status: 404 });
+    const [eventRow, awardRow] = await Promise.all([
+      prismadb.employmentEvent.findFirst({ where: { id: eventId, employeeId }, select: { id: true } }),
+      prismadb.award.findFirst({ where: { id: eventId, employeeId }, select: { id: true } }),
+    ]);
 
-    await prismadb.employmentEvent.delete({ where: { id: eventId } });
-    return new NextResponse(null, { status: 204 });
+    if (eventRow) {
+      await prismadb.employmentEvent.delete({ where: { id: eventId } });
+      return new NextResponse(null, { status: 204 });
+    }
+    if (awardRow) {
+      await prismadb.award.delete({ where: { id: eventId } });
+      return new NextResponse(null, { status: 204 });
+    }
+
+    return new NextResponse("Not found", { status: 404 });
   } catch (e: any) {
-    return new NextResponse(e.message ?? "Server error", { status: 500 });
+    return new NextResponse(e?.message ?? "Server error", { status: 500 });
   }
 }

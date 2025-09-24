@@ -154,6 +154,18 @@ const isGooglePhotosShare = (u?: string) =>
                       {a.tags.map(t => <Badge key={t} variant="secondary">{t}</Badge>)}
                     </div>
                   )}
+                  {(a.description || a.issuer) && (
+  <div className="px-3 pb-3">
+ 
+    {a.description && (
+      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+        {a.description}
+      </p>
+    )}
+  </div>
+)}
+
+
                 </div>
               </button>
               <div className="p-3 pt-0 flex gap-2">
@@ -182,50 +194,35 @@ const isGooglePhotosShare = (u?: string) =>
       {/* VIEW DIALOG */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl">
-          {active && (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-lg font-semibold">{active.title}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {active.issuer ? `${active.issuer} • ` : ""}
-                    {new Date(active.date).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  {active.fileUrl && (
-                    <Button asChild size="sm" variant="outline" type="button">
-                      <a href={active.fileUrl} target="_blank" rel="noreferrer">Open file</a>
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => { setDeletingId(active.id); setConfirmOpen(true); }}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
+        {active && (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between gap-3">
+      <h3 className="font-semibold">{active.title}</h3>
+      <time className="text-xs text-muted-foreground">
+        {new Date(active.date).toLocaleDateString('en-PH', { year:'numeric', month:'short', day:'2-digit' })}
+      </time>
+    </div>
 
-              {active.fileUrl || active.thumbnail ? (
-                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg border">
-                  <Image
-                    src={active.fileUrl || active.thumbnail!}
-                    alt={active.title}
-                    fill
-                    className=" bg-black/5"
-                    priority
-                  />
-                </div>
-              ) : (
-                <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
-                  No preview available.
-                </div>
-              )}
-            </div>
-          )}
+    {active.issuer && (
+      <p className="text-xs text-muted-foreground">Issuer: {active.issuer}</p>
+    )}
+
+    {active.description && (
+      <p className="text-sm leading-relaxed">{active.description}</p>
+    )}
+
+    {active.fileUrl && (
+      <a
+        href={active.fileUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-block text-xs underline hover:opacity-80"
+      >
+        Open certificate
+      </a>
+    )}
+  </div>
+)}
         </DialogContent>
       </Dialog>
 

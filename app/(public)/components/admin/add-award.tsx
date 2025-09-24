@@ -12,6 +12,7 @@ export type AwardRecord = {
   issuer?: string | null;
   date: string;          // "yyyy-mm-dd"
   thumbnail?: string | null;
+   description?: string | null; 
   fileUrl?: string | null;
   tags: string[];
 };
@@ -36,6 +37,7 @@ export default function AddAward({
 }: Props) {
   const isEdit = !!initial?.id;
   const [loading, setLoading] = useState(false);
+  
 
   const isImageLike = (u?: string | null) => {
   if (!u) return false;
@@ -51,27 +53,29 @@ export default function AddAward({
 const isGooglePhotosShare = (u?: string) =>
   !!u && /^(https?:\/\/)?(photos\.app\.goo\.gl|photos\.google\.com)\//i.test(u);
 
+  const today = useMemo(() => new Date().toISOString().slice(0,10), []);
+  
+const [form, setForm] = useState(() => ({
+  title: initial?.title ?? "",
+  issuer: initial?.issuer ?? "Municipality of Lingayen",
+  date: (initial?.date ?? new Date().toISOString().slice(0, 10)),
+  description: initial?.description ?? "",        // 🔥 add
+  thumbnail: initial?.thumbnail ?? "",
+  fileUrl: initial?.fileUrl ?? "",
+  tags: (initial?.tags ?? []).join(", "),
+}));
 
-  const [form, setForm] = useState(() => ({
-    title: initial?.title ?? "",
-    issuer: initial?.issuer ?? "Municipality of Lingayen",
-    date: (initial?.date ?? new Date().toISOString().slice(0, 10)),
-    thumbnail: initial?.thumbnail ?? "",
-    fileUrl: initial?.fileUrl ?? "",
-    tags: (initial?.tags ?? []).join(", "),
-  }));
 
-  const payload = useMemo(() => ({
-    title: form.title.trim(),
-    issuer: form.issuer?.trim() || null,
-    date: form.date, // must be yyyy-mm-dd
-    thumbnail: form.thumbnail?.trim() || null,
-    fileUrl: form.fileUrl?.trim() || null,
-    tags: form.tags
-      .split(",")
-      .map(t => t.trim())
-      .filter(Boolean),
-  }), [form]);
+const payload = useMemo(() => ({
+  title: form.title.trim(),
+  issuer: form.issuer?.trim() || null,
+  date: form.date, // yyyy-mm-dd
+  description: form.description?.trim() || null,  // 🔥 add
+  thumbnail: form.thumbnail?.trim() || null,
+  fileUrl: form.fileUrl?.trim() || null,
+  tags: form.tags.split(",").map(t => t.trim()).filter(Boolean),
+}), [form]);
+
 
   async function handleSubmit() {
     if (!payload.title) {
@@ -149,6 +153,16 @@ const isGooglePhotosShare = (u?: string) =>
           <label className="text-xs text-muted-foreground">Tags (comma-sep)</label>
           <Input value={form.tags} onChange={e=>setForm(s=>({ ...s, tags: e.target.value }))} placeholder="Service, Safety"/>
         </div>
+        <div className="sm:col-span-2">
+  <label className="text-xs text-muted-foreground">Description</label>
+  <Textarea
+    rows={3}
+    value={form.description ?? ""}
+    onChange={(e)=>setForm(s=>({ ...s, description: e.target.value }))}
+    placeholder="e.g., For exemplary service during…"
+  />
+</div>
+
       </div>
 
     <div>

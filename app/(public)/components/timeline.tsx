@@ -44,47 +44,78 @@ export default function Timeline({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    fetch(`/api/public/employees/${employeeId}/timeline`)
-      .then(r => r.json())
-      .then(data => { if (alive) setItems(Array.isArray(data) ? data : []); })
-      .catch(() => { if (alive) setItems([]); });
-    return () => { alive = false; };
-  }, [employeeId, version]);
+  // helpers (top of file)
+const byDateDesc = (a: {date: string}, b: {date: string}) =>
+  new Date(b.date).getTime() - new Date(a.date).getTime();
 
-  function upsertLocal(saved: TimelineRecord) {
-    setItems(curr => {
-      const list = curr ?? [];
-      const idx = list.findIndex(e => e.id === saved.id);
-      if (idx >= 0) {
-        const next = list.slice();
-        next[idx] = { ...next[idx], ...saved };
-        return next.sort((a,b)=> a.date.localeCompare(b.date));
-      }
-      return [saved, ...list].sort((a,b)=> a.date.localeCompare(b.date));
-    });
-  }
+
+
+useEffect(() => {
+  let alive = true;
+  fetch(`/api/public/employees/${employeeId}/timeline`)
+    .then(r => r.json())
+    .then(data => { if (alive) setItems(Array.isArray(data) ? [...data].map(d => ({...d, date: (d.date||"").slice(0,10)})).sort(byDateDesc) : []); })
+    .catch(() => { if (alive) setItems([]); });
+  return () => { alive = false; };
+}, [employeeId, version]);
+
+function upsertLocal(saved: TimelineRecord) {
+  const normalized = { ...saved, date: (saved.date||"").slice(0,10) };
+  setItems(curr => {
+    const list = curr ?? [];
+    const idx = list.findIndex(e => e.id === normalized.id);
+    if (idx >= 0) {
+      const next = list.slice();
+      next[idx] = { ...next[idx], ...normalized };
+      return next.sort(byDateDesc);    // 🔥 newest-first after edit
+    }
+    return [normalized, ...list].sort(byDateDesc); // 🔥 newest-first after add
+  });
+}
   function removeLocal(id: string) {
     setItems(curr => (curr ?? []).filter(e => e.id !== id));
   }
+// Timeline.tsx
+async function confirmDelete() {
+  if (!deletingId) return;
+  try {
+    setDeleting(true);
 
-  async function confirmDelete() {
-    if (!deletingId) return;
-    try {
-      setDeleting(true);
-      const res = await fetch(`/api/admin/employees/${employeeId}/timeline/${deletingId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
-      removeLocal(deletingId);
-      toast.success("Event deleted");
-      setConfirmOpen(false);
-      setDeletingId(null);
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to delete");
-    } finally {
-      setDeleting(false);
+    // Find the item so we know what endpoint to hit
+    const item = (items ?? []).find(i => i.id === deletingId);
+    if (!item) throw new Error("Item not found");
+
+    // Pick endpoint by type
+    const url =
+      item.type === "AWARD"
+        ? `/api/admin/employees/${employeeId}/awards/${deletingId}`
+        : `/api/admin/employees/${employeeId}/timeline/${deletingId}`;
+
+    let res = await fetch(url, { method: "DELETE" });
+
+    // Optional fallback: if we guessed wrong, try the other endpoint
+    if (res.status === 404) {
+      const altUrl =
+        item.type === "AWARD"
+          ? `/api/admin/employees/${employeeId}/timeline/${deletingId}`
+          : `/api/admin/employees/${employeeId}/awards/${deletingId}`;
+      res = await fetch(altUrl, { method: "DELETE" });
     }
+
+    if (!res.ok && res.status !== 204) {
+      throw new Error(await res.text());
+    }
+
+    removeLocal(deletingId);
+    toast.success("Deleted");
+    setConfirmOpen(false);
+    setDeletingId(null);
+  } catch (e: any) {
+    toast.error(e?.message || "Failed to delete");
+  } finally {
+    setDeleting(false);
   }
+}
 
  if (!items) return <TimelineSkeleton/>;    // ✅ show skeleton
   if (items.length === 0) return <p className="text-sm text-muted-foreground">No timeline data yet.</p>;
