@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
-import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage,exportTemplatesToBlob, importTemplatesFromObject } from '@/utils/export-templates';
+import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage, exportTemplatesToBlob, importTemplatesFromObject } from '@/utils/export-templates';
 import TemplatePickerBar from './ui/export-template-picker';
 
 
@@ -301,6 +301,19 @@ export default function DownloadStyledExcel() {
   const removePositionRule = (idx: number) => {
     setPositionReplaceRules(prev => prev.filter((_, i) => i !== idx));
   };
+
+  const makeSafeFilename = (name: string) =>
+    name
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, "") // reserved
+      .replace(/\s+/g, " ")                  // collapse spaces
+      .trim()
+      .slice(0, 120);                        // keep it reasonable
+
+  const selectedTemplateName = useMemo(() => {
+  const tpl = templates.find(t => t.id === selectedTemplateId);
+  return tpl?.name?.trim() || "Employee List";
+}, [templates, selectedTemplateId]);
+
 
   // at the top of DownloadStyledExcel component
   const [showAdvanced, setShowAdvanced] = useState<boolean>(() => {
@@ -601,8 +614,9 @@ export default function DownloadStyledExcel() {
 
       });
 
-      const now = new Date();
-      const filename = `employee_list_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}.xlsx`;
+     const base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
+const filename = `${base}.xlsx`;
+
 
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
@@ -619,44 +633,43 @@ export default function DownloadStyledExcel() {
       setLoading(false);
     }
   };
-const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-const handleClickImport = () => fileInputRef.current?.click();
+  const handleClickImport = () => fileInputRef.current?.click();
 
-const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  e.target.value = ""; // let user choose same file again later
-  if (!file) return;
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let user choose same file again later
+    if (!file) return;
 
-  try {
-    const text = await file.text();
-    const json = JSON.parse(text);
-    const { added, overwritten, skipped } = importTemplatesFromObject(json, {
-      overwriteOnIdConflict: false, // set true if you want overwrite behavior
-    });
-    refreshTemplates();
-    toast.success(
-      `Imported: +${added}${overwritten ? `, overwritten ${overwritten}` : ""}${
-        skipped ? `, skipped ${skipped}` : ""
-      }`
-    );
-  } catch (err) {
-    console.error(err);
-    toast.error("Import failed: invalid or corrupted JSON.");
-  }
-};
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const { added, overwritten, skipped } = importTemplatesFromObject(json, {
+        overwriteOnIdConflict: false, // set true if you want overwrite behavior
+      });
+      refreshTemplates();
+      toast.success(
+        `Imported: +${added}${overwritten ? `, overwritten ${overwritten}` : ""}${skipped ? `, skipped ${skipped}` : ""
+        }`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Import failed: invalid or corrupted JSON.");
+    }
+  };
 
-const handleExport = (includeBuiltIns = false) => {
-  const blob = exportTemplatesToBlob({ includeBuiltIns });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = includeBuiltIns ? "hrps-templates-all.json" : "hrps-templates-user.json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(a.href);
-  toast.message("Templates exported");
-};
+  const handleExport = (includeBuiltIns = false) => {
+    const blob = exportTemplatesToBlob({ includeBuiltIns });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = includeBuiltIns ? "hrps-templates-all.json" : "hrps-templates-user.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    toast.message("Templates exported");
+  };
 
 
   return (
@@ -691,74 +704,74 @@ const handleExport = (includeBuiltIns = false) => {
         onClose={() => setModalOpen(false)}
       >
 
-     <div className="flex items-center gap-3 mb-2">
-  <button
-    onClick={() => {
-      const name = prompt("Template name?");
-      if (!name) return;
+        <div className="flex items-center gap-3 mb-2">
+          <button
+            onClick={() => {
+              const name = prompt("Template name?");
+              if (!name) return;
 
-      const newTpl = saveTemplateToLocalStorage(name, {
-        selectedKeys: selectedColumnsRef.current,
-        statusFilter,
-        idColumnSource,
-        appointmentFilters,
-        positionReplaceRules,
-        sheetName: "Sheet1",
-      });
+              const newTpl = saveTemplateToLocalStorage(name, {
+                selectedKeys: selectedColumnsRef.current,
+                statusFilter,
+                idColumnSource,
+                appointmentFilters,
+                positionReplaceRules,
+                sheetName: "Sheet1",
+              });
 
-      refreshTemplates();
-      setSelectedTemplateId(newTpl.id);
-      toast.success(`Saved template "${name}"`);
-    }}
-    className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-    title="Save current selections as a new template"
-  >
-     <Save className="h-4 w-4" />
-    Save Template
-  </button>
+              refreshTemplates();
+              setSelectedTemplateId(newTpl.id);
+              toast.success(`Saved template "${name}"`);
+            }}
+            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
+            title="Save current selections as a new template"
+          >
+            <Save className="h-4 w-4" />
+            Save Template
+          </button>
 
-  {/* Export user templates */}
-  <button
-    type="button"
-    onClick={() => handleExport(false)}
-    title="Export user templates (.json)"
-    className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-  >
-    <FileDown className="h-4 w-4" />
-    Export
-  </button>
+          {/* Export user templates */}
+          <button
+            type="button"
+            onClick={() => handleExport(false)}
+            title="Export user templates (.json)"
+            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
+          >
+            <FileDown className="h-4 w-4" />
+            Export
+          </button>
 
-  {/* Export all templates (built-ins + user) */}
-  <button
-    type="button"
-    onClick={() => handleExport(true)}
-    title="Export all templates (.json)"
-    className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-  >
-    <FileDown className="h-4 w-4" />
-    Export All
-  </button>
+          {/* Export all templates (built-ins + user) */}
+          <button
+            type="button"
+            onClick={() => handleExport(true)}
+            title="Export all templates (.json)"
+            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
+          >
+            <FileDown className="h-4 w-4" />
+            Export All
+          </button>
 
-  {/* Import */}
-  <button
-    type="button"
-    onClick={handleClickImport}
-    title="Import templates (.json)"
-    className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-  >
-    <FileUp className="h-4 w-4" />
-    Import
-  </button>
+          {/* Import */}
+          <button
+            type="button"
+            onClick={handleClickImport}
+            title="Import templates (.json)"
+            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
+          >
+            <FileUp className="h-4 w-4" />
+            Import
+          </button>
 
-  {/* Hidden file input */}
-  <input
-    ref={fileInputRef}
-    type="file"
-    accept="application/json"
-    onChange={handleImportFile}
-    className="hidden"
-  />
-</div>
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            onChange={handleImportFile}
+            className="hidden"
+          />
+        </div>
 
 
         <TemplatePickerBar

@@ -268,7 +268,7 @@ const isJobOrder = (et?: { value?: string | null; name?: string | null }) => {
       </div>
 
       <div className="transition-transform transform hover:scale-110 cursor-pointer">
-        <QrCodeGenerator departmentId={data.department} employeeId={data.id} />
+        <QrCodeGenerator departmentId={data.department} employeeId={data.id}  employeeNo={data.employeeNo } />
       </div>
 
       <CopyOptionsModal

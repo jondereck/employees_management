@@ -94,7 +94,11 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
               {/* Left: Profile Image / Gallery */}
               <div className="w-full max-w-xs mx-auto lg:mx-0">
                 <div className="overflow-hidden rounded-xl border shadow-sm bg-white">
-                  <Gallery images={employee.images} />
+
+                  <Gallery
+                    images={employee.images ?? []}
+                    employeeId={employee.id}
+                    employeeNo={employee.employeeNo ?? ""} />
                 </div>
               </div>
 
@@ -458,8 +462,8 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
               </div>
 
               <section className="rounded-lg border p-4">
-         
-              <PublicTimeline employeeId={employeeId} />
+
+                <PublicTimeline employeeId={employeeId} />
               </section>
 
               <section className="rounded-lg border p-4">

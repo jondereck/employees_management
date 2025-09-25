@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState, useMemo } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,78 +12,117 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog";
-import { useRef, useState } from "react";
-import { ActionTooltip } from "./ui/action-tooltip";
-
+import ImageLogo from "@/public/icon-192x192.png"; // local asset (same-origin)
+import { toast } from "sonner";
 
 interface QrCodeGeneratorProps {
   departmentId: string;
   employeeId: string;
+  /** Optional: para ma-apply ang JDN + truncate-before-comma filename rule */
+  employeeNo?: string | null;
+  /** Optional: QR size in px (canvas). Default 200 (modal), 100 (trigger) */
+  size?: number;
 }
-
 
 export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   departmentId,
   employeeId,
+  employeeNo,
+  size = 200,
 }) => {
   const qrValue = `${process.env.NEXT_PUBLIC_URL}/view/employee/${employeeId}`;
   const [isOpen, setIsOpen] = useState(false);
   const qrRef = useRef<HTMLCanvasElement | null>(null);
-  // Handle modal toggle
+
+  // Filename rule: JDN + employeeNo(before comma) | fallback to employeeId
+  const fileBaseName = useMemo(() => {
+    const base = employeeNo
+      ? employeeNo.split(",")[0].trim()
+      : employeeId;
+    return `JDN${base}`;
+  }, [employeeNo, employeeId]);
+
   const handleOpen = () => setIsOpen(true);
 
-
-  // Handle Download
   const handleDownload = () => {
     const canvas = qrRef.current;
-    if (canvas) {
-      const url = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `employee-${employeeId}-qr.png`;
-      link.click();
-    }
+    if (!canvas) return;
+    const url = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${fileBaseName}.png`;
+    link.click();
+    toast.success(`QR Code for ${fileBaseName}.png downloaded!`);
   };
 
-  // Handle Print
   const handlePrint = () => {
     const canvas = qrRef.current;
-    if (canvas) {
-      const printWindow = window.open("", "_blank");
-      if (printWindow) {
-        const imgData = canvas.toDataURL("image/png");
-        printWindow.document.write(`<img src="${imgData}" onload="window.print(); window.close();" />`);
-        printWindow.document.close();
-      }
+    if (!canvas) return;
+    const imgData = canvas.toDataURL("image/png");
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.write(
+        `<img src="${imgData}" onload="window.print(); window.close();" />`
+      );
+      w.document.close();
     }
   };
 
-  return (
- <div className="hidden md:block">
-      <ActionTooltip label="Click to enlarge" side="top" align="center">
-        <div
-          className="my-4 flex flex-col items-start space-y-2 cursor-pointer"
-          onClick={handleOpen}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === "Enter" && handleOpen()}
-        >
-          <QRCodeCanvas value={qrValue} size={100} />
-        </div>
-      </ActionTooltip>
+  // Logo size ~20% ng QR (pareho sa bulk exporter)
+  const logoSize = Math.round(size * 0.2);
 
-      {/* Modal to show enlarged QR code */}
+  return (
+    <div className="hidden md:block">
+      {/* Small preview (click to enlarge) */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogTrigger asChild>
+          <div
+            className="my-4 flex flex-col items-start space-y-2 cursor-pointer"
+            onClick={handleOpen}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && handleOpen()}
+            title="Click to enlarge"
+          >
+            <QRCodeCanvas
+              value={qrValue}
+              size={100}
+              // embed center icon for preview as well
+              imageSettings={{
+                src: ImageLogo.src,
+                height: Math.round(100 * 0.2),
+                width: Math.round(100 * 0.2),
+                excavate: true, // clears modules under the image for better contrast
+              }}
+            />
+          </div>
+        </DialogTrigger>
+
+        {/* Modal */}
         <DialogContent className="w-full max-w-sm p-6">
           <DialogHeader>
             <DialogTitle className="text-center">Employee QR Code</DialogTitle>
             <DialogDescription className="text-center text-muted-foreground">
-              Scan the QR code or download it for reference.
+              Scan the QR code or download/print it.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex justify-center items-center py-6">
-            <QRCodeCanvas value={qrValue} size={200} ref={qrRef} />
+            <QRCodeCanvas
+              value={qrValue}
+              size={size}
+              ref={qrRef}
+              // center logo (same-origin image; won’t taint canvas)
+              imageSettings={{
+                src: ImageLogo.src,
+                height: logoSize,
+                width: logoSize,
+                excavate: true,
+              }}
+              // You can tweak errorCorrectionLevel if needed
+              // level="H"
+              // includeMargin
+            />
           </div>
 
           <DialogFooter className="flex justify-between items-center mt-4">

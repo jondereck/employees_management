@@ -80,36 +80,124 @@ function safeFormat(d: Date | null, fmt: string) {
     return "";
   }
 }
-// Prefer date+time → timestamp → date
+
+function hasExplicitTZ(s?: string) {
+  if (!s) return false;
+  // ISO with Z or explicit offset like +08:00 / -0500
+  return /z$/i.test(s) || /[+-]\d{2}:\d{2}$/.test(s) || /[+-]\d{4}$/.test(s);
+}
+
+function normalizeDateString(input?: string): string {
+  if (!input) return "";
+  const s = input.trim();
+
+  // Try a few common calendar-only formats by regex (no Date math)
+  // yyyy-MM-dd
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+
+  // MM/dd/yyyy or M/d/yyyy
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const mm = m[1].padStart(2, "0");
+    const dd = m[2].padStart(2, "0");
+    return `${m[3]}-${mm}-${dd}`;
+  }
+
+  // dd/MM/yyyy or d/M/yyyy
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const dd = m[1].padStart(2, "0");
+    const mm = m[2].padStart(2, "0");
+    // ambiguous with previous; keep as-is unless you know locale
+  }
+
+  // Fallback: last resort using date-fns parse (only for calendar, no TZ output)
+  const tryPat = ["yyyy-MM-dd", "MM/dd/yyyy", "M/d/yyyy", "dd/MM/yyyy", "d/M/yyyy"];
+  for (const p of tryPat) {
+    const d = parse(s, p, new Date());
+    if (isValid(d)) return format(d, "yyyy-MM-dd");
+  }
+  return s; // give up—return raw
+}
+
+function normalizeTimeString(input?: string): string {
+  if (!input) return "";
+  const s = input.trim().toLowerCase();
+
+  // h:mm[:ss] [am|pm]
+  let m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (m) {
+    let hh = parseInt(m[1], 10);
+    const mm = m[2];
+    const ss = m[3] ?? "00";
+    const ampm = (m[4] || "").toLowerCase();
+    if (ampm === "pm" && hh < 12) hh += 12;
+    if (ampm === "am" && hh === 12) hh = 0;
+    return `${String(hh).padStart(2, "0")}:${mm}:${ss.padStart(2, "0")}`;
+  }
+
+  // HH:mm[:ss]
+  m = s.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (m) {
+    const hh = m[1], mm = m[2], ss = m[3] ?? "00";
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  return s; // fallback
+}
+
+// Prefer Date+Time → Timestamp. Only convert when timestamp has an explicit TZ.
+// Otherwise, treat as Manila wall-clock and DON'T convert.
 function toDateTime(date?: string, time?: string, timestamp?: string) {
-  let raw: Date | null = null;
-
+  // Case A: separate Date + Time provided → normalize as strings, no Date()
   if (date && time) {
-    // Try a couple of join styles (CSV often has commas)
-    const candidates = [
-      `${date} ${time}`,
-      `${date}T${time}`,
-      `${date}, ${time}`,
-    ];
-    for (const c of candidates) {
-      raw = parseWithPatterns(c);
-      if (raw) break;
+    const dateStr = normalizeDateString(date);
+    const timeStr = normalizeTimeString(time);
+    return { dateStr, timeStr, iso: "" }; // keep as plain strings
+  }
+
+  // Case B: single Timestamp
+  if (timestamp) {
+    const ts = timestamp.trim();
+
+    // If the timestamp includes TZ info → parse then convert to Manila consistently
+    if (hasExplicitTZ(ts)) {
+      const d = parseWithPatterns(ts);
+      if (d && isValid(d)) {
+        const zoned = utcToZonedTime(d, PH_TZ);
+        return {
+          dateStr: safeFormat(zoned, "yyyy-MM-dd"),
+          timeStr: safeFormat(zoned, "HH:mm:ss"),
+          iso: isValid(zoned) ? zoned.toISOString() : "",
+        };
+      }
     }
+
+    // Otherwise, split it as plain local timestamp (no TZ math)
+    // Accept "YYYY-MM-DD[ T]HH:mm[:ss]" and similar
+    const m = ts.match(
+      /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/
+    );
+    if (m) {
+      return {
+        dateStr: m[1],
+        timeStr: normalizeTimeString(m[2]),
+        iso: "",
+      };
+    }
+
+    // Try looser patterns: let’s separate date + time substrings when obvious
+    const dateOnly = normalizeDateString(ts);
+    if (dateOnly !== ts) return { dateStr: dateOnly, timeStr: "", iso: "" };
   }
 
-  if (!raw && timestamp) raw = parseWithPatterns(timestamp);
-  if (!raw && date) raw = parseWithPatterns(date);
-
-  if (!raw) {
-    return { dateStr: "", timeStr: "", iso: "" };
+  // Case C: only Date provided
+  if (date) {
+    return { dateStr: normalizeDateString(date), timeStr: "", iso: "" };
   }
 
-  const zoned = utcToZonedTime(raw, PH_TZ);
-  return {
-    dateStr: safeFormat(zoned, "yyyy-MM-dd"),
-    timeStr: safeFormat(zoned, "HH:mm:ss"),
-    iso: isValid(zoned) ? zoned.toISOString() : "",
-  };
+  return { dateStr: "", timeStr: "", iso: "" };
 }
 
 export async function POST(req: Request) {
