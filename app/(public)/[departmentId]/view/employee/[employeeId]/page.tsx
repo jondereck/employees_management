@@ -493,14 +493,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
         employeeNo={publicData.employeeNo}
       />
 
-      <PublicFooter
-        systemName="HR Profiling System"
-        creatorName="made with ❤️ by Niffy"
-        creatorLink="https://www.linkedin.com/in/jdnifas/"
-        systemLogo={{ src: "/icon-192x192.png", alt: "HRPS Logo", title: "HR Profiling System" }}
-        hrLogo={{ src: "/hrmo-logo.png", alt: "HRMO Logo", title: "Human Resource Management Office" }}
-        lguLogo={{ src: "/logo.png", alt: "LGU Lingayen Seal", title: "Municipality of Lingayen" }}
-      />
+    
     </div>
   );
 }

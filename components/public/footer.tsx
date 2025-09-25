@@ -40,9 +40,14 @@ export default function PublicFooter({
   );
 
   return (
-    <footer
+      <footer
       className={[
+        // ✅ fixed, full width, pinned to bottom, above other content
+        "fixed inset-x-0 bottom-0 z-40",
+        // ✅ styling
         "w-full border-t bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60",
+        // ✅ safe-area friendly padding for iOS home gesture
+        "pb-[max(0px,env(safe-area-inset-bottom))]",
         className,
       ].join(" ")}
     >
