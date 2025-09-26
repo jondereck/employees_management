@@ -1,54 +1,77 @@
 // lib/bio-utils.ts
+import prismadb from "@/lib/prismadb";
 
-/** Extract BIO (digits) and EMP (2nd token) from "8540010, E-4" or "8540010" or "E-4" */
-export function splitEmployeeNo(raw?: string | null) {
-  const clean = (raw ?? "").trim();
-  if (!clean) return { bio: "", emp: "" };
+/**
+ * Suggest the smallest available numeric BIO in a range (no suffix).
+ * Treats values like "8540001, E-2" as USED for 8540001.
+ */
+export async function findFirstFreeBioFlat(args: {
+  departmentId: string;
+  startFrom: number;
+  allowStart?: boolean;        // default false -> startFrom+1
+  digits?: number | null;      // pad width (optional)
+  familyStart?: number | null; // inclusive
+  familyEnd?: number | null;   // inclusive
+}) {
+  const {
+    departmentId,
+    startFrom,
+    allowStart = false,
+    digits = null,
+    familyStart = null,
+    familyEnd = null,
+  } = args;
 
-  const [a, b] = clean.split(",").map(s => s.trim());
-  // a can be bio (digits) or emp code; we detect
-  if (/^\d+$/.test(a)) {
-    return { bio: a, emp: b ?? "" };
+  // Pull minimal data
+  const rows = await prismadb.employee.findMany({
+    where: { departmentId },
+    select: { employeeNo: true },
+  });
+
+  const used = new Set<number>();
+
+  for (const r of rows) {
+    const raw = (r.employeeNo ?? "").trim();
+    if (!raw) continue;
+
+    // Get LEFT side before comma (if any), then keep digits only
+    // Examples:
+    // "8540001, E-2" -> "8540001"
+    // "2050000-0007" -> "20500000007" (we'll handle by taking only leading digits)
+    // "  8540003  "  -> "8540003"
+    const left = raw.split(",")[0] ?? "";
+    const digitsOnly = left.replace(/[^\d]/g, "");
+
+    // Keep only LEADING digit run to be safe (prevents "2050000-0007" turning into a huge number)
+    const m = digitsOnly.match(/^\d+/);
+    if (!m) continue;
+
+    const n = Number(m[0]);
+    if (!Number.isFinite(n)) continue;
+
+    // Respect optional family bounds
+    if (familyStart != null && n < familyStart) continue;
+    if (familyEnd != null && n > familyEnd) continue;
+
+    used.add(n);
   }
-  // if first token is NOT all digits, then maybe single EMP only
-  if (!b) return { bio: "", emp: a };
-  // fallback
-  return { bio: a, emp: b };
-}
 
-/** Get first free number starting from base+1, e.g., base=854000 -> check 854001, 854002, ... */
-export function findFirstFreeBio(base: number, usedSet: Set<number>, maxTry = 10000) {
-  let candidate = base + 1;
-  let attempts = 0;
-  while (attempts < maxTry) {
-    if (!usedSet.has(candidate)) return String(candidate);
+  // Find smallest available candidate
+  let candidate = allowStart ? startFrom : startFrom + 1;
+  if (familyStart != null && candidate < familyStart) candidate = familyStart;
+
+  // advance until free (or out of range)
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (familyEnd != null && candidate > familyEnd) {
+      throw new Error("No available BIO in the configured range.");
+    }
+    if (!used.has(candidate)) break;
     candidate++;
-    attempts++;
   }
-  throw new Error("No free BIO found within range");
-}
 
-
-export function derivePrefixAndWidth(indexBaseStr: string) {
-  const m = String(indexBaseStr).match(/^(.*?)(0+)$/);
-  if (m) {
-    const prefix = m[1];
-    const width = m[2].length;
-    return { prefix, width };
-  }
-  // no trailing zeros — treat the whole thing as prefix, width 0
-  return { prefix: String(indexBaseStr), width: 0 };
+  let out = String(candidate);
+  if (digits && digits > 0) out = out.padStart(digits, "0");
+  return out; // e.g., "8540002"
 }
-
-export function padSuffix(n: number, width: number) {
-  return String(n).padStart(width, "0");
-}
-
-/** Find first free suffix 1..max for given prefix/width */
-export function firstFreeSuffix(usedSuffixes: Set<number>, width: number) {
-  const max = width > 0 ? Math.pow(10, width) - 1 : 999999; // sane cap for width 0
-  for (let s = 1; s <= max; s++) {
-    if (!usedSuffixes.has(s)) return s;
-  }
-  throw new Error("No free BIO available");
-}
+  

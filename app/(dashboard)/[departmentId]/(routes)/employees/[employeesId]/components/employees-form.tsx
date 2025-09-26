@@ -406,48 +406,58 @@ export const EmployeesForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee, initialData]);
 
-  // split "8540010, E-4" -> { bio:"8540010", emp:"E-4" }
-  function splitEmployeeNo(raw?: string | null) {
-    const clean = (raw ?? "").trim();
-    if (!clean) return { bio: "", emp: "" };
-    const [a, b] = clean.split(",").map(s => s.trim());
-    if (/^\d+$/.test(a)) return { bio: a, emp: b ?? "" };
-    if (!b) return { bio: "", emp: a };
-    return { bio: a, emp: b };
+ // split "2050000-0007, E-4" | "8540010, E-4" | "2050000-0007" | "8540010"
+function splitEmployeeNo(raw?: string | null) {
+  const clean = (raw ?? "").trim();
+  if (!clean) return { bio: "", emp: "" };
+
+  // split by comma to separate EMP part if any
+  const [left, right] = clean.split(",").map(s => s.trim());
+
+  // left may be "2050000-0007" or "8540010"
+  const bio = (left ?? "").toUpperCase();
+  const emp = (right ?? "").toUpperCase();
+
+  return { bio, emp };
+}
+
+// join back to the saved UI format "BIO, EMP" if EMP exists
+function joinEmployeeNo(bio: string, emp?: string) {
+  const b = (bio ?? "").trim().toUpperCase();
+  const e = (emp ?? "").trim().toUpperCase();
+  return e ? `${b}, ${e}` : b;
+}
+const officeId = form.watch("officeId"); // keep
+
+async function suggestBio() {
+  if (!officeId) {
+    toast.error("Select an Office first.");
+    return;
   }
+  try {
+    const res = await fetch(
+      `/api/${params.departmentId}/offices/${officeId}/suggest-bio`,
+      { cache: "no-store" }
+    );
+    const data = await res.json();
 
-  function joinEmployeeNo(bio: string, emp?: string) {
-    const left = (bio ?? "").trim();
-    const right = (emp ?? "").trim();
-    return [left, right].filter(Boolean).join(", ");
-  }
-
-  const officeId = form.watch("officeId"); // assuming you already have an office select bound to "officeId"
-
-  async function suggestBio() {
-    if (!officeId) {
-      toast.error("Select an Office first.");
-      return;
+    if (!res.ok || !data?.ok) {
+      throw new Error(data?.message || "Failed to suggest an available BIO.");
     }
-    try {
-      const res = await fetch(`/api/${params.departmentId}/offices/${officeId}/suggest-bio`, { cache: "no-store" });
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || "Failed to suggest");
-      }
-      const data = await res.json(); // { suggestion: "854003", ... }
-      const suggested = String(data.suggestion || "");
 
-      // keep any existing EMP code the user already typed
-      const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
-      const next = joinEmployeeNo(suggested, emp);
+    // server returns full suggestion, e.g. "2050000-0007"
+    const suggested: string = String(data.suggestion || "").toUpperCase();
 
-      form.setValue("employeeNo", next.toUpperCase(), { shouldDirty: true, shouldTouch: true });
-      toast.success(`Suggested Bio: ${suggested}`);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Unable to suggest bio number.");
-    }
+    // keep user's EMP part if any
+    const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
+    const next = joinEmployeeNo(suggested, emp);
+
+    form.setValue("employeeNo", next, { shouldDirty: true, shouldTouch: true });
+    toast.success(`Suggested BIO: ${suggested}`);
+  } catch (e: any) {
+    toast.error(e?.message ?? "Unable to suggest bio number.");
   }
+}
 
 
 

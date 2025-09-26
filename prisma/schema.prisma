@@ -3,21 +3,23 @@ generator client {
 }
 
 datasource db {
-  provider     = "postgresql"
-  url          = env("DATABASE_URL")
-  directUrl    = env("DATABASE_URL_UNPOOLED")
-  relationMode = "foreignKeys"
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DATABASE_URL_UNPOOLED")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  relationMode      = "foreignKeys"
 }
 
 model Department {
-  id         String      @id @default(uuid())
-  name       String
-  userId     String
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  billboards Billboard[] @relation("DepartmentToBillboard")
-  employee   Employee[]  @relation("DepartmentToEmployee")
-  offices    Offices[]   @relation("DepartmentToOffices")
+  id            String          @id @default(uuid())
+  name          String
+  userId        String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  billboards    Billboard[]     @relation("DepartmentToBillboard")
+  ChangeRequest ChangeRequest[]
+  employee      Employee[]      @relation("DepartmentToEmployee")
+  offices       Offices[]       @relation("DepartmentToOffices")
 }
 
 model Billboard {
@@ -27,6 +29,7 @@ model Billboard {
   imageUrl     String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  bioIndexCode String?    @db.VarChar(16)
   department   Department @relation("DepartmentToBillboard", fields: [departmentId], references: [id], onUpdate: NoAction, map: "billboard_departmentid_fkey")
   offices      Offices[]
 
@@ -40,6 +43,7 @@ model Offices {
   name                String
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
+  bioIndexCode String?    @db.VarChar(16)
   designatedEmployees Employee[] @relation("OfficesToDesignation")
   employee            Employee[] @relation("OfficesToEmployee")
   billboard           Billboard  @relation(fields: [billboardId], references: [id], onUpdate: NoAction, map: "offices_billboardid_fkey")
@@ -47,6 +51,7 @@ model Offices {
 
   @@index([departmentId])
   @@index([billboardId])
+   @@index([bioIndexCode])
 }
 
 model EmployeeType {
@@ -125,6 +130,7 @@ model Employee {
   publicEnabled          Boolean           @default(false)
   publicVersion          Int               @default(1)
   awards                 Award[]
+  changeRequests         ChangeRequest[]   @relation("EmployeeToChangeRequests")
   department             Department        @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onUpdate: NoAction, map: "employee_departmentid_fkey")
   designation            Offices?          @relation("OfficesToDesignation", fields: [designationId], references: [id], onUpdate: NoAction, map: "employee_designationid_fkey")
   eligibility            Eligibility       @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
@@ -132,7 +138,6 @@ model Employee {
   offices                Offices           @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
   employmentEvents       EmploymentEvent[]
   images                 Image[]
-  changeRequests         ChangeRequest[]   @relation("EmployeeToChangeRequests")
 
   @@index([departmentId])
   @@index([officeId])
@@ -180,17 +185,43 @@ model Award {
   employeeId  String
   title       String
   description String?
-  issuer      String? // <-- add
-  thumbnail   String? // <-- add
-  fileUrl     String? // <-- add
-  tags        String[]  @default([]) // NEW (Postgres text[])   // <-- store comma-separated, or use Json
   givenAt     DateTime
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  issuer      String?
+  thumbnail   String?
+  fileUrl     String?
+  tags        String[]  @default([])
   deletedAt   DateTime?
   employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
+}
+
+model ChangeRequest {
+  id             String       @id @default(uuid())
+  departmentId   String
+  employeeId     String
+  entityType     ChangeEntity
+  entityId       String?
+  action         ChangeAction
+  status         ChangeStatus @default(PENDING)
+  oldValues      Json?
+  newValues      Json?
+  note           String?
+  submittedName  String?
+  submittedEmail String?
+  ipHash         String?
+  reviewedAt     DateTime?
+  approvedById   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+  Department     Department   @relation(fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "changerequest_departmentid_fkey")
+  employee       Employee     @relation("EmployeeToChangeRequests", fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "changerequest_employeeid_fkey")
+
+  @@index([departmentId, status, createdAt], map: "changerequest_dept_status_created_idx")
+  @@index([employeeId], map: "changerequest_employeeid_idx")
+  @@index([entityType, entityId], map: "changerequest_entitytype_entityid_idx")
 }
 
 enum EligibilityTypes {
@@ -215,7 +246,6 @@ enum EmploymentEventType {
   OTHER
 }
 
-// --- NEW enums ---
 enum ChangeEntity {
   AWARD
   TIMELINE
@@ -231,31 +261,4 @@ enum ChangeStatus {
   PENDING
   APPROVED
   REJECTED
-}
-
-model ChangeRequest {
-  id           String       @id @default(uuid())
-  departmentId String
-  employeeId   String
-  employee     Employee     @relation("EmployeeToChangeRequests", fields: [employeeId], references: [id], onDelete: Cascade)
-  entityType   ChangeEntity
-  entityId     String? // null for CREATE (no record yet)
-  action       ChangeAction
-  status       ChangeStatus @default(PENDING)
-
-  oldValues      Json? // snapshot of current values (for UPDATE/DELETE)
-  newValues      Json? // proposed values (for CREATE/UPDATE)
-  note           String?
-  submittedName  String?
-  submittedEmail String?
-  ipHash         String? // for basic rate-limiting
-
-  reviewedAt   DateTime?
-  approvedById String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  @@index([departmentId, status, createdAt])
-  @@index([employeeId])
-  @@index([entityType, entityId])
 }

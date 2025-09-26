@@ -1,7 +1,9 @@
 
-import { splitEmployeeNo } from "@/lib/bio-utils";
+
+import { findFirstFreeBioFlat } from "@/lib/bio-utils";
 import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs/server"; // ⬅️ server import
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 // helper: respect local calendar day, then pin to 12:00 UTC
@@ -11,6 +13,16 @@ function toUTCNoonFromLocalDate(d: Date) {
   const day = d.getDate();
   return new Date(Date.UTC(y, m, day, 12, 0, 0)); // 12:00Z
 }
+const employeeInclude = {
+  designation: { select: { id: true, name: true } },
+  images: true,
+  offices: { select: { name: true } },
+  employeeType: { select: { name: true } },
+} satisfies Prisma.EmployeeInclude;
+
+type EmployeeWithIncludes = Prisma.EmployeeGetPayload<{
+  include: typeof employeeInclude;
+}>;
 
 export async function POST(
   req: Request,
@@ -134,35 +146,55 @@ export async function POST(
       autoSalary = salaryRecord?.amount ?? 0;
     }
 
-    // Before creating/updating employee:
-const { bio } = splitEmployeeNo(body.employeeNo);
-if (bio) {
-  const exists = await prismadb.employee.findFirst({
-    where: {
-      officeId: body.officeId,
-      employeeNo: { startsWith: bio }, // safer: parse-and-compare bio exactly
-    },
-    select: { id: true },
+
+    const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
+// --- CREATE employee + default HIRED event atomically (with collision-safe BIO) ---
+const created = await prismadb.$transaction(async (tx) => {
+  // 1) If employeeNo was not provided, try to auto-suggest from the office.bioIndexCode
+  const office = await tx.offices.findUnique({
+    where: { id: officeId },
+    select: { bioIndexCode: true },
   });
-  if (exists) {
-    return new NextResponse("BIO already taken in this office. Please click Suggest again.", { status: 409 });
+
+  let employeeNoFinal =  normalizeBio(employeeNo);
+
+ async function suggestIfNeeded() {
+  if (!employeeNoFinal && office?.bioIndexCode && /^\d+$/.test(office.bioIndexCode)) {
+    const anchor = Number(office.bioIndexCode);
+
+    // Choose your “family” range. Example below = same 1k block (2050000..2050999)
+    const familyStart = Math.floor(anchor / 1000) * 1000;
+    const familyEnd   = familyStart + 999;
+
+    employeeNoFinal = await findFirstFreeBioFlat({
+      departmentId: params.departmentId,
+      startFrom: anchor,                // start candidate = anchor+1 (see allowStart=false)
+      allowStart: false,                // try anchor+1, then +2, etc.
+      digits: office.bioIndexCode.length, // keep width (e.g., 7 digits)
+      familyStart,
+      familyEnd,
+    });
   }
 }
 
+  await suggestIfNeeded();
+  // 2) Create with small retry loop to handle unique collisions on (departmentId, employeeNo)
+  //    (requires @@unique([departmentId, employeeNo]) in your Prisma schema)
+  let employeeRow: EmployeeWithIncludes | null = null;
 
-    // --- CREATE employee + default HIRED event atomically ---
-    const created = await prismadb.$transaction(async (tx) => {
-      const employee = await tx.employee.create({
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      employeeRow = await tx.employee.create({
         data: {
           departmentId: params.departmentId,
           prefix,
-          employeeNo,
+          employeeNo: employeeNoFinal || undefined, // pure digits, no suffix
           lastName,
           firstName,
           middleName,
           suffix,
           images: {
-            createMany: { data: images.map((img: { url: string }) => img) },
+            createMany: { data: (images ?? []).map((img: { url: string }) => ({ url: img.url })) },
           },
           gender,
           contactNumber,
@@ -179,7 +211,7 @@ if (bio) {
           tinNo,
           pagIbigNo,
           philHealthNo,
-          salary: autoSalary, // or use `salary ?? autoSalary` if you allow override
+          salary: autoSalary,
           dateHired: dateHired ? new Date(dateHired) : new Date(),
           latestAppointment,
           isFeatured,
@@ -199,31 +231,47 @@ if (bio) {
           note: note ?? null,
           designationId: designationId ?? null,
         },
-        include: {
-          designation: { select: { id: true, name: true } },
-          images: true,
-          offices: { select: { name: true } },        // ⬅️ for details
-          employeeType: { select: { name: true } },   // ⬅️ for details
-        },
+        include: employeeInclude,
       });
+      break; // success
+    } catch (e: any) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === "P2002" &&
+        (e.meta?.target as string[] | undefined)?.includes("departmentId") &&
+        (e.meta?.target as string[] | undefined)?.includes("employeeNo")
+      ) {
+        // 🔁 On collision, re-suggest then retry
+        employeeNoFinal = "";
+        await suggestIfNeeded();
+        continue;
+      }
+      throw e;
+    }
+  }
 
-      // default HIRED event (no approval)
-      const occurredAt = toUTCNoonFromLocalDate(employee.dateHired);
-      const details = `Hired as ${employee.position} (${employee.employeeType?.name ?? "—"}) in ${employee.offices?.name ?? "—"}.`;
+ 
 
-      await tx.employmentEvent.create({
-        data: {
-          employeeId: employee.id,
-          type: "HIRED",
-          occurredAt, // noon-UTC to avoid off-by-one
-          details,
-        },
-      });
+  if (!employeeRow) throw new Error("Failed to create employee after retries");
 
-      return employee;
-    });
+  // 3) Default HIRED event (noon-UTC to avoid off-by-one timelines)
+  const occurredAt = toUTCNoonFromLocalDate(employeeRow.dateHired);
+  const details = `Hired as ${employeeRow.position} (${employeeRow.employeeType?.name ?? "—"}) in ${employeeRow.offices?.name ?? "—"}.`;
 
-    return NextResponse.json(created);
+  await tx.employmentEvent.create({
+    data: {
+      employeeId: employeeRow.id,
+      type: "HIRED",
+      occurredAt,
+      details,
+    },
+  });
+
+  return employeeRow;
+});
+
+return NextResponse.json(created);
+
   } catch (error) {
     console.log("[EMPLOYEE_POST]", error);
     return new NextResponse("Internal error", { status: 500 });

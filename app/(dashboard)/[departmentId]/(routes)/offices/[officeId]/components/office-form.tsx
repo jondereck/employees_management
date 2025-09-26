@@ -18,15 +18,17 @@ import { AlertModal } from "@/components/modals/alert-modal";
 import { useOrigin } from "@/hooks/use-origin";
 import ImageUpload from "@/components/ui/image-upload";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AutoField } from "../../../employees/components/autofill";
 
 
 const formSchema = z.object({
   name: z.string().min(1, {
     message: "Name is required"
   }),
-  billboardId: z.string().min(1,  {
+  billboardId: z.string().min(1, {
     message: "Billboard is required"
   }),
+  bioIndexCode: z.string().optional().transform(v => (v?.trim() ? v.trim() : undefined)),
 });
 
 type OfficeFormValues = z.infer<typeof formSchema>;
@@ -54,10 +56,17 @@ export const OfficeForm = ({
 
   const form = useForm<OfficeFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData || {
-      name: '',
-      billboardId: '',
-    }
+    defaultValues: initialData
+      ? {
+        name: initialData.name ?? "",
+        billboardId: (initialData as any).billboardId ?? "", // adjust if field exists
+        bioIndexCode: initialData.bioIndexCode ?? "",        // NEW
+      }
+      : {
+        name: "",
+        billboardId: "",
+        bioIndexCode: "",                                     // NEW
+      },
   });
 
 
@@ -65,11 +74,18 @@ export const OfficeForm = ({
   const onSubmit = async (values: OfficeFormValues) => {
     try {
       setLoading(true);
-      if (initialData) {
-        await axios.patch(`/api/${params.departmentId}/offices/${params.officeId}`, values);
 
+      const payload = {
+        ...values,
+        bioIndexCode: values.bioIndexCode ?? null,
+      };
+      if (initialData) {
+        await axios.patch(
+          `/api/${params.departmentId}/offices/${params.officeId}`,
+          payload
+        );
       } else {
-        await axios.post(`/api/${params.departmentId}/offices`, values);;
+        await axios.post(`/api/${params.departmentId}/offices`, payload);
       }
 
       router.refresh();
@@ -80,7 +96,7 @@ export const OfficeForm = ({
         title: "Success!",
         description: toastMessage,
       })
-    } catch (error:any) {
+    } catch (error: any) {
       if (error.response && error.response.data && error.response.data.error) {
         // Handle API error messages
         const errorMessage = error.response.data.error;
@@ -108,9 +124,9 @@ export const OfficeForm = ({
       setLoading(true);
 
       await axios.delete(`/api/${params.departmentId}/offices/${params.officeId}`);
-      
+
       router.push(`/${params.departmentId}/offices`)
-      
+
       toast({
         title: "Success!",
         description: "Office deleted."
@@ -171,6 +187,22 @@ export const OfficeForm = ({
                 </FormItem>
               )}
             />
+                 <FormField
+              control={form.control}
+              name="bioIndexCode"
+              render={({ field }) => (
+                <AutoField
+                  kind="text"
+                  label="BIO Index Code"
+                  placeholder="e.g., 2050000"
+                  description="Used to suggest BIO numbers. Offices can share the same code."
+                  field={field}
+                  nameSafe={false}
+                  formatMode="upper"
+                />
+              )}
+            />
+
             <FormField
               control={form.control}
               name="billboardId"

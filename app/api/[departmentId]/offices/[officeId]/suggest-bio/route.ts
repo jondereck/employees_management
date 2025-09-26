@@ -1,59 +1,38 @@
-// app/api/[departmentId]/offices/[officeId]/suggest-bio/route.ts
 import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
-
-import { OFFICE_INDEX_CODE_BY_ID } from "@/lib/bio-index-map";
-import { derivePrefixAndWidth, padSuffix, firstFreeSuffix, splitEmployeeNo } from "@/lib/bio-utils";
+import { findFirstFreeBioFlat } from "@/lib/bio-utils";
 
 export async function GET(_req: Request, { params }: { params: { departmentId: string; officeId: string } }) {
   try {
     const office = await prismadb.offices.findUnique({
       where: { id: params.officeId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, bioIndexCode: true },
     });
-    if (!office) return new NextResponse("Office not found", { status: 404 });
+    if (!office) return NextResponse.json({ ok: false, message: "Office not found" }, { status: 404 });
 
-  const indexBaseStr = OFFICE_INDEX_CODE_BY_ID[office.id];
-if (!indexBaseStr) {
-  return new NextResponse(`No index base configured for ${office.name} (id=${office.id}).`, { status: 400 });
-}
-const { prefix, width } = derivePrefixAndWidth(indexBaseStr);
+    const anchorRaw = office.bioIndexCode?.trim();
+    if (!anchorRaw || !/^\d+$/.test(anchorRaw)) {
+      return NextResponse.json({ ok: false, message: "This office has no valid numeric BIO Index Code." }, { status: 400 });
+    }
 
-// ✅ collect ALL officeIds that share this index code (e.g., RHU I/II/III)
-const groupOfficeIds = Object.entries(OFFICE_INDEX_CODE_BY_ID)
-  .filter(([, code]) => code === indexBaseStr)
-  .map(([id]) => id);
+    const anchor = Number(anchorRaw);
 
-// 1) fetch employees for ALL offices sharing the same index code
-const emps = await prismadb.employee.findMany({
-  where: { officeId: { in: groupOfficeIds } },
-  select: { employeeNo: true },
-});
+    // Optional family block: same thousand range, tweak as you like
+    const familyStart = Math.floor(anchor / 1000) * 1000; // e.g., 2050000
+    const familyEnd   = familyStart + 999;                // e.g., 2050999 (or 2059999 if per 10k block)
 
-  // 2) parse used suffixes across the group
-const usedSuffixes = new Set<number>();
-for (const e of emps) {
-  const { bio } = splitEmployeeNo(e.employeeNo);
-  if (!bio || !/^\d+$/.test(bio) || !bio.startsWith(prefix)) continue;
-  const suffixStr = bio.slice(prefix.length);
-  if (width > 0 && suffixStr.length !== width) continue;
-  const n = Number(suffixStr || "0");
-  if (Number.isFinite(n) && n > 0) usedSuffixes.add(n);
-}
+    const suggestion = await findFirstFreeBioFlat({
+      departmentId: params.departmentId,
+      startFrom: anchor,
+      allowStart: false,   // start at anchor+1
+      digits: anchorRaw.length, // keep same width as anchor
+      familyStart,
+      familyEnd,
+    });
 
-// 3) suggest first free from the union
-const free = firstFreeSuffix(usedSuffixes, width);
-const suggestion = width > 0 ? `${prefix}${padSuffix(free, width)}` : String(Number(indexBaseStr) + free);
-
-return NextResponse.json({
-  officeId: office.id,
-  officeName: office.name,
-  indexBase: indexBaseStr,
-  sharedOfficeIds: groupOfficeIds, // debug/info
-  suggestion,
-  takenCount: usedSuffixes.size,
-});
-  } catch (err: any) {
-    return new NextResponse(err?.message ?? "Failed to suggest bio", { status: 500 });
+    return NextResponse.json({ ok: true, indexCode: anchorRaw, suggestion });
+  } catch (e) {
+    console.error("[SUGGEST_BIO_FLAT]", e);
+    return NextResponse.json({ ok: false, message: "Internal error" }, { status: 500 });
   }
 }
