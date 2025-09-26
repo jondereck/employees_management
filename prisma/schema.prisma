@@ -81,7 +81,6 @@ model Employee {
   id                     String            @id @default(uuid())
   departmentId           String
   officeId               String
-  bioNumber              String            @unique
   prefix                 String            @default("")
   lastName               String
   firstName              String
