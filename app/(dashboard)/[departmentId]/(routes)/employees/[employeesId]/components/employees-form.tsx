@@ -406,6 +406,48 @@ export const EmployeesForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee, initialData]);
 
+// split "8540010, E-4" -> { bio:"8540010", emp:"E-4" }
+function splitEmployeeNo(raw?: string | null) {
+  const clean = (raw ?? "").trim();
+  if (!clean) return { bio: "", emp: "" };
+  const [a, b] = clean.split(",").map(s => s.trim());
+  if (/^\d+$/.test(a)) return { bio: a, emp: b ?? "" };
+  if (!b) return { bio: "", emp: a };
+  return { bio: a, emp: b };
+}
+
+function joinEmployeeNo(bio: string, emp?: string) {
+  const left = (bio ?? "").trim();
+  const right = (emp ?? "").trim();
+  return [left, right].filter(Boolean).join(", ");
+}
+
+const officeId = form.watch("officeId"); // assuming you already have an office select bound to "officeId"
+
+async function suggestBio() {
+  if (!officeId) {
+    toast.error("Select an Office first.");
+    return;
+  }
+  try {
+    const res = await fetch(`/api/${params.departmentId}/offices/${officeId}/suggest-bio`, { cache: "no-store" });
+    if (!res.ok) {
+      const msg = await res.text();
+      throw new Error(msg || "Failed to suggest");
+    }
+    const data = await res.json(); // { suggestion: "854003", ... }
+    const suggested = String(data.suggestion || "");
+
+    // keep any existing EMP code the user already typed
+    const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
+    const next = joinEmployeeNo(suggested, emp);
+
+    form.setValue("employeeNo", next.toUpperCase(), { shouldDirty: true, shouldTouch: true });
+    toast.success(`Suggested Bio: ${suggested}`);
+  } catch (e: any) {
+    toast.error(e?.message ?? "Unable to suggest bio number.");
+  }
+}
 
 
 
@@ -620,32 +662,41 @@ export const EmployeesForm = ({
               />
 
               <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-4 gap-8">
-                <FormField
-                  control={form.control}
-                  name="employeeNo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Employee No.</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="Employee No."
-                          {...field}
-                          onChange={(e) => {
-                            // Convert the input value to uppercase
-                            const uppercaseValue = e.target.value.toUpperCase();
-                            // Set the field value to the uppercase value
-                            field.onChange(uppercaseValue);
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Ex: T-3
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+               <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+  <FormField
+    control={form.control}
+    name="employeeNo"
+    render={({ field }) => (
+      <FormItem className="sm:col-span-2">
+        <FormLabel>Employee No. (e.g., 8540010, E-4)</FormLabel>
+        <FormControl>
+          <Input
+            disabled={loading}
+            placeholder="e.g., 8540010, E-4"
+            {...field}
+            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+          />
+        </FormControl>
+        <FormDescription>
+          Enter “BIO, EMP” or click Suggest to auto-fill the BIO part.
+        </FormDescription>
+        <FormMessage />
+      </FormItem>
+    )}
+  />
+
+  <div className="sm:col-span-1 flex sm:block">
+    <Button
+      type="button"
+      onClick={suggestBio}
+      disabled={loading || !officeId}
+      className="w-full"
+      variant="secondary"
+    >
+      Suggest Bio No.
+    </Button>
+  </div>
+</div>
                 <FormField
                   control={form.control}
                   name="prefix"

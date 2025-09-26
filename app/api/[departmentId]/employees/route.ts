@@ -1,4 +1,5 @@
 
+import { splitEmployeeNo } from "@/lib/bio-utils";
 import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs/server"; // ⬅️ server import
 import { NextResponse } from "next/server";
@@ -132,6 +133,22 @@ export async function POST(
       });
       autoSalary = salaryRecord?.amount ?? 0;
     }
+
+    // Before creating/updating employee:
+const { bio } = splitEmployeeNo(body.employeeNo);
+if (bio) {
+  const exists = await prismadb.employee.findFirst({
+    where: {
+      officeId: body.officeId,
+      employeeNo: { startsWith: bio }, // safer: parse-and-compare bio exactly
+    },
+    select: { id: true },
+  });
+  if (exists) {
+    return new NextResponse("BIO already taken in this office. Please click Suggest again.", { status: 409 });
+  }
+}
+
 
     // --- CREATE employee + default HIRED event atomically ---
     const created = await prismadb.$transaction(async (tx) => {
