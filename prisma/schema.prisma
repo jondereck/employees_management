@@ -38,9 +38,6 @@ model Offices {
   departmentId        String
   billboardId         String
   name                String
-  indexCode           String // e.g. "854000"
-  bioSuffixWidth      Int        @default(3) // 3 => 001..999
-  lastIssuedSuffix    Int        @default(0) // monotonically increases
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   designatedEmployees Employee[] @relation("OfficesToDesignation")
