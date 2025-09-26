@@ -406,48 +406,48 @@ export const EmployeesForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee, initialData]);
 
-// split "8540010, E-4" -> { bio:"8540010", emp:"E-4" }
-function splitEmployeeNo(raw?: string | null) {
-  const clean = (raw ?? "").trim();
-  if (!clean) return { bio: "", emp: "" };
-  const [a, b] = clean.split(",").map(s => s.trim());
-  if (/^\d+$/.test(a)) return { bio: a, emp: b ?? "" };
-  if (!b) return { bio: "", emp: a };
-  return { bio: a, emp: b };
-}
-
-function joinEmployeeNo(bio: string, emp?: string) {
-  const left = (bio ?? "").trim();
-  const right = (emp ?? "").trim();
-  return [left, right].filter(Boolean).join(", ");
-}
-
-const officeId = form.watch("officeId"); // assuming you already have an office select bound to "officeId"
-
-async function suggestBio() {
-  if (!officeId) {
-    toast.error("Select an Office first.");
-    return;
+  // split "8540010, E-4" -> { bio:"8540010", emp:"E-4" }
+  function splitEmployeeNo(raw?: string | null) {
+    const clean = (raw ?? "").trim();
+    if (!clean) return { bio: "", emp: "" };
+    const [a, b] = clean.split(",").map(s => s.trim());
+    if (/^\d+$/.test(a)) return { bio: a, emp: b ?? "" };
+    if (!b) return { bio: "", emp: a };
+    return { bio: a, emp: b };
   }
-  try {
-    const res = await fetch(`/api/${params.departmentId}/offices/${officeId}/suggest-bio`, { cache: "no-store" });
-    if (!res.ok) {
-      const msg = await res.text();
-      throw new Error(msg || "Failed to suggest");
+
+  function joinEmployeeNo(bio: string, emp?: string) {
+    const left = (bio ?? "").trim();
+    const right = (emp ?? "").trim();
+    return [left, right].filter(Boolean).join(", ");
+  }
+
+  const officeId = form.watch("officeId"); // assuming you already have an office select bound to "officeId"
+
+  async function suggestBio() {
+    if (!officeId) {
+      toast.error("Select an Office first.");
+      return;
     }
-    const data = await res.json(); // { suggestion: "854003", ... }
-    const suggested = String(data.suggestion || "");
+    try {
+      const res = await fetch(`/api/${params.departmentId}/offices/${officeId}/suggest-bio`, { cache: "no-store" });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || "Failed to suggest");
+      }
+      const data = await res.json(); // { suggestion: "854003", ... }
+      const suggested = String(data.suggestion || "");
 
-    // keep any existing EMP code the user already typed
-    const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
-    const next = joinEmployeeNo(suggested, emp);
+      // keep any existing EMP code the user already typed
+      const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
+      const next = joinEmployeeNo(suggested, emp);
 
-    form.setValue("employeeNo", next.toUpperCase(), { shouldDirty: true, shouldTouch: true });
-    toast.success(`Suggested Bio: ${suggested}`);
-  } catch (e: any) {
-    toast.error(e?.message ?? "Unable to suggest bio number.");
+      form.setValue("employeeNo", next.toUpperCase(), { shouldDirty: true, shouldTouch: true });
+      toast.success(`Suggested Bio: ${suggested}`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Unable to suggest bio number.");
+    }
   }
-}
 
 
 
@@ -660,43 +660,74 @@ async function suggestBio() {
                   </FormItem>
                 )}
               />
+              <Separator className="m-2" />
+              {/* Compact row: Employee No. + Suggest (left) | Office (right) */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="employeeNo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Employee No. (e.g., 8540010, E-4)</FormLabel>
 
+                      {/* Input + Button inline */}
+                      <div className="flex gap-2">
+                        <FormControl className="flex-1">
+                          <Input
+                            disabled={loading}
+                            placeholder="e.g., 8540010, E-4"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                          />
+                        </FormControl>
+
+                        <Button
+                          type="button"
+                          onClick={suggestBio}
+                          disabled={loading || !officeId}
+                          className="shrink-0 whitespace-nowrap"
+                          variant="secondary"
+                          aria-label="Suggest Bio Number"
+                        >
+                          Suggest Bio No.
+                        </Button>
+                      </div>
+
+                      {/* keep description but hide on small screens to reduce height */}
+                      <FormDescription className="hidden sm:block">
+                        Enter “BIO, EMP” or click Suggest to auto-fill the BIO part.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="officeId"
+                  render={({ field }) => (
+                    <AutoField
+                      kind="select"
+                      label="Office"
+                      field={field}
+                      required
+                      disabled={loading}
+                      placeholder="Select Office"
+                      recentKey="officeId"
+                      recentMax={3}
+                      recentLabel="Recently used"
+                      pinSuggestions
+                      options={[...offices]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((o) => ({ value: o.id, label: o.name }))}
+                      description="Select the office where the employee is designated."
+                    />
+                  )}
+                />
+              </div>
+
+              <Separator className="m-2" />
               <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-4 gap-8">
-               <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-  <FormField
-    control={form.control}
-    name="employeeNo"
-    render={({ field }) => (
-      <FormItem className="sm:col-span-2">
-        <FormLabel>Employee No. (e.g., 8540010, E-4)</FormLabel>
-        <FormControl>
-          <Input
-            disabled={loading}
-            placeholder="e.g., 8540010, E-4"
-            {...field}
-            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-          />
-        </FormControl>
-        <FormDescription>
-          Enter “BIO, EMP” or click Suggest to auto-fill the BIO part.
-        </FormDescription>
-        <FormMessage />
-      </FormItem>
-    )}
-  />
-
-  <div className="sm:col-span-1 flex sm:block">
-    <Button
-      type="button"
-      onClick={suggestBio}
-      disabled={loading || !officeId}
-      className="w-full"
-      variant="secondary"
-    >
-      Suggest Bio No.
-    </Button>
-  </div>
-</div>
                 <FormField
                   control={form.control}
                   name="prefix"
@@ -1145,29 +1176,7 @@ async function suggestBio() {
                     />
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="officeId"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="select"
-                      label="Office"
-                      field={field}
-                      required
-                      disabled={loading}
-                      placeholder="Select Office"
-                      recentKey="officeId"
-                      recentMax={3}
-                      recentLabel="Recently used"
-                      pinSuggestions
-                      // feed preloaded options
-                      options={[...offices]
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map(o => ({ value: o.id, label: o.name }))}
-                      description="Select the office where the employee is designated."
-                    />
-                  )}
-                />
+
 
                 <FormField
                   control={form.control}
