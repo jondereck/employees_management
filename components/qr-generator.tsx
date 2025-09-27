@@ -30,7 +30,13 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   employeeNo,
   size = 200,
 }) => {
-  const qrValue = `${process.env.NEXT_PUBLIC_URL}/view/employee/${employeeId}`;
+
+  const baseUrl =
+  process.env.NEXT_PUBLIC_URL ??
+  (typeof window !== "undefined" ? window.location.origin : "");
+const qrValue = `${baseUrl}/${departmentId}/view/employee/${employeeId}`;
+
+
   const [isOpen, setIsOpen] = useState(false);
   const qrRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -55,6 +61,7 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
     toast.success(`QR Code for ${fileBaseName}.png downloaded!`);
   };
 
+  
   const handlePrint = () => {
     const canvas = qrRef.current;
     if (!canvas) return;
@@ -65,6 +72,29 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
         `<img src="${imgData}" onload="window.print(); window.close();" />`
       );
       w.document.close();
+    }
+  };
+
+
+  
+  // NEW: copy link to clipboard (with fallback)
+  const handleCopyLink = async () => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(qrValue);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = qrValue;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      toast.success("Profile link copied!");
+    } catch {
+      toast.error("Failed to copy link");
     }
   };
 
@@ -124,6 +154,29 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
               // includeMargin
             />
           </div>
+     {/* Link + Copy (no overlap, truncates nicely) */}
+<div className="mb-3">
+  <div className="flex items-center gap-2">
+    <div className="flex-1 min-w-0">
+      <input
+        readOnly
+        value={qrValue}
+        className="w-full rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground truncate"
+        onFocus={(e) => e.currentTarget.select()}
+        aria-label="Public profile link"
+      />
+    </div>
+    <Button
+      size="sm"
+      variant="outline"
+      className="shrink-0"
+      onClick={handleCopyLink}
+    >
+      Copy link
+    </Button>
+  </div>
+</div>
+
 
           <DialogFooter className="flex justify-between items-center mt-4">
             <Button variant="outline" onClick={handleDownload}>⬇️ Download</Button>
