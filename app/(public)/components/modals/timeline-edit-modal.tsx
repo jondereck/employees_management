@@ -143,7 +143,11 @@ export default function TimelineEditModal({
 
   return (
     <Dialog open={open} onOpenChange={(o)=>!loading && onOpenChange(o)}>
-      <DialogContent className="max-w-lg">
+        <DialogContent
+    className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6"
+    // iOS smooth scrolling
+    style={{ WebkitOverflowScrolling: "touch" }}
+  >
         <h3 className="text-base font-semibold">Suggest an edit (Timeline)</h3>
         <p className="text-xs text-muted-foreground">Your changes will be reviewed by HRMO before publication.</p>
 

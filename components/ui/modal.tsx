@@ -33,9 +33,14 @@ const Modal = ({
       onClose()
     }
   }
+  
   return (
     <Dialog open={isOpen} onOpenChange={onChange}>
-     <DialogContent className=" ">
+     <DialogContent
+    className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6"
+    // iOS smooth scrolling
+    style={{ WebkitOverflowScrolling: "touch" }}
+  >
         <DialogHeader>
           <DialogTitle className="mt-6">{title}</DialogTitle>
           <DialogDescription>

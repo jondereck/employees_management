@@ -1,13 +1,36 @@
+// app/api/public/employees/[employeeId]/timeline/[eventId]/request-delete/route.ts
 import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
+import { z } from "zod";
 
-export async function POST(_req: Request, { params }: { params: { employeeId: string; eventId: string } }) {
+const BodySchema = z.object({
+  reason: z.string().trim().min(3, "Reason is required"),
+  submittedName: z.string().trim().optional(),
+  submittedEmail: z.string().trim().email().optional(),
+});
+
+export async function POST(req: Request, { params }: { params: { employeeId: string; eventId: string } }) {
   try {
-    const emp = await prismadb.employee.findUnique({
-      where: { id: params.employeeId },
+    const body = await req.json().catch(() => null);
+    const parsed = BodySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid payload", details: parsed.error.flatten() }, { status: 400 });
+    }
+    const { reason, submittedName, submittedEmail } = parsed.data;
+
+    // Public pages often send publicId; support BOTH id and publicId.
+    const emp = await prismadb.employee.findFirst({
+      where: {
+        OR: [
+          { id: params.employeeId },
+          { publicId: params.employeeId },
+        ],
+      },
       select: { id: true, departmentId: true, publicEnabled: true },
     });
-    if (!emp?.publicEnabled) return NextResponse.json({ error: "Public suggestions disabled" }, { status: 403 });
+
+    if (!emp) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+    if (!emp.publicEnabled) return NextResponse.json({ error: "Public suggestions disabled" }, { status: 403 });
 
     const event = await prismadb.employmentEvent.findFirst({
       where: { id: params.eventId, employeeId: emp.id },
@@ -23,7 +46,10 @@ export async function POST(_req: Request, { params }: { params: { employeeId: st
         entityId: event.id,
         action: "DELETE",
         status: "PENDING",
-        newValues: {},
+        note: reason,                 // <-- keep the user's reason
+        submittedName,                // optional
+        submittedEmail,               // optional
+        newValues: {},                // nothing to update, it's a delete request
       },
     });
 

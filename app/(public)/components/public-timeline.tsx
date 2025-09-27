@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarIcon, Award as AwardIcon, ArrowUpRight, Landmark, GraduationCap, UserCheck, Pencil, Trash, Plus, Calendar, CalendarCheck, BadgeCheck, Building2 } from "lucide-react";
+import { CalendarIcon, Award as AwardIcon, ArrowUpRight, Landmark, GraduationCap, UserCheck, Pencil, Trash, Plus, Calendar, CalendarCheck, BadgeCheck, Building2, FileEdit, MoveRight, Gift, RefreshCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -12,6 +12,9 @@ import TimelineDeleteModal from "@/app/(public)/components/modals/timeline-delet
 import AwardEditModal from "@/app/(public)/components/modals/award-edit-modal";
 import AwardDeleteModal from "@/app/(public)/components/modals/award-delete-modal";
 import { toast } from "sonner";
+import { SuggestionTabs } from "./suggestions-tabs";
+
+type EmploymentEventType = "HIRED"|"PROMOTED"|"TRANSFERRED"|"REASSIGNED"|"AWARDED"|"CONTRACT_RENEWAL"|"TERMINATED"|"OTHER";
 
 type Basics = {
   dateHired: string;       // ISO from API
@@ -154,90 +157,35 @@ const quickCreate = async () => {
   }, [employeeId, version]);
 
   if (items === null) return <TimelineSkeleton />;
-if (items.length === 0) return (
-  <>
-    <div className="mb-3 flex items-center justify-between">
-      <span className="text-xs text-muted-foreground">
-        Keep your record up to date — submissions go to HRMO for approval.
-      </span>
-      <Button size="sm" onClick={() => setCreateOpen(true)}>
-        <Plus className="mr-2 h-4 w-4" />
-        Add timeline entry
-      </Button>
-    </div>
 
-    <div className="rounded-xl border border-dashed bg-muted/20 p-6">
-      <div className="flex items-start gap-4">
-        <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-          <CalendarCheck className="h-5 w-5 text-muted-foreground" />
-        </div>
+  async function quickAdd(type: EmploymentEventType, details: string) {
+  setQuickLoading(true);
+  try {
+    await fetch(`/api/public/employees/${employeeId}/timeline/request-create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type,
+        details,
+        // optionally occurredAt: new Date().toISOString(),
+      }),
+    });
+    // refresh list / toast success
+  } finally {
+    setQuickLoading(false);
+  }
+}
 
-        <div className="flex-1">
-          <h3 className="text-base font-semibold">Suggested from HR records</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            We’ll prefill your first timeline entry using your Date Hired, Office, and Employee Type.
-          </p>
 
-          {prefill ? (
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <div className="rounded-md border bg-white p-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Date Hired:</span>
-                  <span className="ml-auto">{prefill.occurredAt}</span>
-                </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <BadgeCheck className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Type:</span>
-                  <span className="ml-auto">HIRED</span>
-                </div>
-              </div>
 
-              <div className="rounded-md border bg-white p-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Details:</span>
-                </div>
-                <p className="mt-1 text-muted-foreground">{prefill.details}</p>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-3 text-xs text-muted-foreground">
-              We couldn’t load your default details right now, but you can still add one below.
-            </p>
-          )}
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button onClick={quickCreate} disabled={quickLoading}>
-              {quickLoading ? "Submitting…" : "One-click add ‘HIRED’ entry"}
-            </Button>
-            <Button variant="outline" onClick={() => setCreateOpen(true)}>
-              Edit before submitting
-            </Button>
-          </div>
-
-          <p className="mt-2 text-xs text-muted-foreground">
-            HRMO will review and approve your submission.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <TimelineCreateModal
-      employeeId={employeeId}
-      open={createOpen}
-      onOpenChange={setCreateOpen}
-      initial={prefill ?? undefined} // ⬅️ prefill the modal
-    />
-  </>
-);
 
 
   return (
     <>
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-base font-semibold">Service Timeline</h3>
-        <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>Suggest new timeline</Button>
+
       </div>
 
       <ol className="relative ml-3 border-l pl-5">
@@ -285,7 +233,15 @@ if (items.length === 0) return (
           </li>
         ))}
       </ol>
+  <>
+    <div className="mb-3 flex items-center justify-between">
+      <span className="text-xs text-muted-foreground">
+        Keep your record up to date — submissions go to HRMO for approval.
+      </span>
+    </div>
 
+    <SuggestionTabs onCreate={() => setCreateOpen(true)} />
+  </>
       {/* VIEW dialog */}
       <Dialog open={!!active && !editOpen && !deleteOpen && !awardEditOpen && !awardDeleteOpen} onOpenChange={(o) => { if (!o) setActive(null); }}>
         <DialogContent className="max-w-lg">
@@ -304,6 +260,8 @@ if (items.length === 0) return (
                 </a>
               )}
             </div>
+
+            
           )}
         </DialogContent>
       </Dialog>

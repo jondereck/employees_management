@@ -94,7 +94,11 @@ const submit = async () => {
 };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+       <DialogContent
+    className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6"
+    // iOS smooth scrolling
+    style={{ WebkitOverflowScrolling: "touch" }}
+  >
         <h3 className="text-base font-semibold">Suggest a new Award</h3>
         <p className="text-xs text-muted-foreground">Changes require HRMO approval. Visit HRMO to validate if needed.</p>
         <div className="space-y-3 mt-3">

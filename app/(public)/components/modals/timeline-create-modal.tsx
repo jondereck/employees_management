@@ -9,60 +9,93 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
 
+type UiType = "HIRED" | "PROMOTION" | "TRANSFER" | "TRAINING" | "SEPARATION" | "OTHER";
+
+const TYPE_MAP: Record<UiType, string> = {
+  HIRED: "HIRED",
+  PROMOTION: "PROMOTED",
+  TRANSFER: "TRANSFERRED",
+  TRAINING: "OTHER",
+  SEPARATION: "TERMINATED",
+  OTHER: "OTHER",
+};
+const TYPE_OPTIONS: readonly UiType[] = ["HIRED","PROMOTION","TRANSFER","TRAINING","SEPARATION","OTHER"] as const;
+
+function normalizeUiType(input?: string): UiType {
+  if (!input) return "OTHER";
+  const up = input.toUpperCase();
+
+  // if it's already a UI label
+  if ((TYPE_OPTIONS as readonly string[]).includes(up)) return up as UiType;
+
+  // if it's a backend enum, reverse-map it
+  const rev = (Object.entries(TYPE_MAP) as [UiType, string][])
+    .find(([, v]) => v === up)?.[0];
+
+  return rev ?? "OTHER";
+}
+
 export default function TimelineCreateModal({
   employeeId,
   open,
   onOpenChange,
-  initial, // ⬅️ new
+  initial, // { type?: string; occurredAt?: string; details?: string; note?: string }
 }: {
   employeeId: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   initial?: Partial<{ type: string; occurredAt: string; details: string; note: string }>;
 }) {
-  const TYPE_OPTIONS = ["HIRED","PROMOTION","TRANSFER","TRAINING","SEPARATION","OTHER"] as const;
-
   const [loading, setLoading] = useState(false);
-  const [type, setType] = useState<typeof TYPE_OPTIONS[number]>("TRAINING");
-  const [date, setDate] = useState("");
+
+  // --- single source of truth for inputs ---
+  const [type, setType] = useState<UiType>("TRAINING");
+  const [date, setDate] = useState("");       // yyyy-mm-dd
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [attachment, setAttachment] = useState("");
   const [note, setNote] = useState("");
+useEffect(() => {
+  if (!open) return;
 
-  
+  // defaults
+  const _type = normalizeUiType(initial?.type);
+  let _date = "";
+  let _title = "";
+  let _desc = "";
+  let _attachment = "";
+  const _note = initial?.note ?? "";
 
-  useEffect(() => {
-    if (open) {
-      setType("TRAINING");
-      setDate("");
-      setTitle("");
-      setDesc("");
-      setAttachment("");
-      setNote("");
+  if (initial?.occurredAt) {
+    const d = new Date(initial.occurredAt);
+    _date = isNaN(d.getTime())
+      ? (/^\d{4}-\d{2}-\d{2}$/.test(initial.occurredAt) ? initial.occurredAt : "")
+      : d.toISOString().slice(0, 10);
+  }
+
+  if (initial?.details) {
+    try {
+      const obj = JSON.parse(initial.details);
+      if (obj && typeof obj === "object") {
+        _title = obj.title ?? "";
+        _desc = obj.description ?? "";
+        _attachment = obj.attachment ?? "";
+      } else {
+        _desc = String(initial.details);
+      }
+    } catch {
+      _desc = initial.details;
     }
-  }, [open]);
+  }
 
+  setType(_type);
+  setDate(_date);
+  setTitle(_title);
+  setDesc(_desc);
+  setAttachment(_attachment);
+  setNote(_note);
+}, [open, initial]);
 
-  const [form, setForm] = useState({
-    type: "HIRED",
-    occurredAt: "",
-    details: "",
-    note: "",
-  });
-
-
-    useEffect(() => {
-    if (open && initial) {
-      setForm((s) => ({
-        ...s,
-        ...(initial.type ? { type: initial.type } : {}),
-        ...(initial.occurredAt ? { occurredAt: initial.occurredAt } : {}),
-        ...(initial.details ? { details: initial.details } : {}),
-        ...(initial.note ? { note: initial.note } : {}),
-      }));
-    }
-  }, [open, initial]);
 
   const todayYMD = new Date().toISOString().slice(0, 10);
 
@@ -70,8 +103,6 @@ export default function TimelineCreateModal({
     const s = (raw || "").trim();
     if (!s) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00.000Z`;
-    const m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
-    if (m) return `${m[3]}-${m[1]}-${m[2]}T00:00:00.000Z`;
     const d = new Date(s);
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   };
@@ -90,6 +121,8 @@ export default function TimelineCreateModal({
       title: title.trim(),
       description: desc.trim(),
       attachment: attachment.trim() || null,
+      // Optional: tag TRAINING when type is OTHER so reviewers see intent
+      ...(type === "TRAINING" ? { tag: "TRAINING" } : {}),
     });
 
     try {
@@ -98,7 +131,7 @@ export default function TimelineCreateModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type,                // UI label; server maps UI -> Prisma enum
+          type: TYPE_MAP[type],        // map UI -> backend enum
           occurredAt,
           details,
           note: note.trim() || undefined,
@@ -113,16 +146,37 @@ export default function TimelineCreateModal({
       setLoading(false);
     }
   }
+const TITLE_PLACEHOLDERS: Record<UiType, string> = {
+  HIRED: "e.g., Initial appointment — Administrative Aide I",
+  PROMOTION: "e.g., Promoted to Administrative Aide II (SG 3, Step 1)",
+  TRANSFER: "e.g., Transferred to MSWDO — Case Management Unit",
+  TRAINING: "e.g., Disaster Preparedness Seminar",
+  SEPARATION: "e.g., Retirement effective 2025-06-30",
+  OTHER: "e.g., Special assignment: Project Lead",
+};
+
+const DESC_PLACEHOLDERS: Record<UiType, string> = {
+  HIRED: "Optional details: Plantilla no., item no., memo/order ref., etc.",
+  PROMOTION: "Optional details: Memo no., effective date, salary grade/step, basis.",
+  TRANSFER: "Optional details: From Office → To Office, effective date, order no.",
+  TRAINING: "Optional details: Venue, hours, organizer, certificate URL.",
+  SEPARATION: "Optional details: Reason (retirement, resignation), last day, docs.",
+  OTHER: "Optional details you want HRMO to see.",
+};
 
   return (
     <Dialog open={open} onOpenChange={(o)=>!loading && onOpenChange(o)}>
-      <DialogContent className="max-w-lg">
-        <h3 className="text-base font-semibold">Add Timeline Event</h3>
+       <DialogContent
+    className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6"
+    // iOS smooth scrolling
+    style={{ WebkitOverflowScrolling: "touch" }}
+  >
+        <h3 className="text-base font-semibold">Create a custom timeline entry</h3>
 
         <div className="space-y-3 pt-2">
           <div className="space-y-1">
             <Label>Type</Label>
-            <Select value={type} onValueChange={(v)=>setType(v as typeof TYPE_OPTIONS[number])}>
+            <Select value={type} onValueChange={(v)=>setType(v as UiType)}>
               <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
               <SelectContent>
                 {TYPE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -138,12 +192,12 @@ export default function TimelineCreateModal({
 
           <div className="space-y-1">
             <Label>Title</Label>
-            <Input value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="e.g., Disaster Preparedness Seminar" />
+            <Input value={title} onChange={(e)=>setTitle(e.target.value)}    placeholder={TITLE_PLACEHOLDERS[type]}/>
           </div>
 
           <div className="space-y-1">
             <Label>Description</Label>
-            <Textarea rows={3} value={desc} onChange={(e)=>setDesc(e.target.value)} />
+            <Textarea rows={3} value={desc} onChange={(e)=>setDesc(e.target.value)}    placeholder={DESC_PLACEHOLDERS[type]}  />
           </div>
 
           <div className="space-y-1">

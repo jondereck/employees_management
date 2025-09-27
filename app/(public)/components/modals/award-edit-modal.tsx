@@ -111,7 +111,11 @@ export default function AwardEditModal({ employeeId, award, open, onOpenChange }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+        <DialogContent
+    className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6"
+    // iOS smooth scrolling
+    style={{ WebkitOverflowScrolling: "touch" }}
+  >
         <h3 className="text-base font-semibold">Suggest an edit (Award)</h3>
         <p className="text-xs text-muted-foreground">Your changes will be reviewed by HRMO before publication.</p>
         <div className="space-y-3 mt-3">
