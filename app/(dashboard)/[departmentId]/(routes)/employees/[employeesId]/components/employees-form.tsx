@@ -140,7 +140,7 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   officeId: "",
   eligibilityId: "",
   suffix: "",
-  images: [{ url: "https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg" }],
+  images: [],
   contactNumber: "",
   position: "",
   education: "",
@@ -653,22 +653,34 @@ async function suggestBio() {
               <FormField
                 control={form.control}
                 name="images"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <ImageUpload
-                        value={field.value.map((image => image.url))}
-                        disabled={loading}
-                        onChange={(url) => field.onChange([...field.value, { url }])}
-                        onRemove={(url) => field.onChange([...field.value.filter((current) => current.url !== url)])}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Upload picture of an employee
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field }) =>  {
+    // watch the gender field from your form
+    const gender = form.watch("gender") as "Male" | "Female" | undefined;
+
+    return (
+      <FormItem>
+        <FormControl>
+          <ImageUpload
+            gender={gender} // ✅ pass gender here
+            value={field.value.map((image) => image.url)}
+            disabled={loading}
+            onChange={(url) =>
+              field.onChange([...field.value, { url }])
+            }
+            onRemove={(url) =>
+              field.onChange(
+                field.value.filter((current) => current.url !== url)
+              )
+            }
+          />
+        </FormControl>
+        <FormDescription>
+          Upload picture of an employee
+        </FormDescription>
+        <FormMessage />
+      </FormItem>
+    );
+  }}
               />
               <Separator className="m-2" />
               {/* Compact row: Employee No. + Suggest (left) | Office (right) */}
