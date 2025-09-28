@@ -156,121 +156,122 @@ const created = await prismadb.$transaction(async (tx) => {
     select: { bioIndexCode: true },
   });
 
-  let employeeNoFinal =  normalizeBio(employeeNo);
+      let employeeNoFinal = normalizeBio(employeeNo);
 
- async function suggestIfNeeded() {
-  if (!employeeNoFinal && office?.bioIndexCode && /^\d+$/.test(office.bioIndexCode)) {
-    const anchor = Number(office.bioIndexCode);
+      async function suggestIfNeeded() {
+        if (!employeeNoFinal && office?.bioIndexCode && /^\d+$/.test(office.bioIndexCode)) {
+          const anchor = Number(office.bioIndexCode);
 
-    // Choose your “family” range. Example below = same 1k block (2050000..2050999)
-    const familyStart = Math.floor(anchor / 1000) * 1000;
-    const familyEnd   = familyStart + 999;
+          // Choose your “family” range. Example below = same 1k block (2050000..2050999)
+          const familyStart = Math.floor(anchor / 1000) * 1000;
+          const familyEnd = familyStart + 999;
 
-    employeeNoFinal = await findFirstFreeBioFlat({
-      departmentId: params.departmentId,
-      startFrom: anchor,                // start candidate = anchor+1 (see allowStart=false)
-      allowStart: false,                // try anchor+1, then +2, etc.
-      digits: office.bioIndexCode.length, // keep width (e.g., 7 digits)
-      familyStart,
-      familyEnd,
-    });
-  }
-}
-
-  await suggestIfNeeded();
-  // 2) Create with small retry loop to handle unique collisions on (departmentId, employeeNo)
-  //    (requires @@unique([departmentId, employeeNo]) in your Prisma schema)
-  let employeeRow: EmployeeWithIncludes | null = null;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      employeeRow = await tx.employee.create({
-        data: {
-          departmentId: params.departmentId,
-          prefix,
-          employeeNo: employeeNoFinal || undefined, // pure digits, no suffix
-          lastName,
-          firstName,
-          middleName,
-          suffix,
-          images: {
-            createMany: { data: (images ?? []).map((img: { url: string }) => ({ url: img.url })) },
-          },
-          gender,
-          contactNumber,
-          position,
-          birthday,
-          education,
-          region,
-          houseNo,
-          street,
-          barangay,
-          city,
-          province,
-          gsisNo,
-          tinNo,
-          pagIbigNo,
-          philHealthNo,
-          salary: autoSalary,
-          dateHired: dateHired ? new Date(dateHired) : new Date(),
-          latestAppointment,
-          isFeatured,
-          isArchived,
-          isHead,
-          employeeTypeId,
-          officeId,
-          eligibilityId,
-          salaryGrade: salaryGrade != null ? Number(salaryGrade) : 0,
-          salaryStep:  salaryStep  != null ? Number(salaryStep)  : 0,
-          memberPolicyNo,
-          age,
-          nickname,
-          emergencyContactName,
-          emergencyContactNumber,
-          employeeLink,
-          note: note ?? null,
-          designationId: designationId ?? null,
-        },
-        include: employeeInclude,
-      });
-      break; // success
-    } catch (e: any) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === "P2002" &&
-        (e.meta?.target as string[] | undefined)?.includes("departmentId") &&
-        (e.meta?.target as string[] | undefined)?.includes("employeeNo")
-      ) {
-        // 🔁 On collision, re-suggest then retry
-        employeeNoFinal = "";
-        await suggestIfNeeded();
-        continue;
+          employeeNoFinal = await findFirstFreeBioFlat({
+            departmentId: params.departmentId,
+            startFrom: anchor,                // start candidate = anchor+1 (see allowStart=false)
+            allowStart: false,                // try anchor+1, then +2, etc.
+            digits: office.bioIndexCode.length, // keep width (e.g., 7 digits)
+            familyStart,
+            familyEnd,
+          });
+        }
       }
-      throw e;
-    }
-  }
 
- 
+      await suggestIfNeeded();
+      // 2) Create with small retry loop to handle unique collisions on (departmentId, employeeNo)
+      //    (requires @@unique([departmentId, employeeNo]) in your Prisma schema)
+      let employeeRow: EmployeeWithIncludes | null = null;
 
-  if (!employeeRow) throw new Error("Failed to create employee after retries");
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          employeeRow = await tx.employee.create({
+            data: {
+              departmentId: params.departmentId,
+              prefix,
+              employeeNo: employeeNoFinal || undefined, // pure digits, no suffix
+              lastName,
+              firstName,
+              middleName,
+              suffix,
+              images: {
+                createMany: { data: (images ?? []).map((img: { url: string }) => ({ url: img.url })) },
+              },
+              gender,
+              contactNumber,
+              position,
+              birthday,
+              education,
+              region,
+              houseNo,
+              street,
+              barangay,
+              city,
+              province,
+              gsisNo,
+              tinNo,
+              pagIbigNo,
+              philHealthNo,
+              salary: autoSalary,
+              dateHired: dateHired ? new Date(dateHired) : new Date(),
+              latestAppointment,
+              isFeatured,
+              isArchived,
+              isHead,
+              employeeTypeId,
+              officeId,
+              eligibilityId,
+              salaryGrade: salaryGrade != null ? Number(salaryGrade) : 0,
+              salaryStep: salaryStep != null ? Number(salaryStep) : 0,
+              memberPolicyNo,
+              age,
+              nickname,
+              emergencyContactName,
+              emergencyContactNumber,
+              employeeLink,
+              note: note ?? null,
+              designationId: designationId ?? null,
+              publicEnabled: true,
+            },
+            include: employeeInclude,
+          });
+          break; // success
+        } catch (e: any) {
+          if (
+            e instanceof Prisma.PrismaClientKnownRequestError &&
+            e.code === "P2002" &&
+            (e.meta?.target as string[] | undefined)?.includes("departmentId") &&
+            (e.meta?.target as string[] | undefined)?.includes("employeeNo")
+          ) {
+            // 🔁 On collision, re-suggest then retry
+            employeeNoFinal = "";
+            await suggestIfNeeded();
+            continue;
+          }
+          throw e;
+        }
+      }
 
-  // 3) Default HIRED event (noon-UTC to avoid off-by-one timelines)
-  const occurredAt = toUTCNoonFromLocalDate(employeeRow.dateHired);
-  const details = `Hired as ${employeeRow.position} (${employeeRow.employeeType?.name ?? "—"}) in ${employeeRow.offices?.name ?? "—"}.`;
 
-  await tx.employmentEvent.create({
-    data: {
-      employeeId: employeeRow.id,
-      type: "HIRED",
-      occurredAt,
-      details,
-    },
-  });
 
-  return employeeRow;
-});
+      if (!employeeRow) throw new Error("Failed to create employee after retries");
 
-return NextResponse.json(created);
+      // 3) Default HIRED event (noon-UTC to avoid off-by-one timelines)
+      const occurredAt = toUTCNoonFromLocalDate(employeeRow.dateHired);
+      const details = `Hired as ${employeeRow.position} (${employeeRow.employeeType?.name ?? "—"}) in ${employeeRow.offices?.name ?? "—"}.`;
+
+      await tx.employmentEvent.create({
+        data: {
+          employeeId: employeeRow.id,
+          type: "HIRED",
+          occurredAt,
+          details,
+        },
+      });
+
+      return employeeRow;
+    });
+
+    return NextResponse.json(created);
 
   } catch (error) {
     console.log("[EMPLOYEE_POST]", error);
