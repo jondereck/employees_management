@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx-js-style';
-
+ 
 
 export type Column = { name: string; key: string };
 
@@ -36,7 +36,16 @@ type DownloadExcelParams = {
   qrExt?: string;
   salaryTable?: SalaryRow[];         // <- NEW: pass in or fetch inside
   salaryModeField?: string;
+   sortBy?: 'updatedAt' | 'createdAt';
+  sortDir?: 'asc' | 'desc';
 };
+
+function ts(v: any) {
+  if (!v) return 0;
+  if (typeof v === 'string') return Date.parse(v) || 0;
+  if (v instanceof Date) return v.getTime() || 0;
+  return 0;
+}
 
 function normalizeNFC<T>(val: T): T {
   if (typeof val === "string") return (val.normalize?.("NFC") ?? val) as T;
@@ -132,6 +141,8 @@ export async function generateExcelFile({
   qrExt,
   salaryTable,
   salaryModeField,
+  sortBy,
+  sortDir
 }: DownloadExcelParams): Promise<Blob> {
 
   const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
@@ -319,45 +330,52 @@ export async function generateExcelFile({
 
   const headers = visibleColumns.map(col => col.name);
 
-  const filteredData = filteredEmployees.map((row: any) => {
-    const newRow: Record<string, any> = {};
-    // Parse once
-    const raw = String(row.employeeNo ?? '').trim();
-    const [bioPartRaw, codePartRaw] = raw.split(','); // "3620016", " X-1"
-    const bioPart = (bioPartRaw ?? '').trim();  // 3620016
-    const codePart = (codePartRaw ?? '').trim(); // X-1
+  const sortField = sortBy ?? 'updatedAt';
+const dir = sortDir ?? 'desc';
 
-    visibleColumns.forEach((col) => {
-      let val = row[col.key];
+const sortedEmployees = [...filteredEmployees].sort((a: any, b: any) => {
+  const aTs = ts(a[sortField]) || ts(a.createdAt);
+  const bTs = ts(b[sortField]) || ts(b.createdAt);
+  return dir === 'desc' ? bTs - aTs : aTs - bTs;
+});
 
-      if (col.key === 'employeeNo') {
-        if (idColumnSource === 'uuid') {
-          val = row.id ?? '';
-        } else if (idColumnSource === 'bio') {
-          val = bioPart || codePart || row.id || '';
-        } else {
-          // 'employeeNo' => show the code like X-1
-          val = codePart || bioPart || row.id || '';
-        }
+const filteredData = sortedEmployees.map((row: any) => {
+  const newRow: Record<string, any> = {};
+  // Parse once
+  const raw = String(row.employeeNo ?? '').trim();
+  const [bioPartRaw, codePartRaw] = raw.split(',');
+  const bioPart = (bioPartRaw ?? '').trim();
+  const codePart = (codePartRaw ?? '').trim();
+
+  visibleColumns.forEach((col) => {
+    let val = row[col.key];
+    if (col.key === 'employeeNo') {
+      if (idColumnSource === 'uuid') {
+        val = row.id ?? '';
+      } else if (idColumnSource === 'bio') {
+        val = bioPart || codePart || row.id || '';
+      } else {
+        val = codePart || bioPart || row.id || '';
       }
-
-      newRow[col.name] = val;
-    });
-
-    return newRow;
+    }
+    newRow[col.name] = val;
   });
 
-  const sortedData = filteredData.sort((a: any, b: any) => {
-    if (a['Office'] < b['Office']) return -1;
-    if (a['Office'] > b['Office']) return 1;
-    if (a['Plantilla'] < b['Plantilla']) return -1;  // <- NEW second key
-    if (a['Plantilla'] > b['Plantilla']) return 1;
-    if (a['Last Name'] < b['Last Name']) return -1;
-    if (a['Last Name'] > b['Last Name']) return 1;
-    return 0;
-  });
+  return newRow;
+});
 
-  const worksheet = XLSX.utils.json_to_sheet(sortedData, { header: headers, skipHeader: false });
+  // const sortedData = filteredData.sort((a: any, b: any) => {
+  //   if (a['Office'] < b['Office']) return -1;
+  //   if (a['Office'] > b['Office']) return 1;
+  //   if (a['Plantilla'] < b['Plantilla']) return -1;  // <- NEW second key
+  //   if (a['Plantilla'] > b['Plantilla']) return 1;
+  //   if (a['Last Name'] < b['Last Name']) return -1;
+  //   if (a['Last Name'] > b['Last Name']) return 1;
+  //   return 0;
+  // });
+
+const worksheet = XLSX.utils.json_to_sheet(filteredData, { header: headers, skipHeader: false });
+
   worksheet['!freeze'] = { xSplit: 1, ySplit: 1 };
 
   headers.forEach((header, colIdx) => {

@@ -34,6 +34,17 @@ export default function DownloadStyledExcel() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(undefined);
 
   const [templates, setTemplates] = useState(getAllTemplates());
+  const [sortBy, setSortBy] = useState<'updatedAt' | 'createdAt'>(() => {
+    if (typeof window !== 'undefined') return (localStorage.getItem('hrps_sort_by') as any) || 'updatedAt';
+    return 'updatedAt';
+  });
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => {
+    if (typeof window !== 'undefined') return (localStorage.getItem('hrps_sort_dir') as any) || 'desc';
+    return 'desc';
+  });
+  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_by', sortBy); }, [sortBy]);
+  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_dir', sortDir); }, [sortDir]);
+
 
   function refreshTemplates() {
     // If you merge built-ins + user templates inside getAllTemplates, just call it again:
@@ -620,6 +631,8 @@ export default function DownloadStyledExcel() {
         idColumnSource,
         imageExt,   // NEW
         qrExt,
+        sortBy,
+        sortDir,
 
       });
 
@@ -1170,8 +1183,37 @@ export default function DownloadStyledExcel() {
                             </label>
                           ))}
                         </div>
+                        
+
                       </div>
                     </TabsContent>
+                    <div className="mt-3 rounded-md border bg-white p-3">
+                          <h4 className="text-sm font-semibold">Sort</h4>
+                          <div className="flex flex-wrap items-center gap-3 text-sm mt-2">
+                            <label className="flex items-center gap-2">
+                              <span>Field:</span>
+                              <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as any)}
+                                className="border rounded px-2 py-1 text-xs"
+                              >
+                                <option value="updatedAt">Updated date</option>
+                                <option value="createdAt">Created date</option>
+                              </select>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <span>Order:</span>
+                              <select
+                                value={sortDir}
+                                onChange={(e) => setSortDir(e.target.value as any)}
+                                className="border rounded px-2 py-1 text-xs"
+                              >
+                                <option value="desc">Newest first</option>
+                                <option value="asc">Oldest first</option>
+                              </select>
+                            </label>
+                          </div>
+                        </div>
                     <TabsContent value="filters" className="mt-3">
                       <div className="rounded-md border bg-white p-3 space-y-4">
                         {/* Appointment filter */}

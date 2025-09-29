@@ -79,7 +79,7 @@ export default function PublicSelfServiceActions({
 
   return (
 
-    
+
     <TooltipProvider delayDuration={200}>
       <Card className="rounded-lg border">
         <CardHeader className="flex items-center justify-between space-y-0">
@@ -89,18 +89,18 @@ export default function PublicSelfServiceActions({
             Ongoing
           </Badge>
         </CardHeader>
-<Button
-  size="icon"
-  className="fixed right-[calc(1rem+env(safe-area-inset-right))] z-50 h-12 w-12 rounded-full shadow-lg print:hidden
+        <Button
+          size="icon"
+          className="fixed right-[calc(1rem+env(safe-area-inset-right))] z-50 h-12 w-12 rounded-full shadow-lg print:hidden
              bg-pink-600 hover:bg-pink-700 text-white"
-  style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }} // ↑ adjust 5rem to match footer height
-  onClick={() =>
-    document.getElementById("self-service")?.scrollIntoView({ behavior: "smooth", block: "start" })
-  }
-  aria-label="Open Self-Service"
->
-  <HeartHandshake className="h-5 w-5" />
-</Button>
+          style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }} // ↑ adjust 5rem to match footer height
+          onClick={() =>
+            document.getElementById("self-service")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+          aria-label="Open Self-Service"
+        >
+          <HeartHandshake className="h-5 w-5" />
+        </Button>
 
         {/* Responsive grid: 1 / 2 / 3 cols */}
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -224,27 +224,27 @@ export default function PublicSelfServiceActions({
           </div>
 
           {/* ID & Profile */}
-<div className="rounded-md border p-3 flex flex-col">
-  <div className="mb-2 flex items-center justify-between gap-2">
-    <div className="flex items-center gap-2">
-      {/* lucide-react: UserRound or IdCard */}
-      <svg className="h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor"/><path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor"/></svg>
-      <span className="font-medium text-sm sm:text-base">ID &amp; Profile</span>
-    </div>
-    <Badge variant="secondary">Ongoing</Badge>
-  </div>
-  <p className="text-xs sm:text-sm text-muted-foreground mb-3">
-    Update profile photo or request ID reprint (lost/damaged).
-  </p>
-  <div className="flex flex-col sm:flex-row gap-2 mt-auto">
-    <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setDocOpen(true)}>
-      Update Photo
-    </Button>
-    <Button size="sm" className="w-full sm:w-auto" onClick={() => setDocOpen(true)}>
-      ID Reprint
-    </Button>
-  </div>
-</div>
+          <div className="rounded-md border p-3 flex flex-col">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {/* lucide-react: UserRound or IdCard */}
+                <svg className="h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" /><path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" /></svg>
+                <span className="font-medium text-sm sm:text-base">ID &amp; Profile</span>
+              </div>
+              <Badge variant="secondary">Ongoing</Badge>
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground mb-3">
+              Update profile photo or request ID reprint (lost/damaged).
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 mt-auto">
+              <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setDocOpen(true)}>
+                Update Photo
+              </Button>
+              <Button size="sm" className="w-full sm:w-auto" onClick={() => setDocOpen(true)}>
+                ID Reprint
+              </Button>
+            </div>
+          </div>
 
         </CardContent>
       </Card>
@@ -294,7 +294,7 @@ export default function PublicSelfServiceActions({
           </p>
         </DialogContent>
       </Dialog>
-      
+
 
       {/* Training dialog (if no nomination form yet) */}
       <Dialog open={trainingOpen} onOpenChange={setTrainingOpen}>
@@ -318,7 +318,7 @@ export default function PublicSelfServiceActions({
           </p>
         </DialogContent>
       </Dialog>
-      
+
     </TooltipProvider>
   );
 }
