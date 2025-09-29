@@ -56,7 +56,7 @@ export default function ReportIssueBox({
   return (
     <section className={`mt-6 rounded-lg border bg-slate-50 p-3 sm:p-4 ${className}`}>
       <p className="text-sm text-slate-700">
-        May napansing mali o kulang? Ipaalam sa HRMO para ma-update namin ang public record na ito.
+        May napansing mali, kulang o katanungan ? Ipaalam sa HRMO para ma-update namin ang public record na ito.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">

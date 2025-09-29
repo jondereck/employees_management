@@ -50,6 +50,16 @@ function isImageLike(u?: string | null) {
   }
 }
 
+function getCover(a: PublicAward) {
+  const cover =
+    (isImageLike(a.thumbnail) && a.thumbnail) ||
+    (isImageLike(a.fileUrl) && a.fileUrl) ||
+    null;
+  return cover;
+}
+
+
+
 export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicAwardsGalleryProps) {
   const [awards, setAwards] = useState<PublicAward[] | null>(null);
 
@@ -61,6 +71,7 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
 
   useEffect(() => {
     let alive = true;
@@ -100,10 +111,7 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {awards.map((a) => {
-            const cover =
-              (isImageLike(a.thumbnail) && a.thumbnail) ||
-              (isImageLike(a.fileUrl) && a.fileUrl) ||
-              "/placeholder.svg";
+            const cover = getCover(a) ?? "/placeholder.svg";
 
             return (
               <div key={a.id} className="rounded-lg border overflow-hidden">
@@ -146,7 +154,7 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
                         })}
                     </div>
                     {a.tags?.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
+                      <div className="mt-2 flex flex-wrap gap-1 truncate">
                         {a.tags.map((t) => (
                           <Badge key={t} variant="secondary">
                             {t}
@@ -199,7 +207,37 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl">
           {active && (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              {/* Preview */}
+              <div className="relative w-full overflow-hidden rounded-md bg-muted">
+                {getCover(active) ? (
+                  <div className="relative aspect-[4/3] w-full">
+                    <Image
+                      src={getCover(active)!}
+                      alt={active.title}
+                      fill
+                      className="object-cover"
+                      priority
+                    />
+                  </div>
+                ) : (
+                  <div className="aspect-[4/3] w-full flex items-center justify-center text-xs text-muted-foreground">
+                    No preview
+                    {active.fileUrl && (
+                      <a
+                        href={active.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline ml-1"
+                      >
+                        Open
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Details */}
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-semibold">{active.title}</h3>
                 <time className="text-xs text-muted-foreground">
@@ -210,12 +248,14 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
                   })}
                 </time>
               </div>
+
               {active.issuer && (
                 <p className="text-xs text-muted-foreground">Issuer: {active.issuer}</p>
               )}
               {active.description && (
                 <p className="text-sm leading-relaxed">{active.description}</p>
               )}
+
               {active.fileUrl && (
                 <a
                   href={active.fileUrl}
@@ -230,6 +270,7 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
           )}
         </DialogContent>
       </Dialog>
+
 
       {/* Suggest Modals */}
       <AwardCreateModal

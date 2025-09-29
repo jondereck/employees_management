@@ -26,6 +26,7 @@ import AddTimelineEvent from "@/app/(public)/components/admin/add-timeline-event
 import AddAward from "@/app/(public)/components/admin/add-award";
 import PublicTimeline from "@/app/(public)/components/public-timeline";
 import PublicAwardsGallery from "@/app/(public)/components/public-awards.gallery";
+import PublicSelfServiceActions from "@/app/(public)/components/public-self-service-actions";
 
 export const revalidate = 0;
 
@@ -472,7 +473,6 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                 </div>
                 <PublicAwardsGallery employeeId={employeeId} />
               </section>
-              {/* Awards & Recognition (Ongoing) */}
 
             </div>
 
@@ -486,14 +486,31 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
         </div>
       </main>
 
-      <ReportIssueBox
-        contactEmail={process.env.NEXT_PUBLIC_HR_CONTACT_EMAIL || "hrmo@lingayen.gov.ph"}
-        messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"}
-        employeeName={`${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName}`.replace(/\s+/g, " ").trim()}
-        employeeNo={publicData.employeeNo}
-      />
+     <section id="self-service" className="rounded-lg border p-4">
+  <PublicSelfServiceActions
+    employeeId={employeeId}
+    employeeType={publicData.employeeType?.name ?? null}
+    leaveFormUrl="/files/CSForm6_LeaveApplication.pdf"
+    forms={[
+      { label: "Leave Application (CS Form 6)", href: "/files/LeaveForm.docx" },
+      { label: "PDS Update Form", href: "/files/CS-Form-No.-212-Revised-2025-Personal-Data-Sheet.xlsx" },
+      { label: "DTR Template", href: "/files/DTR Template.xlsm" },
+      { label: "SALN Form", href: "/files/SALN Form.doc" },
+    ]}
+  />
+</section>
 
-    
+
+
+<div id="report-issue">
+  <ReportIssueBox
+    contactEmail={process.env.NEXT_PUBLIC_HR_CONTACT_EMAIL || "hrmo@lingayen.gov.ph"}
+    messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"}
+    employeeName={`${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName}`.replace(/\s+/g, " ").trim()}
+    employeeNo={publicData.employeeNo}
+  />
+</div>
+
     </div>
   );
 }
