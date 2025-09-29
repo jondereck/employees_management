@@ -1,14 +1,18 @@
 // components/TemplatePickerBar.tsx
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, Save, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FaBroom } from "react-icons/fa";
-
+import { isBuiltInTemplateId } from "@/utils/export-templates";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "./input";
 type Template = {
   id: string;            // e.g. "hr-core" | "plantilla" | "payroll" | "gov-ids" or user ids
   name: string;
@@ -29,6 +33,8 @@ type Props = {
   deleteUserTemplate: (id: string) => void;
   refreshTemplates: () => void;
 
+  onRequestUpdate?: (id: string, newName?: string) => void;
+
   /** Optional list of core/built-in ids that must NOT be deletable */
   builtinIds?: string[]; // default: ["hr-core", "plantilla", "payroll", "gov-ids"]
 };
@@ -43,6 +49,7 @@ export default function TemplatePickerBar({
   clearAllUserTemplates,
   deleteUserTemplate,
   refreshTemplates,
+  onRequestUpdate,
   builtinIds = ["hr-core", "plantilla", "payroll", "gov-ids"],
 }: Props) {
   const selected = useMemo(
@@ -52,7 +59,28 @@ export default function TemplatePickerBar({
 
   const isDeletable = selected && !builtinIds.includes(selected.id);
 
+  const isBuiltIn = value ? isBuiltInTemplateId(value) : false;
+
+
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  const openRename = () => {
+    if (!selected || isBuiltIn) return;
+    setNewName(selected.name || "");
+    setRenameOpen(true);
+  };
+
+  const confirmRenameUpdate = () => {
+    if (!value) return;
+    const finalName = newName.trim();
+    onRequestUpdate?.(value, finalName || undefined);
+    setRenameOpen(false);
+  };
+
   return (
+
+     <div className={`flex items-center gap-2 ${className ?? ""}`}>
     <TooltipProvider>
       <div className={cn("flex items-center gap-2", className)}>
         {/* Dropdown */}
@@ -99,6 +127,29 @@ export default function TemplatePickerBar({
             <TooltipContent>Clear last used</TooltipContent>
           </Tooltip>
 
+          {/* UPDATE (overwrite user template) */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="secondary"
+                onClick={() => value && !isBuiltIn && onRequestUpdate?.(value)}
+                disabled={!value || isBuiltIn}
+                className="shrink-0"
+              >
+                <Save className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {!value
+                ? "Select a template first"
+                : isBuiltIn
+                  ? "Built-in templates can’t be updated"
+                  : "Update (overwrite) selected template"}
+            </TooltipContent>
+          </Tooltip>
+
           {/* Delete selected (only for user presets) */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -128,8 +179,30 @@ export default function TemplatePickerBar({
             </TooltipContent>
           </Tooltip>
 
-          {/* Clear ALL user presets */}
           <Tooltip>
+  <TooltipTrigger asChild>
+    <Button
+      type="button"
+      size="icon"
+      variant="secondary"
+      onClick={openRename}
+      disabled={!value || isBuiltIn}
+      className="shrink-0"
+    >
+      <Pencil className="h-4 w-4" />
+    </Button>
+  </TooltipTrigger>
+  <TooltipContent>
+    {!value
+      ? "Select a template first"
+      : isBuiltIn
+      ? "Built-in templates can’t be renamed"
+      : "Rename & update template"}
+  </TooltipContent>
+</Tooltip>
+
+          {/* Clear ALL user presets */}
+          {/* <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 size="icon"
@@ -148,9 +221,34 @@ export default function TemplatePickerBar({
               </Button>
             </TooltipTrigger>
             <TooltipContent>Clear all presets</TooltipContent>
-          </Tooltip>
+          </Tooltip> */}
         </div>
       </div>
+   
+      
     </TooltipProvider>
+    <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename template</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Template name"
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              This will overwrite the selected user template with the current settings.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setRenameOpen(false)}>Cancel</Button>
+            <Button onClick={confirmRenameUpdate}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+   </div>
+    
   );
 }

@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
-import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage, exportTemplatesToBlob, importTemplatesFromObject } from '@/utils/export-templates';
+import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage, exportTemplatesToBlob, importTemplatesFromObject, isBuiltInTemplateId, overwriteUserTemplateById } from '@/utils/export-templates';
 import TemplatePickerBar from './ui/export-template-picker';
 
 
@@ -48,21 +48,30 @@ export default function DownloadStyledExcel() {
     if (tpl.statusFilter) setStatusFilter(tpl.statusFilter);
     if (tpl.idColumnSource) setIdColumnSource(tpl.idColumnSource);
 
-    // ⬇️ appointment filters from template
+    // Appointment filters
     if (tpl.appointmentFilters) {
       if (tpl.appointmentFilters === "all") {
         setAppointmentFilters(APPOINTMENT_OPTIONS);
       } else {
-        // keep only labels that exist in current options
         const allowed = new Set(APPOINTMENT_OPTIONS);
         setAppointmentFilters(tpl.appointmentFilters.filter(x => allowed.has(x)));
       }
     }
 
-    if (tpl.positionReplaceRules) setPositionReplaceRules(tpl.positionReplaceRules);
+    // ✅ Find & Replace rules
+    if (tpl.positionReplaceRules) {
+      setPositionReplaceRules(tpl.positionReplaceRules);
+    }
+
+    // ✅ Paths
+    if (tpl.paths) {
+      setImageBaseDir(tpl.paths.imageBaseDir ?? imageBaseDir);
+      setImageExt(tpl.paths.imageExt ?? imageExt);
+      setQrBaseDir(tpl.paths.qrBaseDir ?? qrBaseDir);
+      setQrExt(tpl.paths.qrExt ?? qrExt);
+      setQrPrefix(tpl.paths.qrPrefix ?? qrPrefix);
+    }
   }
-
-
 
 
   // near other useStates
@@ -310,9 +319,9 @@ export default function DownloadStyledExcel() {
       .slice(0, 120);                        // keep it reasonable
 
   const selectedTemplateName = useMemo(() => {
-  const tpl = templates.find(t => t.id === selectedTemplateId);
-  return tpl?.name?.trim() || "Employee List";
-}, [templates, selectedTemplateId]);
+    const tpl = templates.find(t => t.id === selectedTemplateId);
+    return tpl?.name?.trim() || "Employee List";
+  }, [templates, selectedTemplateId]);
 
 
   // at the top of DownloadStyledExcel component
@@ -614,8 +623,8 @@ export default function DownloadStyledExcel() {
 
       });
 
-     const base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
-const filename = `${base}.xlsx`;
+      const base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
+      const filename = `${base}.xlsx`;
 
 
       const link = document.createElement('a');
@@ -672,6 +681,48 @@ const filename = `${base}.xlsx`;
   };
 
 
+  const handleUpdateCurrentTemplate = (id: string, newName?: string) => {
+
+    if (isBuiltInTemplateId(id)) {
+      toast.warning("Built-in templates can't be updated. Save as a new template instead.");
+      return;
+    }
+    if (!selectedTemplateId) {
+      toast.info("No template selected to update.");
+      return;
+    }
+    if (isBuiltInTemplateId(selectedTemplateId)) {
+      toast.warning("Built-in templates can't be updated. Save as a new template instead.");
+      return;
+    }
+
+    const ok = overwriteUserTemplateById(selectedTemplateId, {
+      name: (newName ?? selectedTemplateName)?.trim() || selectedTemplateName,
+      selectedKeys: selectedColumnsRef.current,
+      statusFilter,
+      idColumnSource,
+      appointmentFilters,
+      positionReplaceRules,
+      sheetName: "Sheet1",
+      paths: {
+        imageBaseDir,
+        imageExt,
+        qrBaseDir,
+        qrExt,
+        qrPrefix,
+      },
+    });
+
+    if (ok) {
+      refreshTemplates();
+      toast.success("Template updated.");
+    } else {
+      toast.error("Could not update template.");
+    }
+  };
+
+
+
   return (
     <div className="flex justify-end">
       <button
@@ -717,6 +768,13 @@ const filename = `${base}.xlsx`;
                 appointmentFilters,
                 positionReplaceRules,
                 sheetName: "Sheet1",
+                paths: {                         // ✅ save paths
+                  imageBaseDir,
+                  imageExt,
+                  qrBaseDir,
+                  qrExt,
+                  qrPrefix,
+                },
               });
 
               refreshTemplates();
@@ -787,6 +845,7 @@ const filename = `${base}.xlsx`;
           clearAllUserTemplates={clearAllUserTemplates}
           deleteUserTemplate={deleteUserTemplate}
           refreshTemplates={refreshTemplates}
+          onRequestUpdate={(id, newName) => handleUpdateCurrentTemplate(id, newName)}
         />
 
         {/* ADVANCED (single collapsible with both subsections) */}

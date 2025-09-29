@@ -6,6 +6,14 @@ import type { Column, IdColumnSource, PositionReplaceRule } from "@/utils/downlo
 export type UserTemplate = Omit<ExportTemplate, "id"> & { id: string };
 export type TemplateId = "hr-core" | "plantilla" | "payroll" | "gov-ids";
 
+export type ExportTemplatePaths = {
+  imageBaseDir: string;
+  imageExt: string;
+  qrBaseDir: string;
+  qrExt: string;
+  qrPrefix: string;
+};
+
 export type AppointmentFilterValue =
   | "all"
   | "permanent"
@@ -25,6 +33,7 @@ export type ExportTemplate = {
   appointmentFilters?: string[] | "all";
   idColumnSource?: IdColumnSource;
   positionReplaceRules?: PositionReplaceRule[];
+  paths?: ExportTemplatePaths;
   sheetName?: string;
     __version__?: number;
 };
@@ -253,4 +262,35 @@ export function importTemplatesFromObject(
   }
 
   return { added, overwritten, skipped };
+}
+
+// mark built-ins so we don't overwrite them
+export function isBuiltInTemplateId(id: string) {
+  return EXPORT_TEMPLATES.some(t => t.id === id);
+}
+
+// overwrite an existing *user* template by id
+export function overwriteUserTemplateById(
+  id: string,
+  patch: Omit<ExportTemplate, "id"> // keep the same id
+): boolean {
+  if (typeof window === "undefined") return false;
+  if (isBuiltInTemplateId(id)) return false; // don't touch built-ins
+
+  const list = loadUserTemplates();
+  const idx = list.findIndex(t => t.id === id);
+  if (idx === -1) return false;
+
+  // keep original name unless patch provides a new one
+  const name = patch.name ?? list[idx].name;
+
+  list[idx] = {
+    ...list[idx],
+    ...patch,
+    id,     // ensure id stays the same
+    name,   // safe keep
+  };
+
+  saveUserTemplates(list);
+  return true;
 }
