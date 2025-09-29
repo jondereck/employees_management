@@ -9,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { toast, Toaster } from "sonner";
@@ -49,15 +49,7 @@ const SUFFIX_OPTIONS = [
 ];
 
 
-const CITY_PRIORITY = [
-  "LINGAYEN"
-];
-
-const PROVINCE_PRIORITY = [
-  "PANGASINAN"
-];
-
-
+type BioSuggestion = { indexCode: string; candidate: string };
 
 
 const formSchema = z.object({
@@ -255,6 +247,9 @@ export const EmployeesForm = ({
   const [inputSearchOpen, setInputSearchOpen] = useState(false);
   const [timelineVersion, setTimelineVersion] = useState(0);
   const [awardsVersion, setAwardsVersion] = useState(0);
+  const [bioOptions, setBioOptions] = useState<BioSuggestion[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
+
 
   const [value, setValue] = useState("")
 
@@ -406,60 +401,74 @@ export const EmployeesForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee, initialData]);
 
- // split "2050000-0007, E-4" | "8540010, E-4" | "2050000-0007" | "8540010"
-function splitEmployeeNo(raw?: string | null) {
-  const clean = (raw ?? "").trim();
-  if (!clean) return { bio: "", emp: "" };
+  // split "2050000-0007, E-4" | "8540010, E-4" | "2050000-0007" | "8540010"
+  function splitEmployeeNo(raw?: string | null) {
+    const clean = (raw ?? "").trim();
+    if (!clean) return { bio: "", emp: "" };
 
-  // split by comma to separate EMP part if any
-  const [left, right] = clean.split(",").map(s => s.trim());
+    // split by comma to separate EMP part if any
+    const [left, right] = clean.split(",").map(s => s.trim());
 
-  // left may be "2050000-0007" or "8540010"
-  const bio = (left ?? "").toUpperCase();
-  const emp = (right ?? "").toUpperCase();
+    // left may be "2050000-0007" or "8540010"
+    const bio = (left ?? "").toUpperCase();
+    const emp = (right ?? "").toUpperCase();
 
-  return { bio, emp };
-}
-
-// join back to the saved UI format "BIO, EMP" if EMP exists
-function joinEmployeeNo(bio: string, emp?: string) {
-  const b = (bio ?? "").trim().toUpperCase();
-  const e = (emp ?? "").trim().toUpperCase();
-  return e ? `${b}, ${e}` : b;
-}
-const officeId = form.watch("officeId"); // keep
-
-async function suggestBio() {
-  if (!officeId) {
-    toast.error("Select an Office first.");
-    return;
+    return { bio, emp };
   }
-  try {
-    const res = await fetch(
-      `/api/${params.departmentId}/offices/${officeId}/suggest-bio`,
-      { cache: "no-store" }
-    );
-    const data = await res.json();
 
-    if (!res.ok || !data?.ok) {
-      throw new Error(data?.message || "Failed to suggest an available BIO.");
+  // join back to the saved UI format "BIO, EMP" if EMP exists
+  function joinEmployeeNo(bio: string, emp?: string) {
+    const b = (bio ?? "").trim().toUpperCase();
+    const e = (emp ?? "").trim().toUpperCase();
+    return e ? `${b}, ${e}` : b;
+  }
+  const officeId = form.watch("officeId"); // keep
+
+  const suggestBio = useCallback(async () => {
+    if (suggesting) return;              // prevent double taps
+    if (!officeId) { toast.error("Select an Office first."); return; }
+
+    setSuggesting(true);
+    const toastId = toast.loading("Suggesting…", {
+      description: "Finding the next available BIO number.",
+      duration: Infinity, // stays until dismissed
+    });
+
+    try {
+      setBioOptions([]);
+      const res = await fetch(`/api/${params.departmentId}/offices/${officeId}/suggest-bio`, { cache: "no-store" });
+      const data = await res.json();
+
+      if (!res.ok || !data?.ok) throw new Error(data?.message || "Failed to suggest an available BIO.");
+
+      let suggestions: BioSuggestion[] = Array.isArray(data.suggestions)
+        ? data.suggestions.filter((s: any) => s?.candidate).map((s: any) => ({ indexCode: String(s.indexCode ?? ""), candidate: String(s.candidate) }))
+        : data.suggestion ? [{ indexCode: "", candidate: String(data.suggestion) }] : [];
+
+      if (!suggestions.length) {
+        toast.error("No available BIO found.");
+        return;
+      }
+
+      if (suggestions.length === 1) {
+        const suggested = suggestions[0].candidate.toUpperCase();
+        const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
+        form.setValue("employeeNo", joinEmployeeNo(suggested, emp), { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+        toast.success(`Suggested BIO: ${suggested}`, { id: toastId });
+        return;
+      }
+
+      setBioOptions(suggestions);
+      toast.success("Suggestions ready ✔", { id: toastId });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Unable to suggest bio number.", { id: toastId });
+    } finally {
+      setSuggesting(false);
     }
-
-    // server returns full suggestion, e.g. "2050000-0007"
-    const suggested: string = String(data.suggestion || "").toUpperCase();
-
-    // keep user's EMP part if any
-    const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
-    const next = joinEmployeeNo(suggested, emp);
-
-    form.setValue("employeeNo", next, { shouldDirty: true, shouldTouch: true });
-    toast.success(`Suggested BIO: ${suggested}`);
-  } catch (e: any) {
-    toast.error(e?.message ?? "Unable to suggest bio number.");
-  }
-}
+  }, [officeId, params.departmentId, form, suggesting]);
 
 
+  useEffect(() => { setBioOptions([]); }, [officeId]);
 
   const onSubmit = async (values: EmployeesFormValues) => {
     const contact = (values.contactNumber ?? "").trim();
@@ -653,34 +662,34 @@ async function suggestBio() {
               <FormField
                 control={form.control}
                 name="images"
-                render={({ field }) =>  {
-    // watch the gender field from your form
-    const gender = form.watch("gender") as "Male" | "Female" | undefined;
+                render={({ field }) => {
+                  // watch the gender field from your form
+                  const gender = form.watch("gender") as "Male" | "Female" | undefined;
 
-    return (
-      <FormItem>
-        <FormControl>
-          <ImageUpload
-            gender={gender} // ✅ pass gender here
-            value={field.value.map((image) => image.url)}
-            disabled={loading}
-            onChange={(url) =>
-              field.onChange([...field.value, { url }])
-            }
-            onRemove={(url) =>
-              field.onChange(
-                field.value.filter((current) => current.url !== url)
-              )
-            }
-          />
-        </FormControl>
-        <FormDescription>
-          Upload picture of an employee
-        </FormDescription>
-        <FormMessage />
-      </FormItem>
-    );
-  }}
+                  return (
+                    <FormItem>
+                      <FormControl>
+                        <ImageUpload
+                          gender={gender} // ✅ pass gender here
+                          value={field.value.map((image) => image.url)}
+                          disabled={loading}
+                          onChange={(url) =>
+                            field.onChange([...field.value, { url }])
+                          }
+                          onRemove={(url) =>
+                            field.onChange(
+                              field.value.filter((current) => current.url !== url)
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Upload picture of an employee
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
               <Separator className="m-2" />
               {/* Compact row: Employee No. + Suggest (left) | Office (right) */}
@@ -706,14 +715,48 @@ async function suggestBio() {
                         <Button
                           type="button"
                           onClick={suggestBio}
-                          disabled={loading || !officeId}
+                          disabled={loading || suggesting || !officeId}
                           className="shrink-0 whitespace-nowrap"
                           variant="secondary"
                           aria-label="Suggest Bio Number"
+                          aria-busy={suggesting}
                         >
-                          Suggest Bio No.
+                          {suggesting ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                              Suggesting…
+                            </span>
+                          ) : "Suggest Bio No."}
                         </Button>
+
+
                       </div>
+                      {/* Render multiple suggestions as quick-pick buttons */}
+                      {bioOptions.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {bioOptions.map((opt) => (
+                            <Button
+                              key={`${opt.indexCode}-${opt.candidate}`}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
+                                form.setValue("employeeNo", joinEmployeeNo(opt.candidate.toUpperCase(), emp), {
+                                  shouldDirty: true,
+                                  shouldTouch: true,
+                                  shouldValidate: true,
+                                });
+                                // Optionally hide choices after selecting:
+                                // setBioOptions([]);
+                              }}
+                              className="rounded-full"
+                            >
+                              Use {opt.candidate}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
 
                       {/* keep description but hide on small screens to reduce height */}
                       <FormDescription className="hidden sm:block">
@@ -743,7 +786,10 @@ async function suggestBio() {
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .map((o) => ({ value: o.id, label: o.name }))}
                       description="Select the office where the employee is designated."
+                       searchable
+                      searchPlaceholder="Search office..."
                     />
+                    
                   )}
                 />
               </div>
@@ -927,6 +973,7 @@ async function suggestBio() {
                       disableFuture
                       description="Your date of birth is used to calculate your age."
                       disabled={loading}
+                      required
                     />
                   )}
                 />
@@ -1195,6 +1242,8 @@ async function suggestBio() {
                       disabled={loading}
                       description="Plantilla office record."
                       required={false}
+                      searchable
+                      searchPlaceholder="Search office..."
                     />
                   )}
                 />
@@ -1211,14 +1260,16 @@ async function suggestBio() {
                       required
                       disabled={loading}
                       placeholder="Select Appointment"
-                      priorityEndpoint={`/api/autofill/popular?field=employeeType&limit=3`}
-                      pinSuggestions
-                      pinnedLabel="Suggestions"
                       options={employeeType
                         .slice()
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .map(et => ({ value: et.id, label: et.name }))}
+
+                      searchable
+                      searchPlaceholder="Search appointment..."
+                      description="Select an Appointment for the employee"
                     />
+
                   )}
                 />
                 <FormField
@@ -1242,7 +1293,10 @@ async function suggestBio() {
                         .slice()
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .map(el => ({ value: el.id, label: el.name }))}
+                        searchable
+                      searchPlaceholder="Search eligibility..."
                     />
+                    
                   )}
                 />
 
@@ -1259,6 +1313,7 @@ async function suggestBio() {
                       disableFuture                 // optional: block future dates
                       description="Date hired is used to calculate years of service."
                       disabled={loading}
+                      required
                     />
                   )}
                 />
