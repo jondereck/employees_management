@@ -32,9 +32,9 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
 }) => {
 
   const baseUrl =
-  process.env.NEXT_PUBLIC_URL ??
-  (typeof window !== "undefined" ? window.location.origin : "");
-const qrValue = `${baseUrl}/${departmentId}/view/employee/${employeeId}`;
+    process.env.NEXT_PUBLIC_URL ??
+    (typeof window !== "undefined" ? window.location.origin : "");
+  const qrValue = `${baseUrl}/view/employee/${employeeId}`;
 
 
   const [isOpen, setIsOpen] = useState(false);
@@ -61,7 +61,7 @@ const qrValue = `${baseUrl}/${departmentId}/view/employee/${employeeId}`;
     toast.success(`QR Code for ${fileBaseName}.png downloaded!`);
   };
 
-  
+
   const handlePrint = () => {
     const canvas = qrRef.current;
     if (!canvas) return;
@@ -76,7 +76,7 @@ const qrValue = `${baseUrl}/${departmentId}/view/employee/${employeeId}`;
   };
 
 
-  
+
   // NEW: copy link to clipboard (with fallback)
   const handleCopyLink = async () => {
     try {
@@ -149,33 +149,33 @@ const qrValue = `${baseUrl}/${departmentId}/view/employee/${employeeId}`;
                 width: logoSize,
                 excavate: true,
               }}
-              // You can tweak errorCorrectionLevel if needed
-              // level="H"
-              // includeMargin
+            // You can tweak errorCorrectionLevel if needed
+            // level="H"
+            // includeMargin
             />
           </div>
-     {/* Link + Copy (no overlap, truncates nicely) */}
-<div className="mb-3">
-  <div className="flex items-center gap-2">
-    <div className="flex-1 min-w-0">
-      <input
-        readOnly
-        value={qrValue}
-        className="w-full rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground truncate"
-        onFocus={(e) => e.currentTarget.select()}
-        aria-label="Public profile link"
-      />
-    </div>
-    <Button
-      size="sm"
-      variant="outline"
-      className="shrink-0"
-      onClick={handleCopyLink}
-    >
-      Copy link
-    </Button>
-  </div>
-</div>
+          {/* Link + Copy (no overlap, truncates nicely) */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <input
+                  readOnly
+                  value={qrValue}
+                  className="w-full rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground truncate"
+                  onFocus={(e) => e.currentTarget.select()}
+                  aria-label="Public profile link"
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                onClick={handleCopyLink}
+              >
+                Copy link
+              </Button>
+            </div>
+          </div>
 
 
           <DialogFooter className="flex justify-between items-center mt-4">

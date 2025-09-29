@@ -28,6 +28,16 @@ const enumToUi = (t: EmploymentEventType) => {
   }
 };
 
+function str(x: any) { return (x ?? "").toString().trim(); }
+function nullIfEmpty(s: string) { return s ? s : null; }
+function parseTags(input: any): string[] {
+  if (Array.isArray(input)) return input.map((t) => str(t)).filter(Boolean);
+  const s = str(input);
+  if (!s) return [];
+  return s.split(",").map((t:any) => t.trim()).filter(Boolean);
+}
+
+
 export async function PATCH(req: Request, { params }: Params) {
   try {
     const { employeeId, eventId } = params;
@@ -35,12 +45,17 @@ export async function PATCH(req: Request, { params }: Params) {
       return new NextResponse("employeeId & eventId required", { status: 400 });
     }
 
-    const body = await req.json();
-    const typeRaw = String(body.type ?? "");
-    const title = String(body.title ?? "").trim();
-    const description = String(body.description ?? "").trim();
-    const date = String(body.date ?? "").slice(0, 10); // yyyy-mm-dd
-    const attachment = String(body.attachment ?? "").trim();
+   const body = await req.json();
+
+    const typeRaw    = str(body.type);
+    const title      = str(body.title);
+    const description= str(body.description);
+    const date       = str(body.date).slice(0, 10); // YYYY-MM-DD
+    const attachment = str(body.attachment);        // certificate URL if any
+    const issuer     = str(body.issuer);
+    const thumbnail  = str(body.thumbnail);
+    const tags       = parseTags(body.tags);        // <-- F
+
 
     if (!title) return new NextResponse("Title required", { status: 400 });
     if (!date)  return new NextResponse("Date required", { status: 400 });
@@ -69,10 +84,13 @@ export async function PATCH(req: Request, { params }: Params) {
         data: {
           type: typeRaw ? uiToEnum(typeRaw) : eventRow.type,
           occurredAt,
-          details: JSON.stringify({
+           details: JSON.stringify({
             title,
             description,
-            attachment: attachment || null,
+            attachment: nullIfEmpty(attachment),
+            issuer:     nullIfEmpty(issuer),
+            thumbnail:  nullIfEmpty(thumbnail),
+            tags, // array<string>
           }),
         },
         select: { id: true, type: true, occurredAt: true },

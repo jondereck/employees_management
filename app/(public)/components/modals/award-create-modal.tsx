@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import PreSubmitAgreement from "../agreements/pre-submit-agreement";
 
-export default function AwardCreateModal({ employeeId, open, onOpenChange }:{
+export default function AwardCreateModal({ employeeId, open, onOpenChange }: {
   employeeId: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -24,9 +25,12 @@ export default function AwardCreateModal({ employeeId, open, onOpenChange }:{
     note: "",
   });
 
+  const [agreeOpen, setAgreeOpen] = useState(false);
+  const payloadRef = useRef<Record<string, any> | null>(null);
+
   const isProbablyUrl = (s?: string) =>
-  !!s && /^https?:\/\/[^\s]+$/i.test(s.trim());
-  
+    !!s && /^https?:\/\/[^\s]+$/i.test(s.trim());
+
   const todayYMD = new Date().toISOString().slice(0, 10);
   const toISODate = (raw: string) => {
     const s = (raw || "").trim();
@@ -45,106 +49,140 @@ export default function AwardCreateModal({ employeeId, open, onOpenChange }:{
 
 
 
-const submit = async () => {
-  if (!form.title.trim()) {
-    toast.error("Title is required");
-    return;
+  function buildPayloadOrToast() {
+    if (!form.title.trim()) { toast.error("Title is required"); return null; }
+
+    const iso = toISODate(form.givenAt);
+    if (!iso) { toast.error("Please enter a valid date (YYYY-MM-DD)."); return null; }
+    if (!notFuture(iso)) { toast.error("Date given cannot be in the future"); return null; }
+
+    const payload: any = {
+      title: form.title.trim(),
+      givenAt: iso,
+    };
+
+    if (form.issuer.trim()) payload.issuer = form.issuer.trim();
+    if (form.description.trim()) payload.description = form.description.trim();
+
+    // Only send real URLs, skip placeholders like "https://..."
+    if (isProbablyUrl(form.fileUrl)) payload.fileUrl = form.fileUrl.trim();
+    if (isProbablyUrl(form.thumbnail)) payload.thumbnail = form.thumbnail.trim();
+
+    if (form.tags.trim()) {
+      payload.tags = form.tags.split(",").map(t => t.trim()).filter(Boolean);
+    }
+
+    if (form.note.trim()) payload.note = form.note.trim();
+    return payload;
   }
-  const iso = toISODate(form.givenAt);
-      if (!iso || !notFuture(iso)) {
-        toast.error("Date given cannot be in the future");
-        return;
-      }
-  
 
-  const payload: any = {
-    title: form.title.trim(),
-    givenAt: iso,
-  };
-
-  if (form.issuer.trim()) payload.issuer = form.issuer.trim();
-  if (form.description.trim()) payload.description = form.description.trim();
-
-  // Only send real URLs, skip placeholders like "https://..."
-  if (isProbablyUrl(form.fileUrl)) payload.fileUrl = form.fileUrl.trim();
-  if (isProbablyUrl(form.thumbnail)) payload.thumbnail = form.thumbnail.trim();
-
-  if (form.tags.trim()) {
-    payload.tags = form.tags.split(",").map(t => t.trim()).filter(Boolean);
+  function handleSubmitClick() {
+    const payload = buildPayloadOrToast();
+    if (!payload) return;            // invalid, already toasted
+    payloadRef.current = payload;    // stash for confirm
+    setAgreeOpen(true);              // OPEN AGREEMENT (no POST yet)
   }
 
-  if (form.note.trim()) payload.note = form.note.trim();
-
-  setLoading(true);
-  try {
-    const res = await fetch(`/api/public/employees/${employeeId}/awards/request-create`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.error || "Failed to submit");
-    toast.success("Submitted for HRMO approval");
-    onOpenChange(false);
-  } catch (e: any) {
-    toast.error(e.message || "Something went wrong");
-  } finally {
-    setLoading(false);
+  async function doSubmit(payload: Record<string, any>) {
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/public/employees/${employeeId}/awards/request-create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Failed to submit");
+      toast.success("Submitted for HRMO approval");
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+      payloadRef.current = null;
+    }
   }
-};
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-       <DialogContent
-    className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6"
-    // iOS smooth scrolling
-    style={{ WebkitOverflowScrolling: "touch" }}
-  >
+      <DialogContent
+        className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6"
+        // iOS smooth scrolling
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
         <h3 className="text-base font-semibold">Suggest a new Award</h3>
         <p className="text-xs text-muted-foreground">Changes require HRMO approval. Visit HRMO to validate if needed.</p>
         <div className="space-y-3 mt-3">
           <div>
             <label className="text-xs text-muted-foreground">Title</label>
-            <Input value={form.title} onChange={e=>setForm(s=>({...s, title: e.target.value}))} />
+            <Input value={form.title} onChange={e => setForm(s => ({ ...s, title: e.target.value }))} />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Issuer</label>
-            <Input value={form.issuer} onChange={e=>setForm(s=>({...s, issuer: e.target.value}))} />
+            <Input value={form.issuer} onChange={e => setForm(s => ({ ...s, issuer: e.target.value }))} />
           </div>
           <div>
-           <label className="text-xs text-muted-foreground">Date Given</label>
-<Input
-  type="date"
-  max={todayYMD}               // ⛔ prevent picking future dates
-  value={form.givenAt}
-  onChange={(e) => setForm((s) => ({ ...s, givenAt: e.target.value }))}
-/>
+            <label className="text-xs text-muted-foreground">Date Given</label>
+            <Input
+              type="date"
+              max={todayYMD}               // ⛔ prevent picking future dates
+              value={form.givenAt}
+              onChange={(e) => setForm((s) => ({ ...s, givenAt: e.target.value }))}
+            />
 
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Certificate URL (image/pdf)</label>
-            <Input value={form.fileUrl} onChange={e=>setForm(s=>({...s, fileUrl: e.target.value}))} placeholder="https://…" />
+            <Input value={form.fileUrl} onChange={e => setForm(s => ({ ...s, fileUrl: e.target.value }))} placeholder="https://…" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Thumbnail URL (optional)</label>
-            <Input value={form.thumbnail} onChange={e=>setForm(s=>({...s, thumbnail: e.target.value}))} placeholder="https://…" />
+            <Input value={form.thumbnail} onChange={e => setForm(s => ({ ...s, thumbnail: e.target.value }))} placeholder="https://…" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Tags (comma-separated)</label>
-            <Input value={form.tags} onChange={e=>setForm(s=>({...s, tags: e.target.value}))} placeholder="excellence, 2025" />
+            <Input value={form.tags} onChange={e => setForm(s => ({ ...s, tags: e.target.value }))} placeholder="excellence, 2025" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Description (optional)</label>
-            <Textarea value={form.description} onChange={e=>setForm(s=>({...s, description: e.target.value}))} />
+            <Textarea value={form.description} onChange={e => setForm(s => ({ ...s, description: e.target.value }))} />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Notes to HRMO (optional)</label>
-            <Textarea value={form.note} onChange={e=>setForm(s=>({...s, note: e.target.value}))} />
+            <Textarea value={form.note} onChange={e => setForm(s => ({ ...s, note: e.target.value }))} />
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={()=>onOpenChange(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={loading}>{loading ? "Submitting…" : "Submit for approval"}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSubmitClick} disabled={loading}>{loading ? "Submitting…" : "Submit for approval"}</Button>
         </div>
+        <PreSubmitAgreement
+          actionId="awards.request-create"
+          open={agreeOpen}
+          onOpenChange={setAgreeOpen}
+          onConfirm={() => {
+            if (payloadRef.current) {
+              doSubmit(payloadRef.current);
+            } else {
+              const p = buildPayloadOrToast();
+              if (p) doSubmit(p);
+            }
+          }}
+          disabled={loading}
+          title="Before you submit this award"
+          confirmLabel="I understand — submit"
+        >
+          <p>
+            HRMO may request supporting documents (e.g., certificate files, letters) to verify authenticity.
+            Make sure details here match your official records.
+          </p>
+          <ul className="list-disc pl-5">
+            <li>Provide a clear certificate image or PDF if requested</li>
+            <li>Use correct dates, issuer, and titles</li>
+            <li>Misrepresentation may lead to rejection</li>
+          </ul>
+        </PreSubmitAgreement>
+
       </DialogContent>
     </Dialog>
   );
