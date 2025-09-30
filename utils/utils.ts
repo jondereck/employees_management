@@ -55,7 +55,7 @@ export const getBirthday = (birthdayString: string): string => {
 
   // Add one day to the parsed birthday
   const nextDayBirthday = new Date(birthday);
-  nextDayBirthday.setDate(birthday.getDate() + 1);
+  nextDayBirthday.setDate(birthday.getDate());
 
   // Format the date as 'MMMM DD, YYYY'
   const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: '2-digit' };
