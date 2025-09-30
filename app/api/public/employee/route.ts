@@ -15,9 +15,13 @@ export async function GET(
         position: true,
         offices: { select: { name: true } },
         images: {
-          select: { url: true },
-          take: 1,
-          orderBy: { createdAt: "desc" },
+          select: { id: true, url: true, createdAt: true, updatedAt: true }, // ⬅️ add these
+          orderBy: [
+            { updatedAt: "desc" },
+            { createdAt: "desc" },
+            { id: "desc" }, // tie-breaker
+          ],
+          take: 2, // keep if you only need the latest on this page
         },
       },
     });

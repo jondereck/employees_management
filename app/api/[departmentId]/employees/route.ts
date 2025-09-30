@@ -148,13 +148,13 @@ export async function POST(
 
 
     const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
-// --- CREATE employee + default HIRED event atomically (with collision-safe BIO) ---
-const created = await prismadb.$transaction(async (tx) => {
-  // 1) If employeeNo was not provided, try to auto-suggest from the office.bioIndexCode
-  const office = await tx.offices.findUnique({
-    where: { id: officeId },
-    select: { bioIndexCode: true },
-  });
+    // --- CREATE employee + default HIRED event atomically (with collision-safe BIO) ---
+    const created = await prismadb.$transaction(async (tx) => {
+      // 1) If employeeNo was not provided, try to auto-suggest from the office.bioIndexCode
+      const office = await tx.offices.findUnique({
+        where: { id: officeId },
+        select: { bioIndexCode: true },
+      });
 
       let employeeNoFinal = normalizeBio(employeeNo);
 
@@ -344,11 +344,15 @@ export async function GET(
     const employees = await prismadb.employee.findMany({
       where,
       include: {
-        images: true,
+        images: {
+    select: { id: true, url: true, createdAt: true, updatedAt: true },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+  },
         offices: true,
         employeeType: true,
         eligibility: true,
         designation: { select: { id: true, name: true } },
+
       },
       orderBy: {
         updatedAt: "desc", // better for realtime UI

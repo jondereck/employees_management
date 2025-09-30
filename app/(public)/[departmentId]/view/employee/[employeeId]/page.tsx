@@ -28,6 +28,7 @@ import PublicTimeline from "@/app/(public)/components/public-timeline";
 import PublicAwardsGallery from "@/app/(public)/components/public-awards.gallery";
 import PublicSelfServiceActions from "@/app/(public)/components/public-self-service-actions";
 
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // Decide if the visitor is an admin for THIS department
@@ -143,6 +144,14 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
    *  ========================== */
 
   // Pull only safe, displayable fields + isArchived for the status
+type PublicImage = {
+  id: string;
+  url: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+
 
   const employeeId = params.employeeId;
   const publicData = await prismadb.employee.findFirst({
@@ -155,6 +164,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
       firstName: true,
       lastName: true,
       middleName: true,
+      gender: true,     
       suffix: true,
       employeeNo: true,
       position: true,
@@ -163,10 +173,19 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
       createdAt: true,
       updatedAt: true,
       offices: { select: { name: true } },
-      images: { select: { url: true }, take: 1, orderBy: { createdAt: "desc" } },
+    images: {
+      select: { id: true, url: true, createdAt: true, updatedAt: true },
+      orderBy: [
+        { createdAt: "desc" }, // 👈 latest *upload* first
+        { id: "desc" },        // tie-breaker
+      ],
+      take: 1,                 // only need the newest
+    },
       employeeType: { select: { name: true, value: true } },
     },
   });
+
+  
 
   if (!publicData) {
     return (
@@ -235,20 +254,35 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
     };
   }
 
+  function formatUpdatedAt(d?: Date | string | null) {
+  if (!d) return "—";
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  }).format(new Date(d));
+}
 
-  const headshot = publicData.images?.[0]?.url ?? null;
-  const isInactive = !!publicData.isArchived;
-  const isActive = !isInactive;
 
-  function formatUpdatedAt(d?: Date | null) {
-    if (!d) return "—";
-    return new Intl.DateTimeFormat("en-PH", {
-      timeZone: "Asia/Manila",
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    }).format(new Date(d));
-  }
+const placeholder =
+  publicData.gender === "Female" ? "/female_placeholder.png" :
+  publicData.gender === "Male"   ? "/male_placeholder.png"   :
+  null;
+
+const latest = publicData.images?.[0] as PublicImage | undefined;
+
+const v =
+  (latest?.updatedAt && Date.parse(String(latest.updatedAt))) ||
+  (latest?.createdAt && Date.parse(String(latest.createdAt))) ||
+  Date.now();
+
+const headshot = latest
+  ? `${latest.url}${latest.url.includes("?") ? "&" : "?"}v=${v}`
+  : placeholder;
+
+
+const isInactive = !!publicData.isArchived;
 
   // ⟵ NEW: pretty date for “since …”
   function formatDateShort(d?: Date | string | null) {
@@ -342,31 +376,24 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
             <div className="flex items-start gap-2 border">
               {/* Photo */}
               <div className="shrink-0">
-                {headshot ? (
-                  <div className="relative overflow-hidden rounded-xl
-                w-32 h-32
-                sm:w-40 sm:h-40
-                lg:w-44 lg:h-44
-                xl:w-52 xl:h-52">
-                    <Image
-                      src={headshot}
-                      alt="..."
-                      fill
-                      sizes="(min-width:1280px) 13rem, (min-width:1024px) 11rem, (min-width:640px) 10rem, 8rem"
-                      className="object-cover block"
-                      priority
-                    />
-                  </div>
+             {headshot ? (
+  <div className="relative overflow-hidden rounded-xl w-32 h-32 sm:w-40 sm:h-40 lg:w-44 lg:h-44 xl:w-52 xl:h-52">
+    <Image
+      src={headshot}
+      alt="Profile photo"
+      fill
+      sizes="(min-width:1280px) 13rem, (min-width:1024px) 11rem, (min-width:640px) 10rem, 8rem"
+      className="object-cover block"
+      priority
+    />
+  </div>
+) : (
+  <div className="rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-xs
+                  w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 xl:w-32 xl:h-32">
+    No photo
+  </div>
+)}
 
-                ) : (
-                  <div
-                    aria-hidden
-                    className="rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-xs
-                 w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 xl:w-32 xl:h-32"
-                  >
-                    No photo
-                  </div>
-                )}
               </div>
 
 
