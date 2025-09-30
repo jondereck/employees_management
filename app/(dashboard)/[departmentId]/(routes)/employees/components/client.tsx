@@ -254,31 +254,31 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
 
 
 
-const { total, inactive, active } = useMemo(() => {
-  const total = filteredData?.length ?? 0;
-  const inactive = (filteredData ?? []).reduce((n, e) => n + (e?.isArchived ? 1 : 0), 0);
-  const active = total - inactive;
-  return { total, active, inactive };
-}, [filteredData]);
+  const { total, inactive, active } = useMemo(() => {
+    const total = filteredData?.length ?? 0;
+    const inactive = (filteredData ?? []).reduce((n, e) => n + (e?.isArchived ? 1 : 0), 0);
+    const active = total - inactive;
+    return { total, active, inactive };
+  }, [filteredData]);
   return (
     <div className="flex flex-col min-h-screen px-4 sm:px-4 lg:px-6 py-6 gap-6 bg-gray-50">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-      <Heading
-  title={`Employees (${total})`}
-  description={
-    <div className="flex gap-2 items-center">
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
-        Active: {active}
-      </Badge>
-      <Badge variant="outline" className="flex items-center gap-1">
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" />
-        Inactive: {inactive}
-      </Badge>
-    </div>
-  }
-/>
+        <Heading
+          title={`Employees (${total})`}
+          description={
+            <div className="flex gap-2 items-center">
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
+                Active: {active}
+              </Badge>
+              <Badge variant="outline" className="flex items-center gap-1">
+                <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" />
+                Inactive: {inactive}
+              </Badge>
+            </div>
+          }
+        />
         <div className="flex items-center gap-3">
           <Button
             onClick={() => router.push(`/${params.departmentId}/employees/new`)}
@@ -334,7 +334,11 @@ const { total, inactive, active } = useMemo(() => {
               offices={offices}
               eligibilities={eligibilities}
               employeeTypes={employeeTypes}
-              renderExtra={(table) => <FloatingSelectionBar table={table} departmentId={departmentId} />}
+              storageKey="employees_table_v1"   // 🔑 unique key per table
+              syncPageToUrl={true}
+              renderExtra={(table) => <FloatingSelectionBar table={table} departmentId={departmentId}
+              />
+              }
             />
 
           </div>

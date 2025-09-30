@@ -22,46 +22,46 @@ export const OfficesClient = ({ data }: OfficesClientProps) => {
   const { departmentId } = useParams() as { departmentId?: string };
 
   // key parts only
-const STORAGE_KEY = `offices_search_v1:${departmentId ?? "global"}`;
+  const STORAGE_KEY = `offices_search_v1:${departmentId ?? "global"}`;
 
-const [mounted, setMounted] = useState(false);
-const [searchTerm, setSearchTerm] = useState(""); // 🔒 stable SSR value
+  const [mounted, setMounted] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(""); // 🔒 stable SSR value
 
-useEffect(() => {
-  // now we're on the client, it's safe to touch localStorage
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (typeof saved === "string") setSearchTerm(saved);
-  } catch {}
-  setMounted(true);
-}, [STORAGE_KEY]);
+  useEffect(() => {
+    // now we're on the client, it's safe to touch localStorage
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (typeof saved === "string") setSearchTerm(saved);
+    } catch { }
+    setMounted(true);
+  }, [STORAGE_KEY]);
 
-const debounced = useDebounce(searchTerm, 400);
-const isDebouncing = debounced !== searchTerm;
+  const debounced = useDebounce(searchTerm, 400);
+  const isDebouncing = debounced !== searchTerm;
 
-// 👇 keep server and first client paint identical: don't filter until mounted
-const filtered = useMemo(() => {
-  if (!mounted) return data;
-  const q = (debounced || "").trim().toLowerCase();
-  if (!q) return data;
-  const norm = (s?: string) => (s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  // 👇 keep server and first client paint identical: don't filter until mounted
+  const filtered = useMemo(() => {
+    if (!mounted) return data;
+    const q = (debounced || "").trim().toLowerCase();
+    if (!q) return data;
+    const norm = (s?: string) => (s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 
-  const m = q.match(/^\?([a-z]+)\s*(.*)$/i);
-  const mode = m?.[1]?.toLowerCase() ?? null;
-  const term = norm(m?.[2] ?? q);
+    const m = q.match(/^\?([a-z]+)\s*(.*)$/i);
+    const mode = m?.[1]?.toLowerCase() ?? null;
+    const term = norm(m?.[2] ?? q);
 
-  return data.filter((row) => {
-    const name = norm(row.name);
-    const billboard = norm(row.billboardLabel);
-    const bio = norm(row.bioIndexCode as any);
-    if (!mode) return name.includes(term) || billboard.includes(term) || bio.includes(term);
-    if (mode === "off") return name.includes(term);
-    return name.includes(term) || billboard.includes(term) || bio.includes(term);
-  });
-}, [mounted, data, debounced]);
+    return data.filter((row) => {
+      const name = norm(row.name);
+      const billboard = norm(row.billboardLabel);
+      const bio = norm(row.bioIndexCode as any);
+      if (!mode) return name.includes(term) || billboard.includes(term) || bio.includes(term);
+      if (mode === "off") return name.includes(term);
+      return name.includes(term) || billboard.includes(term) || bio.includes(term);
+    });
+  }, [mounted, data, debounced]);
 
-// Title count: avoid mismatch by using the same number until mounted
-const shownCount = mounted ? filtered.length : data.length;
+  // Title count: avoid mismatch by using the same number until mounted
+  const shownCount = mounted ? filtered.length : data.length;
 
 
   return (
@@ -93,6 +93,8 @@ const shownCount = mounted ? filtered.length : data.length;
         searchKeys={["name", "billboardLabel", "bioIndexCode"]} // optional if your table uses it
         columns={columns}
         data={filtered}
+        storageKey="office_table_v1"   // 🔑 unique key per table
+        syncPageToUrl={true}
       />
 
       <ApiHeading title="API" description="API calls for Offices" />
