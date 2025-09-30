@@ -553,6 +553,7 @@ function DatalistField({
   );
 }
 
+
 // SELECT (with endpoint/static options)
 function SelectField({
   label, field, disabled, description, required, className,
@@ -775,8 +776,12 @@ function SelectField({
 
   const hasValue = Boolean(field.value);
   const currentValue = field.value == null ? "" : String(field.value).trim();
+  // 👇 ADD THESE
+const [open, setOpen] = useState(false);
+const selected = byValue.get(currentValue.toLowerCase());
 
-  // ----- RENDER -----
+
+  // ----- RENDER --------
   return (
     <FormItem className={className}>
       <FormLabel>
@@ -785,106 +790,99 @@ function SelectField({
 
       <FormControl>
         <div className="relative">
-          {searchable ? (
-            // SEARCHABLE COMBOBOX
-            (() => {
-              const [open, setOpen] = useState(false);
-              const selected = byValue.get(currentValue.toLowerCase());
-              return (
-                <>
-                  <Popover open={open} onOpenChange={setOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={open}
-                        className={cn("w-full justify-between", allowClear && hasValue ? "pr-9" : undefined)}
-                        disabled={disabled || loading}
-                      >
-                        {selected ? selected.label : (loading ? "Loading..." : placeholder)}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 opacity-60" />
-                      </Button>
-                    </PopoverTrigger>
+     {searchable ? (
+  <> 
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("w-full justify-between", allowClear && hasValue ? "pr-9" : undefined)}
+          disabled={disabled || loading}
+        >
+          {selected ? selected.label : (loading ? "Loading..." : placeholder)}
+          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-60" />
+        </Button>
+      </PopoverTrigger>
 
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                      <Command shouldFilter>
-                        <CommandInput placeholder={searchPlaceholder ?? "Search..."} />
-                        <CommandEmpty>No results.</CommandEmpty>
-                        <CommandList>
-                          <CommandGroup>
-                            {ordered.map(opt => (
-                              <CommandItem
-                                key={opt.value}
-                                value={`${opt.label} ${opt.value}`}
-                                onSelect={() => {
-                                  const nv = String(opt.value).trim();
-                                  field.onChange(nv);
-                                  pushRecent(opt);
-                                  setOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    currentValue.toLowerCase() === opt.value.toLowerCase()
-                                      ? "opacity-100"
-                                      : "opacity-0"
-                                  )}
-                                />
-                                {opt.label}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command shouldFilter>
+          <CommandInput placeholder={searchPlaceholder ?? "Search..."} />
+          <CommandEmpty>No results.</CommandEmpty>
+          <CommandList>
+            <CommandGroup>
+              {ordered.map(opt => (
+                <CommandItem
+                  key={opt.value}
+                  value={`${opt.label} ${opt.value}`}
+                  onSelect={() => {
+                    const nv = String(opt.value).trim();
+                    field.onChange(nv);
+                    pushRecent(opt);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      currentValue.toLowerCase() === opt.value.toLowerCase()
+                        ? "opacity-100"
+                        : "opacity-0"
+                    )}
+                  />
+                  {opt.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
 
-                  {/* Clear (X) button */}
-                  {allowClear && hasValue && !disabled && !loading && (
-                    <button
-                      type="button"
-                      aria-label={clearLabel}
-                      title={clearLabel}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        field.onChange("");
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </>
-              );
-            })()
-          ) : (
-            // FALLBACK: shadcn Select
-            <Select
-              disabled={disabled || loading}
-              value={currentValue}
-              onValueChange={(v) => {
-                const nv = String(v).trim();
-                field.onChange(nv);
-                const hit = byValue.get(nv.toLowerCase());
-                if (hit) pushRecent(hit);
-              }}
-            >
-              <SelectTrigger className={cn("w-full", allowClear && hasValue ? "pr-9" : undefined)}>
-                <SelectValue placeholder={loading ? "Loading..." : placeholder} />
-              </SelectTrigger>
-              <SelectContent className="max-h-52 overflow-y-auto">
-                {ordered.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+    {allowClear && hasValue && !disabled && !loading && (
+      <button
+        type="button"
+        aria-label={clearLabel}
+        title={clearLabel}
+        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          field.onChange("");
+        }}
+      >
+        <X className="h-4 w-4" />
+      </button>
+    )}
+  </>
+) : (
+  // FALLBACK: shadcn Select (keep as-is)
+  <Select
+    disabled={disabled || loading}
+    value={currentValue}
+    onValueChange={(v) => {
+      const nv = String(v).trim();
+      field.onChange(nv);
+      const hit = byValue.get(nv.toLowerCase());
+      if (hit) pushRecent(hit);
+    }}
+  >
+    <SelectTrigger className={cn("w-full", allowClear && hasValue ? "pr-9" : undefined)}>
+      <SelectValue placeholder={loading ? "Loading..." : placeholder} />
+    </SelectTrigger>
+    <SelectContent className="max-h-52 overflow-y-auto">
+      {ordered.map(opt => (
+        <SelectItem key={opt.value} value={opt.value}>
+          {opt.label}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+)}
+
         </div>
       </FormControl>
 
