@@ -173,14 +173,7 @@ export default function PublicHeadshot({
           </div>
         </div>
 
-        {/* Close button */}
-        <button
-          onClick={() => setOpen(false)}
-          className="absolute top-3 right-3 h-8 w-8 rounded-xl bg-white/90 backdrop-blur shadow flex items-center justify-center"
-          title="Close"
-        >
-          ✕
-        </button>
+
       </div>
     </div>
   </DialogContent>
