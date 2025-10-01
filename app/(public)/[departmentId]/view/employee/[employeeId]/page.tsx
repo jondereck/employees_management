@@ -456,7 +456,7 @@ const downloadName = `${empBase(employeeNo)}.png`;
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-lg border p-3">
                 <dl className="text-sm">
-                  <dt className="text-muted-foreground">Employee No.</dt>
+                  <dt className="text-muted-foreground">Biometric/Employee No.</dt>
                   <dd className="font-medium">{publicData.employeeNo || "—"}</dd>
                 </dl>
               </div>
