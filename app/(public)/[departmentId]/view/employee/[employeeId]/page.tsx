@@ -27,6 +27,8 @@ import AddAward from "@/app/(public)/components/admin/add-award";
 import PublicTimeline from "@/app/(public)/components/public-timeline";
 import PublicAwardsGallery from "@/app/(public)/components/public-awards.gallery";
 import PublicSelfServiceActions from "@/app/(public)/components/public-self-service-actions";
+import DownloadPhotoButton from "@/app/(public)/components/download-photo";
+import PublicHeadshot from "@/app/(public)/components/download-photo";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -144,12 +146,12 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
    *  ========================== */
 
   // Pull only safe, displayable fields + isArchived for the status
-type PublicImage = {
-  id: string;
-  url: string;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-};
+  type PublicImage = {
+    id: string;
+    url: string;
+    createdAt: Date | string;
+    updatedAt: Date | string;
+  };
 
 
 
@@ -164,7 +166,7 @@ type PublicImage = {
       firstName: true,
       lastName: true,
       middleName: true,
-      gender: true,     
+      gender: true,
       suffix: true,
       employeeNo: true,
       position: true,
@@ -173,19 +175,19 @@ type PublicImage = {
       createdAt: true,
       updatedAt: true,
       offices: { select: { name: true } },
-    images: {
-      select: { id: true, url: true, createdAt: true, updatedAt: true },
-      orderBy: [
-        { createdAt: "desc" }, // 👈 latest *upload* first
-        { id: "desc" },        // tie-breaker
-      ],
-      take: 1,                 // only need the newest
-    },
+      images: {
+        select: { id: true, url: true, createdAt: true, updatedAt: true },
+        orderBy: [
+          { createdAt: "desc" }, // 👈 latest *upload* first
+          { id: "desc" },        // tie-breaker
+        ],
+        take: 1,                 // only need the newest
+      },
       employeeType: { select: { name: true, value: true } },
     },
   });
 
-  
+
 
   if (!publicData) {
     return (
@@ -255,34 +257,34 @@ type PublicImage = {
   }
 
   function formatUpdatedAt(d?: Date | string | null) {
-  if (!d) return "—";
-  return new Intl.DateTimeFormat("en-PH", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  }).format(new Date(d));
-}
+    if (!d) return "—";
+    return new Intl.DateTimeFormat("en-PH", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    }).format(new Date(d));
+  }
 
 
-const placeholder =
-  publicData.gender === "Female" ? "/female_placeholder.png" :
-  publicData.gender === "Male"   ? "/male_placeholder.png"   :
-  null;
+  const placeholder =
+    publicData.gender === "Female" ? "/female_placeholder.png" :
+      publicData.gender === "Male" ? "/male_placeholder.png" :
+        null;
 
-const latest = publicData.images?.[0] as PublicImage | undefined;
+  const latest = publicData.images?.[0] as PublicImage | undefined;
 
-const v =
-  (latest?.updatedAt && Date.parse(String(latest.updatedAt))) ||
-  (latest?.createdAt && Date.parse(String(latest.createdAt))) ||
-  Date.now();
+  const v =
+    (latest?.updatedAt && Date.parse(String(latest.updatedAt))) ||
+    (latest?.createdAt && Date.parse(String(latest.createdAt))) ||
+    Date.now();
 
-const headshot = latest
-  ? `${latest.url}${latest.url.includes("?") ? "&" : "?"}v=${v}`
-  : placeholder;
+  const headshot = latest
+    ? `${latest.url}${latest.url.includes("?") ? "&" : "?"}v=${v}`
+    : placeholder;
 
 
-const isInactive = !!publicData.isArchived;
+  const isInactive = !!publicData.isArchived;
 
   // ⟵ NEW: pretty date for “since …”
   function formatDateShort(d?: Date | string | null) {
@@ -344,6 +346,21 @@ const isInactive = !!publicData.isArchived;
     return trimmed[0].toUpperCase() + ".";
   }
 
+  // helper (put near the top of the file)
+const empBase = (s?: string | null) =>
+  (s ?? "").split(",")[0]?.trim() || "photo";
+
+// get the value from wherever your page already loaded the data
+// examples (pick ONE that matches your code):
+// 1) from a server-fetched object:
+const employeeNo: string | null | undefined = publicData?.employeeNo;
+// 2) or from initialData:
+// const employeeNo = initialData?.employeeNo;
+// 3) or from props:
+// const { employeeNo } = props;
+
+const downloadName = `${empBase(employeeNo)}.png`;
+
 
 
   return (
@@ -376,23 +393,9 @@ const isInactive = !!publicData.isArchived;
             <div className="flex items-start gap-2 border">
               {/* Photo */}
               <div className="shrink-0">
-             {headshot ? (
-  <div className="relative overflow-hidden rounded-xl w-32 h-32 sm:w-40 sm:h-40 lg:w-44 lg:h-44 xl:w-52 xl:h-52">
-    <Image
-      src={headshot}
-      alt="Profile photo"
-      fill
-      sizes="(min-width:1280px) 13rem, (min-width:1024px) 11rem, (min-width:640px) 10rem, 8rem"
-      className="object-cover block"
-      priority
-    />
-  </div>
-) : (
-  <div className="rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-xs
-                  w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 xl:w-32 xl:h-32">
-    No photo
-  </div>
-)}
+                <PublicHeadshot src={headshot} employeeNo={publicData?.employeeNo} />
+
+
 
               </div>
 
@@ -490,15 +493,16 @@ const isInactive = !!publicData.isArchived;
               </div>
 
               <section className="rounded-lg border p-4">
-
-                <PublicTimeline employeeId={employeeId} />
+                <PublicAwardsGallery employeeId={employeeId} />
               </section>
 
               <section className="rounded-lg border p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-base font-semibold">Awards & Recognition</h3>
                 </div>
-                <PublicAwardsGallery employeeId={employeeId} />
+
+
+                <PublicTimeline employeeId={employeeId} />
               </section>
 
             </div>
@@ -513,30 +517,30 @@ const isInactive = !!publicData.isArchived;
         </div>
       </main>
 
-     <section id="self-service" className="rounded-lg border p-4">
-  <PublicSelfServiceActions
-    employeeId={employeeId}
-    employeeType={publicData.employeeType?.name ?? null}
-    leaveFormUrl="/files/CSForm6_LeaveApplication.pdf"
-    forms={[
-      { label: "Leave Application (CS Form 6)", href: "/files/LeaveForm.docx" },
-      { label: "PDS Update Form", href: "/files/CS-Form-No.-212-Revised-2025-Personal-Data-Sheet.xlsx" },
-      { label: "DTR Template", href: "/files/DTR Template.xlsm" },
-      { label: "SALN Form", href: "/files/SALN Form.doc" },
-    ]}
-  />
-</section>
+      <section id="self-service" className="rounded-lg border p-4">
+        <PublicSelfServiceActions
+          employeeId={employeeId}
+          employeeType={publicData.employeeType?.name ?? null}
+          leaveFormUrl="/files/CSForm6_LeaveApplication.pdf"
+          forms={[
+            { label: "Leave Application (CS Form 6)", href: "/files/LeaveForm.docx" },
+            { label: "PDS Update Form", href: "/files/CS-Form-No.-212-Revised-2025-Personal-Data-Sheet.xlsx" },
+            { label: "DTR Template", href: "/files/DTR Template.xlsm" },
+            { label: "SALN Form", href: "/files/SALN Form.doc" },
+          ]}
+        />
+      </section>
 
 
 
-<div id="report-issue">
-  <ReportIssueBox
-    contactEmail={process.env.NEXT_PUBLIC_HR_CONTACT_EMAIL || "hrmo@lingayen.gov.ph"}
-    messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"}
-    employeeName={`${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName}`.replace(/\s+/g, " ").trim()}
-    employeeNo={publicData.employeeNo}
-  />
-</div>
+      <div id="report-issue">
+        <ReportIssueBox
+          contactEmail={process.env.NEXT_PUBLIC_HR_CONTACT_EMAIL || "hrmo@lingayen.gov.ph"}
+          messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"}
+          employeeName={`${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName}`.replace(/\s+/g, " ").trim()}
+          employeeNo={publicData.employeeNo}
+        />
+      </div>
 
     </div>
   );

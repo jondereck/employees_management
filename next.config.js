@@ -12,15 +12,20 @@ const nextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV !== "development", // Remove console.log in production
   },
- images: {
+  images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'res.cloudinary.com' },
       { protocol: 'https', hostname: 'i.imgur.com' },
-      { protocol: 'https', hostname: 'i.ytimg.com' }, 
+      { protocol: 'https', hostname: 'i.ytimg.com' },
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
       { protocol: 'https', hostname: 'lh4.googleusercontent.com' },
       { protocol: 'https', hostname: 'lh5.googleusercontent.com' },
       { protocol: 'https', hostname: 'lh6.googleusercontent.com' },
+      { protocol: 'https', hostname: 'lh6.googleusercontent.com' },
+      { protocol: "https", hostname: "**.fbcdn.net" },
+      { protocol: "https", hostname: "drive.google.com" },
+
+
     ],
   },
 }

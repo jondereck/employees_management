@@ -144,7 +144,7 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
                     )}
                   </div>
                   <div className="p-3 space-y-1">
-                    <div className="font-medium line-clamp-1">{a.title}</div>
+                    <div className="font-medium ">{a.title}</div>
                     <div className="text-xs text-muted-foreground">
                       {(a.issuer ? `${a.issuer} • ` : "") +
                         new Date(a.givenAt).toLocaleDateString("en-PH", {
