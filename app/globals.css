@@ -87,3 +87,38 @@ body,
     @apply bg-background text-foreground;
   }
 }
+
+/* ---- Creator name shimmer animation ---- */
+:root {
+  --creator-shine: linear-gradient(
+    90deg,
+    #f472b6 0%,
+    #a78bfa 50%,
+    #60a5fa 100%
+  );
+}
+
+.creator-animated-name {
+  background: var(--creator-shine);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: creator-shine 4s linear infinite;
+  transition: filter 200ms ease;
+}
+
+@keyframes creator-shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Faster shimmer on hover */
+a.group:hover .creator-animated-name {
+  animation-duration: 2.2s;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .creator-animated-name { animation: none; }
+}

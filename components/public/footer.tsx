@@ -1,21 +1,21 @@
 import Image from "next/image";
 
 type Logo = {
-  src: string;         // e.g. "/system-logo.png"
-  alt: string;         // accessible label
-  width?: number;      // default 28
-  height?: number;     // default 28
-  title?: string;      // tooltip
+  src: string;
+  alt: string;
+  width?: number;
+  height?: number;
+  title?: string;
 };
 
 export default function PublicFooter({
   className = "",
   creatorName = "JDN Systems",
-  creatorLink, // e.g. "https://lingayen.gov.ph/hrmo"
+  creatorLink,
   systemName = "HR Profiling System",
   systemLogo,
   hrLogo,
-  lguLogo, // optional, if you want to also show the LGU seal here
+  lguLogo,
 }: {
   className?: string;
   creatorName?: string;
@@ -40,49 +40,52 @@ export default function PublicFooter({
   );
 
   return (
-      <footer
+    <footer
       className={[
-        // ✅ fixed, full width, pinned to bottom, above other content
         "fixed inset-x-0 bottom-0 z-40",
-        // ✅ styling
         "w-full border-t bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60",
-        // ✅ safe-area friendly padding for iOS home gesture
         "pb-[max(0px,env(safe-area-inset-bottom))]",
         className,
       ].join(" ")}
     >
-      <div className="mx-auto  px-4 sm:px-6 lg:px-8 py-5">
+      <div className="mx-auto px-4 sm:px-6 lg:px-8 py-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           {/* Left: system + logos */}
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center gap-2">
-              {/* System Logo */}
               <LogoImg {...systemLogo} />
-              {/* HR Logo */}
               <LogoImg {...hrLogo} />
-              {/* Optional LGU Logo */}
               {lguLogo ? <LogoImg {...lguLogo} /> : null}
             </div>
+
             <div className="min-w-0">
               <p className="text-sm font-semibold truncate">{systemName}</p>
+
               <p className="text-[11px] leading-3 text-muted-foreground truncate">
-                © {year} {creatorLink ? (
-              <a
-                href={creatorLink}
-                className="hover:underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-               {creatorName}
-              </a>
-            ) : (
-              <>{creatorName}</>
-            )}
+                © {year}{" "}
+                {creatorLink ? (
+                  <a
+                    href={creatorLink}
+                    className="group inline-flex items-center hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <span className="creator-animated-name">{creatorName}</span>
+                    <span
+                      aria-hidden
+                      className="ml-1 opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      ✨
+                    </span>
+                  </a>
+                ) : (
+                  <span className="creator-animated-name">{creatorName}</span>
+                )}
               </p>
             </div>
           </div>
 
-
+          {/* (right side content if any) */}
         </div>
       </div>
     </footer>
