@@ -522,8 +522,9 @@ const downloadName = `${empBase(employeeNo)}.png`;
           employeeId={employeeId}
           employeeType={publicData.employeeType?.name ?? null}
           leaveFormUrl="/files/CSForm6_LeaveApplication.pdf"
+            biometricsFolderUrl="https://drive.google.com/drive/folders/1DTrtWmCTOPLYlVdQD_ORZ-j1FoxcUtX1?usp=sharing"
           forms={[
-            { label: "Leave Application (CS Form 6)", href: "/files/LeaveForm.docx" },
+            { label: "Leave Application (CS Form 6)", href:   "/files/LeaveForm.docx" },
             { label: "PDS Update Form", href: "/files/CS-Form-No.-212-Revised-2025-Personal-Data-Sheet.xlsx" },
             { label: "DTR Template", href: "/files/DTR Template.xlsm" },
             { label: "SALN Form", href: "/files/SALN Form.doc" },

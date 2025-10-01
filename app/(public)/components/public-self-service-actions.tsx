@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Landmark, Calendar, Download, FileText, Wrench, GraduationCap, HeartHandshake } from "lucide-react";
+import { Landmark, Calendar, Download, FileText, Wrench, GraduationCap, HeartHandshake, Fingerprint, RotateCcw } from "lucide-react";
 import { IdCardIcon } from "@radix-ui/react-icons";
+import { PreActionGuard } from "@/components/ui/pre-action-guard";
+
 
 type Props = {
   employeeId: string;
@@ -15,7 +17,7 @@ type Props = {
   leaveFormUrl?: string;
   forms?: Array<{ label: string; href: string }>;
   trainingCalendarUrl?: string;          // e.g. "/files/TrainingCalendar.pdf" or external link
-  trainingNominationFormUrl?: string;    // optional; if present we show a download button instead of a dialog
+  trainingNominationFormUrl?: string; biometricsFolderUrl?: string;
 };
 
 function norm(t?: string | null) {
@@ -54,10 +56,13 @@ export default function PublicSelfServiceActions({
   ],
   trainingCalendarUrl = "/files/TrainingCalendar.pdf",
   trainingNominationFormUrl,
+  biometricsFolderUrl,
 }: Props) {
   const [docOpen, setDocOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [trainingOpen, setTrainingOpen] = useState(false);
+  const [bioGuideOpen, setBioGuideOpen] = useState(false);
+
 
   const primary = useMemo(() => getPrimaryDocForType(employeeType), [employeeType]);
   const PrimaryIcon = primary.icon;
@@ -76,6 +81,52 @@ export default function PublicSelfServiceActions({
     );
   }, [employeeType]);
 
+  // Extract folderId from a Drive folder URL
+  function getFolderId(url?: string) {
+    if (!url) return null;
+    const m = url.match(/\/folders\/([^/?#]+)/);
+    if (m?.[1]) return m[1];
+    try { return new URL(url).searchParams.get("id"); } catch { return null; }
+  }
+
+  // PH formatter
+  const fmtPH = (d?: string | Date | null) =>
+    d ? new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })
+      .format(new Date(d)) : "";
+
+  // Biometrics fetch state
+  const [bioLoading, setBioLoading] = useState(false);
+  const [bioError, setBioError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [latestFile, setLatestFile] = useState<{ id: string; name?: string | null } | null>(null);
+
+  // fetcher
+  async function fetchBiometricsMeta(folderUrl?: string) {
+    if (!folderUrl) return;
+    const folderId = getFolderId(folderUrl);
+    if (!folderId) return;
+
+    setBioLoading(true);
+    setBioError(null);
+    try {
+      const r = await fetch(`/api/biometrics/last-updated?folderId=${folderId}`, { cache: "no-store" });
+      const data = await r.json();
+      if (!data?.ok) throw new Error(data?.error || "Failed to read Drive");
+      setLastUpdated(data.lastUpdated ?? null);
+      setLatestFile(data.latestFile ?? null);
+    } catch (e: any) {
+      setBioError(e?.message ?? "Drive error");
+    } finally {
+      setBioLoading(false);
+    }
+  }
+
+  // auto on mount / when URL changes
+  useEffect(() => {
+    fetchBiometricsMeta(biometricsFolderUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [biometricsFolderUrl]);
+
 
   return (
 
@@ -89,6 +140,7 @@ export default function PublicSelfServiceActions({
             Ongoing
           </Badge>
         </CardHeader>
+
         <Button
           size="icon"
           className="fixed right-[calc(1rem+env(safe-area-inset-right))] z-50 h-12 w-12 rounded-full shadow-lg print:hidden
@@ -105,6 +157,109 @@ export default function PublicSelfServiceActions({
         {/* Responsive grid: 1 / 2 / 3 cols */}
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {/* Primary: COE/SR (single action that adapts) */}
+          {biometricsFolderUrl && (
+            <div className="rounded-md border p-3 flex flex-col">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Fingerprint className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="font-medium text-sm sm:text-base">Biometrics Logs</span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Badge variant="outline">Drive</Badge>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    title="Refresh"
+                    onClick={() => fetchBiometricsMeta(biometricsFolderUrl)}
+                    disabled={bioLoading}
+                  >
+                    <RotateCcw className={`h-4 w-4 ${bioLoading ? "animate-spin" : ""}`} />
+                  </Button>
+                </div>
+              </div>
+
+              <p className="text-xs sm:text-sm text-muted-foreground mb-3">
+                Download your monthly attendance files. This is the same data we email—scan the QR, open Self-Service, and get it anytime.
+              </p>
+
+              <div className="mt-auto flex flex-col sm:flex-row gap-2">
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => setBioGuideOpen(true)}
+                >
+                  Guide
+                </Button>
+                <PreActionGuard
+                  storageKey="biometrics_warn"
+                  policyId="2025-09"            // bump this when you change wording/policy to re-show dialog
+                  href={biometricsFolderUrl}
+                  newTab
+                  title="Before you open the Biometrics folder"
+                  subtitle="Google Drive → Biometrics"
+                  description="To ensure proper use:"
+                  bullets={[
+                    <>Use only the files for your <strong>office/BIO group</strong>.</>,
+                    <>Verify using your <strong>Employee No. / BIO number</strong> on your profile.</>,
+                    <>Match your <strong>BIO Group, Office/Building</strong>, and <strong>Index Code</strong> from the guide.</>,
+                    <>Misuse or misrepresentation may lead to rejection or administrative action.</>,
+                  ]}
+                  buttonText={<>Open Drive Folder</>}
+                  buttonIconLeft={<Download className="h-4 w-4" />}
+                  buttonProps={{ size: "sm", className: "w-full sm:w-auto" }}
+                />
+
+              </div>
+
+              {/* Status line */}
+              <div className="mt-2 text-[11px] text-muted-foreground">
+                {bioLoading && <span>Checking last update…</span>}
+                {!bioLoading && bioError && <span className="text-red-600">Error: {bioError}</span>}
+                {!bioLoading && !bioError && lastUpdated && <span>Updated: {fmtPH(lastUpdated)}</span>}
+                {!bioLoading && !bioError && !lastUpdated && <span>No files detected yet.</span>}
+              </div>
+            </div>
+          )}
+
+
+          {/* Downloadable Forms (single place) */}
+          <div className="rounded-md border p-3 flex flex-col">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
+                {/* Left: icon + label */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="font-medium text-sm sm:text-base truncate">
+                    Downloadable Forms
+                  </span>
+                </div>
+
+                {/* Right: badge */}
+                <Badge variant="outline" className="whitespace-nowrap shrink-0">
+                  Download
+                </Badge>
+              </div>
+
+            </div>
+            <ul className="text-sm space-y-2 mb-2">
+              {forms.map((f) => (
+                <li key={f.label} className="flex items-center justify-between gap-2">
+                  <span className="text-xs sm:text-sm">{f.label}</span>
+                  <a href={f.href} target="_blank" rel="noreferrer">
+                    <Button size="sm" variant="outline" className="h-7">
+                      <Download className="h-3.5 w-3.5 mr-1" />
+                      Get
+                    </Button>
+                  </a>
+                </li>
+              ))}
+            </ul>
+
+          </div>
           <div className="rounded-md border p-3 flex flex-col">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -153,31 +308,6 @@ export default function PublicSelfServiceActions({
 
 
 
-          {/* Downloadable Forms (single place) */}
-          <div className="rounded-md border p-3 flex flex-col">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="font-medium text-sm sm:text-base">Downloadable Forms</span>
-              </div>
-            </div>
-            <ul className="text-sm space-y-2 mb-2">
-              {forms.map((f) => (
-                <li key={f.label} className="flex items-center justify-between gap-2">
-                  <span className="text-xs sm:text-sm">{f.label}</span>
-                  <a href={f.href} target="_blank" rel="noreferrer">
-                    <Button size="sm" variant="outline" className="h-7">
-                      <Download className="h-3.5 w-3.5 mr-1" />
-                      Get
-                    </Button>
-                  </a>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-auto">
-              <Badge variant="outline">Download</Badge>
-            </div>
-          </div>
 
           {/* Training & Development */}
           <div className="rounded-md border p-3 flex flex-col">
@@ -248,6 +378,41 @@ export default function PublicSelfServiceActions({
 
         </CardContent>
       </Card>
+
+      {/* Biometrics: Guide image with watermark */}
+      <Dialog open={bioGuideOpen} onOpenChange={setBioGuideOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Biometrics Folder Guide</DialogTitle>
+            <DialogDescription>
+              Use this chart to match your BIO Group, Office/Building, and Index Code, then open the correct folder.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Image container with watermark overlay */}
+          <div className="relative w-full overflow-hidden rounded-md border">
+            {/* Main guide image */}
+            <img
+              src="/biometrics/biometrics-guide.png"
+              alt="BIO Location Guide"
+              className="block w-full h-auto"
+              loading="eager"
+            />
+
+
+            <img src="/logo.png" alt="" aria-hidden="true"
+              className="pointer-events-none select-none absolute inset-0 m-auto h-60 opacity-10" />
+
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <a href="/biometrics/biometrics-guide.png" target="_blank" rel="noreferrer">
+              <Button variant="outline" size="sm">Open image in new tab</Button>
+            </a>
+            <Button size="sm" onClick={() => setBioGuideOpen(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Unified COE/SR dialog */}
       <Dialog open={docOpen} onOpenChange={setDocOpen}>
