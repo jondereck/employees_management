@@ -11,6 +11,10 @@ import { IdCardIcon } from "@radix-ui/react-icons";
 import { PreActionGuard } from "@/components/ui/pre-action-guard";
 import PdfViewerTile from "./pdf-viewer-tile";
 import SimplePdfViewerTile from "./pdf-viewer-tile";
+import { HotlineDirectory } from "./hotline";
+import { LINGAYEN_HOTLINES } from "./lingayen-hotline/data";
+
+
 
 
 type Props = {
@@ -497,6 +501,7 @@ export default function PublicSelfServiceActions({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
           <SimplePdfViewerTile
             title="Employee Handbook"
             description="A complete guide to workplace policies, employee benefits, and standards."
@@ -527,6 +532,10 @@ export default function PublicSelfServiceActions({
 
 
         </div>
+      </section>
+      <section>
+
+<HotlineDirectory items={LINGAYEN_HOTLINES} className="pt-6" />
       </section>
     </div>
 
