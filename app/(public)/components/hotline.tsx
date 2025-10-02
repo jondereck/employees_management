@@ -20,6 +20,8 @@ export type Hotline = {
   sms?: string[];           // optional overrides per number
 };
 
+
+const telNumber = (s: string) => (s ?? "").toString().replace(/\D/g, "");
 /** ===== Utility ===== */
 function formatPhDisplay(raw: string) {
   const digits = raw.replace(/\D/g, "");
@@ -96,27 +98,40 @@ export function HotlineDirectory({
 
 /** ===== One row (compact header, expandable content) ===== */
 function HotlineRow({ item }: { item: Hotline }) {
-  const primary = item.phones[0];
+
+  const count = item.phones.length;
+  const label = item.tag ? item.tag : `${count} ${count > 1 ? "numbers" : "number"}`;
+
   return (
     <AccordionItem value={item.id} className="border-b last:border-b-0">
-      <AccordionTrigger className="px-3 sm:px-4 py-2.5 hover:no-underline">
+          <AccordionTrigger className="px-3 sm:px-4 py-2.5 hover:no-underline">
         <div className="flex w-full items-center gap-2">
+          {/* LEFT: name + subtitle (+ mobile badge) */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium truncate">{item.name}</span>
-              {item.tag ? <Badge variant="outline" className="h-5">{item.tag}</Badge> : null}
+              {/* optional tag alongside name if you still want it */}
+              {/* {item.tag ? <Badge variant="outline" className="h-5">{item.tag}</Badge> : null} */}
             </div>
+
             <div className="text-xs text-muted-foreground truncate">
               {item.subtitle ?? "Hotline"}
             </div>
+
+            {/* Mobile placement: badge under subtitle (LEFT) */}
+            <div className="mt-1 sm:hidden">
+              <Badge variant="secondary" className="h-5">
+                {label}
+              </Badge>
+            </div>
           </div>
 
-          {/* Right side: primary number (compact) */}
-          <div className="text-sm font-semibold shrink-0 text-right hidden sm:block">
-            {formatPhDisplay(primary)}
+          {/* Desktop/tablet placement: badge on the RIGHT */}
+          <div className="hidden sm:block shrink-0">
+            <Badge variant="secondary" className="h-5">
+              {label}
+            </Badge>
           </div>
-
-          <ChevronDown className="ml-2 h-4 w-4 opacity-60 shrink-0" />
         </div>
       </AccordionTrigger>
 
@@ -134,8 +149,11 @@ function NumbersList({ item }: { item: Hotline }) {
   return (
     <div className="space-y-2">
       {item.phones.map((num, idx) => {
-        const telHref = `tel:${num}`;
-        const smsHref = `sms:${item.sms?.[idx] ?? num}`;
+        const callNum = telNumber(num);
+        const smsNum = telNumber(item.sms?.[idx] ?? num);
+
+        const telHref = `tel:${callNum}`;
+        const smsHref = `sms:${smsNum}`;
         return (
           <div key={idx} className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-medium">{formatPhDisplay(num)}</div>
@@ -143,11 +161,6 @@ function NumbersList({ item }: { item: Hotline }) {
               <Link href={telHref}>
                 <Button variant="secondary" size="sm" className="gap-1">
                   <Phone className="h-4 w-4" /> Call
-                </Button>
-              </Link>
-              <Link href={smsHref}>
-                <Button variant="secondary" size="sm" className="gap-1">
-                  <MessageSquare className="h-4 w-4" /> SMS
                 </Button>
               </Link>
               <Button

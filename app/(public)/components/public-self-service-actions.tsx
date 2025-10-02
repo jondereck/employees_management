@@ -13,7 +13,7 @@ import PdfViewerTile from "./pdf-viewer-tile";
 import SimplePdfViewerTile from "./pdf-viewer-tile";
 import { HotlineDirectory } from "./hotline";
 import { LINGAYEN_HOTLINES } from "./lingayen-hotline/data";
-import InstallOrBookmarkFAB from "./install-bookmark";
+
 
 
 
@@ -161,8 +161,7 @@ export default function PublicSelfServiceActions({
               <HeartHandshake className="h-5 w-5" />
             </Button>
 
-            <InstallOrBookmarkFAB bottomOffsetRem={8} />
-
+         
             {/* Responsive grid: 1 / 2 / 3 cols */}
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* Primary: COE/SR (single action that adapts) */}
