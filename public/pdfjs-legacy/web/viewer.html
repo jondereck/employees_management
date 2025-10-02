@@ -2,52 +2,128 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
-  />
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
   <title>PDF Viewer</title>
-  <!-- Use the css that exists in your package -->
+
+  <!-- pdf.js viewer css that you already have -->
   <link rel="stylesheet" href="./pdf_viewer.css" />
+
+  
+  <!-- Minimal “shadcn-like” styling without Tailwind -->
   <style>
-    html, body { height: 100%; margin: 0; }
-    #toolbar { display:flex; gap:.5rem; align-items:center; padding:.5rem; border-bottom:1px solid #eee; }
-    #viewerContainer { position: absolute; top:44px; bottom:0; left:0; right:0; overflow:auto; background:#f8f9fb; }
-    .btn { padding:.4rem .7rem; border:1px solid #ddd; border-radius:8px; background:#fff; }
-    .pageNumber { width:4rem; text-align:center; }
+    :root {
+      --bg: #ffffff;
+      --panel: #f8fafc;
+      --muted: #64748b;
+      --border: #e5e7eb;
+      --text: #0f172a;
+      --brand: #cf1337; /* HRMO red */
+      --radius: 14px;
+      --toolbar-h: 52px; 
+    }
+    * { box-sizing: border-box; }
+ html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); }
+    .wrap { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+
+  #toolbar {
+  position: fixed;       /* stays at the top */
+  top: 0; left: 0; right: 0;
+  z-index: 10;
+  display: flex; gap: .5rem; align-items: center;
+  height: var(--toolbar-h);
+  padding: .6rem .75rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+    .btn {
+      appearance: none; border: 1px solid var(--border); background: #fff; color: var(--text);
+      padding: .45rem .7rem; border-radius: var(--radius); font: 500 14px/1 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      cursor: pointer; transition: background .15s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn:hover { background: #f9fafb; }
+    .btn-icon { width: 36px; padding: .45rem; text-align: center; }
+
+    .muted { color: var(--muted); }
+    .divider { width: 1px; height: 28px; background: var(--border); margin: 0 .25rem; }
+
+    #pageNumber {
+      width: 68px; text-align: center; border: 1px solid var(--border); border-radius: var(--radius);
+      padding: .4rem .5rem; background: #fff;
+    }
+    #findInput {
+      min-width: 140px; flex: 1 1 auto; max-width: 420px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: .45rem .6rem; background: #fff;
+      
+      
+    }
+
+    /* Viewer area */
+#viewerContainer {
+  position: absolute;    /* IMPORTANT: required by PDFViewer */
+  top: var(--toolbar-h); /* sits below the toolbar */
+  left: 0; right: 0; bottom: 0;
+  overflow: auto;
+  background: #f8f9fb;
+  padding: 8px;
+}
+    /* page shadows to look nice on mobile */
+    .page {
+      box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 20px rgba(0,0,0,.06);
+      border-radius: 10px; overflow: hidden;
+    }
+
+    /* mobile tweaks */
+    @media (max-width: 640px) {
+      #toolbar { flex-wrap: wrap; gap: .4rem; }
+      .divider { display: none; }
+    }
   </style>
 </head>
 <body>
-  <div id="toolbar">
-    <button id="prev" class="btn">Prev</button>
-    <button id="next" class="btn">Next</button>
-    <input id="pageNumber" class="pageNumber" type="number" min="1" value="1" />
-    <span id="pageCount">/ 0</span>
-    <button id="zoomOut" class="btn">−</button>
-    <button id="zoomIn" class="btn">+</button>
+  <div class="wrap">
+    <div id="toolbar" role="toolbar" aria-label="PDF toolbar">
+      <button id="prev" class="btn">Prev</button>
+      <button id="next" class="btn">Next</button>
+
+      <input id="pageNumber" type="number" min="1" value="1" aria-label="Page number" />
+      <span class="muted">/ <span id="pageCount">0</span></span>
+
+      <div class="divider" aria-hidden></div>
+
+      <button id="zoomOut" class="btn btn-icon" aria-label="Zoom out">−</button>
+      <button id="zoomIn" class="btn btn-icon" aria-label="Zoom in">+</button>
+
+      <div class="divider" aria-hidden></div>
+
+      <input id="findInput" type="text" placeholder="Search…" aria-label="Search in document" />
+      <button id="findPrevBtn" class="btn btn-icon" aria-label="Previous match">▲</button>
+<button id="findNextBtn" class="btn btn-icon" aria-label="Next match">▼</button>
+      <button id="findBtn" class="btn" aria-label="Find">Search</button>
+    </div>
+
+    <div id="viewerContainer">
+      <div id="viewer" class="pdfViewer"></div>
+    </div>
   </div>
 
-  <div id="viewerContainer">
-    <div id="viewer" class="pdfViewer"></div>
-  </div>
-
-  <!-- Load pdf.js core + viewer API (these exist in your copy) -->
   <script type="module">
     import * as pdfjsLib from '/pdfjs-legacy/build/pdf.mjs';
     import * as pdfjsViewer from '/pdfjs-legacy/web/pdf_viewer.mjs';
 
-    // Worker (make sure this file exists under public/pdfjs-legacy/build/)
+    // --- Worker path (must exist in public/pdfjs-legacy/build)
     pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs-legacy/build/pdf.worker.mjs';
 
-    // ---- tiny utils ----
+    // --- Utilities
     function getFileFromQuery() {
       const url = new URL(location.href);
-      // support ?file=/path or ?file=<encoded>
-      const f = url.searchParams.get('file');
-      return f || '/_pdf/employee-handbook.pdf';
+      return url.searchParams.get('file') || '/_pdf/employee-handbook.pdf';
     }
 
-    // ---- set up viewer ----
+    // --- Setup viewer plumbing
     const eventBus = new pdfjsViewer.EventBus();
     const linkService = new pdfjsViewer.PDFLinkService({ eventBus });
     const findController = new pdfjsViewer.PDFFindController({ eventBus, linkService });
@@ -60,28 +136,42 @@
       findController,
       textLayerMode: 2,
       useOnlyCssZoom: false,
+      removePageBorders: false,
     });
     linkService.setViewer(viewer);
 
-    // ---- load document ----
+    // --- Load document
     const url = getFileFromQuery();
     const loadingTask = pdfjsLib.getDocument(url);
     const pdfDocument = await loadingTask.promise;
+
+    // IMPORTANT: set document for both viewer and findController
     viewer.setDocument(pdfDocument);
     linkService.setDocument(pdfDocument, null);
+    findController.setDocument(pdfDocument);
 
-    // ---- toolbar wiring ----
+    // Default zoom AFTER pages are initialized (prevents “zoomed in” first paint)
+    eventBus.on('pagesinit', () => {
+      // Choices: "page-fit" | "page-width" | "auto" | 1.0
+      viewer.currentScaleValue = 'page-fit';
+    });
+
+    // --- Toolbar wiring
     const pageNumber = document.getElementById('pageNumber');
     const pageCount = document.getElementById('pageCount');
     const prevBtn = document.getElementById('prev');
     const nextBtn = document.getElementById('next');
     const zoomIn = document.getElementById('zoomIn');
     const zoomOut = document.getElementById('zoomOut');
+    const findInput = document.getElementById('findInput');
+    const findBtn = document.getElementById('findBtn');
+    const findPrevBtn = document.getElementById('findPrevBtn');
+const findNextBtn = document.getElementById('findNextBtn');
 
-    pageCount.textContent = `/ ${pdfDocument.numPages}`;
+    pageCount.textContent = String(pdfDocument.numPages);
 
     eventBus.on('pagechanging', (e) => {
-      pageNumber.value = e.pageNumber;
+      pageNumber.value = String(e.pageNumber);
     });
 
     prevBtn.onclick = () => {
@@ -96,6 +186,78 @@
     };
     zoomIn.onclick = () => { viewer.currentScale *= 1.1; };
     zoomOut.onclick = () => { viewer.currentScale /= 1.1; };
+
+    // --- Search (works on click and while typing)
+    function doSearch() {
+  const query = (findInput.value || '').trim();
+  if (!query) {
+    eventBus.dispatch("find", {
+      source: findInput,
+      type: "again",
+      query: "",
+      caseSensitive: false,
+      entireWord: false,
+      highlightAll: false,
+      findPrevious: false,
+    });
+    return;
+  }
+  eventBus.dispatch("find", {
+    source: findInput,
+    type: "again",
+    query,
+    caseSensitive: false,
+    entireWord: false,
+    highlightAll: true,
+    findPrevious: false,
+  });
+}
+
+findBtn.onclick = doSearch;
+findInput.addEventListener("input", () => {
+  clearTimeout(findInput._t);
+  findInput._t = setTimeout(doSearch, 200);
+});
+
+
+let lastQuery = '';
+
+function dispatchFind({ query, findPrevious = false, again = false }) {
+  eventBus.dispatch("find", {
+    source: findInput,
+    type: again ? "again" : "",  // "" for a fresh search, "again" for stepping
+    query,
+    caseSensitive: false,
+    entireWord: false,
+    highlightAll: true,
+    findPrevious,
+  });
+}
+
+function doSearchFresh() {
+  const q = (findInput.value || "").trim();
+  lastQuery = q;
+  dispatchFind({ query: q, again: false });
+}
+
+function doSearchAgain(direction /* 'next' | 'prev' */) {
+  const q = (findInput.value || "").trim();
+  // If the input changed since last “fresh” search, treat as fresh to rebuild matches
+  if (q !== lastQuery) return doSearchFresh();
+  dispatchFind({ query: q, findPrevious: direction === "prev", again: true });
+}
+
+// Buttons
+findBtn.onclick     = () => doSearchFresh();
+findPrevBtn.onclick = () => doSearchAgain("prev");
+findNextBtn.onclick = () => doSearchAgain("next");
+
+// Live typing with debounce
+findInput.addEventListener("input", () => {
+  clearTimeout(findInput._t);
+  findInput._t = setTimeout(doSearchFresh, 200);
+});
+
   </script>
 </body>
 </html>

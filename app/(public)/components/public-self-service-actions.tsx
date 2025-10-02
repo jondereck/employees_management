@@ -138,6 +138,40 @@ export default function PublicSelfServiceActions({
 
   return (
     <div className="space-y-6">
+       {/* Resources */}
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Resources</h2>
+          <span className="text-xs text-muted-foreground">Read & download</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 items-start"> {/* <- not items-stretch */}
+          <SimplePdfLinkTile
+            title="Employee Handbook"
+            description="A complete guide to workplace policies, employee benefits, and standards."
+            pdfUrl="/_pdf/employee-handbook.pdf"
+            watermarkText="Municipality of Lingayen"
+            watermarkImageUrl="/logo.png"
+            downloadFileName="employee-handbook"
+            wmSize={200}
+            wmOpacity={0.12}
+            wmRotationDeg={0}
+
+          />
+          <SimplePdfLinkTile
+            title="Citizen's Charter"
+            description="A transparent guide to frontline services, processes, and commitments under the ARTA framework."
+            pdfUrl="/_pdf/ARTA.pdf"
+            watermarkText="Municipality of Lingayen"
+            watermarkImageUrl="/logo.png"
+            downloadFileName="Citizen's-Charter"
+            wmSize={200}
+            wmOpacity={0.12}
+            wmRotationDeg={0}
+
+          />
+        </div>
+      </section>
       <section>
         <TooltipProvider delayDuration={200}>
           <Card className="rounded-lg border">
@@ -473,46 +507,6 @@ export default function PublicSelfServiceActions({
           </Dialog>
 
         </TooltipProvider>
-      </section>
-
-      {/* Resources */}
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Resources</h2>
-          <span className="text-xs text-muted-foreground">Read & download</span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 items-start"> {/* <- not items-stretch */}
-          <SimplePdfLinkTile
-            title="Employee Handbook"
-            description="A complete guide to workplace policies, employee benefits, and standards."
-            pdfUrl="/_pdf/employee-handbook.pdf"
-            watermarkText="Municipality of Lingayen"
-            watermarkImageUrl="/logo.png"
-            downloadFileName="employee-handbook"
-            wmSize={200}
-            wmOpacity={0.12}
-            wmRotationDeg={0}
-
-          />
-          <SimplePdfLinkTile
-            title="Citizen's Charter"
-            description="A transparent guide to frontline services, processes, and commitments under the ARTA framework."
-            pdfUrl="/_pdf/ARTA.pdf"
-            watermarkText="Municipality of Lingayen"
-            watermarkImageUrl="/logo.png"
-            downloadFileName="Citizen's-Charter"
-            wmSize={200}
-            wmOpacity={0.12}
-            wmRotationDeg={0}
-
-          />
-        </div>
-
-
-
-
-
       </section>
       <section>
 
