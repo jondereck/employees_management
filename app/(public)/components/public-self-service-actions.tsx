@@ -514,7 +514,7 @@ export default function PublicSelfServiceActions({
             wmSize={200}
             wmOpacity={0.12}
             wmRotationDeg={0}
-            showNativeToolbar={false}
+            showNativeToolbar={true}
           />
 
           <SimplePdfViewerTile

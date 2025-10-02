@@ -77,6 +77,18 @@ const [downloading, setDownloading] = React.useState(false);
   const [wmBlob, setWmBlob] = React.useState<Blob | null>(null);
   const [wmUrl, setWmUrl] = React.useState<string | null>(null);
 
+  // add this helper at top of file
+function shouldUsePdfJs() {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  // Many mobile browsers block inline PDF in embeds
+  const isMobile = /Android|iPhone|iPad|iPod|SamsungBrowser/i.test(ua);
+  // Safari iOS & Samsung Internet frequently fail inside dialogs
+  const isProblematic = /SamsungBrowser|CriOS|FxiOS|Mobile Safari/i.test(ua);
+  return isMobile || isProblematic;
+}
+
+
   // Build a safe absolute URL for the iframe/file= usage
   const absPdfUrl = React.useMemo(() => {
     if (typeof window === "undefined") return pdfUrl;
@@ -279,6 +291,8 @@ const viewerUrl = React.useMemo(() => {
     }
   }
 
+  const usePdfJs = shouldUsePdfJs();
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {/* Toolbar */}
@@ -324,6 +338,32 @@ const viewerUrl = React.useMemo(() => {
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-[96vw] md:max-w-[90vw] lg:max-w-[80vw] xl:max-w-[70vw] p-0 overflow-hidden sm:rounded-2xl">
+
+        {usePdfJs ? (
+        // ✅ Always works on mobile
+        <iframe
+          title={title}
+          src={`/pdfjs-legacy/web/viewer.html?file=${encodeURIComponent(pdfUrl)}`}
+          className="h-[80vh] w-full border-0"
+          allow="fullscreen"
+        />
+      ) : (
+        // old native embed path (kept for desktop Chrome/Edge)
+        <object
+          data={pdfUrl}
+          type="application/pdf"
+          className="h-[80vh] w-full"
+        >
+          <div className="p-6 text-center">
+            <p className="mb-4 text-sm text-muted-foreground">
+              Your browser can’t display PDFs inline.
+            </p>
+            <a href={pdfUrl} target="_blank" className="btn-primary">
+              Open
+            </a>
+          </div>
+        </object>
+      )}
         <DialogHeader className="px-4 pt-4">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="sr-only">

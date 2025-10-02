@@ -1,0 +1,48 @@
+<script type="module">
+  import * as pdfjsLib from "../build/pdf.mjs";
+  import { EventBus, PDFLinkService, PDFFindController, PDFViewer } from "./pdf_viewer.mjs";
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "../build/pdf.worker.min.mjs";
+
+  const params = new URLSearchParams(location.search);
+  let file = params.get("file") || "";
+  try { file = new URL(file, location.origin).toString(); } catch {}
+
+  const eventBus = new EventBus();
+  const linkService = new PDFLinkService({ eventBus });
+  const findController = new PDFFindController({ eventBus, linkService });
+
+  const container = document.getElementById("viewerContainer");
+  const viewer = new PDFViewer({
+    container,
+    eventBus,
+    linkService,
+    findController,
+    textLayerMode: 1,
+    annotationMode: 2,
+  });
+  linkService.setViewer(viewer);
+
+  // --- Zoom & page UI (kept as-is) ---
+
+  // 💡 BYTES MODE: fetch the PDF ourselves to avoid extensions forcing download
+  try {
+    const resp = await fetch(file, { cache: "no-store", credentials: "same-origin" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.arrayBuffer();
+
+    // Pass bytes to pdf.js (no more direct URL fetching, no range/HEAD)
+    const pdf = await pdfjsLib.getDocument({ data }).promise;
+
+    viewer.setDocument(pdf);
+    linkService.setDocument(pdf, null);
+  } catch (e) {
+    console.error("Failed to load PDF:", e);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `<div style="position:absolute;top:48px;left:0;right:0;padding:12px;color:#b91c1c;background:#fee2e2;border-top:1px solid #fecaca">
+         Failed to load PDF (${String(e)}). Check if a download manager is intercepting PDF requests.
+       </div>`
+    );
+  }
+</script>
