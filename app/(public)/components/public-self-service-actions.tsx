@@ -13,6 +13,7 @@ import PdfViewerTile from "./pdf-viewer-tile";
 import SimplePdfViewerTile from "./pdf-viewer-tile";
 import { HotlineDirectory } from "./hotline";
 import { LINGAYEN_HOTLINES } from "./lingayen-hotline/data";
+import SimplePdfLinkTile from "./pdf-viewer-tile";
 
 
 
@@ -161,7 +162,7 @@ export default function PublicSelfServiceActions({
               <HeartHandshake className="h-5 w-5" />
             </Button>
 
-         
+
             {/* Responsive grid: 1 / 2 / 3 cols */}
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* Primary: COE/SR (single action that adapts) */}
@@ -318,7 +319,7 @@ export default function PublicSelfServiceActions({
 
 
               {/* Training & Development */}
-              <div className="rounded-md border p-3 flex flex-col">
+              {/* <div className="rounded-md border p-3 flex flex-col">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <GraduationCap className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -359,30 +360,9 @@ export default function PublicSelfServiceActions({
                     </Button>
                   )}
                 </div>
-              </div>
+              </div> */}
 
-              {/* ID & Profile */}
-              <div className="rounded-md border p-3 flex flex-col">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {/* lucide-react: UserRound or IdCard */}
-                    <svg className="h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" /><path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" /></svg>
-                    <span className="font-medium text-sm sm:text-base">ID &amp; Profile</span>
-                  </div>
-                  <Badge variant="secondary">Ongoing</Badge>
-                </div>
-                <p className="text-xs sm:text-sm text-muted-foreground mb-3">
-                  Update profile photo or request ID reprint (lost/damaged).
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2 mt-auto">
-                  <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setDocOpen(true)}>
-                    Update Photo
-                  </Button>
-                  <Button size="sm" className="w-full sm:w-auto" onClick={() => setDocOpen(true)}>
-                    ID Reprint
-                  </Button>
-                </div>
-              </div>
+             
 
             </CardContent>
           </Card>
@@ -502,42 +482,41 @@ export default function PublicSelfServiceActions({
           <span className="text-xs text-muted-foreground">Read & download</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-
-          <SimplePdfViewerTile
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 items-start"> {/* <- not items-stretch */}
+          <SimplePdfLinkTile
             title="Employee Handbook"
             description="A complete guide to workplace policies, employee benefits, and standards."
             pdfUrl="/_pdf/employee-handbook.pdf"
-            downloadFileName="Employee-Handbook.pdf"
             watermarkText="Municipality of Lingayen"
             watermarkImageUrl="/logo.png"
+            downloadFileName="employee-handbook"
             wmSize={200}
             wmOpacity={0.12}
             wmRotationDeg={0}
-     
-          />
 
-          <SimplePdfViewerTile
+          />
+          <SimplePdfLinkTile
             title="Citizen's Charter"
             description="A transparent guide to frontline services, processes, and commitments under the ARTA framework."
             pdfUrl="/_pdf/ARTA.pdf"
-            downloadFileName="Citizen's Charter.pdf"
             watermarkText="Municipality of Lingayen"
             watermarkImageUrl="/logo.png"
+            downloadFileName="Citizen's-Charter"
             wmSize={200}
             wmOpacity={0.12}
             wmRotationDeg={0}
-  
+
           />
-
-
-
-
         </div>
+
+
+
+
+
       </section>
       <section>
 
-<HotlineDirectory items={LINGAYEN_HOTLINES} className="pt-6" />
+        <HotlineDirectory items={LINGAYEN_HOTLINES} className="pt-6" />
       </section>
     </div>
 
