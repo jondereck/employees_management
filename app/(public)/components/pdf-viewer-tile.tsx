@@ -43,11 +43,22 @@ export default function SimplePdfModalTile({
   const [pdfError, setPdfError] = React.useState<string | null>(null);
   const loadingRef = React.useRef(pdfLoading);
 
+  
 
 React.useEffect(() => {
   loadingRef.current = pdfLoading;
   if (!pdfLoading) setPdfError(null); // clear any old “still loading…” text
 }, [pdfLoading]);
+function needsPdfJsViewer() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  // iOS Safari, Samsung Internet, some mobile Chrome variants are unreliable
+  return /iPhone|iPad|iPod|SamsungBrowser|FxiOS|CriOS/i.test(ua);
+}
+
+const [iframeSrc, setIframeSrc] = React.useState<string>("");
+
+
 
   // Build the viewer URL (server stamps watermark)
   const viewerUrl = React.useMemo(() => {
@@ -62,6 +73,12 @@ React.useEffect(() => {
     return `/api/pdf/wm?${params.toString()}`;
   }, [pdfUrl, watermarkText, watermarkImageUrl, wmSize, wmOpacity, wmRotationDeg]);
 
+  const nativeUrl = viewerUrl; // your watermarked PDF
+const pdfJsUrl = React.useMemo(
+  () => `/pdfjs-legacy/web/viewer.html?file=${encodeURIComponent(nativeUrl)}`,
+  [nativeUrl]
+);
+
   const handleDownload = React.useCallback(() => {
     const a = document.createElement("a");
     a.href = viewerUrl;
@@ -72,24 +89,84 @@ React.useEffect(() => {
   }, [viewerUrl, downloadFileName]);
 
   // when modal opens or URL changes, reset loading state
- React.useEffect(() => {
+React.useEffect(() => {
   if (!open) return;
-
+  // try native first
+  setIframeSrc(nativeUrl);
   setPdfLoading(true);
   loadingRef.current = true;
-  setPdfError(null);
 
-  const id = setTimeout(() => {
-    // only show the hint if we're STILL loading at 10s
+  // if the browser is known-problematic, or it still hasn't finished quickly,
+  // swap to pdf.js viewer
+  const swapFast = needsPdfJsViewer();
+  const t = setTimeout(() => {
     if (loadingRef.current) {
-      setPdfError("Still loading… your network might be slow.");
+      setIframeSrc(pdfJsUrl);
+      // keep loader; pdf.js will trigger onLoad soon after
     }
-  }, 10000);
+  }, swapFast ? 100 : 1500); // Samsung/iOS: swap almost immediately
 
-  return () => clearTimeout(id);
-}, [open, viewerUrl]);
+  return () => clearTimeout(t);
+}, [open, nativeUrl, pdfJsUrl]);
+
+async function ensurePdfJs() {
+  // legacy build works best in Next.js
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  // tell it where the worker is (you already have this path)
+  (pdfjs as any).GlobalWorkerOptions.workerSrc = "/pdfjs-legacy/build/pdf.worker.min.js";
+  return pdfjs;
+}
+function usePdfThumbnail(pdfUrl: string, targetWidth = 96) {
+  const [thumb, setThumb] = React.useState<string | null>(null);
+  const [thumbErr, setThumbErr] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      setThumb(null);
+      setThumbErr(null);
+      try {
+        const pdfjs = await ensurePdfJs();
+        const loadingTask = (pdfjs as any).getDocument({
+          url: pdfUrl, // absolute or public path
+          // safer defaults in Next/Edge:
+          isEvalSupported: false,
+          useWorkerFetch: true,
+          useSystemFonts: true,
+        });
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+
+        const viewport = page.getViewport({ scale: 1 });
+        const scale = targetWidth / viewport.width;
+        const scaled = page.getViewport({ scale });
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d")!;
+        canvas.width = Math.max(1, Math.floor(scaled.width));
+        canvas.height = Math.max(1, Math.floor(scaled.height));
+
+        // Render
+        await page.render({ canvasContext: ctx, viewport: scaled }).promise;
+
+        if (!cancelled) {
+          setThumb(canvas.toDataURL("image/png"));
+        }
+      } catch (e: any) {
+        if (!cancelled) setThumbErr(e?.message ?? "thumb-failed");
+      }
+    }
+    run();
+
+    return () => { cancelled = true; };
+  }, [pdfUrl, targetWidth]);
+
+  return { thumb, thumbErr };
+}
 
 
+const { thumb } = usePdfThumbnail(pdfUrl, 48); // 48–96 is good for the tile
   return (
 
 
@@ -109,9 +186,21 @@ React.useEffect(() => {
           "min-h-[100px] sm:min-h-[112px]" // consistent but compact
         )}
       >
-        <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-lg bg-muted">
-          <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-foreground/70" />
-        </div>
+        
+       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-lg bg-muted overflow-hidden">
+  {thumb ? (
+    <img
+      src={thumb}
+      alt=""
+      className="h-full w-full object-cover"
+      loading="lazy"
+      decoding="async"
+    />
+  ) : (
+    // fallback while rendering the thumb
+    <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-foreground/70" />
+  )}
+</div>
         <div className="min-w-0 flex-1 text-center sm:text-left">
           <div className="text-sm sm:text-base font-semibold leading-tight">{title}</div>
           <div className="text-xs sm:text-sm text-muted-foreground leading-snug">{description}</div>
@@ -178,10 +267,10 @@ React.useEffect(() => {
 
             {/* PDF viewport */}
 
-       <iframe
-  key={viewerUrl}
+<iframe
+  key={iframeSrc}
   title={title}
-  src={viewerUrl}
+  src={iframeSrc}
   className="block h-full w-full border-0"
   onLoad={() => { setPdfLoading(false); loadingRef.current = false; }}
   onError={() => {
@@ -190,6 +279,7 @@ React.useEffect(() => {
     setPdfError("Failed to load PDF.");
   }}
 />
+
 
 
             <style jsx>{`

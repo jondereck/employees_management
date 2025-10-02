@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 
+
+
 async function fetchBytes(url: string) {
   const r = await fetch(url, { cache: "force-cache" });
   if (!r.ok) throw new Error(`Fetch ${url} -> ${r.status}`);
@@ -79,17 +81,29 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const bytes = await pdfDoc.save(); // Uint8Array
+const bytes = await pdfDoc.save(); // Uint8Array
 
-// ✅ Convert to a standalone ArrayBuffer (no SharedArrayBuffer issues)
+// Convert to standalone ArrayBuffer (avoid SAB issues)
 const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+// Optional nice filename from query (?name=Employee-Handbook.pdf)
+const name = (searchParams.get("name") || "document.pdf").replace(/[^\w.-]+/g, "_");
+
 return new NextResponse(ab as ArrayBuffer, {
   status: 200,
   headers: {
     "Content-Type": "application/pdf",
+    // 👇 render inline, not as a download
+    "Content-Disposition": `inline; filename="${name}"`,
+    // caching (tune as you like)
     "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+    // harden a bit
+    "X-Content-Type-Options": "nosniff",
+    // (optional) helps some viewers with range requests / seeking
+    // "Accept-Ranges": "bytes",
   },
 });
+
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Error" }, { status: 500 });
   }
