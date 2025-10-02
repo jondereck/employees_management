@@ -1,48 +1,101 @@
-<script type="module">
-  import * as pdfjsLib from "../build/pdf.mjs";
-  import { EventBus, PDFLinkService, PDFFindController, PDFViewer } from "./pdf_viewer.mjs";
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+  />
+  <title>PDF Viewer</title>
+  <!-- Use the css that exists in your package -->
+  <link rel="stylesheet" href="./pdf_viewer.css" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #toolbar { display:flex; gap:.5rem; align-items:center; padding:.5rem; border-bottom:1px solid #eee; }
+    #viewerContainer { position: absolute; top:44px; bottom:0; left:0; right:0; overflow:auto; background:#f8f9fb; }
+    .btn { padding:.4rem .7rem; border:1px solid #ddd; border-radius:8px; background:#fff; }
+    .pageNumber { width:4rem; text-align:center; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="prev" class="btn">Prev</button>
+    <button id="next" class="btn">Next</button>
+    <input id="pageNumber" class="pageNumber" type="number" min="1" value="1" />
+    <span id="pageCount">/ 0</span>
+    <button id="zoomOut" class="btn">−</button>
+    <button id="zoomIn" class="btn">+</button>
+  </div>
 
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "../build/pdf.worker.min.mjs";
+  <div id="viewerContainer">
+    <div id="viewer" class="pdfViewer"></div>
+  </div>
 
-  const params = new URLSearchParams(location.search);
-  let file = params.get("file") || "";
-  try { file = new URL(file, location.origin).toString(); } catch {}
+  <!-- Load pdf.js core + viewer API (these exist in your copy) -->
+  <script type="module">
+    import * as pdfjsLib from '/pdfjs-legacy/build/pdf.mjs';
+    import * as pdfjsViewer from '/pdfjs-legacy/web/pdf_viewer.mjs';
 
-  const eventBus = new EventBus();
-  const linkService = new PDFLinkService({ eventBus });
-  const findController = new PDFFindController({ eventBus, linkService });
+    // Worker (make sure this file exists under public/pdfjs-legacy/build/)
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs-legacy/build/pdf.worker.mjs';
 
-  const container = document.getElementById("viewerContainer");
-  const viewer = new PDFViewer({
-    container,
-    eventBus,
-    linkService,
-    findController,
-    textLayerMode: 1,
-    annotationMode: 2,
-  });
-  linkService.setViewer(viewer);
+    // ---- tiny utils ----
+    function getFileFromQuery() {
+      const url = new URL(location.href);
+      // support ?file=/path or ?file=<encoded>
+      const f = url.searchParams.get('file');
+      return f || '/_pdf/employee-handbook.pdf';
+    }
 
-  // --- Zoom & page UI (kept as-is) ---
+    // ---- set up viewer ----
+    const eventBus = new pdfjsViewer.EventBus();
+    const linkService = new pdfjsViewer.PDFLinkService({ eventBus });
+    const findController = new pdfjsViewer.PDFFindController({ eventBus, linkService });
 
-  // 💡 BYTES MODE: fetch the PDF ourselves to avoid extensions forcing download
-  try {
-    const resp = await fetch(file, { cache: "no-store", credentials: "same-origin" });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.arrayBuffer();
+    const container = document.getElementById('viewerContainer');
+    const viewer = new pdfjsViewer.PDFViewer({
+      container,
+      eventBus,
+      linkService,
+      findController,
+      textLayerMode: 2,
+      useOnlyCssZoom: false,
+    });
+    linkService.setViewer(viewer);
 
-    // Pass bytes to pdf.js (no more direct URL fetching, no range/HEAD)
-    const pdf = await pdfjsLib.getDocument({ data }).promise;
+    // ---- load document ----
+    const url = getFileFromQuery();
+    const loadingTask = pdfjsLib.getDocument(url);
+    const pdfDocument = await loadingTask.promise;
+    viewer.setDocument(pdfDocument);
+    linkService.setDocument(pdfDocument, null);
 
-    viewer.setDocument(pdf);
-    linkService.setDocument(pdf, null);
-  } catch (e) {
-    console.error("Failed to load PDF:", e);
-    document.body.insertAdjacentHTML(
-      "beforeend",
-      `<div style="position:absolute;top:48px;left:0;right:0;padding:12px;color:#b91c1c;background:#fee2e2;border-top:1px solid #fecaca">
-         Failed to load PDF (${String(e)}). Check if a download manager is intercepting PDF requests.
-       </div>`
-    );
-  }
-</script>
+    // ---- toolbar wiring ----
+    const pageNumber = document.getElementById('pageNumber');
+    const pageCount = document.getElementById('pageCount');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+    const zoomIn = document.getElementById('zoomIn');
+    const zoomOut = document.getElementById('zoomOut');
+
+    pageCount.textContent = `/ ${pdfDocument.numPages}`;
+
+    eventBus.on('pagechanging', (e) => {
+      pageNumber.value = e.pageNumber;
+    });
+
+    prevBtn.onclick = () => {
+      if (viewer.currentPageNumber > 1) viewer.currentPageNumber -= 1;
+    };
+    nextBtn.onclick = () => {
+      if (viewer.currentPageNumber < pdfDocument.numPages) viewer.currentPageNumber += 1;
+    };
+    pageNumber.onchange = () => {
+      const n = Math.max(1, Math.min(pdfDocument.numPages, Number(pageNumber.value) || 1));
+      viewer.currentPageNumber = n;
+    };
+    zoomIn.onclick = () => { viewer.currentScale *= 1.1; };
+    zoomOut.onclick = () => { viewer.currentScale /= 1.1; };
+  </script>
+</body>
+</html>

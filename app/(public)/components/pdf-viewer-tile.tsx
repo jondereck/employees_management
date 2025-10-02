@@ -42,13 +42,15 @@ export default function SimplePdfModalTile({
   const [pdfLoading, setPdfLoading] = React.useState(true);
   const [pdfError, setPdfError] = React.useState<string | null>(null);
   const loadingRef = React.useRef(pdfLoading);
-
+const fileParam = encodeURIComponent(pdfUrl); // e.g. '/_pdf/employee-handbook.pdf'
+const src = `/pdfjs-legacy/web/viewer.html?file=${fileParam}`;
   
 
 React.useEffect(() => {
   loadingRef.current = pdfLoading;
   if (!pdfLoading) setPdfError(null); // clear any old “still loading…” text
 }, [pdfLoading]);
+
 function needsPdfJsViewer() {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
@@ -268,9 +270,9 @@ const { thumb } = usePdfThumbnail(pdfUrl, 48); // 48–96 is good for the tile
             {/* PDF viewport */}
 
 <iframe
-  key={iframeSrc}
+  key={src}
   title={title}
-  src={iframeSrc}
+  src={src}
   className="block h-full w-full border-0"
   onLoad={() => { setPdfLoading(false); loadingRef.current = false; }}
   onError={() => {

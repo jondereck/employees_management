@@ -11,7 +11,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate",
+    "copy:pdfjs": "node -e \"const fs=require('fs'); fs.cpSync('node_modules/pdfjs-dist/build','public/pdfjs-legacy/build',{recursive:true,force:true}); fs.cpSync('node_modules/pdfjs-dist/web','public/pdfjs-legacy/web',{recursive:true,force:true});\"",
+    "postinstall": "npm run copy:pdfjs && prisma generate",
     "seed:all": "tsx scripts/seedAndUpdateSalaries.ts"
   },
   "prisma": {
