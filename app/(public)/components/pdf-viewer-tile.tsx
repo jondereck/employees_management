@@ -1,206 +1,271 @@
 "use client";
 
 import * as React from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Download, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PDFDocument, rgb, degrees } from "pdf-lib";
 
 
-let pdfjsLib: any = null;
-
-async function ensurePdfJs() {
-  if (!pdfjsLib) {
-    // legacy build avoids the defineProperty crash in Next/Edge
-    pdfjsLib = await import("pdfjs-dist/legacy/build/pdf");
-
-    // import the legacy worker as an asset URL so Next can serve it
-    const workerUrl = (await import(
-      "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"
-    )).default;
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
-  }
+// ---- helpers (module scope) ----
+// module-scope helper
+function u8ToArrayBuffer(u8: Uint8Array): ArrayBuffer {
+  const ab = new ArrayBuffer(u8.byteLength);
+  new Uint8Array(ab).set(u8);
+  return ab;
 }
 
 
-
-
-// ---------------------------------------------------------
-
-type PdfViewerTileProps = {
+type SimplePdfViewerTileProps = {
   title?: string;
   description?: string;
+
+  /** Public path or absolute URL to a PDF (e.g. "/_pdf/employee-handbook.pdf") */
   pdfUrl: string;
 
-  // Watermark options
-  watermarkImageUrl?: string;
-  watermarkText?: string;
-  wmSize?: number;
-  wmOpacity?: number;
-  wmRotationDeg?: number;
-
-  // Viewer options
-  usePdfJsViewer?: boolean;
-
-  // NEW: Thumbnail options
-  thumbnailUrl?: string;     // static image (/public/thumbs/handbook.png)
-  autoThumbnail?: boolean;   // render page 1 via pdfjs if no thumbnailUrl
-  thumbWidth?: number;       // px; default 40 (fits your tile icon area)
-  thumbHeight?: number;      // px; aspect kept by contain
-
-  className?: string;
+  /** If you want to change the downloaded name, set this. */
   downloadFileName?: string;
+
+  /** Optional: transform bytes before downloading (e.g., extra stamping beyond the watermark). */
+  onPrepareDownload?: (bytes: ArrayBuffer) => Promise<Blob | ArrayBuffer>;
+
+  /** Use native toolbar? */
+  showNativeToolbar?: boolean;
+
+  /** Watermark options (applies to viewer & download) */
+  watermarkText?: string;            // e.g., "Municipality of Lingayen • HRMO"
+  watermarkImageUrl?: string;        // e.g., "/logo.png" (png/jpg)
+  wmSize?: number;                   // base size for text font / image width in points (default 320)
+  wmOpacity?: number;                // 0..1 (default 0.12)
+  wmRotationDeg?: number;            // default 30
+  className?: string;
+  nativeToolbarOnly?: boolean;
 };
 
-export default function PdfViewerTile({
-  title = "Handbook & Policies",
+export default function SimplePdfViewerTile({
+  title = "PDF",
   description = "Open and read without leaving the app",
   pdfUrl,
-  watermarkImageUrl = "/logo.png",
-  watermarkText,
-  wmSize = 0.35,
-  wmOpacity = 0.15,
-  wmRotationDeg = 0,
-  usePdfJsViewer = false,
-
-  thumbnailUrl,
-  autoThumbnail = true,
-  thumbWidth = 40,
-  thumbHeight = 40,
-
+  downloadFileName = "document.pdf",
+  onPrepareDownload,
+  showNativeToolbar = true,
+  nativeToolbarOnly = true,   // << default ON
+  watermarkText = "CONFIDENTIAL • HRMO",
+  watermarkImageUrl,           // optional
+  wmSize = 320,
+  wmOpacity = 0.12,
+  wmRotationDeg = 30,
   className,
-  downloadFileName = "document-watermarked.pdf",
-}: PdfViewerTileProps) {
+}: SimplePdfViewerTileProps) {
   const [open, setOpen] = React.useState(false);
-  const [downloading, setDownloading] = React.useState(false);
- const [thumbDataUrl, setThumbDataUrl] = React.useState<string | null>(null);
-const [thumbError, setThumbError] = React.useState<string | null>(null);
 
-  
-React.useEffect(() => {
-  let aborted = false;
+  const [processing, setProcessing] = React.useState(false);
+  const [embedOk, setEmbedOk] = React.useState(true);
+// delete:
+const [downloading, setDownloading] = React.useState(false);
+// delete the whole handleDownload() function
 
-  async function makeThumb() {
-    setThumbError(null);
+  // Watermarked blob/url (created when dialog opens)
+  const [wmBlob, setWmBlob] = React.useState<Blob | null>(null);
+  const [wmUrl, setWmUrl] = React.useState<string | null>(null);
 
-    if (thumbnailUrl) {
-      setThumbDataUrl(thumbnailUrl);
-      return;
-    }
-    if (!autoThumbnail) return;
-
+  // Build a safe absolute URL for the iframe/file= usage
+  const absPdfUrl = React.useMemo(() => {
+    if (typeof window === "undefined") return pdfUrl;
     try {
-      // 0) prove we’re in the browser
-      if (typeof window === "undefined") return;
-
-      // 1) normalize to absolute URL
-      const absUrl = new URL(pdfUrl.startsWith("/") ? pdfUrl : `/${pdfUrl}`, window.location.origin).toString();
-      console.debug("[PdfThumb] absUrl:", absUrl);
-
-      // 2) fetch the bytes yourself (avoids CORS/cookies issues)
-      
-      
-
-      // 3) load pdfjs (client) — we’ll render without worker for simplicity
-    await ensurePdfJs();
-const resp = await fetch(new URL(pdfUrl, window.location.origin).toString(), {
-  credentials: "same-origin",
-  cache: "force-cache",
-});
-if (!resp.ok) throw new Error(`fetch failed (${resp.status})`);
-const data = await resp.arrayBuffer();
-
-// Let pdf.js use its worker (no disableWorker here)
-const loadingTask = pdfjsLib.getDocument({ data });
-const pdf = await loadingTask.promise;
-const page = await pdf.getPage(1);
-
-const baseViewport = page.getViewport({ scale: 1 });
-const targetW = 160;
-const scale = targetW / baseViewport.width;
-const viewport = page.getViewport({ scale });
-
-const canvas = document.createElement("canvas");
-const ctx = canvas.getContext("2d");
-if (!ctx) throw new Error("2D canvas context unavailable");
-
-canvas.width = Math.ceil(viewport.width);
-canvas.height = Math.ceil(viewport.height);
-
-await page.render({ canvasContext: ctx, viewport }).promise;
-setThumbDataUrl(canvas.toDataURL("image/jpeg", 0.85));
-    } catch (err: any) {
-      console.warn("[PdfThumb] failed:", err);
-      if (!aborted) setThumbError(err?.message || "Thumbnail failed");
+      return new URL(pdfUrl, window.location.origin).toString();
+    } catch {
+      return pdfUrl;
     }
+  }, [pdfUrl]);
+
+
+  // If we have a watermarked blob URL, use that for viewing; else the original.
+  const viewerBaseUrl = wmUrl ?? absPdfUrl;
+
+// keep your existing viewerBaseUrl logic
+const viewerUrl = React.useMemo(() => {
+  const base = viewerBaseUrl; // wmUrl ?? absPdfUrl
+  return `${base}#toolbar=1&navpanes=0`;   // always show native toolbar
+}, [viewerBaseUrl]);
+
+
+
+  // Clean up object URLs on unmount/close
+  React.useEffect(() => {
+    return () => {
+      if (wmUrl) URL.revokeObjectURL(wmUrl);
+    };
+  }, [wmUrl]);
+
+  // Fetch helper
+  async function fetchAsArrayBuffer(url: string): Promise<ArrayBuffer> {
+    const resp = await fetch(url, { credentials: "same-origin" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.arrayBuffer();
   }
 
-  makeThumb();
-  return () => { aborted = true; };
-}, [pdfUrl, thumbnailUrl, autoThumbnail]);
+  // Create watermarked PDF once when dialog opens (or when pdfUrl changes while open)
+  React.useEffect(() => {
+    if (!open) return;
 
+    let cancelled = false;
 
+    async function prepare() {
+      setProcessing(true);
+      setEmbedOk(true);
 
-  const iframeSrc = usePdfJsViewer
-    ? `/pdfjs/web/viewer.html?file=${encodeURIComponent(pdfUrl)}`
-    : `${pdfUrl}#toolbar=0&navpanes=0`;
+      try {
+        // 1) Load original PDF bytes
+        const srcBytes = await fetchAsArrayBuffer(absPdfUrl);
 
-  async function handleDownloadWatermarked() {
+        // 2) Lazy import pdf-lib
+        const { PDFDocument, rgb, degrees } = await import("pdf-lib");
+
+        // 3) Create document from bytes
+        const pdfDoc = await PDFDocument.load(srcBytes, { updateMetadata: false });
+
+        // 4) Optional: embed watermark image
+        let wmImg: any = null;
+        if (watermarkImageUrl) {
+          try {
+            const imgBytes = await fetchAsArrayBuffer(
+              new URL(watermarkImageUrl, typeof window !== "undefined" ? window.location.origin : undefined as any).toString()
+            );
+            // Heuristics to decide embed type by file header
+            const isPng = imgBytes.byteLength >= 8 && new Uint8Array(imgBytes)[1] === 0x50; // crude check
+            wmImg = isPng ? await pdfDoc.embedPng(imgBytes) : await pdfDoc.embedJpg(imgBytes);
+          } catch {
+            // ignore image errors, continue with text-only watermark
+            wmImg = null;
+          }
+        }
+
+        const font = await pdfDoc.embedFont("Helvetica");
+
+        // 5) Stamp each page
+        const pages = pdfDoc.getPages();
+        for (const page of pages) {
+          const { width, height } = page.getSize();
+
+          // Common transforms
+          const rotate = degrees(wmRotationDeg);
+
+          // (a) Image watermark (centered)
+          if (wmImg) {
+            const imgWidth = wmSize;
+            const scale = imgWidth / wmImg.width;
+            const imgHeight = wmImg.height * scale;
+
+            page.drawImage(wmImg, {
+              x: (width - imgWidth) / 2,
+              y: (height - imgHeight) / 2,
+              width: imgWidth,
+              height: imgHeight,
+              opacity: wmOpacity,
+              rotate,
+            });
+          }
+
+          // (b) Text watermark (large, centered)
+          if (watermarkText) {
+            const textSize = wmSize * 0.25; // tie text size to wmSize
+            const textWidth = font.widthOfTextAtSize(watermarkText, textSize);
+            const textHeight = font.heightAtSize(textSize);
+
+            page.drawText(watermarkText, {
+              x: (width - textWidth) / 2,
+              y: (height - textHeight) / 2,
+              size: textSize,
+              font,
+              color: rgb(0, 0, 0),
+              opacity: wmOpacity,
+              rotate,
+            });
+          }
+        }
+
+        // 6) Bytes → Blob → object URL
+        const u8 = await pdfDoc.save(); // Uint8Array
+        const bytesAB = u8ToArrayBuffer(u8); // <-- tight ArrayBuffer
+
+        // 7) If caller wants another pass (e.g., add per-user stamp), allow it
+        if (onPrepareDownload) {
+          const maybe = await onPrepareDownload(bytesAB); // <-- pass ArrayBuffer
+          const finalBlob = maybe instanceof Blob
+            ? maybe
+            : new Blob([maybe], { type: "application/pdf" });
+          if (cancelled) return;
+          setWmBlob(finalBlob);
+          const url = URL.createObjectURL(finalBlob);
+          setWmUrl(url);
+          setProcessing(false);
+          return;
+        }
+
+        const blob = new Blob([bytesAB], { type: "application/pdf" }); // <-- use ArrayBuffer
+        if (cancelled) return;
+        setWmBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setWmUrl(url);
+
+      } catch (err) {
+        console.error("Watermarking failed, falling back to original:", err);
+        if (!cancelled) {
+          setWmBlob(null);
+          setWmUrl(null);
+        }
+      } finally {
+        if (!cancelled) setProcessing(false);
+      }
+    }
+
+    void prepare();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    absPdfUrl,
+    watermarkText,
+    watermarkImageUrl,
+    wmSize,
+    wmOpacity,
+    wmRotationDeg,
+    onPrepareDownload,
+  ]);
+
+  async function handleDownload() {
     setDownloading(true);
     try {
-      const [pdfBytes, imgBytes] = await Promise.all([
-        fetch(pdfUrl).then(r => r.arrayBuffer()),
-        watermarkImageUrl ? fetch(watermarkImageUrl).then(r => r.arrayBuffer()) : Promise.resolve(new ArrayBuffer(0)),
-      ]);
-
-      const pdfDoc = await PDFDocument.load(pdfBytes);
-      let embeddedImg: any | null = null;
-
-      if (watermarkImageUrl) {
-        const isPng = watermarkImageUrl.toLowerCase().endsWith(".png");
-        const isJpg = /\.(jpe?g)$/i.test(watermarkImageUrl);
-        if (isPng) embeddedImg = await pdfDoc.embedPng(imgBytes);
-        else if (isJpg) embeddedImg = await pdfDoc.embedJpg(imgBytes);
+      // If we already have a watermarked blob, download that directly
+      if (wmBlob) {
+        const url = URL.createObjectURL(wmBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = downloadFileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        return;
       }
 
-      for (const page of pdfDoc.getPages()) {
-        const { width, height } = page.getSize();
-        const targetWidth = width * wmSize;
-        let imgW = 0, imgH = 0;
-        if (embeddedImg) {
-          const ratio = embeddedImg.height / embeddedImg.width;
-          imgW = targetWidth;
-          imgH = targetWidth * ratio;
-          page.drawImage(embeddedImg, {
-            x: (width - imgW) / 2,
-            y: (height - imgH) / 2,
-            width: imgW,
-            height: imgH,
-            opacity: wmOpacity,
-            rotate: degrees(wmRotationDeg),
-          });
-        }
-        if (watermarkText?.trim()) {
-          const fontSize = Math.max(24, Math.min(64, width * 0.05));
-          page.drawText(watermarkText, {
-            x: width / 2 - (watermarkText.length * fontSize * 0.25),
-            y: height / 2 - fontSize / 2 - (embeddedImg ? imgH * 0.6 : 0),
-            size: fontSize,
-            opacity: wmOpacity,
-            color: rgb(0.2, 0.2, 0.2),
-            rotate: degrees(wmRotationDeg),
-          });
-        }
-      }
-
-      const stamped = await pdfDoc.save(); // Uint8Array -> normalize to ArrayBuffer
-      const ab = new ArrayBuffer(stamped.byteLength);
-      new Uint8Array(ab).set(stamped);
-      const blob = new Blob([ab], { type: "application/pdf" });
-
+      // Fallback: download original (and still allow caller to prepare if provided)
+      const bytes = await fetchAsArrayBuffer(absPdfUrl);
+      const prepared = onPrepareDownload
+        ? await onPrepareDownload(bytes)
+        : new Blob([bytes], { type: "application/pdf" });
+      const blob = prepared instanceof Blob ? prepared : new Blob([prepared], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -216,6 +281,25 @@ setThumbDataUrl(canvas.toDataURL("image/jpeg", 0.85));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {/* Toolbar */}
+      {!nativeToolbarOnly && (
+        <div className="flex items-center justify-between gap-2 px-4 pb-3">
+          <div className="text-sm text-muted-foreground hidden sm:block">
+            {processing ? "Preparing watermarked copy…" : "Inline viewer; you can also download the file."}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              disabled={downloading || processing}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {downloading ? "Preparing…" : "Download"}
+            </Button>
+          </div>
+        </div>
+      )}
       <DialogTrigger asChild>
         <button
           type="button"
@@ -225,32 +309,13 @@ setThumbDataUrl(canvas.toDataURL("image/jpeg", 0.85));
           )}
         >
           <Card className="group relative flex w-full items-center gap-4 rounded-xl p-4 hover:shadow-md transition border">
-            {/* Thumbnail / Icon */}
-         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted overflow-hidden relative">
-  {thumbDataUrl ? (
-    <img
-      src={thumbDataUrl}
-      alt=""
-      className="h-full w-full object-contain"
-      width={thumbWidth}
-      height={thumbHeight}
-      style={{ maxWidth: thumbWidth, maxHeight: thumbHeight }}
-    />
-  ) : (
-    <FileText className="h-6 w-6 text-foreground/70" />
-  )}
-  {thumbError && (
-    <span className="absolute -bottom-1 right-1 rounded bg-amber-500 text-[10px] px-1 py-[1px] text-white">
-      !
-    </span>
-  )}
-</div>
-
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted overflow-hidden">
+              <FileText className="h-6 w-6 text-foreground/70" />
+            </div>
             <div className="min-w-0">
               <div className="font-semibold leading-tight">{title}</div>
               <div className="text-sm text-muted-foreground truncate">{description}</div>
             </div>
-
             <div className="ml-auto text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition">
               Open
             </div>
@@ -261,39 +326,48 @@ setThumbDataUrl(canvas.toDataURL("image/jpeg", 0.85));
       <DialogContent className="sm:max-w-[96vw] md:max-w-[90vw] lg:max-w-[80vw] xl:max-w-[70vw] p-0 overflow-hidden sm:rounded-2xl">
         <DialogHeader className="px-4 pt-4">
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className="sr-only">View {title} inside the app</DialogDescription>
+          <DialogDescription className="sr-only">
+            View {title} inside the app
+          </DialogDescription>
         </DialogHeader>
 
-        {/* Toolbar */}
-        <div className="flex items-center justify-between gap-2 px-4 pb-3">
-          <div className="text-sm text-muted-foreground hidden sm:block">
-            Inline viewer — watermark overlay; download is watermarked.
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleDownloadWatermarked} disabled={downloading}>
-              <Download className="mr-2 h-4 w-4" />
-              {downloading ? "Preparing…" : "Download (watermarked)"}
-            </Button>
-          </div>
-        </div>
 
-        {/* Watermark overlay + viewer */}
-        <div className="relative h-[82vh] w-full">
-          <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center" style={{ opacity: 0.20 }}>
-            {watermarkImageUrl && (
-              <img
-                src={watermarkImageUrl}
-                alt=""
-                className="select-none"
-                style={{ width: "40%", maxWidth: 420, transform: "none", opacity: 0.5, filter: "grayscale(100%) contrast(120%)" }}
+
+        {/* Inline viewer with graceful fallback */}
+        <div className="relative h-[82vh] w-full bg-muted/30">
+          {embedOk ? (
+            processing ? (
+              <div className="h-full w-full grid place-items-center p-6 text-center">
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>Generating watermarked preview…</p>
+                </div>
+              </div>
+            ) : (
+              <iframe
+                title={title}
+                src={viewerUrl}
+                className="h-full w-full"
+                onError={() => setEmbedOk(false)}
               />
-            )}
-            {watermarkText && (
-              <div className="absolute text-4xl md:text-6xl font-bold tracking-wider">{watermarkText}</div>
-            )}
-          </div>
-
-          <iframe title={title} src={iframeSrc} className="h-full w-full" loading="lazy" />
+            )
+          ) : (
+            <div className="h-full w-full grid place-items-center p-6 text-center">
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Inline preview is blocked by the browser/extension. You can still open the PDF in a new tab.
+                </p>
+                <a
+                  href={viewerBaseUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 text-primary underline"
+                >
+                  <FileText className="h-4 w-4" />
+                  Open PDF in new tab
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

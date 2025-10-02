@@ -10,6 +10,7 @@ import { Landmark, Calendar, Download, FileText, Wrench, GraduationCap, HeartHan
 import { IdCardIcon } from "@radix-ui/react-icons";
 import { PreActionGuard } from "@/components/ui/pre-action-guard";
 import PdfViewerTile from "./pdf-viewer-tile";
+import SimplePdfViewerTile from "./pdf-viewer-tile";
 
 
 type Props = {
@@ -220,7 +221,7 @@ export default function PublicSelfServiceActions({
                   <div className="mt-2 text-[11px] text-muted-foreground">
                     {bioLoading && <span>Checking last update…</span>}
                     {!bioLoading && bioError && <span className="text-red-600">Error: {bioError}</span>}
-                    {!bioLoading && !bioError && lastUpdated && <span>Updated: {fmtPH(lastUpdated)}</span>}
+                    {!bioLoading && !bioError && lastUpdated && <span>Last Update: {fmtPH(lastUpdated)}</span>}
                     {!bioLoading && !bioError && !lastUpdated && <span>No files detected yet.</span>}
                   </div>
                 </div>
@@ -496,33 +497,35 @@ export default function PublicSelfServiceActions({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <PdfViewerTile
-            title="Handbook & Policies"
-            description="Open and read without leaving the app"
-            pdfUrl="/files/employee-handbook.pdf"
-            watermarkImageUrl="/logo.png"     // from /public
+          <SimplePdfViewerTile
+            title="Employee Handbook"
+            description="A complete guide to workplace policies, employee benefits, and standards."
+            pdfUrl="/_pdf/employee-handbook.pdf"
+            downloadFileName="Employee-Handbook.pdf"
             watermarkText="Municipality of Lingayen"
-            autoThumbnail
-            // usePdfJsViewer
-            wmRotationDeg={0}           // ← straight, no tilt
-            wmOpacity={0.15}
-            wmSize={0.35}
-            downloadFileName="Handbook-Lingayen.pdf"
+            watermarkImageUrl="/logo.png"
+            wmSize={200}
+            wmOpacity={0.12}
+            wmRotationDeg={0}
+            showNativeToolbar={false}
           />
 
-          {/* <PdfViewerTile
-            title="ARTA"
-            description="Open and read without leaving the app"
-            pdfUrl="/files/employee-handbook.pdf"
-            watermarkImageUrl="/logo.png"     // from /public
+          <SimplePdfViewerTile
+            title="Citizen's Charter"
+            description="A transparent guide to frontline services, processes, and commitments under the ARTA framework."
+            pdfUrl="/_pdf/ARTA.pdf"
+            downloadFileName="Citizen's Charter.pdf"
             watermarkText="Municipality of Lingayen"
-            autoThumbnail
-            wmRotationDeg={0}           // ← straight, no tilt
-            wmOpacity={0.15}
-            wmSize={0.35}
-            downloadFileName="Handbook-Lingayen.pdf"
-          /> */}
-          {/* future: Policies, Code of Conduct, FAQ, etc. */}
+            watermarkImageUrl="/logo.png"
+            wmSize={200}
+            wmOpacity={0.12}
+            wmRotationDeg={0}
+            showNativeToolbar={false}
+          />
+
+
+
+
         </div>
       </section>
     </div>

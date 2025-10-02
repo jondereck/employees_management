@@ -347,19 +347,19 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
   }
 
   // helper (put near the top of the file)
-const empBase = (s?: string | null) =>
-  (s ?? "").split(",")[0]?.trim() || "photo";
+  const empBase = (s?: string | null) =>
+    (s ?? "").split(",")[0]?.trim() || "photo";
 
-// get the value from wherever your page already loaded the data
-// examples (pick ONE that matches your code):
-// 1) from a server-fetched object:
-const employeeNo: string | null | undefined = publicData?.employeeNo;
-// 2) or from initialData:
-// const employeeNo = initialData?.employeeNo;
-// 3) or from props:
-// const { employeeNo } = props;
+  // get the value from wherever your page already loaded the data
+  // examples (pick ONE that matches your code):
+  // 1) from a server-fetched object:
+  const employeeNo: string | null | undefined = publicData?.employeeNo;
+  // 2) or from initialData:
+  // const employeeNo = initialData?.employeeNo;
+  // 3) or from props:
+  // const { employeeNo } = props;
 
-const downloadName = `${empBase(employeeNo)}.png`;
+  const downloadName = `${empBase(employeeNo)}.png`;
 
 
 
@@ -493,15 +493,13 @@ const downloadName = `${empBase(employeeNo)}.png`;
               </div>
 
               <section className="rounded-lg border p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-base font-semibold">Awards & Recognition</h3>
+                </div>
                 <PublicAwardsGallery employeeId={employeeId} />
               </section>
 
               <section className="rounded-lg border p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-base font-semibold">Awards & Recognition</h3>
-                </div>
-
-
                 <PublicTimeline employeeId={employeeId} />
               </section>
 
@@ -522,9 +520,9 @@ const downloadName = `${empBase(employeeNo)}.png`;
           employeeId={employeeId}
           employeeType={publicData.employeeType?.name ?? null}
           leaveFormUrl="/files/CSForm6_LeaveApplication.pdf"
-            biometricsFolderUrl="https://drive.google.com/drive/folders/1DTrtWmCTOPLYlVdQD_ORZ-j1FoxcUtX1?usp=sharing"
+          biometricsFolderUrl="https://drive.google.com/drive/folders/1DTrtWmCTOPLYlVdQD_ORZ-j1FoxcUtX1?usp=sharing"
           forms={[
-            { label: "Leave Application (CS Form 6)", href:   "/files/LeaveForm.docx" },
+            { label: "Leave Application (CS Form 6)", href: "/files/LeaveForm.docx" },
             { label: "PDS Update Form", href: "/files/CS-Form-No.-212-Revised-2025-Personal-Data-Sheet.xlsx" },
             { label: "DTR Template", href: "/files/DTR Template.xlsm" },
             { label: "SALN Form", href: "/files/SALN Form.doc" },
