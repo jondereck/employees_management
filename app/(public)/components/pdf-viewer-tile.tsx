@@ -69,24 +69,40 @@ export default function SimplePdfViewerTile({
 
   const [processing, setProcessing] = React.useState(false);
   const [embedOk, setEmbedOk] = React.useState(true);
-// delete:
-const [downloading, setDownloading] = React.useState(false);
-// delete the whole handleDownload() function
+  // delete:
+  const [downloading, setDownloading] = React.useState(false);
+  // delete the whole handleDownload() function
 
   // Watermarked blob/url (created when dialog opens)
   const [wmBlob, setWmBlob] = React.useState<Blob | null>(null);
   const [wmUrl, setWmUrl] = React.useState<string | null>(null);
 
+  const isMobile =
+  typeof navigator !== "undefined" &&
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+const wmViewUrl = React.useMemo(() => {
+  const params = new URLSearchParams({
+    file: pdfUrl,
+    text: watermarkText ?? "",
+    ...(watermarkImageUrl ? { img: watermarkImageUrl } : {}),
+    size: String(wmSize ?? 320),
+    opacity: String(wmOpacity ?? 0.12),
+    rotate: String(wmRotationDeg ?? 30),
+  });
+  return `/api/pdf/wm?${params.toString()}`;
+}, [pdfUrl, watermarkText, watermarkImageUrl, wmSize, wmOpacity, wmRotationDeg]);
+
   // add this helper at top of file
-function shouldUsePdfJs() {
-  if (typeof window === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  // Many mobile browsers block inline PDF in embeds
-  const isMobile = /Android|iPhone|iPad|iPod|SamsungBrowser/i.test(ua);
-  // Safari iOS & Samsung Internet frequently fail inside dialogs
-  const isProblematic = /SamsungBrowser|CriOS|FxiOS|Mobile Safari/i.test(ua);
-  return isMobile || isProblematic;
-}
+  function shouldUsePdfJs() {
+    if (typeof window === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    // Many mobile browsers block inline PDF in embeds
+    const isMobile = /Android|iPhone|iPad|iPod|SamsungBrowser/i.test(ua);
+    // Safari iOS & Samsung Internet frequently fail inside dialogs
+    const isProblematic = /SamsungBrowser|CriOS|FxiOS|Mobile Safari/i.test(ua);
+    return isMobile || isProblematic;
+  }
 
 
   // Build a safe absolute URL for the iframe/file= usage
@@ -103,11 +119,11 @@ function shouldUsePdfJs() {
   // If we have a watermarked blob URL, use that for viewing; else the original.
   const viewerBaseUrl = wmUrl ?? absPdfUrl;
 
-// keep your existing viewerBaseUrl logic
-const viewerUrl = React.useMemo(() => {
-  const base = viewerBaseUrl; // wmUrl ?? absPdfUrl
-  return `${base}#toolbar=1&navpanes=0`;   // always show native toolbar
-}, [viewerBaseUrl]);
+  // keep your existing viewerBaseUrl logic
+  const viewerUrl = React.useMemo(() => {
+    const base = viewerBaseUrl; // wmUrl ?? absPdfUrl
+    return `${base}#toolbar=1&navpanes=0`;   // always show native toolbar
+  }, [viewerBaseUrl]);
 
 
 
@@ -292,6 +308,9 @@ const viewerUrl = React.useMemo(() => {
   }
 
   const usePdfJs = shouldUsePdfJs();
+  const viewerSrc = usePdfJs
+  ? `/pdfjs-legacy/web/viewer.html?file=${encodeURIComponent(absPdfUrl)}`
+  : (wmUrl ?? absPdfUrl); // native viewer can handle blob on desktop
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -328,7 +347,7 @@ const viewerUrl = React.useMemo(() => {
             </div>
             <div className="min-w-0">
               <div className="font-semibold leading-tight">{title}</div>
-              <div className="text-sm text-muted-foreground truncate">{description}</div>
+              <div className="text-sm text-muted-foreground ">{description}</div>
             </div>
             <div className="ml-auto text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition">
               Open
@@ -337,79 +356,44 @@ const viewerUrl = React.useMemo(() => {
         </button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[96vw] md:max-w-[90vw] lg:max-w-[80vw] xl:max-w-[70vw] p-0 overflow-hidden sm:rounded-2xl">
+    <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+  <DialogHeader className="px-4 pt-4">
+    <DialogTitle>{title}</DialogTitle>
+    <DialogDescription className="sr-only">View {title} inside the app</DialogDescription>
+  </DialogHeader>
+<div className="relative h-[82dvh] w-full bg-muted/30">
+ {isMobile ? (
+  <div className="h-full w-full flex items-center justify-center px-4">
+    <div className="w-full max-w-sm rounded-2xl bg-white shadow-sm border p-5 text-center">
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+        <FileText className="h-6 w-6 text-primary" />
+      </div>
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Opens in your phone’s PDF viewer.
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Button asChild className="w-full">
+          <a href={wmViewUrl} target="_blank" rel="noopener noreferrer">
+            Open PDF
+          </a>
+        </Button>
+        <Button variant="outline" className="w-full" onClick={handleDownload} disabled={downloading}>
+          <Download className="mr-2 h-4 w-4" />
+          {downloading ? "…" : "Download"}
+        </Button>
+      </div>
+    </div>
+  </div>
+) : (
+  <iframe key={wmViewUrl} title={title} src={wmViewUrl} className="h-full w-full block border-0" />
+)}
 
-        {usePdfJs ? (
-        // ✅ Always works on mobile
-        <iframe
-          title={title}
-          src={`/pdfjs-legacy/web/viewer.html?file=${encodeURIComponent(pdfUrl)}`}
-          className="h-[80vh] w-full border-0"
-          allow="fullscreen"
-        />
-      ) : (
-        // old native embed path (kept for desktop Chrome/Edge)
-        <object
-          data={pdfUrl}
-          type="application/pdf"
-          className="h-[80vh] w-full"
-        >
-          <div className="p-6 text-center">
-            <p className="mb-4 text-sm text-muted-foreground">
-              Your browser can’t display PDFs inline.
-            </p>
-            <a href={pdfUrl} target="_blank" className="btn-primary">
-              Open
-            </a>
-          </div>
-        </object>
-      )}
-        <DialogHeader className="px-4 pt-4">
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className="sr-only">
-            View {title} inside the app
-          </DialogDescription>
-        </DialogHeader>
+</div>
 
 
+</DialogContent>
 
-        {/* Inline viewer with graceful fallback */}
-        <div className="relative h-[82vh] w-full bg-muted/30">
-          {embedOk ? (
-            processing ? (
-              <div className="h-full w-full grid place-items-center p-6 text-center">
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <p>Generating watermarked preview…</p>
-                </div>
-              </div>
-            ) : (
-              <iframe
-                title={title}
-                src={viewerUrl}
-                className="h-full w-full"
-                onError={() => setEmbedOk(false)}
-              />
-            )
-          ) : (
-            <div className="h-full w-full grid place-items-center p-6 text-center">
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Inline preview is blocked by the browser/extension. You can still open the PDF in a new tab.
-                </p>
-                <a
-                  href={viewerBaseUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 text-primary underline"
-                >
-                  <FileText className="h-4 w-4" />
-                  Open PDF in new tab
-                </a>
-              </div>
-            </div>
-          )}
-        </div>
-      </DialogContent>
     </Dialog>
   );
 }
