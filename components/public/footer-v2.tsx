@@ -22,7 +22,7 @@ type PublicFooterProps = {
   creatorEffect?: CreatorEffect;
   creatorName?: string;
   creatorLink?: string;
-  creatorImage?: { src: string; alt?: string; width?: number; height?: number; href?: string;  };
+  creatorImage?: { src: string; alt?: string; width?: number; height?: number };
 
   // layout + theme
   brand?: { c1?: string; c2?: string; c3?: string };
@@ -83,54 +83,53 @@ export default function PublicFooter({
   };
 
   // creator renderer (image-first)
-const renderCreator = () => {
-  if (creatorMode === "image" && creatorImage?.src) {
-    const img = (
-      <Image
-        src={creatorImage.src}
-        alt={creatorImage.alt ?? "Creator"}
-        width={creatorImage.width ?? (dense ? 80 : 96)}
-        height={creatorImage.height ?? (dense ? 16 : 18)}
-        className="inline-block align-middle"
-        priority={false}
-        loading="lazy"
-      />
+  const renderCreator = () => {
+    if (creatorMode === "image" && creatorImage?.src) {
+      const img = (
+        <Image
+          src={creatorImage.src}
+          alt={creatorImage.alt ?? "Creator"}
+          width={creatorImage.width ?? (dense ? 80 : 96)}
+          height={creatorImage.height ?? (dense ? 16 : 18)}
+          className="inline-block align-middle"
+          priority={false}
+          loading="lazy"
+        />
+      );
+      return creatorLink ? (
+        <a
+          href={creatorLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open creator link"
+          className="inline-flex items-center"
+        >
+          {img}
+        </a>
+      ) : (
+        img
+      );
+    }
+
+    // fallback text mode (kept minimal)
+    const txt = (
+      <span className="text-[11px] sm:text-xs text-muted-foreground">
+        {creatorName}
+      </span>
     );
-
-    // Prefer per-image link; fallback to global creatorLink
-    const link = creatorImage.href ?? creatorLink;
-
-    return link ? (
+    return creatorLink ? (
       <a
-        href={link}
+        href={creatorLink}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label={creatorImage.alt ?? "Open creator link"}
-        className="inline-flex items-center"
+        className="hover:underline"
       >
-        {img}
+        {txt}
       </a>
     ) : (
-      img
+      txt
     );
-  }
-
-  // fallback text mode (kept minimal for dense layout)
-  const txt = (
-    <span className="text-[11px] sm:text-xs text-muted-foreground">
-      {creatorName}
-    </span>
-  );
-
-  return creatorLink ? (
-    <a href={creatorLink} target="_blank" rel="noopener noreferrer" className="hover:underline">
-      {txt}
-    </a>
-  ) : (
-    txt
-  );
-};
-
+  };
 
   // compact paddings/heights on mobile
   const padY = dense ? "py-2" : "py-3";
@@ -156,18 +155,17 @@ const renderCreator = () => {
         >
           {/* Left: logos small */}
           <div className="flex items-center gap-2">
-            <LogoImg {...systemLogo}  />
-            <LogoImg {...hrLogo}  />
-            {lguLogo ? <LogoImg {...lguLogo}  /> : null}
+            <LogoImg {...systemLogo} small />
+            <LogoImg {...hrLogo} small />
+            {lguLogo ? <LogoImg {...lguLogo} small /> : null}
           </div>
 
           {/* Middle: system name (tiny) */}
           <div className="flex-1 mx-2 text-center truncate">
-                {showYearOnMobile ? (
-              <span className="ml-1 text-[10px] text-muted-foreground align-middle">© {year} </span>
+            <span className="text-[12px] font-semibold truncate">{systemName}</span>
+            {showYearOnMobile ? (
+              <span className="ml-1 text-[10px] text-muted-foreground align-middle">© {year}</span>
             ) : null}
-            <span className="text-[12px] font-semibold truncate">{ systemName}</span>
-        
           </div>
 
           {/* Right: creator image/text small */}
