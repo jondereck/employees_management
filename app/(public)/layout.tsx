@@ -20,12 +20,13 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
     creatorImage={{
     src: "/creator-footer.png",
     alt: "Made by JDN",
-    width: 80,
-    height: 16,
+    width: 96,
+    height: 18,
     href: "https://hrps.vercel.app/f622687f-79c6-44e8-87c6-301a257582b2/view/employee/8458d76a-3c43-4c5a-bdaf-40af989500d6" // ← opened when tapped/clicked
   }}
   dense={true}                  // compact mobile (default true)
   showYearOnMobile={true}      // hide © on very small screens
+  
 />
 
 {/* V1
