@@ -30,6 +30,8 @@ import PublicSelfServiceActions from "@/app/(public)/components/public-self-serv
 import DownloadPhotoButton from "@/app/(public)/components/download-photo";
 import PublicHeadshot from "@/app/(public)/components/download-photo";
 import { normalizeEducationLines } from "@/utils/normalize-education";
+import { ActiveBadge } from "@/app/(public)/components/icons/active-badges";
+
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -382,7 +384,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
   const downloadName = `${empBase(employeeNo)}.png`;
 
-
+  const fullName = `${publicData.prefix} ${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName} ${publicData.suffix || ""}`.replace(/\s+/g, " ").trim();
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -415,9 +417,6 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
               {/* Photo */}
               <div className="shrink-0">
                 <PublicHeadshot src={headshot} employeeNo={publicData?.employeeNo} />
-
-
-
               </div>
 
 
@@ -434,21 +433,28 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                       {employmentType}
                     </span>
                   )}
-                  {/* <span
-    className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700"
-    title="This profile is visible via public link."
-  >
-    Public link
-  </span> */}
                 </div>
 
 
                 {/* FULL NAME */}
-                <h1 className="text-md sm:text-xl font-bold">
-                  {publicData.prefix} {publicData.firstName} {getMiddleInitial(publicData.middleName)}{" "}
-                  {publicData.lastName} {publicData.suffix || ""}
-                </h1>
+                <div className="relative">
+                  {/* one-line, full width, horizontal scroll if needed */}
+                  <div
+                    className="flex items-center gap-2 whitespace-nowrap overflow-x-auto pr-1 no-scrollbar"
+                    aria-label="Employee name"
+                  >
+                    <h1 className="font-bold text-sm leading-tight text-[clamp(1rem,3.8vw,1.25rem)] sm:text-[clamp(1.125rem,2vw,1.5rem)]">
+                      {fullName}
+                    </h1>
 
+                    {!publicData.isArchived && (
+                      <span className="shrink-0" title="Active employee" aria-label="Active employee">
+                        <ActiveBadge className="h-4 w-4 sm:h-5 sm:w-5" />
+                        <span className="sr-only">Active</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
                 {/* Working line */}
                 <p className="mt-1 text-xs sm:text-md font-light">{workingLine}</p>
 
