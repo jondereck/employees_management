@@ -10,12 +10,12 @@ export type Hotline = {
 
 export const LINGAYEN_HOTLINES: Hotline[] = [
   { id: "pdrrmo", name: "PDRRMO", subtitle: "Prov’l Disaster Risk Reduction", tag: "24/7", phones: ["911","09171505754","09985846867"] },
-  { id: "pnp", name: "PNP – Lingayen", subtitle: "Police Station", phones: ["09165625353","09985985109"] },
+  { id: "pnp", name: "PNP – Lingayen",tag: "24/7", subtitle: "Police Station", phones: ["09165625353","09985985109"] },
   { id: "mswdo", name: "MSWDO", phones: ["0756337991"] },
   { id: "ldh", name: "Lingayen District Hospital", phones: ["0755422295","09430770072"] },
   { id: "jngh", name: "Jesus Nazarene General Hospital", phones: ["0755425758","09773485328"] },
   { id: "sncgh", name: "Sto. Niño de Casipit General Hospital", phones: ["0755224295","09662152473"] },
-  { id: "ldrrmo", name: "LDRRMO", phones: ["0756537515","09190992230"] },
+  { id: "ldrrmo", tag: "24/7", name: "LDRRMO", phones: ["0756537515","09190992230"] },
   { id: "bfp", name: "BFP – Lingayen", subtitle: "Fire Station", phones: ["0755427080","09171861611"] },
   { id: "primewater", name: "PrimeWater", phones: ["0756544447","09985903400","09277804924"] },
   { id: "cenpelco", name: "CENPELCO", phones: ["0755295179","09215257718","09165847423"] },

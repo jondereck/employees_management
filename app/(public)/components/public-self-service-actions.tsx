@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Landmark, Calendar, Download, FileText, Wrench, GraduationCap, HeartHandshake, Fingerprint, RotateCcw } from "lucide-react";
+import { Landmark, Calendar, Download, FileText, Wrench, GraduationCap, HeartHandshake, Fingerprint, RotateCcw, PhoneCall } from "lucide-react";
 import { IdCardIcon } from "@radix-ui/react-icons";
 import { PreActionGuard } from "@/components/ui/pre-action-guard";
 import PdfViewerTile from "./pdf-viewer-tile";
@@ -14,9 +14,7 @@ import SimplePdfViewerTile from "./pdf-viewer-tile";
 import { HotlineDirectory } from "./hotline";
 import { LINGAYEN_HOTLINES } from "./lingayen-hotline/data";
 import SimplePdfLinkTile from "./pdf-viewer-tile";
-
-
-
+import { FloatingShortcuts } from "./modals/floating-shorcuts";
 
 
 type Props = {
@@ -138,7 +136,7 @@ export default function PublicSelfServiceActions({
 
   return (
     <div className="space-y-6">
-       {/* Resources */}
+      {/* Resources */}
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Resources</h2>
@@ -183,18 +181,8 @@ export default function PublicSelfServiceActions({
               </Badge>
             </CardHeader>
 
-            <Button
-              size="icon"
-              className="fixed right-[calc(1rem+env(safe-area-inset-right))] z-50 h-12 w-12 rounded-full shadow-lg print:hidden
-             bg-pink-600 hover:bg-pink-700 text-white"
-              style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }} // ↑ adjust 5rem to match footer height
-              onClick={() =>
-                document.getElementById("self-service")?.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
-              aria-label="Open Self-Service"
-            >
-              <HeartHandshake className="h-5 w-5" />
-            </Button>
+            {/* Floating shortcuts: Self-Service + Hotline */}
+     <FloatingShortcuts />
 
 
             {/* Responsive grid: 1 / 2 / 3 cols */}
@@ -396,7 +384,7 @@ export default function PublicSelfServiceActions({
                 </div>
               </div> */}
 
-             
+
 
             </CardContent>
           </Card>
@@ -508,7 +496,7 @@ export default function PublicSelfServiceActions({
 
         </TooltipProvider>
       </section>
-      <section>
+      <section id="hotlines">
 
         <HotlineDirectory items={LINGAYEN_HOTLINES} className="pt-6" />
       </section>
