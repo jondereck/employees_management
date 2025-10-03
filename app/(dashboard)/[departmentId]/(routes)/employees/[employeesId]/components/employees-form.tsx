@@ -39,6 +39,8 @@ import AddAward from "@/app/(public)/components/admin/add-award";
 import Timeline from "@/app/(public)/components/timeline";
 import AwardsGallery from "@/app/(public)/components/awards-gallery";
 
+
+
 const PREFIX_OPTIONS = [
   "HON.", "ENGR.", "DR.", "ATTY.", "ARCH.", "PROF.", "DIR.", "SIR", "MA'AM"
 ];
@@ -92,9 +94,11 @@ const formSchema = z.object({
   barangay: z.string(),
   houseNo: z.string(),
   street: z.string(),
-  salaryGrade: z.union([z.string(), z.number()])
-    .transform((v) => String(v)) // always string for Prisma
-    .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric"),
+  salaryGrade: z
+    .union([z.string(), z.number()])
+    .transform((v) => String(v).trim())
+    .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric")
+    .refine((v) => Number(v) >= 1 && Number(v) <= 33, "Salary Grade must be between 1 and 33"),
   salary: z.number().min(0),
   birthday: z.date().optional(),
   // age: z.string(),
@@ -116,7 +120,30 @@ const formSchema = z.object({
   employeeLink: z.string(),
   designationId: z.string().optional().nullable(), // dropdown can be empty
   note: z.string().optional().nullable(),
-});
+})
+  .superRefine((data, ctx) => {
+    // Require birthday
+    if (!data.birthday) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["birthday"],
+        message: "Date of birth is required",
+      });
+    }
+
+    // Require dateHired (accepts Date or non-empty string)
+    const hired = data.dateHired;
+    if (
+      !hired ||
+      (typeof hired === "string" && hired.trim() === "")
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["dateHired"],
+        message: "Date hired is required",
+      });
+    }
+  });
 
 type EmployeesFormValues = z.infer<typeof formSchema>;
 const upper = (s?: string | null) => (s ?? "").toUpperCase();
@@ -469,8 +496,14 @@ export const EmployeesForm = ({
 
 
   useEffect(() => { setBioOptions([]); }, [officeId]);
-
+  const onInvalid = () => {
+    toast.error("Please fill the required fields.", {
+      description: "Check the highlighted inputs and try again.",
+    });
+  };
   const onSubmit = async (values: EmployeesFormValues) => {
+
+
     const contact = (values.contactNumber ?? "").trim();
     setLoading(true);
     try {
@@ -606,7 +639,8 @@ export const EmployeesForm = ({
       </div >
       <Separator />
       < Form {...form} >
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 w-full">
+
 
 
           <Tabs defaultValue="details" className="mt-8">
@@ -786,10 +820,10 @@ export const EmployeesForm = ({
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .map((o) => ({ value: o.id, label: o.name }))}
                       description="Select the office where the employee is designated."
-                       searchable
+                      searchable
                       searchPlaceholder="Search office..."
                     />
-                    
+
                   )}
                 />
               </div>
@@ -891,7 +925,6 @@ export const EmployeesForm = ({
                       kind="text"
                       label="Middle Name"
                       field={field}
-                      required
                       placeholder="Middle Name"
                       description="Ex: De Guzman"
                       showCounter
@@ -1293,10 +1326,10 @@ export const EmployeesForm = ({
                         .slice()
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .map(el => ({ value: el.id, label: el.name }))}
-                        searchable
+                      searchable
                       searchPlaceholder="Search eligibility..."
                     />
-                    
+
                   )}
                 />
 
