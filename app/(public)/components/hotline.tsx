@@ -270,7 +270,7 @@ function HotlineRow({ item }: { item: Hotline }) {
           )}
 
           {/* Custom chevron for consistency */}
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform data-[state=open]:rotate-180" />
+       
         </div>
       </AccordionTrigger>
 

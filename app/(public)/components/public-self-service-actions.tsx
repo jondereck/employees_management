@@ -19,7 +19,8 @@ import { FloatingShortcuts } from "./modals/floating-shorcuts";
 
 type Props = {
   employeeId: string;
-  employeeType?: string | null;          // "Permanent" | "Casual" | "Co-terminous" | "Job Order" | etc.
+  employeeType?: string | null;  
+  isActive?: boolean;
   leaveFormUrl?: string;
   forms?: Array<{ label: string; href: string }>;
   trainingCalendarUrl?: string;          // e.g. "/files/TrainingCalendar.pdf" or external link
@@ -53,6 +54,7 @@ function getPrimaryDocForType(employeeType?: string | null) {
 export default function PublicSelfServiceActions({
   employeeId,
   employeeType,
+   isActive = false,
   leaveFormUrl = "/files/CSForm6_LeaveApplication.pdf",
   forms = [
     { label: "Leave Application (CS Form 6)", href: "/files/CSForm6_LeaveApplication.pdf" },
@@ -137,7 +139,9 @@ export default function PublicSelfServiceActions({
   return (
     <div className="space-y-6">
       {/* Resources */}
-      <section>
+
+        {!isActive && (
+  <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Resources</h2>
           <span className="text-xs text-muted-foreground">Read & download</span>
@@ -170,6 +174,8 @@ export default function PublicSelfServiceActions({
           />
         </div>
       </section>
+  )}
+     
       <section>
         <TooltipProvider delayDuration={200}>
           <Card className="rounded-lg border">
@@ -188,7 +194,7 @@ export default function PublicSelfServiceActions({
             {/* Responsive grid: 1 / 2 / 3 cols */}
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* Primary: COE/SR (single action that adapts) */}
-              {biometricsFolderUrl && (
+              {!isActive && biometricsFolderUrl && (
                 <div className="rounded-md border p-3 flex flex-col">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">

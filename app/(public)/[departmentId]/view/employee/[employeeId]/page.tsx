@@ -440,7 +440,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                 <div className="relative">
                   {/* one-line, full width, horizontal scroll if needed */}
                   <div
-                    className="flex items-center gap-2 whitespace-nowrap overflow-x-auto pr-1 no-scrollbar"
+                    className="flex items-center whitespace-nowrap overflow-x-auto pr-1 no-scrollbar"
                     aria-label="Employee name"
                   >
                     <h1 className="font-bold text-sm leading-tight text-[clamp(1rem,3.8vw,1.25rem)] sm:text-[clamp(1.125rem,2vw,1.5rem)]">
@@ -575,6 +575,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
         <PublicSelfServiceActions
           employeeId={employeeId}
           employeeType={publicData.employeeType?.name ?? null}
+          isActive={publicData.isArchived}
           leaveFormUrl="/files/CSForm6_LeaveApplication.pdf"
           biometricsFolderUrl="https://drive.google.com/drive/folders/1DTrtWmCTOPLYlVdQD_ORZ-j1FoxcUtX1?usp=sharing"
           forms={[
