@@ -29,6 +29,7 @@ import PublicAwardsGallery from "@/app/(public)/components/public-awards.gallery
 import PublicSelfServiceActions from "@/app/(public)/components/public-self-service-actions";
 import DownloadPhotoButton from "@/app/(public)/components/download-photo";
 import PublicHeadshot from "@/app/(public)/components/download-photo";
+import { normalizeEducationLines } from "@/utils/normalize-education";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -167,9 +168,11 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
       lastName: true,
       middleName: true,
       gender: true,
+      prefix: true,
       suffix: true,
       employeeNo: true,
       position: true,
+      education: true,
       isArchived: true, // 👈 status source (true = inactive)
       dateHired: true,       // 👈 add
       createdAt: true,
@@ -184,8 +187,26 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
         take: 1,                 // only need the newest
       },
       employeeType: { select: { name: true, value: true } },
+      eligibility: {                    // 👈 add this
+        select: {
+          name: true,                   // e.g., "CSC Professional"
+        },
+      },
+
     },
   });
+
+  function norm(v?: string | null) {
+    return (v ?? "").trim().toLowerCase();
+  }
+
+
+  const eligName = publicData?.eligibility?.name;
+  const showEligibility = !!eligName && norm(eligName) !== "none" && norm(eligName) !== "n/a" && norm(eligName) !== "-";
+
+  const edu = publicData?.education ?? "";
+  const eduNormalized = normalizeEducationLines(edu);
+  const showEducation = eduNormalized.length > 0;
 
 
 
@@ -424,7 +445,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
                 {/* FULL NAME */}
                 <h1 className="text-md sm:text-xl font-bold">
-                  {publicData.firstName} {getMiddleInitial(publicData.middleName)}{" "}
+                  {publicData.prefix} {publicData.firstName} {getMiddleInitial(publicData.middleName)}{" "}
                   {publicData.lastName} {publicData.suffix || ""}
                 </h1>
 
@@ -491,6 +512,35 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
                   </dd>
                 </dl>
               </div>
+              {/* Eligibility — same UI pattern */}
+              {showEligibility && (
+                <div className="rounded-lg border p-3">
+                  <dl className="text-sm">
+                    <dt className="text-muted-foreground">Eligibility</dt>
+                    <dd className="font-medium">{eligName}</dd>
+                  </dl>
+                </div>
+              )}
+
+              {/* Educational Attainment — same UI pattern */}
+              {showEducation && (
+                <div className="rounded-lg border p-3">
+                  <dl className="text-sm">
+                    <dt className="text-muted-foreground">Educational Attainment</dt>
+                    <dd className="font-medium">
+                      {eduNormalized.length > 1 ? (
+                        <ul className="mt-1 list-disc pl-5 space-y-1">
+                          {eduNormalized.map((e, i) => (
+                            <li key={i}>{e}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        eduNormalized[0]
+                      )}
+                    </dd>
+                  </dl>
+                </div>
+              )}
 
               <section className="rounded-lg border p-4">
                 <div className="mb-3 flex items-center justify-between">
