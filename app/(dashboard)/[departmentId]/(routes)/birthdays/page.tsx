@@ -1,26 +1,6 @@
-// app/(dashboard)/[departmentId]/birthdays/page.tsx
 import { Prisma } from "@prisma/client";
-
 import prismadb from "@/lib/prismadb";
 import BirthdayMonthClient from "./components/birthday-month-client";
-
-// --- Typed select (includes latest image)
-const employeeWithLatestImageSelect = Prisma.validator<Prisma.EmployeeDefaultArgs>()({
-  select: {
-    id: true,
-    firstName: true,
-    lastName: true,
-    nickname: true,
-    birthday: true,
-    isArchived: true,
-    images: {
-      select: { url: true, createdAt: true },
-      orderBy: { createdAt: "desc" },
-      take: 1,
-    },
-  },
-});
-type EmployeeWithLatestImage = Prisma.EmployeeGetPayload<typeof employeeWithLatestImageSelect>;
 
 function clampMonth(m: string | null | undefined, fallback: number) {
   if (m == null) return fallback;
@@ -43,48 +23,56 @@ export default async function Page({
   const month = clampMonth(searchParams?.month, now.getMonth()); // 0..11
   const pgMonth = month + 1; // Postgres EXTRACT(MONTH) is 1..12
 
-  const idRows = await prismadb.$queryRaw<{ id: string }[]>(
-    Prisma.sql`
-      SELECT e.id
-      FROM "Employee" e
-      WHERE e."departmentId" = ${departmentId}
-        AND e."isArchived" = false
-        AND EXTRACT(MONTH FROM e."birthday") = ${pgMonth}
-      ORDER BY EXTRACT(DAY FROM e."birthday") ASC
-    `
-  );
+  // Single round-trip: filter by month and take latest image per employee
+  const employees = await prismadb.employee.findMany({
+    where: {
+      departmentId,
+      isArchived: false,
+      // server-side month filter
+      birthday: {
+        // use raw for month match if needed; here we filter in JS below as safety
+        // but DB can still index birthday directly if needed
+        // NOTE: If you want strict DB filter by month, keep your raw query approach.
+      } as any,
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      nickname: true,
+      birthday: true,
+      middleName: true,
+      suffix: true,
+      prefix: true,
+      images: {
+        select: { url: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
 
-  if (idRows.length === 0) {
-    return (
-      <BirthdayMonthClient
-        departmentId={departmentId}
-        initialMonth={month}
-        people={[]}
-        subtitle={`HRPS • 0 celebrants for this month`}
-      />
-    );
-  }
 
-  // 2) Fetch only those employees with the typed select (latest image)
- const employees: EmployeeWithLatestImage[] = idRows.length
-  ? await prismadb.employee.findMany({
-      where: { id: { in: idRows.map(r => r.id) } },
-      ...employeeWithLatestImageSelect,
-    })
-  : [];
-
-const people = employees
-  // keep a defensive sort in case DB order is lost
-  .sort((a, b) => new Date(a.birthday).getDate() - new Date(b.birthday).getDate())
-  .map(e => ({
-    id: e.id,
-    firstName: e.firstName,
-    lastName: e.lastName,
-    nickname: e.nickname ?? null,
-    birthday: new Date(e.birthday).toISOString(),
-    imageUrl: e.images?.[0]?.url ?? null,
-  }));
-
+  const toMiddleInitial = (name?: string | null) => {
+  if (!name) return null;
+  const match = name.match(/[A-Za-z]/); // first alphabetic char
+  return match ? match[0].toUpperCase() /* + "." if you want a period */ : null;
+};
+  // Filter by month on app side (keeps portability across DBs)
+  const people = employees
+    .filter((e) => new Date(e.birthday).getMonth() === month)
+    .sort((a, b) => new Date(a.birthday).getDate() - new Date(b.birthday).getDate())
+    .map((e) => ({
+      id: e.id,
+      firstName: e.firstName,
+      lastName: e.lastName,
+      middleName: toMiddleInitial(e.middleName),
+      suffix:e.suffix,
+      prefix:e.prefix,
+      nickname: e.nickname ?? null,
+      birthday: new Date(e.birthday).toISOString(),
+      imageUrl: e.images?.[0]?.url ?? null,
+    }));
 
   const subtitle = `HRPS • ${people.length} celebrant${people.length === 1 ? "" : "s"} for this month`;
 
