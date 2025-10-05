@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
@@ -64,6 +64,27 @@ export default function PublicFooter({
   creatorHighlight
 }: PublicFooterProps) {
   const year = new Date().getFullYear();
+  const creatorTimerRef = useRef<number | null>(null);
+  const navigateTo = (href: string) => {
+  if (href.startsWith("/") || href.startsWith(window.location.origin)) {
+    router.push(href.replace(window.location.origin, ""));
+  } else {
+    window.location.href = href;
+  }
+};
+
+const goNow = () => {
+  const href = creatorOverlay.href;
+  if (!href) return;
+  if (creatorTimerRef.current) window.clearTimeout(creatorTimerRef.current);
+  navigateTo(href);
+  setCreatorOverlay({ visible: false, href: undefined });
+};
+
+const cancelPreview = () => {
+  if (creatorTimerRef.current) window.clearTimeout(creatorTimerRef.current);
+  setCreatorOverlay({ visible: false, href: undefined });
+};
 
   const router = useRouter();
 
@@ -72,38 +93,18 @@ export default function PublicFooter({
     href?: string;
   }>({ visible: false, href: undefined });
 
-  const openCreatorWithDelay = (href?: string) => {
-    if (!href) return;
-    setCreatorOverlay({ visible: true, href });
+const openCreatorWithDelay = (href?: string) => {
+  if (!href) return;
+  setCreatorOverlay({ visible: true, href });
 
-    const ms = Math.max(0, creatorDelayMs ?? 3000);
-
-    const timer = setTimeout(() => {
-      // Prefer router.push for SPA nav; fallback to location if external
-      try {
-        if (href.startsWith("/") || href.startsWith(window.location.origin)) {
-          router.push(href.replace(window.location.origin, ""));
-        } else {
-          window.location.href = href;
-        }
-      } finally {
-        setCreatorOverlay({ visible: false, href: undefined });
-      }
-    }, ms);
-
-    // Allow user to tap overlay to skip the wait
-    const skip = () => {
-      clearTimeout(timer);
-      if (href.startsWith("/") || href.startsWith(window.location.origin)) {
-        router.push(href.replace(window.location.origin, ""));
-      } else {
-        window.location.href = href;
-      }
-    };
-
-    // attach skip to state for the overlay click
-    (openCreatorWithDelay as any)._skip = skip;
-  };
+  const ms = Math.max(0, creatorDelayMs ?? 3000);
+  if (creatorTimerRef.current) window.clearTimeout(creatorTimerRef.current);
+  creatorTimerRef.current = window.setTimeout(() => {
+    navigateTo(href);
+    setCreatorOverlay({ visible: false, href: undefined });
+    creatorTimerRef.current = null;
+  }, ms);
+};
 
   const cssVars = useMemo(
     () => ({
@@ -294,23 +295,28 @@ export default function PublicFooter({
 {creatorOverlay.visible ? (
   <div
     className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6"
-    onClick={() => (openCreatorWithDelay as any)._skip?.()}
     role="dialog"
     aria-modal="true"
   >
-    <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-xl px-6 py-5 w-full max-w-xs text-center">
-      <div className="flex items-center justify-center mb-3">
+    <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-xl px-6 py-6 w-full max-w-sm text-center">
+      {/* Creator image enlarged */}
+      <div className="flex items-center justify-center">
         <Image
           src={creatorImage?.src ?? "/creator-footer.png"}
           alt={creatorImage?.alt ?? "Creator"}
-          width={creatorImage?.width ?? 120}
-          height={creatorImage?.height ?? 24}
-          className="object-contain"
+          width={Math.round((creatorImage?.width ?? 96) * 2.4)}
+          height={Math.round((creatorImage?.height ?? 18) * 2.4)}
+          className="select-none object-contain"
+          priority
         />
       </div>
-      <p className="text-sm text-muted-foreground mb-3">Opening&hellip;</p>
-      {/* simple progress bar animation (3s) */}
-      <div className="h-1 w-full rounded bg-neutral-200 dark:bg-neutral-800 overflow-hidden">
+
+      <p className="mt-4 text-center text-sm text-muted-foreground">
+        Opening creator page…
+      </p>
+
+      {/* (Optional) simple progress indicator; keep if you like */}
+      <div className="mt-3 h-1 w-full rounded bg-neutral-200 dark:bg-neutral-800 overflow-hidden">
         <div
           className="h-full animate-[grow_3s_linear_forwards]"
           style={{ background: "var(--creator-c1, #cf1337)" }}
@@ -322,9 +328,25 @@ export default function PublicFooter({
           to { width: 100% }
         }
       `}</style>
+
+      <div className="mt-5 flex items-center justify-center gap-3">
+        <button
+          onClick={goNow}
+          className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          Go now
+        </button>
+        <button
+          onClick={cancelPreview}
+          className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   </div>
 ) : null}
+
 
     <footer
       className={cn(
