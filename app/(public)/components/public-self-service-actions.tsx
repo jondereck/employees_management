@@ -15,6 +15,7 @@ import { HotlineDirectory } from "./hotline";
 import { LINGAYEN_HOTLINES } from "./lingayen-hotline/data";
 import SimplePdfLinkTile from "./pdf-viewer-tile";
 import { FloatingShortcuts } from "./modals/floating-shorcuts";
+import MobileBirthdayGreeter from "./mobile-bday-greeter";
 
 
 type Props = {
@@ -25,6 +26,23 @@ type Props = {
   forms?: Array<{ label: string; href: string }>;
   trainingCalendarUrl?: string;          // e.g. "/files/TrainingCalendar.pdf" or external link
   trainingNominationFormUrl?: string; biometricsFolderUrl?: string;
+    birthdayPeople?: Array<{
+    id: string;
+    firstName: string;
+    lastName?: string | null;
+    nickname?: string | null;
+    imageUrl?: string | null;
+    prefix?: string | null;
+    middleName?: string | null;
+    suffix?: string | null;
+    birthday: string; // ISO
+
+  }>;
+       birthdayMonthOverride?: number;
+
+  // Optional: background image for the birthday card
+  birthdayBackgroundSrc?: string;
+
 };
 
 function norm(t?: string | null) {
@@ -65,6 +83,9 @@ export default function PublicSelfServiceActions({
   trainingCalendarUrl = "/files/TrainingCalendar.pdf",
   trainingNominationFormUrl,
   biometricsFolderUrl,
+    birthdayPeople = [],
+  birthdayMonthOverride,
+  birthdayBackgroundSrc = "/individual-bday-greet.png", // or "/bday_bg.png"
 }: Props) {
   const [docOpen, setDocOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
@@ -138,6 +159,17 @@ export default function PublicSelfServiceActions({
 
   return (
     <div className="space-y-6">
+      {/* === Birthday Celebrants (Mobile-friendly) === */}
+{birthdayPeople.length > 0 && (
+  <section id="birthdays" className="mb-6">
+    <MobileBirthdayGreeter
+      people={birthdayPeople}
+      monthOverride={birthdayMonthOverride}
+      backgroundSrc={birthdayBackgroundSrc}
+    />
+  </section>
+)}
+
       {/* Resources */}
 
         {!isActive && (

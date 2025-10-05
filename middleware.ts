@@ -4,7 +4,7 @@ export default authMiddleware({
   publicRoutes: [
     "/api/:path*",
     "/(.*)/view/employee/(.*)",   // printed QR URLs
-    "/(.*)/employees/(.*)"
+    // add "/(.*)/employees/(.*)" too if you use that path publicly
   ],
 });
 

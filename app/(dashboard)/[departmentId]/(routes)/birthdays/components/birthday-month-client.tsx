@@ -713,6 +713,8 @@ export default function BirthdayMonthClient({
                   nickname: cardPerson.nickname,
                   imageUrl: cardPerson.imageUrl,
                   middleName: cardPerson.middleName,
+                  suffix: cardPerson.suffix,
+                  prefix: cardPerson.prefix,
                 }}
 
               />

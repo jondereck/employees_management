@@ -164,14 +164,18 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
       id: params.employeeId,
       departmentId: params.departmentId,
       publicEnabled: true,
+
+      
     },
     select: {
       firstName: true,
       lastName: true,
       middleName: true,
+       nickname: true,     
       gender: true,
       prefix: true,
       suffix: true,
+        birthday: true, 
       employeeNo: true,
       position: true,
       education: true,
@@ -197,6 +201,26 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
     },
   });
+
+  const thisMonth = new Date().getMonth();
+
+const birthdayPeople =
+  publicData && publicData.birthday
+    ? (new Date(publicData.birthday).getMonth() === thisMonth
+        ? [{
+            id: params.employeeId,
+            firstName: publicData.firstName,
+            lastName: publicData.lastName,
+            nickname: publicData.nickname ?? null,
+            prefix: publicData.prefix ?? null,
+            middleName: publicData.middleName ?? null,
+            suffix: publicData.suffix ?? null,
+            imageUrl: publicData.images?.[0]?.url ?? null,
+            birthday: new Date(publicData.birthday).toISOString(),
+          }]
+        : [])
+    : [];
+
 
   function norm(v?: string | null) {
     return (v ?? "").trim().toLowerCase();
@@ -584,6 +608,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
             { label: "DTR Template", href: "/files/DTR Template.xlsm" },
             { label: "SALN Form", href: "/files/SALN Form.doc" },
           ]}
+           birthdayPeople={birthdayPeople}
         />
       </section>
 
@@ -595,6 +620,7 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
           messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"}
           employeeName={`${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName}`.replace(/\s+/g, " ").trim()}
           employeeNo={publicData.employeeNo}
+          
         />
       </div>
 
