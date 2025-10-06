@@ -31,6 +31,7 @@ import DownloadPhotoButton from "@/app/(public)/components/download-photo";
 import PublicHeadshot from "@/app/(public)/components/download-photo";
 import { normalizeEducationLines } from "@/utils/normalize-education";
 import { ActiveBadge } from "@/app/(public)/components/icons/active-badges";
+import AutoTrackPublicView from "@/components/public/auto-track-public-view";
 
 
 export const dynamic = "force-dynamic";
@@ -165,17 +166,17 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
       departmentId: params.departmentId,
       publicEnabled: true,
 
-      
+
     },
     select: {
       firstName: true,
       lastName: true,
       middleName: true,
-       nickname: true,     
+      nickname: true,
       gender: true,
       prefix: true,
       suffix: true,
-        birthday: true, 
+      birthday: true,
       employeeNo: true,
       position: true,
       education: true,
@@ -204,22 +205,22 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
   const thisMonth = new Date().getMonth();
 
-const birthdayPeople =
-  publicData && publicData.birthday
-    ? (new Date(publicData.birthday).getMonth() === thisMonth
+  const birthdayPeople =
+    publicData && publicData.birthday
+      ? (new Date(publicData.birthday).getMonth() === thisMonth
         ? [{
-            id: params.employeeId,
-            firstName: publicData.firstName,
-            lastName: publicData.lastName,
-            nickname: publicData.nickname ?? null,
-            prefix: publicData.prefix ?? null,
-            middleName: publicData.middleName ?? null,
-            suffix: publicData.suffix ?? null,
-            imageUrl: publicData.images?.[0]?.url ?? null,
-            birthday: new Date(publicData.birthday).toISOString(),
-          }]
+          id: params.employeeId,
+          firstName: publicData.firstName,
+          lastName: publicData.lastName,
+          nickname: publicData.nickname ?? null,
+          prefix: publicData.prefix ?? null,
+          middleName: publicData.middleName ?? null,
+          suffix: publicData.suffix ?? null,
+          imageUrl: publicData.images?.[0]?.url ?? null,
+          birthday: new Date(publicData.birthday).toISOString(),
+        }]
         : [])
-    : [];
+      : [];
 
 
   function norm(v?: string | null) {
@@ -502,6 +503,14 @@ const birthdayPeople =
                 This employee is currently <strong>Active</strong>.
               </div>
             )}
+            <div className="mt-3">
+              {/* Auto log a pageview (no UI) */}
+              <AutoTrackPublicView
+                viewedEmployeeId={params.employeeId}
+                departmentId={params.departmentId}
+              />
+
+            </div>
 
             {/* Details mini-grid */}
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -608,10 +617,9 @@ const birthdayPeople =
             { label: "DTR Template", href: "/files/DTR Template.xlsm" },
             { label: "SALN Form", href: "/files/SALN Form.doc" },
           ]}
-           birthdayPeople={birthdayPeople}
+          birthdayPeople={birthdayPeople}
         />
       </section>
-
 
 
       <div id="report-issue">
@@ -620,7 +628,7 @@ const birthdayPeople =
           messengerIdOrUsername={process.env.NEXT_PUBLIC_HR_MESSENGER_ID || "LGULingayenOfficial"}
           employeeName={`${publicData.firstName} ${getMiddleInitial(publicData.middleName)} ${publicData.lastName}`.replace(/\s+/g, " ").trim()}
           employeeNo={publicData.employeeNo}
-          
+
         />
       </div>
 
