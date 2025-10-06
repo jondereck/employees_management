@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./button";
-import { ImagePlus, Trash, Crop as CropIcon,Wand2, Loader2, Pencil } from "lucide-react";
+import { ImagePlus, Trash, Crosshair, Wand2, Loader2, Pencil, Grid3x3 } from "lucide-react";
 import Image from "next/image";
 import { CldUploadWidget, type CldUploadWidgetResults } from "next-cloudinary";
 import dynamic from "next/dynamic";
@@ -47,44 +47,53 @@ export default function ImageUpload({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
 
   const [isProcessing, setIsProcessing] = useState(false); // for the wand inside modal
-  const [editingOriginalUrl, setEditingOriginalUrl] = useState<string | null>(null);
-function isCloudinaryUrl(u: string) {
-  return /res\.cloudinary\.com\/.+\/image\/upload\//.test(u);
-}
+
+
+  const [showGrid, setShowGrid] = useState(true);
+
+  // are we editing an existing card, or adding a brand-new photo?
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [editingOriginalUrl, setEditingOriginalUrl] = useState<string | null>(null); // you may already have this from earlier fix
+
+
+  function isCloudinaryUrl(u: string) {
+    return /res\.cloudinary\.com\/.+\/image\/upload\//.test(u);
+  }
 
   // under other useState hooks
-async function removeBgInModal() {
-  if (!targetUrl) return;
-  try {
-    setIsProcessing(true);
-    const res = await fetch("/api/tools/rembg", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ imageUrl: targetUrl }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || "Background removal failed");
+  async function removeBgInModal() {
+    if (!targetUrl) return;
+    try {
+      setIsProcessing(true);
+      const res = await fetch("/api/tools/rembg", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ imageUrl: targetUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Background removal failed");
 
-    // show new image inside modal
-    setTargetUrl(data.url);            // Cloudinary secure_url preferred
-    toast.success("Background removed", { description: "Preview updated.", duration: 2000 });
-  } catch (err: any) {
-    console.error(err);
-    toast.error("Background removal failed", { description: err?.message ?? "Please try again." });
-  } finally {
-    setIsProcessing(false);
+      // show new image inside modal
+      setTargetUrl(data.url);            // Cloudinary secure_url preferred
+      onChange(data.url);
+      toast.success("Background removed", { description: "Preview updated.", duration: 2000 });
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Background removal failed", { description: err?.message ?? "Please try again." });
+    } finally {
+      setIsProcessing(false);
+    }
   }
-}
 
 
-        
-useEffect(() => {
-  if (!isCropping) return;
-  // reset crop state for the new image
-  setZoom(1);
-  setCrop({ x: 0, y: 0 });
-  setCroppedAreaPixels(null);
-}, [targetUrl, isCropping]);
+
+  useEffect(() => {
+    if (!isCropping) return;
+    // reset crop state for the new image
+    setZoom(1);
+    setCrop({ x: 0, y: 0 });
+    setCroppedAreaPixels(null);
+  }, [targetUrl, isCropping]);
 
   useEffect(() => setIsMounted(true), []);
   if (!isMounted) return null;
@@ -98,54 +107,54 @@ useEffect(() => {
 
   const showPlaceholder = value.length === 0 && !!placeholderSrc;
 
-function openCropper(url: string) {
-  setEditingOriginalUrl(url);        // <-- remember original to replace later
-  setTargetUrl(url);
-  setZoom(1);
-  setCrop({ x: 0, y: 0 });
-  setCroppedAreaPixels(null);
-  setIsCropping(true);
-}
-
-
-function applyCrop() {
-  if (!targetUrl || !croppedAreaPixels) return;
-
-  // If not a Cloudinary URL, we can’t inject a transformation string.
-  if (!isCloudinaryUrl(targetUrl)) {
-    // Best-effort fallback: just use the current targetUrl without crop.
-    if (editingOriginalUrl) {
-      onRemove(editingOriginalUrl);
+  function openCropper(url: string, mode: "edit" | "add" = "edit") {
+    if (mode === "edit") {
+      setEditingOriginalUrl(url);      // we’ll replace this on Apply
+      setIsAddingNew(false);
+    } else {
+      setEditingOriginalUrl(null);     // nothing to replace, we’ll add on Apply
+      setIsAddingNew(true);
     }
-    onChange(targetUrl);
-    toast.message("Applied without crop", {
-      description: "Final image source isn’t Cloudinary; returning wand result.",
-    });
+    setTargetUrl(url);
+    setZoom(1);
+    setCrop({ x: 0, y: 0 });
+    setCroppedAreaPixels(null);
+    setIsCropping(true);
+  }
+
+  function autoCenter() {
+    // center the image in the frame and reset zoom
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    // optional toast if you’re using Sonner:
+    toast.message("Centered", { description: "Crop area reset to center." });
+  }
+
+  function applyCrop() {
+    if (!targetUrl || !croppedAreaPixels) return;
+
+    const { x, y, width, height } = croppedAreaPixels;
+    const cropTx = [
+      `c_crop,x_${Math.round(x)},y_${Math.round(y)},w_${Math.round(width)},h_${Math.round(height)}`,
+      "c_thumb,w_700,h_700",
+      "f_png,q_auto",
+    ].join("/");
+
+    const finalUrl = addTransform(targetUrl, cropTx);
+
+    if (isAddingNew) {
+      // ✅ ADD to list (your parent does field.onChange([...field.value, { url }]))
+      onChange(finalUrl);
+    } else {
+      // ✅ REPLACE the original we were editing
+      if (editingOriginalUrl) onRemove(editingOriginalUrl);
+      onChange(finalUrl);
+    }
+
     setIsCropping(false);
-    return;
+    setIsAddingNew(false);
+    setEditingOriginalUrl(null);
   }
-
-  const { x, y, width, height } = croppedAreaPixels;
-
-  const cropTx = [
-    `c_crop,x_${Math.round(x)},y_${Math.round(y)},w_${Math.round(width)},h_${Math.round(height)}`,
-    "c_thumb,w_700,h_700",
-    "f_png,q_auto",
-  ].join("/");
-
-  const newUrl = addTransform(targetUrl, cropTx);
-
-  // ✅ Replace the original image in parent state.
-  if (editingOriginalUrl) {
-    onRemove(editingOriginalUrl);
-  }
-  onChange(newUrl);
-
-  toast.success("Crop applied", { duration: 1600 });
-  setIsCropping(false);
-  setEditingOriginalUrl(null);
-}
-
 
 
   return (
@@ -177,30 +186,30 @@ function applyCrop() {
                 </div>
               </div>
 
- {/* Actions */}
-<div className="absolute right-2 top-2 z-10 flex gap-2">
-  {/* Edit (opens modal for crop/remove-bg) */}
-  <Button
-    type="button"
-    onClick={() => openCropper(url)}
-    variant="secondary"
-    size="icon"
-    disabled={disabled}
-    title="Edit (crop / remove background)"
-  >
-    <Pencil className="h-4 w-4" />
-  </Button>
+              {/* Actions */}
+              <div className="absolute right-2 top-2 z-10 flex gap-2">
+                {/* Edit (opens modal for crop/remove-bg) */}
+                <Button
+                  type="button"
+                  onClick={() => openCropper(url)}
+                  variant="secondary"
+                  size="icon"
+                  disabled={disabled}
+                  title="Edit (crop / remove background)"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
 
-  <Button
-    type="button"
-    onClick={() => onRemove(url)}
-    variant="destructive"
-    size="icon"
-    disabled={disabled}
-  >
-    <Trash className="h-4 w-4" />
-  </Button>
-</div>
+                <Button
+                  type="button"
+                  onClick={() => onRemove(url)}
+                  variant="destructive"
+                  size="icon"
+                  disabled={disabled}
+                >
+                  <Trash className="h-4 w-4" />
+                </Button>
+              </div>
 
 
 
@@ -230,11 +239,20 @@ function applyCrop() {
       {/* Upload widget (still allows new uploads with manual crop) */}
       <CldUploadWidget
         uploadPreset="evo6spz1"
-        options={{ multiple: false, cropping: true }}
+        options={{
+          multiple: false,
+          cropping: false,                // ✅ disable Cloudinary’s crop UI
+          sources: ["local", "url", "camera"],
+          resourceType: "image",
+          showAdvancedOptions: false,     // (optional) hide Cloudinary edit tools
+        }}
         onUpload={(res: CldUploadWidgetResults) => {
           if (res?.event === "success" && res.info && typeof res.info === "object") {
             const raw = (res.info as any).secure_url as string | undefined;
-            if (raw) onChange(raw);
+            if (raw) {
+              // 🔁 NEW: open editor for NEW photo
+              openCropper(raw, "add");
+            }
           }
         }}
         onError={(err) => console.error("Cloudinary upload error:", err)}
@@ -252,67 +270,91 @@ function applyCrop() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
           <div className="relative w-full max-w-[92vw] sm:max-w-[640px] rounded-xl bg-white shadow-xl">
             <div className="relative h-[60vh] max-h-[560px] w-full">
-        <Cropper
-  key={targetUrl}                 // <-- force re-mount on URL change
-  image={targetUrl}
-  crop={crop}
-  zoom={zoom}
-  aspect={1}
-  onCropChange={setCrop}
-  onZoomChange={setZoom}
-  onCropComplete={(_c: Area, p: Area) => setCroppedAreaPixels(p)}
-  showGrid={true}
-  restrictPosition={true}
-/>
+              <Cropper
+                key={targetUrl}                 // <-- force re-mount on URL change
+                image={targetUrl}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={(_c: Area, p: Area) => setCroppedAreaPixels(p)}
+                showGrid={showGrid}
+                restrictPosition={true}
+              />
 
             </div>
 
-      <div className="flex flex-col gap-3 p-3">
-  {/* Zoom slider */}
-  <input
-    type="range"
-    min={1}
-    max={3}
-    step={0.01}
-    value={zoom}
-    onChange={(e) => setZoom(Number(e.target.value))}
-    className="w-full"
-  />
+            <div className="flex flex-col gap-3 p-3">
+              {/* Zoom slider */}
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="w-full"
+              />
 
-  <div className="flex items-center justify-between gap-2">
-    {/* Left: processing indicator if needed */}
-    <div className="min-h-[28px] text-sm text-muted-foreground">
-      {isProcessing && (
-        <span className="inline-flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Removing background…
-        </span>
-      )}
-    </div>
+              <div className="flex items-center justify-between gap-2">
+                {/* Left: processing indicator if needed */}
+          
 
-    {/* Right: controls */}
-    <div className="flex gap-2">
-      <Button variant="secondary" onClick={() => setIsCropping(false)} disabled={isProcessing}>
-        Cancel
-      </Button>
+                {/* Right: controls */}
+                <div className="flex gap-2">
 
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={removeBgInModal}
-        disabled={isProcessing}
-        title="Remove background"
-      >
-        <Wand2 className="mr-2 h-4 w-4" />
-        Remove BG
-      </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setShowGrid((v) => !v)}
+                    disabled={isProcessing}
+                    title={showGrid ? "Hide grid" : "Show grid"}
+                  >
+                    <Grid3x3 className="mr-2 h-4 w-4" />
+                    {showGrid ? "Hide Grid" : "Show Grid"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={autoCenter}
+                    disabled={isProcessing}
+                    title="Auto-center"
+                  >
+                    <Crosshair className="mr-2 h-4 w-4" />
+                    Center
+                  </Button>
 
-      <Button onClick={applyCrop} disabled={isProcessing}>
-        Apply Crop
-      </Button>
-    </div>
-  </div>
-</div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={removeBgInModal}
+                    disabled={isProcessing}
+                    title="Remove background"
+                  >
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    Remove BG
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      setIsCropping(false);
+                      setIsAddingNew(false);       // reset mode if the user cancels a new upload
+                      setEditingOriginalUrl(null);
+                    }}
+                    disabled={isProcessing}
+                  >
+                    Cancel
+                  </Button>
+
+
+                  <Button onClick={applyCrop} disabled={isProcessing}>
+                    Apply Changes
+                  </Button>
+                </div>
+
+              </div>
+            </div>
 
           </div>
         </div>

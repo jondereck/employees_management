@@ -64,25 +64,18 @@ export async function POST(req: NextRequest) {
     });
 
     // Normalize output -> Buffer
-    let outBuf: Buffer | null = null;
-    if (output?.arrayBuffer) {
-      outBuf = Buffer.from(await output.arrayBuffer());
-    } else if (output instanceof Uint8Array) {
-      outBuf = Buffer.from(output);
-    } else if (output?.url) {
-      const res = await fetch(output.url());
-      outBuf = Buffer.from(await res.arrayBuffer());
-    } else if (typeof output === "string") {
-      const res = await fetch(output);
-      outBuf = Buffer.from(await res.arrayBuffer());
-    }
-
-    if (!outBuf) {
-      return NextResponse.json({ error: "Unexpected model output" }, { status: 500 });
-    }
-
-    const secureUrl = await uploadBufferToCloudinary(outBuf, publicId);
-    return NextResponse.json({ url: secureUrl });
+  let outBuf: Buffer | null = null;
+if (output?.arrayBuffer) outBuf = Buffer.from(await output.arrayBuffer());
+else if (output instanceof Uint8Array) outBuf = Buffer.from(output);
+else if (output?.url) {
+  const res = await fetch(output.url());
+  outBuf = Buffer.from(await res.arrayBuffer());
+} else if (typeof output === "string") {
+  const res = await fetch(output);
+  outBuf = Buffer.from(await res.arrayBuffer());
+}
+const secureUrl = await uploadBufferToCloudinary(outBuf!);
+return NextResponse.json({ url: secureUrl });
   } catch (err: any) {
     console.error("rembg error:", err);
     return NextResponse.json({ error: err?.message || "Failed to process image" }, { status: 500 });
