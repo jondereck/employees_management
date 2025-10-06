@@ -3,6 +3,9 @@ import prismadb from "@/lib/prismadb";
 import { z } from "zod";
 import { hashIp } from "@/lib/hash-ip";
 import { Prisma } from "@prisma/client";
+import { ApprovalEvent } from "@/lib/types/realtime";
+import { pusherServer } from "@/lib/pusher";
+
 
 const CreateEventSchema = z.object({
   type: z.string(),                       // must match your EmploymentEventType on review
@@ -47,7 +50,30 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
         submittedEmail: parsed.data.submittedEmail,
         ipHash,
       },
+      select: { id: true }, // we need the CR id for the event
     });
+
+    /* ✅ NEW: fire realtime event so reviewers see it instantly */
+    // We reuse the ApprovalEvent shape so your bell shows it in the Approvals tab.
+    const payload: ApprovalEvent = {
+      type: "created",                // a new (pending) request was created
+      entity: "timeline",
+      approvalId: cr.id,              // use changeRequest id
+      departmentId: emp.departmentId,
+      employeeId: emp.id,
+      targetId: undefined,            // no target yet
+      title: String(parsed.data.type).toUpperCase(), // e.g. PROMOTION
+      occurredAt: parsed.data.occurredAt,
+      givenAt: null,
+      actorId: parsed.data.submittedEmail ?? parsed.data.submittedName ?? "public",
+      when: new Date().toISOString(),
+    };
+
+    await pusherServer.trigger(
+      `dept-${emp.departmentId}-approvals`,
+      "approval:event",
+      payload
+    );
 
     return NextResponse.json({ ok: true, requestId: cr.id });
   } catch (e) {

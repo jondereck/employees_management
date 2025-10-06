@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react";
-import { Bell, Cake, Calendar } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Bell, Cake, Calendar, CheckCircle, FileCheck, History } from "lucide-react";
 
 import {
   Popover,
@@ -26,39 +26,40 @@ import { UpcomingBirthdays } from "./notification/upcoming-birthday";
 import { Retirements } from "./notification/retirements";
 import { Anniversaries } from "./notification/anniversaries";
 
+import { useApprovalToast } from "@/hooks/use-approval-toast";
+import { useParams } from "next/navigation";
+import { toast } from "sonner";
+import { useApprovalsRealtime } from "@/hooks/use-approvals-realtime";
+import { ApprovalEvent } from "@/lib/types/realtime";
+
+
 
 interface NotificationsProps {
   data: EmployeesColumn[];
 }
-
 const Notifications = ({ data }: NotificationsProps) => {
   const today = useMemo(() => new Date(), []);
-
+  const params = useParams<{ departmentId: string }>();
+  const departmentId = params?.departmentId;
+  const [isNotification, setNotification] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnniversaryModalOpen, setIsAnniversaryModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [isNotification, setNotification] = useState(true);
 
+  const { push, unseenCount, lastEvents, markSeen } = useApprovalToast();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 640);
     checkMobile();
     window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const handleViewAllClick = () => {
-    setIsAnniversaryModalOpen((prev) => !prev);
-  };
+  const handleViewAllClick = () => setIsAnniversaryModalOpen((prev) => !prev);
+  const closeModal = () => setIsModalOpen(false);
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-  };
-
-
+  // ----- Birthdays / Retirements / Anniversaries (unchanged) -----
   const currentYear = today.getFullYear();
-
-  // Retirement notifications - employees turning 65 this year
 
   const retireesThisYear = data.filter((emp) => {
     if (emp.isArchived) return false;
@@ -67,7 +68,6 @@ const Notifications = ({ data }: NotificationsProps) => {
     return age === 65;
   });
 
-  // Filter employees with milestone anniversaries (5, 10, 15... years) and not archived
   const milestoneAnniversaries = data.filter((emp) => {
     if (emp.isArchived) return false;
     const hireDate = new Date(emp.dateHired);
@@ -75,49 +75,121 @@ const Notifications = ({ data }: NotificationsProps) => {
     return [10, 15, 20, 25, 30, 35, 40].includes(years);
   });
 
-
-
   const celebrantsToday = useMemo(() => {
     const todayMonthDay = `${today.getMonth() + 1}-${today.getDate()}`;
-
     return data.filter((emp) => {
       if (!emp.birthday) return false;
-
       const dob = new Date(emp.birthday);
       if (isNaN(dob.getTime())) return false;
-
-      // ✅ Add 1 day to the birthday before extracting month and day
-      dob.setDate(dob.getDate());
-
       const empMonthDay = `${dob.getMonth() + 1}-${dob.getDate()}`;
-
       return empMonthDay === todayMonthDay && !emp.isArchived;
     });
   }, [data, today]);
 
-
   const upcomingBirthdays = useMemo(() => {
     return data.filter((employee) => {
       if (!employee.birthday || employee.isArchived) return false;
-
       const birthday = new Date(employee.birthday);
-      const thisYearBirthday = new Date(today.getFullYear(), birthday.getMonth(), birthday.getDate());
-
-      // If birthday has already passed this year, shift to next year
+      const thisYearBirthday = new Date(
+        today.getFullYear(),
+        birthday.getMonth(),
+        birthday.getDate()
+      );
       if (thisYearBirthday < today) {
         thisYearBirthday.setFullYear(today.getFullYear());
       }
-
       const diffTime = thisYearBirthday.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
       return diffDays > 0 && diffDays <= 7;
     });
   }, [data, today]);
 
-  const baseUrl = process.env.NEXT_PUBLIC_URL;
+  // ----- Realtime Approvals subscription -----
+  const onApprovalEvent = useCallback((e: ApprovalEvent) => {
+    push(e);
+    toast(
+      e.type === "created"
+        ? `New ${e.entity} approval created`
+        : `${e.entity} approval updated`,
+      {
+        description:
+          e.title
+            ? `${e.title} • ${new Date(e.when).toLocaleString()}`
+            : new Date(e.when).toLocaleString(),
+        icon: <FileCheck className="w-4 h-4" />,
+        action: {
+          label: "Open",
+          onClick: () => {
+            // optional: route to your approvals page
+            window.location.href = `/${e.departmentId}/approvals`;
+          },
+        },
+        duration: 5000,
+      }
+    );
+  }, [push]);
 
+  useApprovalsRealtime(departmentId ?? "", onApprovalEvent);
 
+  // Badge dot should turn on if there are birthdays today OR unseen approval events
+  const hasDot = celebrantsToday.length > 0 || unseenCount > 0;
+
+  // When user opens the popover/modal, mark approvals as seen
+  useEffect(() => {
+    if (!isModalOpen) return;
+    markSeen();
+  }, [isModalOpen, markSeen]);
+
+  // Renderer for the live “Approvals” tab
+  const ApprovalsTab = (
+    <div className="p-2">
+      <div className="mb-2 flex items-center gap-2">
+        <History className="w-5 h-5" />
+        <h3 className="font-semibold">Approvals (live)</h3>
+        {unseenCount > 0 && (
+          <span className="ml-auto inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs">
+            {unseenCount} new
+          </span>
+        )}
+      </div>
+
+      {lastEvents.length === 0 ? (
+        <p className="text-sm text-gray-500 text-center">No recent approval activity</p>
+      ) : (
+        <ul className="space-y-2 max-h-72 overflow-y-auto">
+          {lastEvents.map((e, i) => (
+            <li
+              key={`${e.approvalId}-${i}`}
+              className="flex items-start justify-between rounded-md border p-2"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium capitalize">
+                    {e.entity} • {e.type}
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1 truncate">
+                  {e.title ?? e.targetId}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {new Date(e.when).toLocaleString()}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-2 shrink-0"
+                onClick={() => (window.location.href = `/${e.departmentId}/approvals`)}
+              >
+                View
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 
   return (
     <div className="relative flex items-center">

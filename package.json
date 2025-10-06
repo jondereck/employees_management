@@ -81,6 +81,8 @@
     "ph-geo-admin-divisions": "^1.0.6",
     "postcss": "8.4.29",
     "posthog-node": "^5.9.2",
+    "pusher": "^5.2.0",
+    "pusher-js": "^8.4.0",
     "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
     "query-string": "^8.1.0",

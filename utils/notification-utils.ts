@@ -22,7 +22,7 @@ export const getFormattedDate = (date: Date) =>
 // Add 1 day to fix off-by-one timezone issues (optional)
 export const addOneDay = (date: Date) => {
   const d = new Date(date);
-  d.setDate(d.getDate() + 1);
+  d.setDate(d.getDate() + 0);
   return d;
 };
 

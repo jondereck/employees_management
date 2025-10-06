@@ -3,6 +3,9 @@ import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prismadb";
 import type { EmploymentEventType } from "@prisma/client";
 
+// ⬇️ add this import
+import { pusherServer } from "@/lib/pusher";
+
 /* ---------------- helpers ---------------- */
 
 type CanonicalAction = "CREATE" | "UPDATE" | "DELETE";
@@ -23,7 +26,7 @@ function uiToDbEventType(ui?: string | null): EmploymentEventType | undefined {
     PROMOTED: "PROMOTED",
     TRANSFER: "TRANSFERRED",
     TRANSFERRED: "TRANSFERRED",
-    TRAINING: "OTHER",              // display bucket only
+    TRAINING: "OTHER",
     REASSIGNED: "REASSIGNED",
     AWARD: "AWARDED",
     RECOGNITION: "AWARDED",
@@ -51,6 +54,22 @@ function normalizeDetails(v: any): string | null | undefined {
   try { return JSON.stringify(v); } catch { return String(v); }
 }
 
+/* ---------------- realtime payload ---------------- */
+
+type RealtimeApprovalPayload = {
+  type: "created" | "updated" | "deleted";
+  entity: "timeline" | "award";
+  approvalId: string;
+  departmentId: string;
+  employeeId: string;
+  targetId?: string;
+  title?: string | null;
+  occurredAt?: string | null;
+  givenAt?: string | null;
+  actorId: string;
+  when: string;
+};
+
 /* ---------------- route ---------------- */
 
 export async function POST(
@@ -69,11 +88,14 @@ export async function POST(
   const action = normalizeAction(cr.action);
   const nv = (cr.newValues ?? {}) as any;
 
+  // We will fill this inside the transaction and emit AFTER success
+  let rt: RealtimeApprovalPayload | undefined;
+
   try {
     await prisma.$transaction(async (tx) => {
       if (cr.entityType === "AWARD") {
         if (action === "CREATE") {
-          await tx.award.create({
+          const created = await tx.award.create({
             data: {
               employeeId: cr.employeeId,
               title: nv.title,
@@ -84,9 +106,22 @@ export async function POST(
               thumbnail: nv.thumbnail ?? null,
               tags: Array.isArray(nv.tags) ? nv.tags : [],
             },
+            select: { id: true, title: true, givenAt: true },
           });
+
+          rt = {
+            type: "created",
+            entity: "award",
+            approvalId: cr.id,
+            departmentId: cr.departmentId,
+            employeeId: cr.employeeId,
+            targetId: created.id,
+            title: created.title ?? null,
+            givenAt: created.givenAt?.toISOString() ?? null,
+            actorId: userId,
+            when: new Date().toISOString(),
+          };
         } else if (action === "UPDATE") {
-          // validate ownership
           const aw = await tx.award.findUnique({
             where: { id: cr.entityId! },
             select: { id: true, employeeId: true },
@@ -102,30 +137,74 @@ export async function POST(
           if (nv.fileUrl      !== undefined) patch.fileUrl = nv.fileUrl ?? null;
           if (nv.thumbnail    !== undefined) patch.thumbnail = nv.thumbnail ?? null;
           if (nv.tags         !== undefined) patch.tags = Array.isArray(nv.tags) ? nv.tags : [];
-          await tx.award.update({ where: { id: aw.id }, data: patch });
+
+          const updated = await tx.award.update({
+            where: { id: aw.id },
+            data: patch,
+            select: { id: true, title: true, givenAt: true },
+          });
+
+          rt = {
+            type: "updated",
+            entity: "award",
+            approvalId: cr.id,
+            departmentId: cr.departmentId,
+            employeeId: cr.employeeId,
+            targetId: updated.id,
+            title: updated.title ?? null,
+            givenAt: updated.givenAt?.toISOString() ?? null,
+            actorId: userId,
+            when: new Date().toISOString(),
+          };
         } else if (action === "DELETE") {
-          // HARD DELETE (no deletedAt needed)
           const aw = await tx.award.findUnique({
             where: { id: cr.entityId! },
-            select: { id: true, employeeId: true },
+            select: { id: true, employeeId: true, title: true, givenAt: true },
           });
           if (!aw || aw.employeeId !== cr.employeeId) {
             throw new Error("Award not found for employee");
           }
           await tx.award.delete({ where: { id: aw.id } });
+
+          rt = {
+            type: "deleted",
+            entity: "award",
+            approvalId: cr.id,
+            departmentId: cr.departmentId,
+            employeeId: cr.employeeId,
+            targetId: aw.id,
+            title: aw.title ?? null,
+            givenAt: aw.givenAt?.toISOString() ?? null,
+            actorId: userId,
+            when: new Date().toISOString(),
+          };
         }
       }
 
       if (cr.entityType === "TIMELINE") {
         if (action === "CREATE") {
-          await tx.employmentEvent.create({
+          const created = await tx.employmentEvent.create({
             data: {
               employeeId: cr.employeeId,
               type: uiToDbEventType(nv.type)!,          // map UI → Prisma enum
               occurredAt: toDate(nv.occurredAt)!,
               details: normalizeDetails(nv.details) ?? null,
             },
+            select: { id: true, type: true, occurredAt: true },
           });
+
+          rt = {
+            type: "created",
+            entity: "timeline",
+            approvalId: cr.id,
+            departmentId: cr.departmentId,
+            employeeId: cr.employeeId,
+            targetId: created.id,
+            title: created.type, // use enum as label
+            occurredAt: created.occurredAt?.toISOString() ?? null,
+            actorId: userId,
+            when: new Date().toISOString(),
+          };
         } else if (action === "UPDATE") {
           const ev = await tx.employmentEvent.findUnique({
             where: { id: cr.entityId! },
@@ -138,17 +217,47 @@ export async function POST(
           if (nv.type       !== undefined) patch.type = uiToDbEventType(nv.type);
           if (nv.occurredAt !== undefined) patch.occurredAt = toDate(nv.occurredAt);
           if (nv.details    !== undefined) patch.details = normalizeDetails(nv.details);
-          await tx.employmentEvent.update({ where: { id: ev.id }, data: patch });
+
+          const updated = await tx.employmentEvent.update({
+            where: { id: ev.id },
+            data: patch,
+            select: { id: true, type: true, occurredAt: true },
+          });
+
+          rt = {
+            type: "updated",
+            entity: "timeline",
+            approvalId: cr.id,
+            departmentId: cr.departmentId,
+            employeeId: cr.employeeId,
+            targetId: updated.id,
+            title: updated.type,
+            occurredAt: updated.occurredAt?.toISOString() ?? null,
+            actorId: userId,
+            when: new Date().toISOString(),
+          };
         } else if (action === "DELETE") {
-          // HARD DELETE to avoid soft-delete columns
           const ev = await tx.employmentEvent.findUnique({
             where: { id: cr.entityId! },
-            select: { id: true, employeeId: true },
+            select: { id: true, employeeId: true, type: true, occurredAt: true },
           });
           if (!ev || ev.employeeId !== cr.employeeId) {
             throw new Error("EmploymentEvent not found for employee");
           }
           await tx.employmentEvent.delete({ where: { id: ev.id } });
+
+          rt = {
+            type: "deleted",
+            entity: "timeline",
+            approvalId: cr.id,
+            departmentId: cr.departmentId,
+            employeeId: cr.employeeId,
+            targetId: ev.id,
+            title: ev.type,
+            occurredAt: ev.occurredAt?.toISOString() ?? null,
+            actorId: userId,
+            when: new Date().toISOString(),
+          };
         }
       }
 
@@ -157,6 +266,15 @@ export async function POST(
         data: { status: "APPROVED", reviewedAt: new Date(), approvedById: userId },
       });
     });
+
+    // ⬇️ Emit AFTER the transaction succeeded
+   if (rt) {
+  await pusherServer.trigger(
+    `dept-${rt.departmentId}-approvals`,
+    "approval:event",
+    rt
+  );
+}
 
     return NextResponse.json({ ok: true, status: "APPROVED" });
   } catch (e: any) {
