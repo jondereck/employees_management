@@ -288,7 +288,7 @@ export default function PublicSelfServiceActions({
                   <div className="mt-2 text-[11px] text-muted-foreground">
                     {bioLoading && <span>Checking last update…</span>}
                     {!bioLoading && bioError && <span className="text-red-600">Error: {bioError}</span>}
-                    {!bioLoading && !bioError && lastUpdated && <span>Last Update: {fmtPH(lastUpdated)}</span>}
+                    {!bioLoading && !bioError && lastUpdated && <span className="text-red-600">Last Update: {fmtPH(lastUpdated)}</span>}
                     {!bioLoading && !bioError && !lastUpdated && <span>No files detected yet.</span>}
                   </div>
                 </div>

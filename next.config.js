@@ -24,6 +24,7 @@ const nextConfig = {
       { protocol: 'https', hostname: 'lh6.googleusercontent.com' },
       { protocol: "https", hostname: "**.fbcdn.net" },
       { protocol: "https", hostname: "drive.google.com" },
+        { protocol: "https", hostname: "replicate.delivery" },
 
 
     ],
