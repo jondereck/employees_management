@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import prisma from "@/lib/prismadb";
+import { pusherServer } from "@/lib/pusher";
 
 export async function POST(_req: Request, { params }: { params: { departmentId: string; id: string } }) {
   const { userId } = auth();
@@ -10,8 +11,11 @@ export async function POST(_req: Request, { params }: { params: { departmentId: 
     where: { id: params.id },
     data: { status: "REJECTED", reviewedAt: new Date(), approvedById: userId },
   });
-
-  // TODO: notify requester/admins if needed
+await pusherServer.trigger(
+  `dept-${cr.departmentId}-approvals`,
+  "approval:resolved",
+  { approvalId: cr.id, departmentId: cr.departmentId, status: "REJECTED" }
+);
 
   return NextResponse.json({ ok: true });
 }

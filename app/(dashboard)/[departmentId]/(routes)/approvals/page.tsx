@@ -2,6 +2,7 @@ import prismadb from "@/lib/prismadb";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import Container from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/container";
 import ChangeRequestCard from "./components/change-request-card";
+import ApprovalsRealtime from "./components/approvals-tealtime";
 
 
 export const revalidate = 0;                 // no static caching
@@ -62,6 +63,7 @@ export default async function ApprovalsPage({
 
   return (
     <div className="bg-white">
+      <ApprovalsRealtime />
       <Container>
         <div className="px-4 py-10 sm:px-6 lg:px-8">
           <div className="mb-4 flex items-baseline justify-between">

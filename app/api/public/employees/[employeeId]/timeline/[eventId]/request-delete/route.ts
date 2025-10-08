@@ -1,7 +1,9 @@
-// app/api/public/employees/[employeeId]/timeline/[eventId]/request-delete/route.ts
 import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
 import { z } from "zod";
+
+import { ApprovalEvent } from "@/lib/types/realtime";
+import { pusherServer } from "@/lib/pusher";
 
 const BodySchema = z.object({
   reason: z.string().trim().min(3, "Reason is required"),
@@ -18,14 +20,8 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     }
     const { reason, submittedName, submittedEmail } = parsed.data;
 
-    // Public pages often send publicId; support BOTH id and publicId.
     const emp = await prismadb.employee.findFirst({
-      where: {
-        OR: [
-          { id: params.employeeId },
-          { publicId: params.employeeId },
-        ],
-      },
+      where: { OR: [{ id: params.employeeId }, { publicId: params.employeeId }] },
       select: { id: true, departmentId: true, publicEnabled: true },
     });
 
@@ -38,7 +34,7 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     });
     if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
-    await prismadb.changeRequest.create({
+    const cr = await prismadb.changeRequest.create({
       data: {
         departmentId: emp.departmentId,
         employeeId: emp.id,
@@ -46,12 +42,31 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
         entityId: event.id,
         action: "DELETE",
         status: "PENDING",
-        note: reason,                 // <-- keep the user's reason
+        note: reason,                 // keep the user's reason
         submittedName,                // optional
         submittedEmail,               // optional
         newValues: {},                // nothing to update, it's a delete request
       },
+      select: { id: true },
     });
+
+    /* ✅ NEW: realtime emit (request to DELETE timeline) */
+    const actor = submittedEmail ?? submittedName ?? "public";
+    const payload: ApprovalEvent = {
+      type: "deleted",               // request to delete
+      entity: "timeline",
+      approvalId: cr.id,             // changeRequest id
+      departmentId: emp.departmentId,
+      employeeId: emp.id,
+      targetId: event.id,
+      title: "TIMELINE DELETE REQUEST",
+      occurredAt: null,
+      givenAt: null,
+      actorId: actor,
+      when: new Date().toISOString(),
+    };
+
+    await pusherServer.trigger(`dept-${emp.departmentId}-approvals`, "approval:event", payload);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

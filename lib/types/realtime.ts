@@ -12,3 +12,10 @@ export type ApprovalEvent = {
   actorId: string;
   when: string;               // ISO
 };
+
+
+export type ApprovalResolvedEvent = {
+  approvalId: string;
+  departmentId: string;
+  status: "APPROVED" | "REJECTED";
+};

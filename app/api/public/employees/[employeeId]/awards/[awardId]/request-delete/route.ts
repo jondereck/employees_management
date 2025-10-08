@@ -4,6 +4,10 @@ import { z } from "zod";
 import { hashIp } from "@/lib/hash-ip";
 import { Prisma } from "@prisma/client";
 
+
+import { ApprovalEvent } from "@/lib/types/realtime";
+import { pusherServer } from "@/lib/pusher";
+
 const DeleteSchema = z.object({
   reason: z.string().min(5).max(500),
   submittedName: z.string().max(120).optional(),
@@ -43,9 +47,29 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
         submittedEmail: parsed.data.submittedEmail,
         ipHash,
       },
+      select: { id: true },
     });
 
-    // TODO: notify admins
+    /* ✅ NEW: realtime emit (delete request) */
+    const actor = parsed.data.submittedEmail ?? parsed.data.submittedName ?? "public";
+    const payload: ApprovalEvent = {
+      type: "deleted",
+      entity: "award",
+      approvalId: cr.id,
+      departmentId: award.employee.departmentId,
+      employeeId: award.employee.id,
+      targetId: award.id,
+      title: award.title ?? "AWARD DELETE REQUEST",
+      occurredAt: null,
+      givenAt: award.givenAt?.toISOString() ?? null,
+      actorId: actor,
+      when: new Date().toISOString(),
+    };
+    await pusherServer.trigger(
+      `dept-${award.employee.departmentId}-approvals`,
+      "approval:event",
+      payload
+    );
 
     return NextResponse.json({ ok: true, requestId: cr.id });
   } catch (e) {

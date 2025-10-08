@@ -7,6 +7,7 @@ import Notifications from "@/app/(dashboard)/[departmentId]/(routes)/employees/c
 import { Employees } from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/types";
 import MobileSidebar from "./mobile-sidebar";
 import { MainNav } from "./main-nav";
+import ApprovalsGlobalListener from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/notification/approvals-global-listerner";
 
 
 
@@ -30,8 +31,11 @@ export const Navbar = async () => {
   const res = await fetch(`${apiUrl}/employees`);
   const employees: Employees[] = await res.json();
 
+  
+
   return (
     <div className="border-b ">
+         <ApprovalsGlobalListener />
       <div className="flex items-center lg:justify-between px-4 my-5 md:my-2 h-16 ">
         <MobileSidebar/>
         <Back />

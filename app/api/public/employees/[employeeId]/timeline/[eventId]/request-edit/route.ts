@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
 import { z } from "zod";
 import type { EmploymentEventType, Prisma } from "@prisma/client";
+import { ApprovalEvent } from "@/lib/types/realtime";
+import { pusherServer } from "@/lib/pusher";
+
 
 const UI_TO_DB: Record<string, EmploymentEventType> = {
   HIRED: "HIRED",
@@ -73,7 +76,7 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     }
     if (parsed.data.details !== undefined) nv.details = parsed.data.details ?? null;
 
-    await prismadb.changeRequest.create({
+    const cr = await prismadb.changeRequest.create({
       data: {
         departmentId: emp.departmentId,
         employeeId: emp.id,
@@ -86,7 +89,26 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
         submittedName: parsed.data.submittedName,
         submittedEmail: parsed.data.submittedEmail,
       },
+      select: { id: true },
     });
+
+    /* ✅ NEW: realtime emit (request to UPDATE timeline) */
+    const actor = parsed.data.submittedEmail ?? parsed.data.submittedName ?? "public";
+    const payload: ApprovalEvent = {
+      type: "updated",                // request to update
+      entity: "timeline",
+      approvalId: cr.id,              // changeRequest id
+      departmentId: emp.departmentId,
+      employeeId: emp.id,
+      targetId: event.id,
+      title: parsed.data.type ? String(uiToDb(parsed.data.type)) : "TIMELINE UPDATE REQUEST",
+      occurredAt: nv.occurredAt ?? null,
+      givenAt: null,
+      actorId: actor,
+      when: new Date().toISOString(),
+    };
+
+    await pusherServer.trigger(`dept-${emp.departmentId}-approvals`, "approval:event", payload);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

@@ -3,6 +3,10 @@ import prismadb from "@/lib/prismadb";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
+/* ✅ NEW */
+
+import { ApprovalEvent } from "@/lib/types/realtime";
+import { pusherServer } from "@/lib/pusher";
 const DateLike = z.union([
   z.string().datetime(),
   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -64,7 +68,7 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     if (parsed.data.thumbnail !== undefined) nv.thumbnail = parsed.data.thumbnail ?? null;
     if (parsed.data.tags !== undefined) nv.tags = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
 
-    await prismadb.changeRequest.create({
+    const cr = await prismadb.changeRequest.create({
       data: {
         departmentId: emp.departmentId,
         employeeId: emp.id,
@@ -77,7 +81,25 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
         submittedName: parsed.data.submittedName,
         submittedEmail: parsed.data.submittedEmail,
       },
+      select: { id: true },
     });
+
+    /* ✅ NEW: realtime emit (update request) */
+    const actor = parsed.data.submittedEmail ?? parsed.data.submittedName ?? "public";
+    const payload: ApprovalEvent = {
+      type: "updated",
+      entity: "award",
+      approvalId: cr.id,
+      departmentId: emp.departmentId,
+      employeeId: emp.id,
+      targetId: award.id,
+      title: nv.title ?? "AWARD UPDATE REQUEST",
+      occurredAt: null,
+      givenAt: nv.givenAt ?? null,
+      actorId: actor,
+      when: new Date().toISOString(),
+    };
+    await pusherServer.trigger(`dept-${emp.departmentId}-approvals`, "approval:event", payload);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

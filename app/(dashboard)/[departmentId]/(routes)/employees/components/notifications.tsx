@@ -27,12 +27,14 @@ import { Retirements } from "./notification/retirements";
 import { Anniversaries } from "./notification/anniversaries";
 
 import { useApprovalToast } from "@/hooks/use-approval-toast";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { useApprovalsRealtime } from "@/hooks/use-approvals-realtime";
 import { ApprovalEvent } from "@/lib/types/realtime";
+import { useApprovalsIndicator } from "@/hooks/use-approvals-indicator";
+import ApprovalsRealtimeTab from "./notification/approval-realtime-notification-tab";
 
-
+ 
 
 interface NotificationsProps {
   data: EmployeesColumn[];
@@ -40,12 +42,31 @@ interface NotificationsProps {
 const Notifications = ({ data }: NotificationsProps) => {
   const today = useMemo(() => new Date(), []);
   const params = useParams<{ departmentId: string }>();
-  const departmentId = params?.departmentId;
-  const [isNotification, setNotification] = useState(true);
+    const pathname = usePathname();
+
+
+  
+  const departmentId =
+    typeof params?.departmentId === "string"
+      ? params.departmentId
+      : Array.isArray(params?.departmentId)
+      ? params.departmentId[0]
+      : pathname?.match(/^\/([^/]+)/)?.[1] ?? "";
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnniversaryModalOpen, setIsAnniversaryModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  const { hasApprovalDot, markApprovalsSeen } = useApprovalsIndicator();
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+  
+  const [isNotification, setNotification] = useState(true);
   const { push, unseenCount, lastEvents, markSeen } = useApprovalToast();
 
   useEffect(() => {
@@ -145,7 +166,7 @@ const Notifications = ({ data }: NotificationsProps) => {
     <div className="p-2">
       <div className="mb-2 flex items-center gap-2">
         <History className="w-5 h-5" />
-        <h3 className="font-semibold">Approvals (live)</h3>
+        <h3 className="font-semibold">Approvals </h3>
         {unseenCount > 0 && (
           <span className="ml-auto inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs">
             {unseenCount} new
@@ -193,25 +214,30 @@ const Notifications = ({ data }: NotificationsProps) => {
 
   return (
     <div className="relative flex items-center">
-      {isMobile ? (
+        {isMobile ? (
         <>
           <button onClick={() => setIsModalOpen(true)}>
-            <NotificationBell hasBirthdaysToday={celebrantsToday.length > 0} />
+            <NotificationBell hasDot={hasDot} />
           </button>
 
-          <Modal
+        <Modal
             title="Notifications"
-            description="Birthday, Retirements, Anniversaries"
+            description="Live approvals, birthdays, retirements, anniversaries"
             isOpen={isModalOpen}
-            onClose={closeModal}
+            onClose={() => { setIsModalOpen(false); markApprovalsSeen(); }}
           >
             <div className="w-full">
-              <Tabs defaultValue="birthdays" className="w-full">
-                <TabsList className="grid grid-cols-3">
+              <Tabs defaultValue="approvals" className="w-full">
+                <TabsList className="grid grid-cols-4">
+                  <TabsTrigger value="approvals">Approvals</TabsTrigger>
                   <TabsTrigger value="birthdays">Birthdays</TabsTrigger>
                   <TabsTrigger value="retirement">Retirements</TabsTrigger>
                   <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="approvals">
+                  <ApprovalsRealtimeTab departmentId={departmentId} />
+                </TabsContent>
 
                 <TabsContent value="birthdays">
                   <div className="p-2">
@@ -315,17 +341,21 @@ const Notifications = ({ data }: NotificationsProps) => {
 
         </>
       ) : (
-        <Popover>
+   <Popover onOpenChange={(open) => { if (open) markApprovalsSeen(); }}>
           <PopoverTrigger>
-            <NotificationBell hasBirthdaysToday={celebrantsToday.length > 0} />
+            <NotificationBell hasDot={hasDot} />
           </PopoverTrigger>
-          <PopoverContent className="w-80 p-0" align="end">
-            <Tabs defaultValue="birthdays" className="w-full">
-              <TabsList className="grid grid-cols-3">
+          <PopoverContent className="w-96 p-0" align="end">
+            <Tabs defaultValue="approvals" className="w-full">
+              <TabsList className="grid grid-cols-4">
+                <TabsTrigger value="approvals">Approvals</TabsTrigger>
                 <TabsTrigger value="birthdays">Birthdays</TabsTrigger>
                 <TabsTrigger value="retirement">Retirements</TabsTrigger>
                 <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
               </TabsList>
+               <TabsContent value="approvals">
+                <ApprovalsRealtimeTab departmentId={departmentId} />
+              </TabsContent>
               <TabsContent value="birthdays">
                 <div className="p-2">
                   {/* Today's Birthdays */}

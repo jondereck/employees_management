@@ -267,6 +267,12 @@ export async function POST(
       });
     });
 
+    await pusherServer.trigger(
+  `dept-${cr.departmentId}-approvals`,
+  "approval:resolved",
+  { approvalId: cr.id, departmentId: cr.departmentId, status: "APPROVED" }
+);
+
     // ⬇️ Emit AFTER the transaction succeeded
    if (rt) {
   await pusherServer.trigger(

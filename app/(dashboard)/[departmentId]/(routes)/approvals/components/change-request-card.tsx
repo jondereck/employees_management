@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { useApprovalToast } from "@/hooks/use-approval-toast";
 
 function prettyJSON(value: any) {
   if (value === null || value === undefined) return "—";
@@ -35,14 +36,16 @@ export default function ChangeRequestCard({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [loading, setLoading] = useState<"approve" | "reject" | null>(null);
+  const { removeByApprovalId } = useApprovalToast();
 
   const onApprove = async () => {
     try {
       setLoading("approve");
       const res = await fetch(`/api/admin/${departmentId}/change-requests/${cr.id}/approve`, { method: "POST" });
       if (!res.ok) throw new Error("Approve failed");
-      toast.success("Change approved and applied.");
-      startTransition(() => router.refresh());
+     toast.success("Change approved and applied.");
+  removeByApprovalId(cr.id); // ⬅ optimistic local clear
+  startTransition(() => router.refresh());
     } catch (e: any) {
       toast.error(e.message || "Error approving change");
     } finally {
@@ -56,7 +59,9 @@ export default function ChangeRequestCard({
       const res = await fetch(`/api/admin/${departmentId}/change-requests/${cr.id}/reject`, { method: "POST" });
       if (!res.ok) throw new Error("Reject failed");
       toast.success("Change request rejected.");
-      startTransition(() => router.refresh());
+  removeByApprovalId(cr.id); // ⬅ optimistic local clear
+  startTransition(() => router.refresh());
+
     } catch (e: any) {
       toast.error(e.message || "Error rejecting change");
     } finally {
