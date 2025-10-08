@@ -33,8 +33,9 @@ import { useApprovalsRealtime } from "@/hooks/use-approvals-realtime";
 import { ApprovalEvent } from "@/lib/types/realtime";
 import { useApprovalsIndicator } from "@/hooks/use-approvals-indicator";
 import ApprovalsRealtimeTab from "./notification/approval-realtime-notification-tab";
+import { hasBirthdayDotForToday, useBirthdayIndicator } from "@/hooks/use-birthday-indicator";
 
- 
+
 
 interface NotificationsProps {
   data: EmployeesColumn[];
@@ -42,22 +43,23 @@ interface NotificationsProps {
 const Notifications = ({ data }: NotificationsProps) => {
   const today = useMemo(() => new Date(), []);
   const params = useParams<{ departmentId: string }>();
-    const pathname = usePathname();
+  const pathname = usePathname();
 
 
-  
+
   const departmentId =
     typeof params?.departmentId === "string"
       ? params.departmentId
       : Array.isArray(params?.departmentId)
-      ? params.departmentId[0]
-      : pathname?.match(/^\/([^/]+)/)?.[1] ?? "";
+        ? params.departmentId[0]
+        : pathname?.match(/^\/([^/]+)/)?.[1] ?? "";
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnniversaryModalOpen, setIsAnniversaryModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   const { hasApprovalDot, markApprovalsSeen } = useApprovalsIndicator();
+  const { dismissedDate, markTodaySeen } = useBirthdayIndicator() as any;
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 640);
@@ -65,7 +67,7 @@ const Notifications = ({ data }: NotificationsProps) => {
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
-  
+
   const [isNotification, setNotification] = useState(true);
   const { push, unseenCount, lastEvents, markSeen } = useApprovalToast();
 
@@ -106,6 +108,8 @@ const Notifications = ({ data }: NotificationsProps) => {
       return empMonthDay === todayMonthDay && !emp.isArchived;
     });
   }, [data, today]);
+
+
 
   const upcomingBirthdays = useMemo(() => {
     return data.filter((employee) => {
@@ -153,7 +157,24 @@ const Notifications = ({ data }: NotificationsProps) => {
   useApprovalsRealtime(departmentId ?? "", onApprovalEvent);
 
   // Badge dot should turn on if there are birthdays today OR unseen approval events
-  const hasDot = celebrantsToday.length > 0 || unseenCount > 0;
+  const hasBirthdayDot = hasBirthdayDotForToday(
+    celebrantsToday.length > 0,
+    dismissedDate
+  );
+
+  // bell shows red if approvals unseen OR birthdays unseen-today
+  const hasDot = hasApprovalDot || hasBirthdayDot;
+
+  // When the user switches to the Birthdays tab, clear today's birthday dot
+  const handleTabChange = (val: string) => {
+    if (val === "birthdays") {
+      markTodaySeen();                 // clears birthday dot for today
+    }
+    if (val === "approvals") {
+      markApprovalsSeen();             // optional: clear approvals when focused
+    }
+  };
+
 
   // When user opens the popover/modal, mark approvals as seen
   useEffect(() => {
@@ -214,13 +235,13 @@ const Notifications = ({ data }: NotificationsProps) => {
 
   return (
     <div className="relative flex items-center">
-        {isMobile ? (
+      {isMobile ? (
         <>
           <button onClick={() => setIsModalOpen(true)}>
             <NotificationBell hasDot={hasDot} />
           </button>
 
-        <Modal
+          <Modal
             title="Notifications"
             description="Live approvals, birthdays, retirements, anniversaries"
             isOpen={isModalOpen}
@@ -230,7 +251,12 @@ const Notifications = ({ data }: NotificationsProps) => {
               <Tabs defaultValue="approvals" className="w-full">
                 <TabsList className="grid grid-cols-4">
                   <TabsTrigger value="approvals">Approvals</TabsTrigger>
-                  <TabsTrigger value="birthdays">Birthdays</TabsTrigger>
+                  <TabsTrigger value="birthdays" className="relative">
+                    Birthdays
+                    {hasBirthdayDot && (
+                      <span className="ml-1 inline-block h-2 w-2 rounded-full bg-red-500" />
+                    )}
+                  </TabsTrigger>
                   <TabsTrigger value="retirement">Retirements</TabsTrigger>
                   <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
                 </TabsList>
@@ -246,7 +272,7 @@ const Notifications = ({ data }: NotificationsProps) => {
                       <Cake className="h-6 w-6 text-yellow-700" />
                       Todays Birthday
                     </h3>
-                   <TodaysBirthdays celebrantsToday={celebrantsToday} closeParentModal={closeModal} />
+                    <TodaysBirthdays celebrantsToday={celebrantsToday} closeParentModal={closeModal} />
                   </div>
                   {/* Upcoming Birthdays */}
                   <div className="p-2">
@@ -341,19 +367,24 @@ const Notifications = ({ data }: NotificationsProps) => {
 
         </>
       ) : (
-   <Popover onOpenChange={(open) => { if (open) markApprovalsSeen(); }}>
+        <Popover onOpenChange={(open) => { if (open) markApprovalsSeen(); }}>
           <PopoverTrigger>
             <NotificationBell hasDot={hasDot} />
           </PopoverTrigger>
           <PopoverContent className="w-96 p-0" align="end">
-            <Tabs defaultValue="approvals" className="w-full">
+             <Tabs defaultValue="approvals" className="w-full" onValueChange={handleTabChange}>
               <TabsList className="grid grid-cols-4">
                 <TabsTrigger value="approvals">Approvals</TabsTrigger>
-                <TabsTrigger value="birthdays">Birthdays</TabsTrigger>
+                <TabsTrigger value="birthdays" className="relative">
+                  Birthdays
+                  {hasBirthdayDot && (
+                    <span className="ml-1 inline-block h-2 w-2 rounded-full bg-red-500" />
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="retirement">Retirements</TabsTrigger>
                 <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
               </TabsList>
-               <TabsContent value="approvals">
+              <TabsContent value="approvals">
                 <ApprovalsRealtimeTab departmentId={departmentId} />
               </TabsContent>
               <TabsContent value="birthdays">
@@ -363,7 +394,8 @@ const Notifications = ({ data }: NotificationsProps) => {
                     <Cake className="h-6 w-6 text-yellow-700" />
                     Todays Birthdays
                   </h3>
-                  <TodaysBirthdays celebrantsToday={celebrantsToday} />
+                  <TodaysBirthdays celebrantsToday={celebrantsToday} closeParentModal={() => { }} />
+
                 </div>
                 {/* Upcoming Birthdays */}
                 <div className="p-2">
