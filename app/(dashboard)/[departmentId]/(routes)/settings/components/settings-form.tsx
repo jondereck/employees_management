@@ -19,6 +19,7 @@ import { ApiAlert } from "@/components/api-alert";
 import { useOrigin } from "@/hooks/use-origin";
 import CsvAttendanceImport from "../../employees/components/csv-attendance-import";
 import NeonUsageCard from "@/components/neon-usage-card";
+import CopyOptionsCard from "./copy-options-card";
 
 
 
@@ -144,6 +145,7 @@ export const SettingsForm = ({
           </Button>
         </form>
       </Form>
+              <CopyOptionsCard />
             <CsvAttendanceImport />
              <NeonUsageCard/>
       <Separator/>
