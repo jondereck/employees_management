@@ -1,4 +1,7 @@
 import * as XLSX from 'xlsx-js-style';
+import { format as formatDate } from 'date-fns';
+
+import { EmployeeWithRelations } from '@/lib/types';
  
 
 export type Column = { name: string; key: string };
@@ -494,4 +497,431 @@ for (let i = 0; i < filteredData.length; i++) {
     compression: true,
   });
   return new Blob([excelBuffer], { type: 'application/octet-stream' });
+}
+
+export type WorkbookColumn = {
+  key: string;
+  label: string;
+  type?: 'string' | 'number' | 'date';
+  getValue: (employee: EmployeeWithRelations) => unknown;
+};
+
+export type EmployeesByOffice = {
+  officeId: string;
+  officeName: string;
+  officeShortCode?: string | null;
+  employees: EmployeeWithRelations[];
+};
+
+export type ExportOfficeOption = {
+  id: string;
+  name: string;
+  bioIndexCode?: string | null;
+  shortName?: string | null;
+};
+
+export type StylingOptions = {
+  titleFontSize?: number;
+  titleFill?: string;
+  headerFill?: string;
+  borderColor?: string;
+  stripeFill?: string;
+};
+
+export type BuildWorkbookOptions = {
+  employeesByOffice: EmployeesByOffice[];
+  columns: WorkbookColumn[];
+  stylingOptions?: StylingOptions;
+  mode?: 'perOffice' | 'singleSheet';
+  combinedSheetTitle?: string;
+};
+
+const DEFAULT_STYLING: Required<StylingOptions> = {
+  titleFontSize: 18,
+  titleFill: 'F2F4F7',
+  headerFill: 'F8F9FC',
+  borderColor: 'D0D5DD',
+  stripeFill: 'F9FAFB',
+};
+
+export function sanitizeSheetName(name: string): string {
+  const invalid = /[\[\]:*?/\\]/g;
+  const cleaned = String(name ?? '')
+    .replace(invalid, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const fallback = cleaned.length > 0 ? cleaned : 'Sheet';
+  return fallback.length > 31 ? fallback.slice(0, 31) : fallback;
+}
+
+function ensureUniqueSheetName(
+  baseName: string,
+  usedNames: Set<string>,
+  baseCounts: Map<string, number>,
+): string {
+  let candidate = sanitizeSheetName(baseName);
+  if (!candidate) candidate = 'Sheet';
+  if (candidate.length > 31) candidate = candidate.slice(0, 31);
+
+  if (!usedNames.has(candidate)) {
+    usedNames.add(candidate);
+    baseCounts.set(candidate, 1);
+    return candidate;
+  }
+
+  const base = candidate;
+  let counter = (baseCounts.get(base) ?? 1) + 1;
+  while (true) {
+    const suffix = `-${counter}`;
+    const trimmedBase = base.slice(0, Math.max(0, 31 - suffix.length)).trim();
+    let next = trimmedBase ? `${trimmedBase}${suffix}` : `Sheet${suffix}`;
+    next = sanitizeSheetName(next);
+    if (next.length > 31) {
+      next = next.slice(0, 31);
+    }
+    if (!usedNames.has(next)) {
+      usedNames.add(next);
+      baseCounts.set(base, counter);
+      return next || `Sheet-${counter}`;
+    }
+    counter += 1;
+  }
+}
+
+function normalizeDateValue(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === 'number' || typeof value === 'string') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
+}
+
+function normalizeNumberValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const sanitized = value.replace(/[^0-9.-]/g, '');
+    if (!sanitized) return null;
+    const num = Number(sanitized);
+    return Number.isNaN(num) ? null : num;
+  }
+  return null;
+}
+
+function normalizeCellValue(
+  value: unknown,
+  type?: 'string' | 'number' | 'date',
+): { value: any; cellType: XLSX.CellObject['t']; widthValue: string; numberFormat?: string } {
+  if (type === 'date') {
+    const date = normalizeDateValue(value);
+    if (date) {
+      return {
+        value: date,
+        cellType: 'd',
+        widthValue: formatDate(date, 'yyyy-MM-dd'),
+        numberFormat: 'mm/dd/yyyy',
+      };
+    }
+  }
+
+  if (type === 'number') {
+    const num = normalizeNumberValue(value);
+    if (num != null) {
+      const isInteger = Number.isInteger(num);
+      return {
+        value: num,
+        cellType: 'n',
+        widthValue: num.toLocaleString(undefined, {
+          minimumFractionDigits: isInteger ? 0 : 2,
+          maximumFractionDigits: isInteger ? 0 : 2,
+        }),
+        numberFormat: isInteger ? '#,##0' : '#,##0.00',
+      };
+    }
+  }
+
+  const stringValue = value == null ? '' : String(value);
+  return {
+    value: stringValue,
+    cellType: 's',
+    widthValue: stringValue,
+  };
+}
+
+type WorksheetOptions = {
+  officeName: string;
+  employees: EmployeeWithRelations[];
+  columns: WorkbookColumn[];
+  styling: Required<StylingOptions>;
+};
+
+function createWorksheet({ officeName, employees, columns, styling }: WorksheetOptions): XLSX.WorkSheet {
+  const worksheet: XLSX.WorkSheet = {};
+  const merges: XLSX.Range[] = [];
+  const columnCount = columns.length;
+  const borderStyle = { style: 'thin', color: { rgb: styling.borderColor } } as const;
+
+  const columnWidths = columns.map((column) => Math.max(column.label.length + 2, 14));
+
+  const titleCellRef = XLSX.utils.encode_cell({ r: 0, c: 0 });
+  worksheet[titleCellRef] = {
+    v: officeName,
+    t: 's',
+    s: {
+      font: { bold: true, sz: styling.titleFontSize },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      fill: { patternType: 'solid', fgColor: { rgb: styling.titleFill } },
+    },
+  };
+  if (columnCount > 0) {
+    merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: columnCount - 1 } });
+  }
+
+  columns.forEach((column, index) => {
+    const headerRef = XLSX.utils.encode_cell({ r: 1, c: index });
+    worksheet[headerRef] = {
+      v: column.label,
+      t: 's',
+      s: {
+        font: { bold: true },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        fill: { patternType: 'solid', fgColor: { rgb: styling.headerFill } },
+        border: {
+          top: borderStyle,
+          right: borderStyle,
+          bottom: borderStyle,
+          left: borderStyle,
+        },
+      },
+    };
+  });
+
+  if (employees.length === 0) {
+    const noteRef = XLSX.utils.encode_cell({ r: 2, c: 0 });
+    worksheet[noteRef] = {
+      v: 'No employees',
+      t: 's',
+      s: {
+        font: { italic: true, color: { rgb: '6B7280' } },
+        alignment: { horizontal: 'left', vertical: 'center' },
+      },
+    };
+  } else {
+    employees.forEach((employee, rowIndex) => {
+      columns.forEach((column, columnIndex) => {
+        const { value, cellType, widthValue, numberFormat } = normalizeCellValue(
+          column.getValue(employee),
+          column.type,
+        );
+
+        const cellRef = XLSX.utils.encode_cell({ r: 2 + rowIndex, c: columnIndex });
+        const alignment =
+          cellType === 'n'
+            ? { horizontal: 'right', vertical: 'center' }
+            : cellType === 'd'
+              ? { horizontal: 'center', vertical: 'center' }
+              : { horizontal: 'left', vertical: 'center', wrapText: true };
+
+        const cell: XLSX.CellObject = {
+          v: value,
+          t: cellType,
+          s: {
+            font: { sz: 11 },
+            alignment,
+            border: {
+              top: borderStyle,
+              right: borderStyle,
+              bottom: borderStyle,
+              left: borderStyle,
+            },
+          },
+        };
+
+        if (numberFormat && (cellType === 'n' || cellType === 'd')) {
+          cell.z = numberFormat;
+        }
+
+        if (rowIndex % 2 === 1) {
+          cell.s = {
+            ...cell.s,
+            fill: { patternType: 'solid', fgColor: { rgb: styling.stripeFill } },
+          };
+        }
+
+        worksheet[cellRef] = cell;
+        const widthLength = Math.min(Math.max(widthValue.length + 2, 12), 60);
+        columnWidths[columnIndex] = Math.max(columnWidths[columnIndex], widthLength);
+      });
+    });
+  }
+
+  if (merges.length) {
+    worksheet['!merges'] = merges;
+  }
+
+  worksheet['!cols'] = columnWidths.map((wch) => ({ wch }));
+  worksheet['!rows'] = [
+    { hpt: 28 },
+    { hpt: 20 },
+  ];
+
+  return worksheet;
+}
+
+export function buildWorkbook({
+  employeesByOffice,
+  columns,
+  stylingOptions,
+  mode = 'perOffice',
+  combinedSheetTitle = 'All Offices',
+}: BuildWorkbookOptions): XLSX.WorkBook {
+  const workbook = XLSX.utils.book_new();
+  if (columns.length === 0) {
+    return workbook;
+  }
+
+  const styling: Required<StylingOptions> = { ...DEFAULT_STYLING, ...stylingOptions } as Required<StylingOptions>;
+  const usedNames = new Set<string>();
+  const baseCounts = new Map<string, number>();
+
+  const sources =
+    mode === 'singleSheet'
+      ? [
+          {
+            officeId: 'all',
+            officeName: combinedSheetTitle,
+            officeShortCode: combinedSheetTitle,
+            employees: employeesByOffice.flatMap((group) => group.employees),
+          },
+        ]
+      : employeesByOffice;
+
+  sources.forEach((group) => {
+    const sheetName = ensureUniqueSheetName(
+      group.officeShortCode ?? group.officeName,
+      usedNames,
+      baseCounts,
+    );
+    const worksheet = createWorksheet({
+      officeName: group.officeName,
+      employees: group.employees,
+      columns,
+      styling,
+    });
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  });
+
+  return workbook;
+}
+
+export function writeWorkbookToFile(workbook: XLSX.WorkBook, filename: string) {
+  XLSX.writeFile(workbook, filename, { compression: true, bookType: 'xlsx' });
+}
+
+export function partitionEmployeesByOffice(
+  employees: EmployeeWithRelations[],
+  offices: ExportOfficeOption[],
+  selection: 'all' | string[],
+): EmployeesByOffice[] {
+  const officesById = new Map<string, ExportOfficeOption>();
+  offices.forEach((office) => {
+    officesById.set(office.id, office);
+  });
+
+  const normalizeSelection = () => {
+    if (selection === 'all') {
+      return offices.map((office) => office.id);
+    }
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    selection.forEach((id) => {
+      if (!seen.has(id) && officesById.has(id)) {
+        seen.add(id);
+        ids.push(id);
+      }
+    });
+    return ids;
+  };
+
+  const selectedIds = normalizeSelection();
+  const groups = new Map<string, EmployeesByOffice>();
+
+  const ensureGroup = (officeId: string, fallbackName?: string, fallbackCode?: string | null) => {
+    let group = groups.get(officeId);
+    if (!group) {
+      const officeMeta = officesById.get(officeId);
+      group = {
+        officeId,
+        officeName: officeMeta?.name ?? fallbackName ?? 'Office',
+        officeShortCode: officeMeta?.bioIndexCode ?? fallbackCode ?? null,
+        employees: [],
+      };
+      groups.set(officeId, group);
+    }
+    return group;
+  };
+
+  const includeEmployee = (employee: EmployeeWithRelations) => {
+    const officeId = employee.offices?.id;
+    if (!officeId) return;
+    if (selection !== 'all' && !selectedIds.includes(officeId)) return;
+
+    const group = ensureGroup(officeId, employee.offices?.name, employee.offices?.bioIndexCode ?? null);
+    group.employees.push(employee);
+  };
+
+  employees.forEach(includeEmployee);
+
+  const finalIds: string[] = (() => {
+    if (selection === 'all') {
+      const ids = [...new Set([...offices.map((office) => office.id), ...groups.keys()])];
+      return ids;
+    }
+    return selectedIds;
+  })();
+
+  const sortEmployees = (list: EmployeeWithRelations[]) =>
+    [...list].sort((a, b) => {
+      const lastA = (a.lastName ?? '').toString().toLowerCase();
+      const lastB = (b.lastName ?? '').toString().toLowerCase();
+      if (lastA !== lastB) return lastA.localeCompare(lastB);
+      const firstA = (a.firstName ?? '').toString().toLowerCase();
+      const firstB = (b.firstName ?? '').toString().toLowerCase();
+      return firstA.localeCompare(firstB);
+    });
+
+  const result: EmployeesByOffice[] = finalIds.map((officeId) => {
+    const officeMeta = officesById.get(officeId);
+    const group = groups.get(officeId);
+    return {
+      officeId,
+      officeName: group?.officeName ?? officeMeta?.name ?? 'Office',
+      officeShortCode: group?.officeShortCode ?? officeMeta?.bioIndexCode ?? officeMeta?.shortName ?? null,
+      employees: sortEmployees(group?.employees ?? []),
+    };
+  });
+
+  if (selection === 'all') {
+    const extraGroups: EmployeesByOffice[] = [];
+    groups.forEach((group, officeId) => {
+      if (finalIds.includes(officeId)) return;
+      extraGroups.push({
+        officeId,
+        officeName: group.officeName,
+        officeShortCode: group.officeShortCode,
+        employees: sortEmployees(group.employees),
+      });
+    });
+    if (extraGroups.length) {
+      extraGroups.sort((a, b) => a.officeName.localeCompare(b.officeName));
+      result.push(...extraGroups);
+    }
+  }
+
+  return result;
 }

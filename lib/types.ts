@@ -54,13 +54,14 @@ export interface EmployeeWithRelations {
   city?: string | null;
   barangay?: string | null;
   houseNo?: string | null;
+  street?: string | null;
   age?: number | null;
   nickname?: string | null;
   emergencyContactName?: string | null;
   emergencyContactNumber?: string | null;
   employeeLink?: string | null;
 
-  offices: { id: string; name: string };
+  offices: { id: string; name: string; bioIndexCode?: string | null };
   employeeType: { id: string; name: string; value: string };
   eligibility: { id: string; name: string; value: string };
   images: ImageFile[];
@@ -106,7 +107,7 @@ export interface EmployeesColumn {
 
   eligibility: { id: string; name: string; value: string };
   employeeType: { id: string; name: string; value: string };
-  offices: { id: string; name: string };
+  offices: { id: string; name: string; bioIndexCode?: string | null };
   images: ImageFile[];
 
   region?: string | null;
@@ -114,6 +115,7 @@ export interface EmployeesColumn {
   city?: string | null;
   barangay?: string | null;
   houseNo?: string | null;
+  street?: string | null;
   age?: number | null;
   nickname?: string | null;
   emergencyContactName?: string | null;

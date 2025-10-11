@@ -18,9 +18,15 @@ const EmployeesPage = async ({
 }) => {
 
   const offices = await prismadb.offices.findMany({
+    where: { departmentId: params.departmentId },
     orderBy: {
       name: 'asc',
-    }
+    },
+    select: {
+      id: true,
+      name: true,
+      bioIndexCode: true,
+    },
   });
 
 
@@ -119,6 +125,7 @@ const EmployeesPage = async ({
     offices: {
       id: item.offices.id,
       name: item.offices.name,
+      bioIndexCode: item.offices.bioIndexCode,
     },
     images: item.images.map((image) => ({
       id: image.id,
@@ -130,6 +137,7 @@ const EmployeesPage = async ({
     city: item.city,
     barangay: item.barangay,
     houseNo: item.houseNo,
+    street: item.street,
     age: item.age,
     nickname: item.nickname,
     emergencyContactName: item.emergencyContactName,
