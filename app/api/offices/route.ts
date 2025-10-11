@@ -11,7 +11,7 @@ export async function GET(req: Request) {
 
   const offices = await prismadb.offices.findMany({
     where: departmentId ? { departmentId } : undefined,
-    select: { id: true, name: true },
+    select: { id: true, name: true, bioIndexCode: true },
     orderBy: { name: "asc" },
   });
 
