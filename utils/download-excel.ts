@@ -1,11 +1,13 @@
 import * as XLSX from 'xlsx-js-style';
- 
+
+import type { SortLevel as ExportSortLevel } from '@/types/export';
+
 
 export type Column = { name: string; key: string };
 
 export type IdColumnSource = 'uuid' | 'bio' | 'employeeNo';
 
-export type SortLevel = { field: string; dir: 'asc' | 'desc' };
+export type SortLevel = ExportSortLevel;
 
 
 export type PositionReplaceRule = {

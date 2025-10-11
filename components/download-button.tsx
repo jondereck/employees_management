@@ -6,12 +6,14 @@ import { toast } from 'sonner';
 import { FaFileExcel } from 'react-icons/fa';
 import { ChevronDown, FileDown, FileUp, Save, Trash2 } from "lucide-react";
 import Modal from './ui/modal';
-import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, SortLevel } from '@/utils/download-excel';
+import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useParams } from 'next/navigation';
+import type { ExportTemplateV2, SortLevel } from '@/types/export';
+import { coerceDir, isSortLevel, isStringArray } from '@/lib/guards';
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
@@ -20,6 +22,14 @@ import TemplatePickerBar from './ui/export-template-picker';
 import { EXPORT_TABS, ExportTabKey } from "./tabs.registry";
 
 type OfficeOption = { id: string; name: string; bioIndexCode?: string | null };
+
+type ModalSize = 'cozy' | 'roomy' | 'xl';
+
+const MODAL_WIDTH_CLASSES: Record<ModalSize, string> = {
+  cozy: 'w-[min(900px,calc(100vw-48px))]',
+  roomy: 'w-[min(1100px,calc(100vw-48px))] 2xl:w-[min(1200px,calc(100vw-64px))]',
+  xl: 'w-[min(1200px,calc(100vw-64px))]',
+};
 
 const TAB_KEY_TO_VALUE: Record<ExportTabKey, string> = {
   filter: 'filters',
@@ -111,6 +121,31 @@ export default function DownloadStyledExcel() {
     const stored = localStorage.getItem('export.sheetMode');
     return stored === 'merged' ? 'merged' : 'perOffice';
   });
+
+  const [modalSize, setModalSize] = useState<ModalSize>(() => {
+    if (typeof window === 'undefined') return 'roomy';
+    const stored = localStorage.getItem('export.modalSize');
+    return stored === 'cozy' || stored === 'xl' ? stored : 'roomy';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.modalSize', modalSize);
+    } catch (error) {
+      console.warn('Failed to persist export.modalSize', error);
+    }
+  }, [modalSize]);
+
+  const toggleModalSize = () => {
+    setModalSize((prev) => {
+      if (prev === 'cozy') return 'roomy';
+      if (prev === 'roomy') return 'xl';
+      return 'cozy';
+    });
+  };
+
+  const modalSizeLabel = modalSize === 'xl' ? 'Shrink' : 'Expand';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -225,33 +260,37 @@ export default function DownloadStyledExcel() {
   }
 
 
-  const normalizeTemplate = (tpl: ExportTemplate) => {
-    const rawOffices = Array.isArray((tpl as any)?.officesSelection)
-      ? (tpl as any).officesSelection
-      : [];
-    const officesSelection = rawOffices.map((id: any) => String(id)).filter((id) => id.length > 0);
+  const normalizeTemplate = (tpl: ExportTemplate): ExportTemplateV2 => {
+    const rawOffices = tpl?.officesSelection as unknown;
 
-    const sheetModeValue: 'perOffice' | 'merged' = (tpl as any)?.sheetMode === 'merged' ? 'merged' : 'perOffice';
+    const officesSelection: string[] = isStringArray(rawOffices)
+      ? rawOffices
+      : Array.isArray(rawOffices)
+        ? (rawOffices as unknown[])
+            .map((id: unknown): string => String(id))
+            .filter((id: string): boolean => id.length > 0)
+        : [];
 
-    const sortLevelsValue: SortLevel[] = Array.isArray((tpl as any)?.sortLevels)
-      ? (tpl as any).sortLevels
-          .map((level: any) => {
-            if (!level || typeof level.field !== 'string') return null;
-            return {
-              field: String(level.field),
-              dir: level.dir === 'asc' ? 'asc' : 'desc',
-            } as SortLevel;
-          })
-          .filter((level): level is SortLevel => !!level)
-          .slice(0, 3)
-      : [];
+    const sheetModeValue: 'perOffice' | 'merged' = tpl?.sheetMode === 'merged' ? 'merged' : 'perOffice';
+
+    const rawLevels: unknown[] = Array.isArray(tpl?.sortLevels) ? (tpl.sortLevels as unknown[]) : [];
+
+    const sortLevels: SortLevel[] = rawLevels
+      .map((level: unknown): SortLevel | null => {
+        if (!isSortLevel(level)) return null;
+        const field: string = (level as any).field;
+        const dir: 'asc' | 'desc' = coerceDir((level as any).dir);
+        return { field, dir };
+      })
+      .filter((level: SortLevel | null): level is SortLevel => level !== null)
+      .slice(0, 3);
 
     return {
       ...tpl,
       templateVersion: 2 as const,
       officesSelection,
       sheetMode: sheetModeValue,
-      sortLevels: sortLevelsValue,
+      sortLevels,
     };
   };
 
@@ -1118,111 +1157,132 @@ export default function DownloadStyledExcel() {
         description="Choose which fields to include in the Excel file."
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
+        hideDefaultHeader
+        contentClassName={cn(
+          'z-[90] max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-hidden sm:max-w-none gap-0 p-0',
+          MODAL_WIDTH_CLASSES[modalSize]
+        )}
+        bodyClassName="flex h-full flex-col overflow-hidden"
       >
+        <div className="flex h-full w-full min-w-0 flex-col">
+          <div className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold leading-tight text-foreground">Select Columns to Export</h2>
+                <p className="text-sm text-muted-foreground">Choose which fields to include in the Excel file.</p>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground md:justify-end">
+                <button
+                  onClick={() => {
+                    const name = prompt("Template name?");
+                    if (!name) return;
 
-        <div className="flex items-center gap-3 mb-2">
-          <button
-            onClick={() => {
-              const name = prompt("Template name?");
-              if (!name) return;
+                    const newTpl = saveTemplateToLocalStorage(name, {
+                      templateVersion: 2,
+                      selectedKeys: selectedColumnsRef.current,
+                      statusFilter,
+                      idColumnSource,
+                      appointmentFilters,
+                      positionReplaceRules,
+                      officesSelection: selectedOffices.map((id) => String(id)),
+                      sheetMode,
+                      sortLevels: combinedSortLevels,
+                      sheetName: "Sheet1",
+                      paths: {
+                        imageBaseDir,
+                        imageExt,
+                        qrBaseDir,
+                        qrExt,
+                        qrPrefix,
+                      },
+                    });
 
-              const newTpl = saveTemplateToLocalStorage(name, {
-                templateVersion: 2,
-                selectedKeys: selectedColumnsRef.current,
-                statusFilter,
-                idColumnSource,
-                appointmentFilters,
-                positionReplaceRules,
-                officesSelection: selectedOffices.map((id) => String(id)),
-                sheetMode,
-                sortLevels: combinedSortLevels,
-                sheetName: "Sheet1",
-                paths: {                         // ✅ save paths
-                  imageBaseDir,
-                  imageExt,
-                  qrBaseDir,
-                  qrExt,
-                  qrPrefix,
-                },
-              });
+                    refreshTemplates();
+                    setSelectedTemplateId(newTpl.id);
+                    toast.success(`Saved template "${name}"`);
+                  }}
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                  title="Save current selections as a new template"
+                >
+                  <Save className="h-4 w-4" />
+                  Save Template
+                </button>
 
-              refreshTemplates();
-              setSelectedTemplateId(newTpl.id);
-              toast.success(`Saved template "${name}"`);
-            }}
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-            title="Save current selections as a new template"
-          >
-            <Save className="h-4 w-4" />
-            Save Template
-          </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport(false)}
+                  title="Export user templates (.json)"
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Export
+                </button>
 
-          {/* Export user templates */}
-          <button
-            type="button"
-            onClick={() => handleExport(false)}
-            title="Export user templates (.json)"
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-          >
-            <FileDown className="h-4 w-4" />
-            Export
-          </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport(true)}
+                  title="Export all templates (.json)"
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Export All
+                </button>
 
-          {/* Export all templates (built-ins + user) */}
-          <button
-            type="button"
-            onClick={() => handleExport(true)}
-            title="Export all templates (.json)"
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-          >
-            <FileDown className="h-4 w-4" />
-            Export All
-          </button>
+                <button
+                  type="button"
+                  onClick={handleClickImport}
+                  title="Import templates (.json)"
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileUp className="h-4 w-4" />
+                  Import
+                </button>
 
-          {/* Import */}
-          <button
-            type="button"
-            onClick={handleClickImport}
-            title="Import templates (.json)"
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-          >
-            <FileUp className="h-4 w-4" />
-            Import
-          </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  title="Toggle modal size"
+                  onClick={toggleModalSize}
+                >
+                  {modalSizeLabel}
+                </Button>
 
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json"
-            onChange={handleImportFile}
-            className="hidden"
-          />
-        </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/json"
+                  onChange={handleImportFile}
+                  className="hidden"
+                />
+              </div>
+            </div>
+          </div>
 
+          <div className="flex-1 w-full min-w-0 overflow-y-auto overflow-x-hidden px-4 py-4">
+            <TemplatePickerBar
+              className="mb-3 w-full"
+              value={selectedTemplateId}
+              templates={templates}
+              onApply={(tpl) => {
+                applyTemplate(tpl);
+                setSelectedTemplateId(tpl.id);
+              }}
+              onChangeSelected={setSelectedTemplateId}
+              clearLastUsedTemplate={clearLastUsedTemplate}
+              clearAllUserTemplates={clearAllUserTemplates}
+              deleteUserTemplate={deleteUserTemplate}
+              refreshTemplates={refreshTemplates}
+              onRequestUpdate={(id, newName) => handleUpdateCurrentTemplate(id, newName)}
+            />
 
-        <TemplatePickerBar
-          className="mb-3"
-          value={selectedTemplateId}
-          templates={templates}
-          onApply={(tpl) => {
-            applyTemplate(tpl);
-            setSelectedTemplateId(tpl.id);
-          }}
-          onChangeSelected={setSelectedTemplateId}
-          clearLastUsedTemplate={clearLastUsedTemplate}
-          clearAllUserTemplates={clearAllUserTemplates}
-          deleteUserTemplate={deleteUserTemplate}
-          refreshTemplates={refreshTemplates}
-          onRequestUpdate={(id, newName) => handleUpdateCurrentTemplate(id, newName)}
-        />
-
-        {/* ADVANCED (single collapsible with both subsections) */}
-        <div className="max-h-[75vh] overflow-y-auto pr-1">
-          {/* ADVANCED (single box; sticky header + conditional mount for content) */}
-          <div className="mb-4 rounded-lg border bg-white shadow-sm">
+            {/* ADVANCED (single collapsible with both subsections) */}
+            <div className="w-full min-w-0">
+              {/* ADVANCED (single box; sticky header + conditional mount for content) */}
+              <div className="mb-4 rounded-lg border bg-white shadow-sm">
             {/* Sticky header so the toggle stays visible */}
-            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur px-3 py-2 border-b">
+            <div className="sticky top-0 z-10 border-b bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
@@ -1241,77 +1301,84 @@ export default function DownloadStyledExcel() {
             >
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
-                  <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full">
-                    <div className="flex flex-nowrap items-center gap-2">
-                      <div className="flex flex-nowrap gap-2">
-                        {PRIMARY_TABS.map((tab) => {
-                          const Icon = tab.icon;
-                          const isActive = activeTabKey === tab.key;
-                          return (
-                            <Button
-                              key={tab.key}
-                              variant={isActive ? 'secondary' : 'ghost'}
-                              size="sm"
-                              onClick={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
-                              aria-label={tab.label}
-                              title={tab.label}
-                              aria-selected={isActive}
-                              aria-current={isActive ? 'page' : undefined}
-                              className={cn('h-8 px-2 gap-2 font-medium', isActive ? 'pointer-events-none' : undefined)}
-                            >
-                              <Icon className="size-4" />
-                              <span>{tab.label}</span>
-                            </Button>
-                          );
-                        })}
-                      </div>
-
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant={activeInOverflow ? 'secondary' : 'ghost'}
-                            size="sm"
-                            className="h-8 px-2 gap-2 font-medium"
-                            aria-label={moreButtonLabel}
-                            title={moreButtonLabel}
-                            aria-selected={activeInOverflow}
-                            aria-haspopup="menu"
-                          >
-                            <ChevronDown className="size-4" />
-                            <span>{moreButtonLabel}</span>
-                            {activeInOverflow ? (
-                              <span className="ml-1 inline-block size-2 rounded-full bg-primary" aria-hidden="true" />
-                            ) : null}
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="min-w-44">
-                          {OVERFLOW_TABS.map((tab) => {
+                  <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full min-w-0">
+                    <div className="sticky top-[48px] z-20 border-b bg-background px-2 py-2">
+                      <div className="flex w-full min-w-0 items-center gap-2">
+                        <div className="flex items-center gap-2">
+                          {PRIMARY_TABS.map((tab) => {
                             const Icon = tab.icon;
                             const isActive = activeTabKey === tab.key;
                             return (
-                              <DropdownMenuItem
+                              <Button
                                 key={tab.key}
-                                onSelect={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
-                                className={cn('flex items-center gap-2', isActive ? 'bg-accent text-accent-foreground' : undefined)}
+                                variant={isActive ? 'secondary' : 'ghost'}
+                                size="sm"
+                                onClick={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
                                 aria-label={tab.label}
                                 title={tab.label}
-                                aria-current={isActive ? 'page' : undefined}
                                 aria-selected={isActive}
+                                aria-current={isActive ? 'page' : undefined}
+                                className={cn('h-8 px-2 gap-2 font-medium whitespace-nowrap', isActive ? 'pointer-events-none' : undefined)}
                               >
                                 <Icon className="size-4" />
                                 <span>{tab.label}</span>
-                              </DropdownMenuItem>
+                              </Button>
                             );
                           })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant={activeInOverflow ? 'secondary' : 'ghost'}
+                              size="sm"
+                              className="h-8 px-2 gap-2 font-medium whitespace-nowrap"
+                              aria-label={moreButtonLabel}
+                              title={moreButtonLabel}
+                              aria-selected={activeInOverflow}
+                              aria-haspopup="menu"
+                            >
+                              <ChevronDown className="size-4" />
+                              <span className="truncate">{moreButtonLabel}</span>
+                              {activeInOverflow ? (
+                                <span className="ml-1 inline-block size-2 rounded-full bg-primary" aria-hidden="true" />
+                              ) : null}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            sideOffset={6}
+                            collisionPadding={8}
+                            avoidCollisions
+                            className="min-w-44 z-[100]"
+                          >
+                            {OVERFLOW_TABS.map((tab) => {
+                              const Icon = tab.icon;
+                              const isActive = activeTabKey === tab.key;
+                              return (
+                                <DropdownMenuItem
+                                  key={tab.key}
+                                  onSelect={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
+                                  className={cn('flex items-center gap-2', isActive ? 'bg-accent text-accent-foreground' : undefined)}
+                                  aria-label={tab.label}
+                                  title={tab.label}
+                                  aria-current={isActive ? 'page' : undefined}
+                                  aria-selected={isActive}
+                                >
+                                  <Icon className="size-4" />
+                                  <span>{tab.label}</span>
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
 
                     {/* TAB: Paths */}
                     <TabsContent value="paths" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-3">
+                      <div className="rounded-md border bg-white p-3 space-y-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Paths</h4>
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-3 sm:grid-cols-2 w-full min-w-0">
                           {/* Image base folder */}
                           <div className="flex flex-col">
                             <label className="text-xs text-gray-600 mb-1">Image base folder</label>
@@ -1396,8 +1463,8 @@ export default function DownloadStyledExcel() {
 
                     {/* TAB: Position Find & Replace */}
                     <TabsContent value="position" className="mt-3">
-                      <div className="rounded-md border bg-white p-3">
-                        <div className=" space-y-2">
+                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
+                        <div className="space-y-2 min-w-0">
                           <div className="flex items-center justify-between">
                             <h5 className="text-sm font-semibold">Position</h5>
                             <div className="space-x-3">
@@ -1412,7 +1479,7 @@ export default function DownloadStyledExcel() {
                             </div>
                           </div>
 
-                          <div className="border rounded">
+                          <div className="border rounded w-full min-w-0">
                             {/* === Global Target Picker at the top === */}
                             <div className="p-2 border-b bg-white">
                               <CheckboxListPicker
@@ -1572,7 +1639,7 @@ export default function DownloadStyledExcel() {
                     </TabsContent>
                     {/* TAB: Columns */}
                     <TabsContent value="columns_path" className="mt-3">
-                      <div className="rounded-md border bg-white p-3">
+                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
                         <div className="mb-2 flex justify-between items-center text-sm">
                           <label className="font-medium">Select Columns</label>
                           <button
@@ -1583,7 +1650,7 @@ export default function DownloadStyledExcel() {
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
                           {columnOrder.map((col) => (
                             <label key={col.key} className="flex items-center space-x-2 text-sm">
                               <input
@@ -1600,7 +1667,7 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
                     <TabsContent value="sort" className="mt-3">
-                      <div className="rounded-md border bg-white p-3">
+                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Sort</h4>
                         <div className="mt-2 space-y-3 text-sm">
                           <div className="flex flex-wrap items-center gap-3">
@@ -1688,7 +1755,7 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
                     <TabsContent value="filters" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-4">
+                      <div className="rounded-md border bg-white p-3 space-y-4 w-full min-w-0">
                         {/* Appointment filter */}
                         <div>
                           <div className="mb-2 flex justify-between items-center text-sm">
@@ -1701,7 +1768,7 @@ export default function DownloadStyledExcel() {
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto border p-2 rounded bg-white shadow">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
                             {APPOINTMENT_OPTIONS.map((label) => (
                               <label key={label} className="flex items-center space-x-2 text-sm">
                                 <input
@@ -1744,7 +1811,7 @@ export default function DownloadStyledExcel() {
                             className="w-full mb-2 rounded border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                           />
 
-                          <div className="space-y-2 max-h-48 overflow-y-auto border p-2 rounded bg-white shadow">
+                          <div className="space-y-2 max-h-48 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
                             {filteredOffices.length === 0 ? (
                               <p className="text-xs text-gray-500 px-1">No offices match your search.</p>
                             ) : (
@@ -1798,7 +1865,7 @@ export default function DownloadStyledExcel() {
                     </TabsContent>
 
                     <TabsContent value="id" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-3">
+                      <div className="rounded-md border bg-white p-3 space-y-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Which ID should appear in the exported “Employee No” column?</h4>
 
                         <div className="space-y-2 text-sm">
@@ -1918,6 +1985,8 @@ export default function DownloadStyledExcel() {
             Download
           </button>
         </div>
+        </div>
+      </div>
       </Modal>
 
     </div>
