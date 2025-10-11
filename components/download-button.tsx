@@ -4,21 +4,43 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { FaFileExcel } from 'react-icons/fa';
-import { FileDown, FileUp, Save, Trash2 } from "lucide-react";
+import { ChevronDown, FileDown, FileUp, Save, Trash2 } from "lucide-react";
 import Modal from './ui/modal';
 import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, SortLevel } from '@/utils/download-excel';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { useParams } from 'next/navigation';
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
 import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage, exportTemplatesToBlob, importTemplatesFromObject, isBuiltInTemplateId, overwriteUserTemplateById } from '@/utils/export-templates';
 import TemplatePickerBar from './ui/export-template-picker';
+import { EXPORT_TABS, ExportTabKey } from "./tabs.registry";
 
 type OfficeOption = { id: string; name: string; bioIndexCode?: string | null };
-import { useParams } from 'next/navigation';
 
+const TAB_KEY_TO_VALUE: Record<ExportTabKey, string> = {
+  filter: 'filters',
+  columns: 'columns_path',
+  sort: 'sort',
+  paths: 'paths',
+  findreplace: 'position',
+  id: 'id',
+};
 
+const TAB_VALUE_TO_KEY = Object.entries(TAB_KEY_TO_VALUE).reduce<Record<string, ExportTabKey>>(
+  (acc, [key, value]) => {
+    acc[value] = key as ExportTabKey;
+    return acc;
+  },
+  {}
+);
 
+const PRIMARY_TAB_KEYS: ExportTabKey[] = ['filter', 'columns', 'sort'];
+const PRIMARY_TABS = EXPORT_TABS.filter((tab) => PRIMARY_TAB_KEYS.includes(tab.key));
+const OVERFLOW_TABS = EXPORT_TABS.filter((tab) => !PRIMARY_TAB_KEYS.includes(tab.key));
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
@@ -403,6 +425,14 @@ export default function DownloadStyledExcel() {
     setAdvancedTab(value);
     setActiveExportTab(value);
   };
+
+  const activeTabKey = TAB_VALUE_TO_KEY[advancedTab] ?? 'filter';
+  const activeTabMeta = useMemo(() => EXPORT_TABS.find((tab) => tab.key === activeTabKey), [activeTabKey]);
+  const activeInOverflow = useMemo(
+    () => OVERFLOW_TABS.some((tab) => tab.key === activeTabKey),
+    [activeTabKey]
+  );
+  const moreButtonLabel = activeInOverflow && activeTabMeta ? `More (${activeTabMeta.label})` : 'More';
 
 
   // full rule list (persisted)
@@ -1212,23 +1242,69 @@ export default function DownloadStyledExcel() {
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
                   <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full">
-                    <div className="overflow-x-auto whitespace-nowrap scrollbar-none">
-                      <TabsList className="inline-flex w-full min-w-max gap-2">
-                        <TabsTrigger value="filters" className="px-3 py-2 text-sm">Filter</TabsTrigger>
-                        <TabsTrigger value="columns_path" className="px-3 py-2 text-sm">Columns</TabsTrigger>
-                        <TabsTrigger value="sort" className="px-3 py-2 text-sm">Sort</TabsTrigger>
-                        <TabsTrigger value="paths" className="px-3 py-2 text-sm">Paths</TabsTrigger>
-                        <TabsTrigger value="position" className="px-3 py-2 text-sm">
-                          <ActionTooltip label="Find &amp; Replace">
-                            <span className="block w-full">Find &amp; Replace</span>
-                          </ActionTooltip>
-                        </TabsTrigger>
-                        <TabsTrigger value="id" className="px-3 py-2 text-sm">
-                          <ActionTooltip label="ID Column">
-                            <span className="block w-full">ID</span>
-                          </ActionTooltip>
-                        </TabsTrigger>
-                      </TabsList>
+                    <div className="flex flex-nowrap items-center gap-2">
+                      <div className="flex flex-nowrap gap-2">
+                        {PRIMARY_TABS.map((tab) => {
+                          const Icon = tab.icon;
+                          const isActive = activeTabKey === tab.key;
+                          return (
+                            <Button
+                              key={tab.key}
+                              variant={isActive ? 'secondary' : 'ghost'}
+                              size="sm"
+                              onClick={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
+                              aria-label={tab.label}
+                              title={tab.label}
+                              aria-selected={isActive}
+                              aria-current={isActive ? 'page' : undefined}
+                              className={cn('h-8 px-2 gap-2 font-medium', isActive ? 'pointer-events-none' : undefined)}
+                            >
+                              <Icon className="size-4" />
+                              <span>{tab.label}</span>
+                            </Button>
+                          );
+                        })}
+                      </div>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant={activeInOverflow ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className="h-8 px-2 gap-2 font-medium"
+                            aria-label={moreButtonLabel}
+                            title={moreButtonLabel}
+                            aria-selected={activeInOverflow}
+                            aria-haspopup="menu"
+                          >
+                            <ChevronDown className="size-4" />
+                            <span>{moreButtonLabel}</span>
+                            {activeInOverflow ? (
+                              <span className="ml-1 inline-block size-2 rounded-full bg-primary" aria-hidden="true" />
+                            ) : null}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-44">
+                          {OVERFLOW_TABS.map((tab) => {
+                            const Icon = tab.icon;
+                            const isActive = activeTabKey === tab.key;
+                            return (
+                              <DropdownMenuItem
+                                key={tab.key}
+                                onSelect={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
+                                className={cn('flex items-center gap-2', isActive ? 'bg-accent text-accent-foreground' : undefined)}
+                                aria-label={tab.label}
+                                title={tab.label}
+                                aria-current={isActive ? 'page' : undefined}
+                                aria-selected={isActive}
+                              >
+                                <Icon className="size-4" />
+                                <span>{tab.label}</span>
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
 
                     {/* TAB: Paths */}
