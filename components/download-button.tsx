@@ -14,6 +14,9 @@ import { ActionTooltip } from './ui/action-tooltip';
 import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage, exportTemplatesToBlob, importTemplatesFromObject, isBuiltInTemplateId, overwriteUserTemplateById } from '@/utils/export-templates';
 import TemplatePickerBar from './ui/export-template-picker';
 
+type OfficeOption = { id: string; name: string; bioIndexCode?: string | null };
+import { useParams } from 'next/navigation';
+
 
 
 
@@ -21,6 +24,76 @@ export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [mappings, setMappings] = useState<Mappings | null>(null);
+
+  const params = useParams<{ departmentId?: string }>();
+  const departmentId = useMemo(() => {
+    const raw = params?.departmentId;
+    if (!raw) return undefined;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [params]);
+
+  const [officeOptions, setOfficeOptions] = useState<OfficeOption[]>([]);
+  const [officeSearch, setOfficeSearch] = useState('');
+  const [selectedOffices, setSelectedOffices] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('export.officesSelection');
+      const parsed = stored ? JSON.parse(stored) : [];
+      if (Array.isArray(parsed)) {
+        return parsed.map((id) => String(id));
+      }
+    } catch (error) {
+      console.warn('Failed to parse export.officesSelection', error);
+    }
+    return [];
+  });
+
+  const officeMetadata = useMemo(() => {
+    return officeOptions.reduce<Record<string, { name: string; bioIndexCode?: string | null }>>((acc, office) => {
+      acc[office.id] = { name: office.name, bioIndexCode: office.bioIndexCode ?? undefined };
+      return acc;
+    }, {});
+  }, [officeOptions]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.officesSelection', JSON.stringify(selectedOffices));
+    } catch (error) {
+      console.warn('Failed to persist export.officesSelection', error);
+    }
+  }, [selectedOffices]);
+
+  useEffect(() => {
+    if (!modalOpen || !departmentId) return;
+    let cancelled = false;
+    const loadOffices = async () => {
+      try {
+        const res = await fetch(`/api/offices?departmentId=${departmentId}`);
+        if (!res.ok) return;
+        const data: OfficeOption[] = await res.json();
+        if (!cancelled) {
+          setOfficeOptions(data);
+        }
+      } catch (error) {
+        console.error('Failed to load offices for export modal', error);
+      }
+    };
+    loadOffices();
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOpen, departmentId]);
+
+  useEffect(() => {
+    if (!officeOptions.length) return;
+    setSelectedOffices((prev) => {
+      const allowed = new Set(officeOptions.map((office) => office.id));
+      const filtered = prev.filter((id) => allowed.has(id));
+      if (filtered.length === prev.length) return prev;
+      return filtered;
+    });
+  }, [officeOptions]);
 
   const [allPositions, setAllPositions] = useState<string[]>([]);
   const [posSearch, setPosSearch] = useState('');
@@ -429,6 +502,45 @@ export default function DownloadStyledExcel() {
   const toggleAllAppointments = () =>
     setAppointmentFilters(isAllAppointments ? [] : [...APPOINTMENT_OPTIONS]);
 
+  const filteredOffices = useMemo(() => {
+    const query = officeSearch.trim().toLowerCase();
+    if (!query) return officeOptions;
+    return officeOptions.filter((office) => {
+      const name = office.name.toLowerCase();
+      const code = office.bioIndexCode?.toLowerCase() ?? '';
+      return name.includes(query) || (!!code && code.includes(query));
+    });
+  }, [officeOptions, officeSearch]);
+
+  const toggleOfficeSelection = (officeId: string) => {
+    setSelectedOffices((prev) =>
+      prev.includes(officeId)
+        ? prev.filter((id) => id !== officeId)
+        : [...prev, officeId]
+    );
+  };
+
+  const selectAllFilteredOffices = () => {
+    if (!filteredOffices.length) {
+      setSelectedOffices([]);
+      return;
+    }
+    setSelectedOffices((prev) => {
+      const set = new Set(prev);
+      filteredOffices.forEach((office) => set.add(office.id));
+      return Array.from(set);
+    });
+  };
+
+  const deselectAllFilteredOffices = () => {
+    if (!filteredOffices.length) {
+      setSelectedOffices([]);
+      return;
+    }
+    const remove = new Set(filteredOffices.map((office) => office.id));
+    setSelectedOffices((prev) => prev.filter((id) => !remove.has(id)));
+  };
+
 
   // under your other path states
   const [imageExt, setImageExt] = useState<string>(() =>
@@ -618,6 +730,22 @@ export default function DownloadStyledExcel() {
     setLoading(true);
     const toastId = toast.loading('Generating Excel file...');
     try {
+      let officesSelection: string[] = [];
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('export.officesSelection');
+          const parsed = stored ? JSON.parse(stored) : [];
+          if (Array.isArray(parsed)) {
+            officesSelection = Array.from(new Set(parsed.map((id: any) => String(id))));
+          }
+        } catch (error) {
+          console.warn('Failed to parse export.officesSelection before download', error);
+          officesSelection = [...selectedOffices];
+        }
+      } else {
+        officesSelection = [...selectedOffices];
+      }
+
       const blob = await generateExcelFile({
         selectedKeys,
         columnOrder: effectiveColumnOrder,
@@ -633,10 +761,23 @@ export default function DownloadStyledExcel() {
         qrExt,
         sortBy,
         sortDir,
+        officesSelection,
+        officeMetadata,
 
       });
 
-      const base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
+      let base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
+      if (officesSelection.length === 1) {
+        const officeId = officesSelection[0];
+        const info = officeMetadata[officeId];
+        const suffixSource = info?.bioIndexCode || info?.name || officeId;
+        if (suffixSource) {
+          const safeSuffix = makeSafeFilename(`${suffixSource}`);
+          if (safeSuffix) {
+            base = makeSafeFilename(`${base}_${safeSuffix}`);
+          }
+        }
+      }
       const filename = `${base}.xlsx`;
 
 
@@ -1239,6 +1380,59 @@ export default function DownloadStyledExcel() {
                                 <span>{label}</span>
                               </label>
                             ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="mb-2 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                            <label className="font-medium">Filter by Office</label>
+                            <div className="flex gap-2 text-xs">
+                              <button
+                                type="button"
+                                onClick={selectAllFilteredOffices}
+                                className="text-blue-600 hover:underline"
+                              >
+                                Select All
+                              </button>
+                              <button
+                                type="button"
+                                onClick={deselectAllFilteredOffices}
+                                className="text-blue-600 hover:underline"
+                              >
+                                Deselect All
+                              </button>
+                            </div>
+                          </div>
+
+                          <input
+                            type="text"
+                            value={officeSearch}
+                            onChange={(e) => setOfficeSearch(e.target.value)}
+                            placeholder="Search offices..."
+                            className="w-full mb-2 rounded border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                          />
+
+                          <div className="space-y-2 max-h-48 overflow-y-auto border p-2 rounded bg-white shadow">
+                            {filteredOffices.length === 0 ? (
+                              <p className="text-xs text-gray-500 px-1">No offices match your search.</p>
+                            ) : (
+                              filteredOffices.map((office) => (
+                                <label key={office.id} className="flex items-start gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedOffices.includes(office.id)}
+                                    onChange={() => toggleOfficeSelection(office.id)}
+                                    className="mt-1"
+                                  />
+                                  <span className="flex flex-col">
+                                    <span>{office.name}</span>
+                                    {office.bioIndexCode ? (
+                                      <span className="text-xs text-gray-500">{office.bioIndexCode}</span>
+                                    ) : null}
+                                  </span>
+                                </label>
+                              ))
+                            )}
                           </div>
                         </div>
 

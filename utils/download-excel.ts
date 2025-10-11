@@ -38,6 +38,8 @@ type DownloadExcelParams = {
   salaryModeField?: string;
    sortBy?: 'updatedAt' | 'createdAt';
   sortDir?: 'asc' | 'desc';
+  officesSelection?: string[];
+  officeMetadata?: Record<string, { name: string; bioIndexCode?: string | null }>;
 };
 
 function ts(v: any) {
@@ -142,7 +144,9 @@ export async function generateExcelFile({
   salaryTable,
   salaryModeField,
   sortBy,
-  sortDir
+  sortDir,
+  officesSelection = [],
+  officeMetadata = {}
 }: DownloadExcelParams): Promise<Blob> {
 
   const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
@@ -204,76 +208,79 @@ export async function generateExcelFile({
   v != null && String(v).trim().length > 0;
 
   const updatedData = data.employees.map((row: any) => {
+    const copy: any = { ...row };
+    const originalOfficeId = copy.officeId ?? '';
+    copy.__officeId = originalOfficeId ? String(originalOfficeId) : '';
+
     // --- map IDs to labels ---
+    if (originalOfficeId && officeMapping[originalOfficeId]) {
+      copy.officeId = officeMapping[originalOfficeId];
+    }
+    if (copy.eligibilityId && eligibilityMapping[copy.eligibilityId]) {
+      copy.eligibilityId = eligibilityMapping[copy.eligibilityId];
+    }
+    if (copy.employeeTypeId && appointmentMapping[copy.employeeTypeId]) {
+      copy.employeeTypeId = appointmentMapping[copy.employeeTypeId];
+    }
 
-    if (row.officeId && officeMapping[row.officeId]) {
-      row.officeId = officeMapping[row.officeId];
-    }
-    if (row.eligibilityId && eligibilityMapping[row.eligibilityId]) {
-      row.eligibilityId = eligibilityMapping[row.eligibilityId];
-    }
-    if (row.employeeTypeId && appointmentMapping[row.employeeTypeId]) {
-      row.employeeTypeId = appointmentMapping[row.employeeTypeId];
-    }
-
-    row.appointment = row.employeeTypeId; // label string after mapping
-    row.eligibility = row.eligibilityId;  // label string after mapping
-    row.status = row.isArchived ? "Retired" : "Active";
-    row.comma = (hasText(row.barangay) && hasText(row.city)) ? "," : "";
+    copy.appointment = copy.employeeTypeId; // label string after mapping
+    copy.eligibility = copy.eligibilityId;  // label string after mapping
+    copy.status = copy.isArchived ? "Retired" : "Active";
+    copy.comma = (hasText(copy.barangay) && hasText(copy.city)) ? "," : "";
 
 
     // --- Plantilla: designation name or fallback to office name ---
-    if (row.designationId && officeMapping[row.designationId]) {
-      row.plantilla = officeMapping[row.designationId];
+    if (copy.designationId && officeMapping[copy.designationId]) {
+      copy.plantilla = officeMapping[copy.designationId];
     } else {
-      row.plantilla = row.officeId || '';
+      copy.plantilla = copy.officeId || '';
     }
 
     // --- Dates ---
-    if (row.birthday) {
-      row.birthday = new Date(row.birthday).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    if (copy.birthday) {
+      copy.birthday = new Date(copy.birthday).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
     }
-    if (row.dateHired) {
-      row.dateHired = new Date(row.dateHired).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    if (copy.dateHired) {
+      copy.dateHired = new Date(copy.dateHired).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
     }
 
     // --- Middle initial ---
-    if (row.middleName) {
-      const trimmed = row.middleName.trim();
-      row.middleName = trimmed.length > 0 ? `${trimmed[0].toUpperCase()}.` : '';
+    if (copy.middleName) {
+      const trimmed = copy.middleName.trim();
+      copy.middleName = trimmed.length > 0 ? `${trimmed[0].toUpperCase()}.` : '';
     }
 
     // --- Position rules ---
-    if (row.position) {
-      row.position = applyPositionRules(String(row.position), positionReplaceRules);
+    if (copy.position) {
+      copy.position = applyPositionRules(String(copy.position), positionReplaceRules);
     }
 
     // --- IDs cleanup ---
-    row.gsisNo = (row.gsisNo?.toString().trim()) || "N/A";
-    row.tinNo = (row.tinNo?.toString().trim()) || "N/A";
-    row.philHealthNo = (row.philHealthNo?.toString().trim()) || "N/A";
-    row.pagIbigNo = (row.pagIbigNo?.toString().trim()) || "N/A";
+    copy.gsisNo = (copy.gsisNo?.toString().trim()) || "N/A";
+    copy.tinNo = (copy.tinNo?.toString().trim()) || "N/A";
+    copy.philHealthNo = (copy.philHealthNo?.toString().trim()) || "N/A";
+    copy.pagIbigNo = (copy.pagIbigNo?.toString().trim()) || "N/A";
 
     // --- Nickname fallback ---
-    if (!row.nickname || row.nickname.toString().trim() === "") {
-      const first = (row.firstName ?? "").toString().trim();
-      row.nickname = first.split(/\s+/)[0] || "";
+    if (!copy.nickname || copy.nickname.toString().trim() === "") {
+      const first = (copy.firstName ?? "").toString().trim();
+      copy.nickname = first.split(/\s+/)[0] || "";
     }
 
     // --- Image/QR paths ---
     const imgExt = (imageExt || 'png').replace(/^\./, '').toLowerCase();
     const qrcodeExt = (qrExt || 'png').replace(/^\./, '').toLowerCase();
-    const employeeNoSafe = String(row.employeeNo ?? '').split(',')[0].trim();
-    row.imagePath = `${safeImageDir}\\${employeeNoSafe}.${imgExt}`;
-    row.qrPath = `${safeQrDir}\\${qrPrefix}${employeeNoSafe}.${qrcodeExt}`;
+    const employeeNoSafe = String(copy.employeeNo ?? '').split(',')[0].trim();
+    copy.imagePath = `${safeImageDir}\\${employeeNoSafe}.${imgExt}`;
+    copy.qrPath = `${safeQrDir}\\${qrPrefix}${employeeNoSafe}.${qrcodeExt}`;
 
     // --- Salary export (auto vs manual) ---
-    const source = decideSalarySource(row, salaryModeField);
-    let salaryExport = Number(row.salary) || 0;
+    const source = decideSalarySource(copy, salaryModeField);
+    let salaryExport = Number(copy.salary) || 0;
 
     // Prefer table passed in; else use the API-built stepsByGrade map
-    const autoFromParam = lookupAutoSalary(Number(row.salaryGrade), Number(row.salaryStep), salaryTable);
-    const autoFromApiMap = lookupAutoSalaryFromMap(Number(row.salaryGrade), Number(row.salaryStep));
+    const autoFromParam = lookupAutoSalary(Number(copy.salaryGrade), Number(copy.salaryStep), salaryTable);
+    const autoFromApiMap = lookupAutoSalaryFromMap(Number(copy.salaryGrade), Number(copy.salaryStep));
 
     if (source === 'auto') {
       const auto = (typeof autoFromParam === 'number' ? autoFromParam : autoFromApiMap);
@@ -283,14 +290,13 @@ export async function generateExcelFile({
     }
 
     // If you want the existing "Salary" column to reflect this, overwrite:
-    // row.salary = salaryExport;
+    // copy.salary = salaryExport;
     // Or keep it separate (and add 'salaryExport' column in your modal):
-    row.salaryExport = salaryExport;
-    row.salarySourceExport = source;
-    if (row.yearsOfService === undefined) row.yearsOfService = "";
+    copy.salaryExport = salaryExport;
+    copy.salarySourceExport = source;
+    if (copy.yearsOfService === undefined) copy.yearsOfService = "";
     // --- Normalize text for NFC (ñ fix) ---
-    row = normalizeRowStringsNFC(row);
-    return row;
+    return normalizeRowStringsNFC(copy);
   });
 
 
@@ -331,167 +337,251 @@ export async function generateExcelFile({
   const headers = visibleColumns.map(col => col.name);
 
   const sortField = sortBy ?? 'updatedAt';
-const dir = sortDir ?? 'desc';
+  const dir = sortDir ?? 'desc';
 
-const sortedEmployees = [...filteredEmployees].sort((a: any, b: any) => {
-  const aTs = ts(a[sortField]) || ts(a.createdAt);
-  const bTs = ts(b[sortField]) || ts(b.createdAt);
-  return dir === 'desc' ? bTs - aTs : aTs - bTs;
-});
+  const buildWorksheet = (rows: any[], options: { includeTitle?: boolean; title?: string } = {}) => {
+    const sortedRows = [...rows].sort((a: any, b: any) => {
+      const aTs = ts(a[sortField]) || ts(a.createdAt);
+      const bTs = ts(b[sortField]) || ts(b.createdAt);
+      return dir === 'desc' ? bTs - aTs : aTs - bTs;
+    });
 
-const filteredData = sortedEmployees.map((row: any) => {
-  const newRow: Record<string, any> = {};
-  // Parse once
-  const raw = String(row.employeeNo ?? '').trim();
-  const [bioPartRaw, codePartRaw] = raw.split(',');
-  const bioPart = (bioPartRaw ?? '').trim();
-  const codePart = (codePartRaw ?? '').trim();
+    const filteredData = sortedRows.map((row: any) => {
+      const newRow: Record<string, any> = {};
+      const raw = String(row.employeeNo ?? '').trim();
+      const [bioPartRaw, codePartRaw] = raw.split(',');
+      const bioPart = (bioPartRaw ?? '').trim();
+      const codePart = (codePartRaw ?? '').trim();
 
-  visibleColumns.forEach((col) => {
-    let val = row[col.key];
-    if (col.key === 'employeeNo') {
-      if (idColumnSource === 'uuid') {
-        val = row.id ?? '';
-      } else if (idColumnSource === 'bio') {
-        val = bioPart || codePart || row.id || '';
-      } else {
-        val = codePart || bioPart || row.id || '';
-      }
+      visibleColumns.forEach((col) => {
+        let val = row[col.key];
+        if (col.key === 'employeeNo') {
+          if (idColumnSource === 'uuid') {
+            val = row.id ?? '';
+          } else if (idColumnSource === 'bio') {
+            val = bioPart || codePart || row.id || '';
+          } else {
+            val = codePart || bioPart || row.id || '';
+          }
+        }
+        newRow[col.name] = val;
+      });
+
+      return newRow;
+    });
+
+    const dataRows = filteredData.map((row) => headers.map((header) => row[header]));
+
+    const worksheet = XLSX.utils.aoa_to_sheet([]);
+    const includeTitle = !!options.includeTitle;
+    const headerRowIdx = includeTitle ? 1 : 0; // zero-based
+    const dataStartRowIdx = headerRowIdx + 1;
+    const headerExcelRow = headerRowIdx + 1;
+    const dataExcelStartRow = dataStartRowIdx + 1;
+
+    if (includeTitle) {
+      const titleText = options.title ?? '';
+      XLSX.utils.sheet_add_aoa(worksheet, [[titleText]], { origin: 'A1' });
+      worksheet['!merges'] = worksheet['!merges'] || [];
+      worksheet['!merges'].push({
+        s: { r: 0, c: 0 },
+        e: { r: 0, c: Math.max(headers.length - 1, 0) },
+      });
+      const titleCell = worksheet['A1'] || { t: 's', v: titleText };
+      titleCell.t = 's';
+      titleCell.v = titleText;
+      titleCell.s = {
+        font: { bold: true, sz: 16 },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        fill: { fgColor: { rgb: 'DDDDDD' } },
+      };
+      worksheet['A1'] = titleCell;
     }
-    newRow[col.name] = val;
-  });
 
-  return newRow;
-});
+    XLSX.utils.sheet_add_aoa(worksheet, [headers], { origin: { r: headerRowIdx, c: 0 } });
 
-  // const sortedData = filteredData.sort((a: any, b: any) => {
-  //   if (a['Office'] < b['Office']) return -1;
-  //   if (a['Office'] > b['Office']) return 1;
-  //   if (a['Plantilla'] < b['Plantilla']) return -1;  // <- NEW second key
-  //   if (a['Plantilla'] > b['Plantilla']) return 1;
-  //   if (a['Last Name'] < b['Last Name']) return -1;
-  //   if (a['Last Name'] > b['Last Name']) return 1;
-  //   return 0;
-  // });
+    if (dataRows.length > 0) {
+      XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: { r: dataStartRowIdx, c: 0 } });
+    } else if (includeTitle && headers.length > 0) {
+      const noteAddress = XLSX.utils.encode_cell({ r: dataStartRowIdx, c: 0 });
+      worksheet[noteAddress] = {
+        t: 's',
+        v: 'No employees',
+        s: { font: { italic: true, color: { rgb: '555555' } } },
+      };
+    }
 
-const worksheet = XLSX.utils.json_to_sheet(filteredData, { header: headers, skipHeader: false });
+    worksheet['!freeze'] = { xSplit: 1, ySplit: includeTitle ? 2 : 1 };
 
-  worksheet['!freeze'] = { xSplit: 1, ySplit: 1 };
-
-  headers.forEach((header, colIdx) => {
-    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIdx });
-    worksheet[cellAddress].s = {
-      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12 },
-      fill: { fgColor: { rgb: '28a745' } },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      border: {
-        top: { style: 'thin', color: { rgb: '000000' } },
-        bottom: { style: 'thin', color: { rgb: '000000' } },
-        left: { style: 'thin', color: { rgb: '000000' } },
-        right: { style: 'thin', color: { rgb: '000000' } },
-      },
-    };
-  });
-
-  filteredData.forEach((row: any, rowIndex: number) => {
-    const isRetired = row['Retired'] === true || String(row['Retired']).toLowerCase() === 'true';
-    headers.forEach((header, colIndex) => {
-      const cellAddress = XLSX.utils.encode_cell({ r: rowIndex + 1, c: colIndex });
-      const baseStyle: any = {
-        font: { sz: 11, color: { rgb: '000000' } },
-        alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+    headers.forEach((header, colIdx) => {
+      const cellAddress = XLSX.utils.encode_cell({ r: headerRowIdx, c: colIdx });
+      const cell = worksheet[cellAddress] || { t: 's', v: header };
+      cell.s = {
+        font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12 },
+        fill: { fgColor: { rgb: '28a745' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
         border: {
-          top: { style: 'thin', color: { rgb: 'CCCCCC' } },
-          bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
-          left: { style: 'thin', color: { rgb: 'CCCCCC' } },
-          right: { style: 'thin', color: { rgb: 'CCCCCC' } },
+          top: { style: 'thin', color: { rgb: '000000' } },
+          bottom: { style: 'thin', color: { rgb: '000000' } },
+          left: { style: 'thin', color: { rgb: '000000' } },
+          right: { style: 'thin', color: { rgb: '000000' } },
         },
       };
-      if (isRetired) {
-        baseStyle.fill = { fgColor: { rgb: 'FFCCCC' } };
-        baseStyle.font = { sz: 11, color: { rgb: '990000' }, bold: true };
-      }
-      if (worksheet[cellAddress]) worksheet[cellAddress].s = baseStyle;
+      worksheet[cellAddress] = cell;
     });
-  });
 
-// Helper to build A1 address from (rowNumber: 1-based, colIndex: 0-based)
-const addr = (rowNumber: number, colIndex: number) =>
-  XLSX.utils.encode_cell({ r: rowNumber - 1, c: colIndex });
-
-// Resolve current column indexes from the runtime headers array
-const idxBirthday       = headers.indexOf("Birthday");
-const idxAge            = headers.indexOf("Age");
-const idxDateHired      = headers.indexOf("Date Hired");
-const idxYearsOfService = headers.indexOf("Year(s) of Service");
-const idxTerminateDate  = headers.indexOf("Terminate Date");
-
-// Write formulas only if the needed columns are actually present/selected
-for (let i = 0; i < filteredData.length; i++) {
-  const rowNumber = i + 2; // header row = 1, data starts at 2
-
-  const birthdateCell =
-    idxBirthday >= 0 ? addr(rowNumber, idxBirthday) : undefined;
-  const ageCell =
-    idxAge >= 0 ? addr(rowNumber, idxAge) : undefined;
-  const hiredDateCell =
-    idxDateHired >= 0 ? addr(rowNumber, idxDateHired) : undefined;
-  const serviceCell =
-    idxYearsOfService >= 0 ? addr(rowNumber, idxYearsOfService) : undefined;
-  const terminateDateCell =
-    idxTerminateDate >= 0 ? addr(rowNumber, idxTerminateDate) : undefined;
-
-  // AGE = DATEDIF(Birthday, Today/Terminate, "Y")
-  if (ageCell && birthdateCell) {
-    const startRef = `IF(${birthdateCell}="","",DATEVALUE(${birthdateCell}))`;
-    const endRef = terminateDateCell
-      ? `IF(${terminateDateCell}="",TODAY(),DATEVALUE(${terminateDateCell}))`
-      : `TODAY()`;
-
-    worksheet[ageCell] = {
-      t: "n",
-      f: `IF(${birthdateCell}="","",DATEDIF(${startRef},${endRef},"Y"))`,
-      s: worksheet[ageCell]?.s || {},
-    };
-  }
-
-  // YEARS OF SERVICE = DATEDIF(Date Hired, Today/Terminate, "Y")
-  if (serviceCell && hiredDateCell) {
-    const startRef = `IF(${hiredDateCell}="","",DATEVALUE(${hiredDateCell}))`;
-    const endRef = terminateDateCell
-      ? `IF(${terminateDateCell}="",TODAY(),DATEVALUE(${terminateDateCell}))`
-      : `TODAY()`;
-
-    worksheet[serviceCell] = {
-      t: "n",
-      f: `IF(${hiredDateCell}="","",DATEDIF(${startRef},${endRef},"Y"))`,
-      s: worksheet[serviceCell]?.s || {},
-    };
-  }
-}
-
-
-  const columnWidths = headers.map((header) => {
-    let maxLength = header.length;
-    filteredData.forEach((row: any) => {
-      const cellValue = row[header] ?? '';
-      const cellLength = String(cellValue).length;
-      if (cellLength > maxLength) {
-        maxLength = cellLength;
-      }
+    filteredData.forEach((row: any, rowIndex: number) => {
+      const isRetired = row['Retired'] === true || String(row['Retired']).toLowerCase() === 'true';
+      headers.forEach((header, colIndex) => {
+        const cellAddress = XLSX.utils.encode_cell({ r: dataStartRowIdx + rowIndex, c: colIndex });
+        const baseStyle: any = {
+          font: { sz: 11, color: { rgb: '000000' } },
+          alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+          border: {
+            top: { style: 'thin', color: { rgb: 'CCCCCC' } },
+            bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
+            left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+            right: { style: 'thin', color: { rgb: 'CCCCCC' } },
+          },
+        };
+        if (isRetired) {
+          baseStyle.fill = { fgColor: { rgb: 'FFCCCC' } };
+          baseStyle.font = { sz: 11, color: { rgb: '990000' }, bold: true };
+        }
+        if (worksheet[cellAddress]) worksheet[cellAddress].s = baseStyle;
+      });
     });
-    return { wch: maxLength + 1 };
-  });
-  worksheet['!cols'] = columnWidths;
+
+    const addr = (rowNumber: number, colIndex: number) =>
+      XLSX.utils.encode_cell({ r: rowNumber - 1, c: colIndex });
+
+    const idxBirthday = headers.indexOf('Birthday');
+    const idxAge = headers.indexOf('Age');
+    const idxDateHired = headers.indexOf('Date Hired');
+    const idxYearsOfService = headers.indexOf('Year(s) of Service');
+    const idxTerminateDate = headers.indexOf('Terminate Date');
+
+    for (let i = 0; i < filteredData.length; i++) {
+      const rowNumber = dataExcelStartRow + i;
+
+      const birthdateCell = idxBirthday >= 0 ? addr(rowNumber, idxBirthday) : undefined;
+      const ageCell = idxAge >= 0 ? addr(rowNumber, idxAge) : undefined;
+      const hiredDateCell = idxDateHired >= 0 ? addr(rowNumber, idxDateHired) : undefined;
+      const serviceCell = idxYearsOfService >= 0 ? addr(rowNumber, idxYearsOfService) : undefined;
+      const terminateDateCell = idxTerminateDate >= 0 ? addr(rowNumber, idxTerminateDate) : undefined;
+
+      if (ageCell && birthdateCell) {
+        const startRef = `IF(${birthdateCell}="","",DATEVALUE(${birthdateCell}))`;
+        const endRef = terminateDateCell
+          ? `IF(${terminateDateCell}="",TODAY(),DATEVALUE(${terminateDateCell}))`
+          : `TODAY()`;
+
+        worksheet[ageCell] = {
+          t: 'n',
+          f: `IF(${birthdateCell}="","",DATEDIF(${startRef},${endRef},"Y"))`,
+          s: worksheet[ageCell]?.s || {},
+        };
+      }
+
+      if (serviceCell && hiredDateCell) {
+        const startRef = `IF(${hiredDateCell}="","",DATEVALUE(${hiredDateCell}))`;
+        const endRef = terminateDateCell
+          ? `IF(${terminateDateCell}="",TODAY(),DATEVALUE(${terminateDateCell}))`
+          : `TODAY()`;
+
+        worksheet[serviceCell] = {
+          t: 'n',
+          f: `IF(${hiredDateCell}="","",DATEDIF(${startRef},${endRef},"Y"))`,
+          s: worksheet[serviceCell]?.s || {},
+        };
+      }
+    }
+
+    const columnWidths = headers.map((header) => {
+      let maxLength = header.length;
+      filteredData.forEach((row: any) => {
+        const cellValue = row[header] ?? '';
+        const cellLength = String(cellValue).length;
+        if (cellLength > maxLength) {
+          maxLength = cellLength;
+        }
+      });
+      return { wch: maxLength + 1 };
+    });
+    if (columnWidths.length > 0) {
+      worksheet['!cols'] = columnWidths;
+    }
+
+    return worksheet;
+  };
+
+  const normalizedSelection = Array.from(new Set((officesSelection ?? []).map((id) => String(id)).filter(Boolean)));
+  const selectionSet = new Set(normalizedSelection);
+  const selectionCount = normalizedSelection.length;
 
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+  const takenSheetNames = new Set<string>();
+
+  if (selectionCount === 0) {
+    const worksheet = buildWorksheet(filteredEmployees, { includeTitle: false });
+    const sheetName = uniqueSheetName(sanitizeSheetName('Sheet1'), takenSheetNames);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  } else if (selectionCount === 1) {
+    const officeId = normalizedSelection[0];
+    const rows = filteredEmployees.filter((emp: any) => emp.__officeId === officeId);
+    const meta = officeMetadata[officeId];
+    const fallbackName = meta?.name || officeMapping[officeId] || officeId || 'Office';
+    const sheetName = uniqueSheetName(
+      sanitizeSheetName(meta?.bioIndexCode || fallbackName || 'Sheet'),
+      takenSheetNames
+    );
+    const worksheet = buildWorksheet(rows, { includeTitle: true, title: fallbackName });
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  } else {
+    const filteredBySelection = filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
+    const partitionInput = filteredBySelection.map((emp: any) => ({ officeId: emp.__officeId, row: emp }));
+    const partitioned = partitionByOffice(partitionInput);
+
+    normalizedSelection.forEach((officeId) => {
+      const entries = partitioned[officeId] ?? [];
+      const rows = entries.map((entry) => entry.row);
+      const meta = officeMetadata[officeId];
+      const fallbackName = meta?.name || officeMapping[officeId] || officeId || 'Office';
+      const sheetName = uniqueSheetName(
+        sanitizeSheetName(meta?.bioIndexCode || fallbackName || 'Sheet'),
+        takenSheetNames
+      );
+      const worksheet = buildWorksheet(rows, { includeTitle: true, title: fallbackName });
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    });
+  }
+
   const excelBuffer = XLSX.write(workbook, {
     bookType: 'xlsx',
     type: 'array',
-    bookSST: true,          // <- shared strings table
+    bookSST: true,
     cellStyles: true,
     compression: true,
   });
   return new Blob([excelBuffer], { type: 'application/octet-stream' });
+}
+
+export function sanitizeSheetName(name: string) {
+  const cleaned = name.replace(/[\\/*?:[\]]/g, '').slice(0, 31).trim();
+  return cleaned || 'Sheet';
+}
+
+export function uniqueSheetName(base: string, taken: Set<string>) {
+  let name = base;
+  let i = 2;
+  while (taken.has(name)) name = `${base}-${i++}`;
+  taken.add(name);
+  return name;
+}
+
+export function partitionByOffice<T extends { officeId: string }>(rows: T[]) {
+  return rows.reduce<Record<string, T[]>>((acc, r) => {
+    (acc[r.officeId] ||= []).push(r);
+    return acc;
+  }, {});
 }
