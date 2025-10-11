@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { FaFileExcel } from 'react-icons/fa';
-import { FileDown, FileUp, Save } from "lucide-react";
+import { FileDown, FileUp, Save, Trash2 } from "lucide-react";
 import Modal from './ui/modal';
-import { generateExcelFile, Mappings, PositionReplaceRule } from '@/utils/download-excel';
+import { generateExcelFile, Mappings, PositionReplaceRule, SortLevel } from '@/utils/download-excel';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import { CheckboxListPicker } from './checkbox-list-picker';
@@ -31,6 +31,26 @@ export default function DownloadStyledExcel() {
     if (!raw) return undefined;
     return Array.isArray(raw) ? raw[0] : raw;
   }, [params]);
+
+  function readStoredSortLevels(): SortLevel[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('export.sortLevels');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((item: any) => item && typeof item.field === 'string')
+        .slice(0, 3)
+        .map((item: any) => ({
+          field: String(item.field),
+          dir: item.dir === 'asc' ? 'asc' : 'desc',
+        }));
+    } catch (error) {
+      console.warn('Failed to parse export.sortLevels', error);
+      return [];
+    }
+  }
 
   const [officeOptions, setOfficeOptions] = useState<OfficeOption[]>([]);
   const [officeSearch, setOfficeSearch] = useState('');
@@ -63,6 +83,21 @@ export default function DownloadStyledExcel() {
       console.warn('Failed to persist export.officesSelection', error);
     }
   }, [selectedOffices]);
+
+  const [sheetMode, setSheetMode] = useState<'perOffice' | 'merged'>(() => {
+    if (typeof window === 'undefined') return 'perOffice';
+    const stored = localStorage.getItem('export.sheetMode');
+    return stored === 'merged' ? 'merged' : 'perOffice';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.sheetMode', sheetMode);
+    } catch (error) {
+      console.warn('Failed to persist export.sheetMode', error);
+    }
+  }, [sheetMode]);
 
   useEffect(() => {
     if (!modalOpen || !departmentId) return;
@@ -107,16 +142,59 @@ export default function DownloadStyledExcel() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(undefined);
 
   const [templates, setTemplates] = useState(getAllTemplates());
-  const [sortBy, setSortBy] = useState<'updatedAt' | 'createdAt'>(() => {
-    if (typeof window !== 'undefined') return (localStorage.getItem('hrps_sort_by') as any) || 'updatedAt';
+  const [sortBy, setSortBy] = useState<string>(() => {
+    const stored = readStoredSortLevels();
+    if (stored[0]?.field) return stored[0].field;
+    if (typeof window !== 'undefined') {
+      const legacy = localStorage.getItem('hrps_sort_by');
+      if (legacy) return legacy;
+    }
     return 'updatedAt';
   });
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => {
-    if (typeof window !== 'undefined') return (localStorage.getItem('hrps_sort_dir') as any) || 'desc';
+    const stored = readStoredSortLevels();
+    if (stored[0]?.dir === 'asc' || stored[0]?.dir === 'desc') return stored[0].dir;
+    if (typeof window !== 'undefined') {
+      const legacy = localStorage.getItem('hrps_sort_dir');
+      if (legacy === 'asc' || legacy === 'desc') return legacy;
+    }
     return 'desc';
   });
-  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_by', sortBy); }, [sortBy]);
-  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_dir', sortDir); }, [sortDir]);
+  const [additionalSortLevels, setAdditionalSortLevels] = useState<SortLevel[]>(() => {
+    const stored = readStoredSortLevels();
+    return stored.slice(1);
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (sortBy === 'updatedAt' || sortBy === 'createdAt') {
+      localStorage.setItem('hrps_sort_by', sortBy);
+    }
+  }, [sortBy]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_dir', sortDir);
+  }, [sortDir]);
+
+  const combinedSortLevels = useMemo(() => {
+    const levels: SortLevel[] = [];
+    if (sortBy) {
+      levels.push({ field: sortBy, dir: sortDir });
+    }
+    additionalSortLevels.forEach((level) => {
+      if (level?.field) {
+        levels.push({ field: level.field, dir: level.dir });
+      }
+    });
+    return levels.slice(0, 3);
+  }, [sortBy, sortDir, additionalSortLevels]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.sortLevels', JSON.stringify(combinedSortLevels));
+    } catch (error) {
+      console.warn('Failed to persist export.sortLevels', error);
+    }
+  }, [combinedSortLevels]);
 
 
   function refreshTemplates() {
@@ -714,6 +792,46 @@ export default function DownloadStyledExcel() {
     );
   }, [columnOrder, idColumnSource]);
 
+  const sortFieldOptions = useMemo(() => {
+    const entries = new Map<string, string>();
+    effectiveColumnOrder.forEach((col) => {
+      const label = col.key === 'officeId' ? 'Office Name' : col.name;
+      entries.set(col.key, label);
+    });
+    entries.set('status', 'Status');
+    entries.set('appointment', 'Appointment');
+    entries.set('eligibility', 'Eligibility');
+    entries.set('updatedAt', 'Updated date');
+    entries.set('createdAt', 'Created date');
+    return Array.from(entries.entries()).map(([value, label]) => ({ value, label }));
+  }, [effectiveColumnOrder]);
+
+  const handleAddSortLevel = () => {
+    if (additionalSortLevels.length >= 2) return;
+    const fallback = sortFieldOptions[0]?.value || sortBy || 'updatedAt';
+    setAdditionalSortLevels((prev) => [...prev, { field: fallback, dir: 'asc' }]);
+  };
+
+  const updateSortLevelField = (index: number, field: string) => {
+    setAdditionalSortLevels((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], field };
+      return next;
+    });
+  };
+
+  const updateSortLevelDir = (index: number, dir: 'asc' | 'desc') => {
+    setAdditionalSortLevels((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], dir };
+      return next;
+    });
+  };
+
+  const removeSortLevel = (index: number) => {
+    setAdditionalSortLevels((prev) => prev.filter((_, i) => i !== index));
+  };
+
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -763,18 +881,28 @@ export default function DownloadStyledExcel() {
         sortDir,
         officesSelection,
         officeMetadata,
+        sortLevels: combinedSortLevels,
+        sheetMode,
 
       });
 
-      let base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
-      if (officesSelection.length === 1) {
-        const officeId = officesSelection[0];
-        const info = officeMetadata[officeId];
-        const suffixSource = info?.bioIndexCode || info?.name || officeId;
-        if (suffixSource) {
-          const safeSuffix = makeSafeFilename(`${suffixSource}`);
-          if (safeSuffix) {
-            base = makeSafeFilename(`${base}_${safeSuffix}`);
+      let base: string;
+      if (sheetMode === 'merged') {
+        const now = new Date();
+        const datePart = now.toISOString().slice(0, 10);
+        const timePart = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+        base = makeSafeFilename(`Employees_MergedOffices_${datePart}_${timePart}`);
+      } else {
+        base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
+        if (officesSelection.length === 1) {
+          const officeId = officesSelection[0];
+          const info = officeMetadata[officeId];
+          const suffixSource = info?.bioIndexCode || info?.name || officeId;
+          if (suffixSource) {
+            const safeSuffix = makeSafeFilename(`${suffixSource}`);
+            if (safeSuffix) {
+              base = makeSafeFilename(`${base}_${safeSuffix}`);
+            }
           }
         }
       }
@@ -1329,32 +1457,91 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
                     <div className="mt-3 rounded-md border bg-white p-3">
-                          <h4 className="text-sm font-semibold">Sort</h4>
-                          <div className="flex flex-wrap items-center gap-3 text-sm mt-2">
+                      <h4 className="text-sm font-semibold">Sort</h4>
+                      <div className="mt-2 space-y-3 text-sm">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="flex items-center gap-2">
+                            <span>Field:</span>
+                            <select
+                              value={sortBy}
+                              onChange={(e) => setSortBy(e.target.value)}
+                              className="border rounded px-2 py-1 text-xs"
+                            >
+                              {sortFieldOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                              {!sortFieldOptions.some((option) => option.value === sortBy) && sortBy ? (
+                                <option value={sortBy}>{sortBy}</option>
+                              ) : null}
+                            </select>
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <span>Order:</span>
+                            <select
+                              value={sortDir}
+                              onChange={(e) => setSortDir(e.target.value === 'asc' ? 'asc' : 'desc')}
+                              className="border rounded px-2 py-1 text-xs"
+                            >
+                              <option value="desc">Descending</option>
+                              <option value="asc">Ascending</option>
+                            </select>
+                          </label>
+                        </div>
+
+                        {additionalSortLevels.map((level, index) => (
+                          <div key={index} className="flex flex-wrap items-center gap-3">
+                            <span className="text-xs font-semibold text-gray-500">Then by:</span>
                             <label className="flex items-center gap-2">
                               <span>Field:</span>
                               <select
-                                value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value as any)}
+                                value={level.field}
+                                onChange={(e) => updateSortLevelField(index, e.target.value)}
                                 className="border rounded px-2 py-1 text-xs"
                               >
-                                <option value="updatedAt">Updated date</option>
-                                <option value="createdAt">Created date</option>
+                                {sortFieldOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                                {!sortFieldOptions.some((option) => option.value === level.field) && level.field ? (
+                                  <option value={level.field}>{level.field}</option>
+                                ) : null}
                               </select>
                             </label>
                             <label className="flex items-center gap-2">
                               <span>Order:</span>
                               <select
-                                value={sortDir}
-                                onChange={(e) => setSortDir(e.target.value as any)}
+                                value={level.dir}
+                                onChange={(e) => updateSortLevelDir(index, e.target.value === 'asc' ? 'asc' : 'desc')}
                                 className="border rounded px-2 py-1 text-xs"
                               >
-                                <option value="desc">Newest first</option>
-                                <option value="asc">Oldest first</option>
+                                <option value="desc">Descending</option>
+                                <option value="asc">Ascending</option>
                               </select>
                             </label>
+                            <button
+                              type="button"
+                              onClick={() => removeSortLevel(index)}
+                              className="text-gray-500 hover:text-red-600"
+                              aria-label={`Remove sort level ${index + 2}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
-                        </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={handleAddSortLevel}
+                          disabled={additionalSortLevels.length >= 2}
+                          className="text-xs text-blue-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          + Add sort level
+                        </button>
+                      </div>
+                    </div>
                     <TabsContent value="filters" className="mt-3">
                       <div className="rounded-md border bg-white p-3 space-y-4">
                         {/* Appointment filter */}
@@ -1433,6 +1620,32 @@ export default function DownloadStyledExcel() {
                                 </label>
                               ))
                             )}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-gray-200 pt-3">
+                          <span className="text-sm font-medium">Sheet mode</span>
+                          <div className="mt-2 space-y-2 text-sm">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="sheetMode"
+                                value="perOffice"
+                                checked={sheetMode === 'perOffice'}
+                                onChange={() => setSheetMode('perOffice')}
+                              />
+                              <span>One sheet per office</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="sheetMode"
+                                value="merged"
+                                checked={sheetMode === 'merged'}
+                                onChange={() => setSheetMode('merged')}
+                              />
+                              <span>Single sheet (merge selected offices)</span>
+                            </label>
                           </div>
                         </div>
 

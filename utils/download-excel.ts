@@ -5,6 +5,8 @@ export type Column = { name: string; key: string };
 
 export type IdColumnSource = 'uuid' | 'bio' | 'employeeNo';
 
+export type SortLevel = { field: string; dir: 'asc' | 'desc' };
+
 
 export type PositionReplaceRule = {
   mode: 'exact' | 'startsWith' | 'contains' | 'regex';
@@ -36,10 +38,12 @@ type DownloadExcelParams = {
   qrExt?: string;
   salaryTable?: SalaryRow[];         // <- NEW: pass in or fetch inside
   salaryModeField?: string;
-   sortBy?: 'updatedAt' | 'createdAt';
+   sortBy?: string;
   sortDir?: 'asc' | 'desc';
   officesSelection?: string[];
   officeMetadata?: Record<string, { name: string; bioIndexCode?: string | null }>;
+  sortLevels?: SortLevel[];
+  sheetMode?: 'perOffice' | 'merged';
 };
 
 function ts(v: any) {
@@ -146,7 +150,9 @@ export async function generateExcelFile({
   sortBy,
   sortDir,
   officesSelection = [],
-  officeMetadata = {}
+  officeMetadata = {},
+  sortLevels,
+  sheetMode,
 }: DownloadExcelParams): Promise<Blob> {
 
   const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
@@ -336,83 +342,51 @@ export async function generateExcelFile({
 
   const headers = visibleColumns.map(col => col.name);
 
-  const sortField = sortBy ?? 'updatedAt';
-  const dir = sortDir ?? 'desc';
+  const legacySortField = sortBy ?? 'updatedAt';
+  const legacySortDir = sortDir ?? 'desc';
 
-  const buildWorksheet = (rows: any[], options: { includeTitle?: boolean; title?: string } = {}) => {
-    const sortedRows = [...rows].sort((a: any, b: any) => {
-      const aTs = ts(a[sortField]) || ts(a.createdAt);
-      const bTs = ts(b[sortField]) || ts(b.createdAt);
-      return dir === 'desc' ? bTs - aTs : aTs - bTs;
-    });
+  const normalizedLevels = (sortLevels ?? [])
+    .filter((level): level is SortLevel => !!level && typeof level.field === 'string')
+    .map((level) => ({
+      field: String(level.field),
+      dir: level.dir === 'asc' ? 'asc' : 'desc',
+    }));
 
-    const filteredData = sortedRows.map((row: any) => {
-      const newRow: Record<string, any> = {};
-      const raw = String(row.employeeNo ?? '').trim();
-      const [bioPartRaw, codePartRaw] = raw.split(',');
-      const bioPart = (bioPartRaw ?? '').trim();
-      const codePart = (codePartRaw ?? '').trim();
+  const effectiveSortLevels: SortLevel[] = normalizedLevels.length
+    ? normalizedLevels
+    : [{ field: legacySortField, dir: legacySortDir }];
 
-      visibleColumns.forEach((col) => {
-        let val = row[col.key];
-        if (col.key === 'employeeNo') {
-          if (idColumnSource === 'uuid') {
-            val = row.id ?? '';
-          } else if (idColumnSource === 'bio') {
-            val = bioPart || codePart || row.id || '';
-          } else {
-            val = codePart || bioPart || row.id || '';
-          }
+  const formatRow = (row: any) => {
+    const newRow: Record<string, any> = {};
+    const raw = String(row.employeeNo ?? '').trim();
+    const [bioPartRaw, codePartRaw] = raw.split(',');
+    const bioPart = (bioPartRaw ?? '').trim();
+    const codePart = (codePartRaw ?? '').trim();
+
+    visibleColumns.forEach((col) => {
+      let val = row[col.key];
+      if (col.key === 'employeeNo') {
+        if (idColumnSource === 'uuid') {
+          val = row.id ?? '';
+        } else if (idColumnSource === 'bio') {
+          val = bioPart || codePart || row.id || '';
+        } else {
+          val = codePart || bioPart || row.id || '';
         }
-        newRow[col.name] = val;
-      });
-
-      return newRow;
+      }
+      newRow[col.name] = val;
     });
 
+    return newRow;
+  };
+
+  const createDisplayRows = (rows: any[]) => {
+    const filteredData = rows.map(formatRow);
     const dataRows = filteredData.map((row) => headers.map((header) => row[header]));
+    return { filteredData, dataRows };
+  };
 
-    const worksheet = XLSX.utils.aoa_to_sheet([]);
-    const includeTitle = !!options.includeTitle;
-    const headerRowIdx = includeTitle ? 1 : 0; // zero-based
-    const dataStartRowIdx = headerRowIdx + 1;
-    const headerExcelRow = headerRowIdx + 1;
-    const dataExcelStartRow = dataStartRowIdx + 1;
-
-    if (includeTitle) {
-      const titleText = options.title ?? '';
-      XLSX.utils.sheet_add_aoa(worksheet, [[titleText]], { origin: 'A1' });
-      worksheet['!merges'] = worksheet['!merges'] || [];
-      worksheet['!merges'].push({
-        s: { r: 0, c: 0 },
-        e: { r: 0, c: Math.max(headers.length - 1, 0) },
-      });
-      const titleCell = worksheet['A1'] || { t: 's', v: titleText };
-      titleCell.t = 's';
-      titleCell.v = titleText;
-      titleCell.s = {
-        font: { bold: true, sz: 16 },
-        alignment: { horizontal: 'center', vertical: 'center' },
-        fill: { fgColor: { rgb: 'DDDDDD' } },
-      };
-      worksheet['A1'] = titleCell;
-    }
-
-    XLSX.utils.sheet_add_aoa(worksheet, [headers], { origin: { r: headerRowIdx, c: 0 } });
-
-    if (dataRows.length > 0) {
-      XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: { r: dataStartRowIdx, c: 0 } });
-    } else if (includeTitle && headers.length > 0) {
-      const noteAddress = XLSX.utils.encode_cell({ r: dataStartRowIdx, c: 0 });
-      worksheet[noteAddress] = {
-        t: 's',
-        v: 'No employees',
-        s: { font: { italic: true, color: { rgb: '555555' } } },
-      };
-    }
-
-    worksheet['!freeze'] = { xSplit: 1, ySplit: includeTitle ? 2 : 1 };
-
+  const styleHeaderRow = (worksheet: XLSX.WorkSheet, headerRowIdx: number) => {
     headers.forEach((header, colIdx) => {
       const cellAddress = XLSX.utils.encode_cell({ r: headerRowIdx, c: colIdx });
       const cell = worksheet[cellAddress] || { t: 's', v: header };
@@ -429,8 +403,14 @@ export async function generateExcelFile({
       };
       worksheet[cellAddress] = cell;
     });
+  };
 
-    filteredData.forEach((row: any, rowIndex: number) => {
+  const styleDataRows = (
+    worksheet: XLSX.WorkSheet,
+    filteredData: Record<string, any>[] ,
+    dataStartRowIdx: number
+  ) => {
+    filteredData.forEach((row, rowIndex) => {
       const isRetired = row['Retired'] === true || String(row['Retired']).toLowerCase() === 'true';
       headers.forEach((header, colIndex) => {
         const cellAddress = XLSX.utils.encode_cell({ r: dataStartRowIdx + rowIndex, c: colIndex });
@@ -451,15 +431,23 @@ export async function generateExcelFile({
         if (worksheet[cellAddress]) worksheet[cellAddress].s = baseStyle;
       });
     });
+  };
 
+  const idxBirthday = headers.indexOf('Birthday');
+  const idxAge = headers.indexOf('Age');
+  const idxDateHired = headers.indexOf('Date Hired');
+  const idxYearsOfService = headers.indexOf('Year(s) of Service');
+  const idxTerminateDate = headers.indexOf('Terminate Date');
+
+  const applyDateFormulas = (
+    worksheet: XLSX.WorkSheet,
+    filteredData: Record<string, any>[],
+    dataStartRowIdx: number
+  ) => {
+    if (!filteredData.length) return;
     const addr = (rowNumber: number, colIndex: number) =>
       XLSX.utils.encode_cell({ r: rowNumber - 1, c: colIndex });
-
-    const idxBirthday = headers.indexOf('Birthday');
-    const idxAge = headers.indexOf('Age');
-    const idxDateHired = headers.indexOf('Date Hired');
-    const idxYearsOfService = headers.indexOf('Year(s) of Service');
-    const idxTerminateDate = headers.indexOf('Terminate Date');
+    const dataExcelStartRow = dataStartRowIdx + 1;
 
     for (let i = 0; i < filteredData.length; i++) {
       const rowNumber = dataExcelStartRow + i;
@@ -496,11 +484,13 @@ export async function generateExcelFile({
         };
       }
     }
+  };
 
+  const applyColumnWidths = (worksheet: XLSX.WorkSheet, data: Record<string, any>[]) => {
     const columnWidths = headers.map((header) => {
       let maxLength = header.length;
-      filteredData.forEach((row: any) => {
-        const cellValue = row[header] ?? '';
+      data.forEach((row: any) => {
+        const cellValue = row?.[header] ?? '';
         const cellLength = String(cellValue).length;
         if (cellLength > maxLength) {
           maxLength = cellLength;
@@ -511,6 +501,104 @@ export async function generateExcelFile({
     if (columnWidths.length > 0) {
       worksheet['!cols'] = columnWidths;
     }
+  };
+
+  const addMergedTitleRow = (worksheet: XLSX.WorkSheet, rowIndex: number, title: string) => {
+    XLSX.utils.sheet_add_aoa(worksheet, [[title]], { origin: { r: rowIndex, c: 0 } });
+    worksheet['!merges'] = worksheet['!merges'] || [];
+    worksheet['!merges'].push({
+      s: { r: rowIndex, c: 0 },
+      e: { r: rowIndex, c: Math.max(headers.length - 1, 0) },
+    });
+    const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: 0 });
+    const cell = worksheet[cellAddress] || { t: 's', v: title };
+    cell.t = 's';
+    cell.v = title;
+    cell.s = {
+      font: { bold: true, sz: 16 },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      fill: { fgColor: { rgb: 'DDDDDD' } },
+    };
+    worksheet[cellAddress] = cell;
+  };
+
+  const buildWorksheet = (rows: any[], options: { includeTitle?: boolean; title?: string } = {}) => {
+    const sortedRows = sortRows(rows, effectiveSortLevels);
+    const { filteredData, dataRows } = createDisplayRows(sortedRows);
+    const worksheet = XLSX.utils.aoa_to_sheet([]);
+    const includeTitle = !!options.includeTitle;
+    let currentRow = 0;
+
+    if (includeTitle) {
+      const titleText = options.title ?? '';
+      addMergedTitleRow(worksheet, currentRow, titleText);
+      currentRow += 1;
+    }
+
+    const headerRowIdx = currentRow;
+    XLSX.utils.sheet_add_aoa(worksheet, [headers], { origin: { r: headerRowIdx, c: 0 } });
+    styleHeaderRow(worksheet, headerRowIdx);
+
+    currentRow += 1;
+    const dataStartRowIdx = currentRow;
+
+    if (dataRows.length > 0) {
+      XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: { r: dataStartRowIdx, c: 0 } });
+      styleDataRows(worksheet, filteredData, dataStartRowIdx);
+      applyDateFormulas(worksheet, filteredData, dataStartRowIdx);
+      currentRow += dataRows.length;
+    } else if (includeTitle && headers.length > 0) {
+      const noteAddress = XLSX.utils.encode_cell({ r: dataStartRowIdx, c: 0 });
+      worksheet[noteAddress] = {
+        t: 's',
+        v: 'No employees',
+        s: { font: { italic: true, color: { rgb: '555555' } } },
+      };
+      currentRow += 1;
+    }
+
+    worksheet['!freeze'] = { xSplit: 1, ySplit: includeTitle ? 2 : 1 };
+    applyColumnWidths(worksheet, filteredData);
+
+    return worksheet;
+  };
+
+  type GroupDefinition = { officeId: string; title: string; rows: any[] };
+
+  const buildMergedWorksheet = (groups: GroupDefinition[]) => {
+    const worksheet = XLSX.utils.aoa_to_sheet([]);
+    const headerRowIdx = 0;
+    XLSX.utils.sheet_add_aoa(worksheet, [headers], { origin: { r: headerRowIdx, c: 0 } });
+    styleHeaderRow(worksheet, headerRowIdx);
+
+    let nextRow = headerRowIdx + 1;
+    const allFilteredData: Record<string, any>[] = [];
+
+    groups.forEach((group) => {
+      addMergedTitleRow(worksheet, nextRow, group.title);
+      nextRow += 1;
+
+      const { filteredData, dataRows } = createDisplayRows(group.rows);
+      allFilteredData.push(...filteredData);
+
+      if (dataRows.length > 0) {
+        XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: { r: nextRow, c: 0 } });
+        styleDataRows(worksheet, filteredData, nextRow);
+        applyDateFormulas(worksheet, filteredData, nextRow);
+        nextRow += dataRows.length;
+      } else {
+        const noteAddress = XLSX.utils.encode_cell({ r: nextRow, c: 0 });
+        worksheet[noteAddress] = {
+          t: 's',
+          v: 'No employees',
+          s: { font: { italic: true, color: { rgb: '555555' } } },
+        };
+        nextRow += 1;
+      }
+    });
+
+    worksheet['!freeze'] = { xSplit: 1, ySplit: 1 };
+    applyColumnWidths(worksheet, allFilteredData);
 
     return worksheet;
   };
@@ -521,39 +609,74 @@ export async function generateExcelFile({
 
   const workbook = XLSX.utils.book_new();
   const takenSheetNames = new Set<string>();
+  const resolvedSheetMode = sheetMode === 'merged' ? 'merged' : 'perOffice';
 
-  if (selectionCount === 0) {
-    const worksheet = buildWorksheet(filteredEmployees, { includeTitle: false });
-    const sheetName = uniqueSheetName(sanitizeSheetName('Sheet1'), takenSheetNames);
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-  } else if (selectionCount === 1) {
-    const officeId = normalizedSelection[0];
-    const rows = filteredEmployees.filter((emp: any) => emp.__officeId === officeId);
+  const resolveOfficeTitle = (officeId: string, fallbackLabel: string = 'Office') => {
     const meta = officeMetadata[officeId];
-    const fallbackName = meta?.name || officeMapping[officeId] || officeId || 'Office';
-    const sheetName = uniqueSheetName(
-      sanitizeSheetName(meta?.bioIndexCode || fallbackName || 'Sheet'),
-      takenSheetNames
-    );
-    const worksheet = buildWorksheet(rows, { includeTitle: true, title: fallbackName });
+    return meta?.name || officeMapping[officeId] || officeId || fallbackLabel;
+  };
+
+  if (resolvedSheetMode === 'merged') {
+    const rowsToInclude = selectionCount === 0
+      ? filteredEmployees
+      : filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
+
+    const sortedMergedRows = sortRows(rowsToInclude, effectiveSortLevels);
+    const officeOrderBase = selectionCount === 0
+      ? Array.from(new Set(sortedMergedRows.map((emp: any) => emp.__officeId || '')))
+      : normalizedSelection;
+    const officeOrder = officeOrderBase.length > 0 ? officeOrderBase : [''];
+
+    const rowsByOffice = new Map<string, any[]>();
+    sortedMergedRows.forEach((row: any) => {
+      const key = row.__officeId || '';
+      if (!rowsByOffice.has(key)) rowsByOffice.set(key, []);
+      rowsByOffice.get(key)!.push(row);
+    });
+
+    const groups: GroupDefinition[] = officeOrder.map((officeId) => ({
+      officeId,
+      title: resolveOfficeTitle(officeId, selectionCount === 0 ? 'All Offices' : 'Office'),
+      rows: rowsByOffice.get(officeId) ?? [],
+    }));
+
+    const worksheet = buildMergedWorksheet(groups);
+    const sheetName = uniqueSheetName(sanitizeSheetName('Merged Offices'), takenSheetNames);
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
   } else {
-    const filteredBySelection = filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
-    const partitionInput = filteredBySelection.map((emp: any) => ({ officeId: emp.__officeId, row: emp }));
-    const partitioned = partitionByOffice(partitionInput);
-
-    normalizedSelection.forEach((officeId) => {
-      const entries = partitioned[officeId] ?? [];
-      const rows = entries.map((entry) => entry.row);
+    if (selectionCount === 0) {
+      const worksheet = buildWorksheet(filteredEmployees, { includeTitle: false });
+      const sheetName = uniqueSheetName(sanitizeSheetName('Sheet1'), takenSheetNames);
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    } else if (selectionCount === 1) {
+      const officeId = normalizedSelection[0];
+      const rows = filteredEmployees.filter((emp: any) => emp.__officeId === officeId);
+      const fallbackName = resolveOfficeTitle(officeId);
       const meta = officeMetadata[officeId];
-      const fallbackName = meta?.name || officeMapping[officeId] || officeId || 'Office';
       const sheetName = uniqueSheetName(
         sanitizeSheetName(meta?.bioIndexCode || fallbackName || 'Sheet'),
         takenSheetNames
       );
       const worksheet = buildWorksheet(rows, { includeTitle: true, title: fallbackName });
       XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-    });
+    } else {
+      const filteredBySelection = filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
+      const partitionInput = filteredBySelection.map((emp: any) => ({ officeId: emp.__officeId, row: emp }));
+      const partitioned = partitionByOffice(partitionInput);
+
+      normalizedSelection.forEach((officeId) => {
+        const entries = partitioned[officeId] ?? [];
+        const rows = entries.map((entry) => entry.row);
+        const fallbackName = resolveOfficeTitle(officeId);
+        const meta = officeMetadata[officeId];
+        const sheetName = uniqueSheetName(
+          sanitizeSheetName(meta?.bioIndexCode || fallbackName || 'Sheet'),
+          takenSheetNames
+        );
+        const worksheet = buildWorksheet(rows, { includeTitle: true, title: fallbackName });
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+      });
+    }
   }
 
   const excelBuffer = XLSX.write(workbook, {
@@ -584,4 +707,32 @@ export function partitionByOffice<T extends { officeId: string }>(rows: T[]) {
     (acc[r.officeId] ||= []).push(r);
     return acc;
   }, {});
+}
+
+// Map a column key to a comparable value (string/number/date); fallback to ""
+export function getComparable(row: any, field: string) {
+  const v = row?.[field];
+  if (v == null) return '';
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'number') return v;
+  const t = typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? Date.parse(v) : NaN;
+  if (!Number.isNaN(t)) return t;
+  return String(v).toLowerCase();
+}
+
+// Stable multi-level sort (levels in priority order)
+export function sortRows<T>(rows: T[], levels: { field: string; dir: 'asc' | 'desc' }[]) {
+  if (!levels?.length) return rows;
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => {
+      for (const { field, dir } of levels) {
+        const A = getComparable(a.r as any, field);
+        const B = getComparable(b.r as any, field);
+        if (A < B) return dir === 'asc' ? -1 : 1;
+        if (A > B) return dir === 'asc' ? 1 : -1;
+      }
+      return a.i - b.i;
+    })
+    .map((x) => x.r);
 }
