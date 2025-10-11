@@ -292,6 +292,11 @@ export async function GET(
 
     // filters (all optional)
     const officeId = searchParams.get("officeId") || undefined;
+    const officeFilters = searchParams
+      .getAll("offices")
+      .flatMap((value) => value.split(","))
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
     const employeeTypeId = searchParams.get("employeeTypeId") || undefined;
     const eligibilityId = searchParams.get("eligibilityId") || undefined;
 
@@ -317,13 +322,18 @@ export async function GET(
     // build where
     const where: any = {
       departmentId: params.departmentId,
-      officeId,
       employeeTypeId,
       eligibilityId,
       // Only set isFeatured/isHead if they’re explicitly boolean
       ...(typeof isFeatured === "boolean" ? { isFeatured } : {}),
       ...(typeof isHead === "boolean" ? { isHead } : {}),
     };
+
+    if (officeFilters.length > 0) {
+      where.officeId = { in: officeFilters };
+    } else if (officeId) {
+      where.officeId = officeId;
+    }
 
     if (status === "active") where.isArchived = false;
     if (status === "archived") where.isArchived = true;

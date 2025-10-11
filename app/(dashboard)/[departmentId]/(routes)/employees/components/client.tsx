@@ -15,7 +15,7 @@ import { DataTable } from "@/components/ui/data-table";
 import ApiList from "@/components/ui/api-list";
 import ApiHeading from "@/components/ui/api-heading";
 import Footer from "../../(frontend)/view/components/footer";
-import DownloadEmployeeBackup from "@/components/download-button";
+import ExportEmployeesButton from "./export-employees-button";
 import React, { useState, useMemo, useEffect } from 'react';
 import SearchFilter from "@/components/search-filter";
 import BirthdayNotifications from "./notifications";
@@ -28,7 +28,7 @@ import CsvAttendanceImport from "./csv-attendance-import";
 import { Badge } from "@/components/ui/badge";
 
 
-interface Option { id: string; name: string; }
+interface Option { id: string; name: string; bioIndexCode?: string | null; }
 
 const STATUS_VALUES = ["all", "Active", "Inactive"] as const;
 type StatusValue = typeof STATUS_VALUES[number];
@@ -302,7 +302,11 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
             </div>
             {/* Download Button */}
             <div className="w-auto">
-              <DownloadEmployeeBackup />
+              <ExportEmployeesButton
+                departmentId={departmentId}
+                offices={offices}
+                employees={swrEmployees}
+              />
             </div>
           </div>
 
