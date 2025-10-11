@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { FaFileExcel } from 'react-icons/fa';
 import { FileDown, FileUp, Save, Trash2 } from "lucide-react";
 import Modal from './ui/modal';
-import { generateExcelFile, Mappings, PositionReplaceRule, SortLevel } from '@/utils/download-excel';
+import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, SortLevel } from '@/utils/download-excel';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 import { CheckboxListPicker } from './checkbox-list-picker';
@@ -203,10 +203,52 @@ export default function DownloadStyledExcel() {
   }
 
 
+  const normalizeTemplate = (tpl: ExportTemplate) => {
+    const rawOffices = Array.isArray((tpl as any)?.officesSelection)
+      ? (tpl as any).officesSelection
+      : [];
+    const officesSelection = rawOffices.map((id: any) => String(id)).filter((id) => id.length > 0);
+
+    const sheetModeValue: 'perOffice' | 'merged' = (tpl as any)?.sheetMode === 'merged' ? 'merged' : 'perOffice';
+
+    const sortLevelsValue: SortLevel[] = Array.isArray((tpl as any)?.sortLevels)
+      ? (tpl as any).sortLevels
+          .map((level: any) => {
+            if (!level || typeof level.field !== 'string') return null;
+            return {
+              field: String(level.field),
+              dir: level.dir === 'asc' ? 'asc' : 'desc',
+            } as SortLevel;
+          })
+          .filter((level): level is SortLevel => !!level)
+          .slice(0, 3)
+      : [];
+
+    return {
+      ...tpl,
+      templateVersion: 2 as const,
+      officesSelection,
+      sheetMode: sheetModeValue,
+      sortLevels: sortLevelsValue,
+    };
+  };
+
+
 
   function applyTemplate(tpl: ExportTemplate) {
     setSelectedTemplateId(tpl.id);
     setSelectedColumns(tpl.selectedKeys);
+    const normalized = normalizeTemplate(tpl);
+    setSelectedOffices(normalized.officesSelection);
+    setSheetMode(normalized.sheetMode);
+    if (normalized.sortLevels.length > 0) {
+      const [first, ...rest] = normalized.sortLevels;
+      setSortBy(first.field);
+      setSortDir(first.dir);
+      setAdditionalSortLevels(rest.slice(0, 2));
+    } else {
+      setAdditionalSortLevels([]);
+    }
     if (tpl.statusFilter) setStatusFilter(tpl.statusFilter);
     if (tpl.idColumnSource) setIdColumnSource(tpl.idColumnSource);
 
@@ -351,17 +393,16 @@ export default function DownloadStyledExcel() {
 
 
   const [advancedTab, setAdvancedTab] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("hrps_advanced_tab") || "paths";
+    if (typeof window !== 'undefined') {
+      return getActiveExportTab() || localStorage.getItem('hrps_advanced_tab') || 'filters';
     }
-    return "paths";
+    return 'filters';
   });
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("hrps_advanced_tab", advancedTab);
-    }
-  }, [advancedTab]);
+  const handleAdvancedTabChange = (value: string) => {
+    setAdvancedTab(value);
+    setActiveExportTab(value);
+  };
 
 
   // full rule list (persisted)
@@ -657,6 +698,7 @@ export default function DownloadStyledExcel() {
 
 
   const columnOrder = [
+    { name: 'No. (row number)', key: 'rowNumber' },
     { name: 'Employee No', key: 'employeeNo' },
     { name: 'Last Name', key: 'lastName' },
     { name: 'First Name', key: 'firstName' },
@@ -700,6 +742,7 @@ export default function DownloadStyledExcel() {
   ];
 
   const defaultSelectedColumns = [
+    'rowNumber',
     'lastName',
     'firstName',
     'middleName',
@@ -787,9 +830,15 @@ export default function DownloadStyledExcel() {
         idColumnSource === 'bio' ? 'Employee Code' :
           'Employee No';
 
-    return columnOrder.map(col =>
-      col.key === 'employeeNo' ? { ...col, name: label } : col
-    );
+    return columnOrder.map((col) => {
+      if (col.key === 'rowNumber') {
+        return { ...col, name: 'No.' };
+      }
+      if (col.key === 'employeeNo') {
+        return { ...col, name: label };
+      }
+      return col;
+    });
   }, [columnOrder, idColumnSource]);
 
   const sortFieldOptions = useMemo(() => {
@@ -980,11 +1029,15 @@ export default function DownloadStyledExcel() {
 
     const ok = overwriteUserTemplateById(selectedTemplateId, {
       name: (newName ?? selectedTemplateName)?.trim() || selectedTemplateName,
+      templateVersion: 2,
       selectedKeys: selectedColumnsRef.current,
       statusFilter,
       idColumnSource,
       appointmentFilters,
       positionReplaceRules,
+      officesSelection: selectedOffices.map((id) => String(id)),
+      sheetMode,
+      sortLevels: combinedSortLevels,
       sheetName: "Sheet1",
       paths: {
         imageBaseDir,
@@ -1044,11 +1097,15 @@ export default function DownloadStyledExcel() {
               if (!name) return;
 
               const newTpl = saveTemplateToLocalStorage(name, {
+                templateVersion: 2,
                 selectedKeys: selectedColumnsRef.current,
                 statusFilter,
                 idColumnSource,
                 appointmentFilters,
                 positionReplaceRules,
+                officesSelection: selectedOffices.map((id) => String(id)),
+                sheetMode,
+                sortLevels: combinedSortLevels,
                 sheetName: "Sheet1",
                 paths: {                         // ✅ save paths
                   imageBaseDir,
@@ -1154,15 +1211,25 @@ export default function DownloadStyledExcel() {
             >
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
-                  <Tabs value={advancedTab} onValueChange={setAdvancedTab} className="w-full">
-                    <TabsList className="grid grid-cols-5 w-full gap-5">
-                      <TabsTrigger value="filters">Filter</TabsTrigger>
-                      <TabsTrigger value="columns_path">Columns</TabsTrigger>
-                      <TabsTrigger value="paths">Paths</TabsTrigger>
-                      <TabsTrigger value="position">Find &amp; Replace</TabsTrigger>
-                      <TabsTrigger value="id">ID Column</TabsTrigger> {/* NEW */}
-
-                    </TabsList>
+                  <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full">
+                    <div className="overflow-x-auto whitespace-nowrap scrollbar-none">
+                      <TabsList className="inline-flex w-full min-w-max gap-2">
+                        <TabsTrigger value="filters" className="px-3 py-2 text-sm">Filter</TabsTrigger>
+                        <TabsTrigger value="columns_path" className="px-3 py-2 text-sm">Columns</TabsTrigger>
+                        <TabsTrigger value="sort" className="px-3 py-2 text-sm">Sort</TabsTrigger>
+                        <TabsTrigger value="paths" className="px-3 py-2 text-sm">Paths</TabsTrigger>
+                        <TabsTrigger value="position" className="px-3 py-2 text-sm">
+                          <ActionTooltip label="Find &amp; Replace">
+                            <span className="block w-full">Find &amp; Replace</span>
+                          </ActionTooltip>
+                        </TabsTrigger>
+                        <TabsTrigger value="id" className="px-3 py-2 text-sm">
+                          <ActionTooltip label="ID Column">
+                            <span className="block w-full">ID</span>
+                          </ActionTooltip>
+                        </TabsTrigger>
+                      </TabsList>
+                    </div>
 
                     {/* TAB: Paths */}
                     <TabsContent value="paths" className="mt-3">
@@ -1452,52 +1519,20 @@ export default function DownloadStyledExcel() {
                             </label>
                           ))}
                         </div>
-                        
+
 
                       </div>
                     </TabsContent>
-                    <div className="mt-3 rounded-md border bg-white p-3">
-                      <h4 className="text-sm font-semibold">Sort</h4>
-                      <div className="mt-2 space-y-3 text-sm">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <label className="flex items-center gap-2">
-                            <span>Field:</span>
-                            <select
-                              value={sortBy}
-                              onChange={(e) => setSortBy(e.target.value)}
-                              className="border rounded px-2 py-1 text-xs"
-                            >
-                              {sortFieldOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                              {!sortFieldOptions.some((option) => option.value === sortBy) && sortBy ? (
-                                <option value={sortBy}>{sortBy}</option>
-                              ) : null}
-                            </select>
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <span>Order:</span>
-                            <select
-                              value={sortDir}
-                              onChange={(e) => setSortDir(e.target.value === 'asc' ? 'asc' : 'desc')}
-                              className="border rounded px-2 py-1 text-xs"
-                            >
-                              <option value="desc">Descending</option>
-                              <option value="asc">Ascending</option>
-                            </select>
-                          </label>
-                        </div>
-
-                        {additionalSortLevels.map((level, index) => (
-                          <div key={index} className="flex flex-wrap items-center gap-3">
-                            <span className="text-xs font-semibold text-gray-500">Then by:</span>
+                    <TabsContent value="sort" className="mt-3">
+                      <div className="rounded-md border bg-white p-3">
+                        <h4 className="text-sm font-semibold">Sort</h4>
+                        <div className="mt-2 space-y-3 text-sm">
+                          <div className="flex flex-wrap items-center gap-3">
                             <label className="flex items-center gap-2">
                               <span>Field:</span>
                               <select
-                                value={level.field}
-                                onChange={(e) => updateSortLevelField(index, e.target.value)}
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
                                 className="border rounded px-2 py-1 text-xs"
                               >
                                 {sortFieldOptions.map((option) => (
@@ -1505,43 +1540,77 @@ export default function DownloadStyledExcel() {
                                     {option.label}
                                   </option>
                                 ))}
-                                {!sortFieldOptions.some((option) => option.value === level.field) && level.field ? (
-                                  <option value={level.field}>{level.field}</option>
+                                {!sortFieldOptions.some((option) => option.value === sortBy) && sortBy ? (
+                                  <option value={sortBy}>{sortBy}</option>
                                 ) : null}
                               </select>
                             </label>
                             <label className="flex items-center gap-2">
                               <span>Order:</span>
                               <select
-                                value={level.dir}
-                                onChange={(e) => updateSortLevelDir(index, e.target.value === 'asc' ? 'asc' : 'desc')}
+                                value={sortDir}
+                                onChange={(e) => setSortDir(e.target.value === 'asc' ? 'asc' : 'desc')}
                                 className="border rounded px-2 py-1 text-xs"
                               >
                                 <option value="desc">Descending</option>
                                 <option value="asc">Ascending</option>
                               </select>
                             </label>
-                            <button
-                              type="button"
-                              onClick={() => removeSortLevel(index)}
-                              className="text-gray-500 hover:text-red-600"
-                              aria-label={`Remove sort level ${index + 2}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
                           </div>
-                        ))}
 
-                        <button
-                          type="button"
-                          onClick={handleAddSortLevel}
-                          disabled={additionalSortLevels.length >= 2}
-                          className="text-xs text-blue-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          + Add sort level
-                        </button>
+                          {additionalSortLevels.map((level, index) => (
+                            <div key={index} className="flex flex-wrap items-center gap-3">
+                              <span className="text-xs font-semibold text-gray-500">Then by:</span>
+                              <label className="flex items-center gap-2">
+                                <span>Field:</span>
+                                <select
+                                  value={level.field}
+                                  onChange={(e) => updateSortLevelField(index, e.target.value)}
+                                  className="border rounded px-2 py-1 text-xs"
+                                >
+                                  {sortFieldOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                  {!sortFieldOptions.some((option) => option.value === level.field) && level.field ? (
+                                    <option value={level.field}>{level.field}</option>
+                                  ) : null}
+                                </select>
+                              </label>
+                              <label className="flex items-center gap-2">
+                                <span>Order:</span>
+                                <select
+                                  value={level.dir}
+                                  onChange={(e) => updateSortLevelDir(index, e.target.value === 'asc' ? 'asc' : 'desc')}
+                                  className="border rounded px-2 py-1 text-xs"
+                                >
+                                  <option value="desc">Descending</option>
+                                  <option value="asc">Ascending</option>
+                                </select>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => removeSortLevel(index)}
+                                className="text-gray-500 hover:text-red-600"
+                                aria-label={`Remove sort level ${index + 2}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={handleAddSortLevel}
+                            disabled={additionalSortLevels.length >= 2}
+                            className="text-xs text-blue-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            + Add sort level
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    </TabsContent>
                     <TabsContent value="filters" className="mt-3">
                       <div className="rounded-md border bg-white p-3 space-y-4">
                         {/* Appointment filter */}

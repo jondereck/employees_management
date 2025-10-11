@@ -326,9 +326,14 @@ export async function generateExcelFile({
       emp.employeeTypeId && allowed.has(String(emp.employeeTypeId).toLowerCase())
     );
   }
+  const includeRowNumber = selectedKeys.includes('rowNumber');
+
   const visibleColumns = columnOrder
     .filter(col => !hiddenFields.includes(col.key) && selectedKeys.includes(col.key))
     .map(col => {
+      if (col.key === 'rowNumber') {
+        return { ...col, name: 'No.' };
+      }
       if (col.key !== 'employeeNo') return col;
 
       const name =
@@ -365,7 +370,9 @@ export async function generateExcelFile({
 
     visibleColumns.forEach((col) => {
       let val = row[col.key];
-      if (col.key === 'employeeNo') {
+      if (col.key === 'rowNumber') {
+        val = typeof row.__rowNumber === 'number' ? row.__rowNumber : '';
+      } else if (col.key === 'employeeNo') {
         if (idColumnSource === 'uuid') {
           val = row.id ?? '';
         } else if (idColumnSource === 'bio') {
@@ -416,7 +423,11 @@ export async function generateExcelFile({
         const cellAddress = XLSX.utils.encode_cell({ r: dataStartRowIdx + rowIndex, c: colIndex });
         const baseStyle: any = {
           font: { sz: 11, color: { rgb: '000000' } },
-          alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+          alignment: {
+            vertical: 'center',
+            horizontal: header === 'No.' ? 'right' : 'left',
+            wrapText: header === 'No.' ? false : true,
+          },
           border: {
             top: { style: 'thin', color: { rgb: 'CCCCCC' } },
             bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
@@ -428,7 +439,12 @@ export async function generateExcelFile({
           baseStyle.fill = { fgColor: { rgb: 'FFCCCC' } };
           baseStyle.font = { sz: 11, color: { rgb: '990000' }, bold: true };
         }
-        if (worksheet[cellAddress]) worksheet[cellAddress].s = baseStyle;
+        const cell = worksheet[cellAddress] || { t: 's', v: row[header] ?? '' };
+        if (header === 'No.' && typeof row[header] === 'number') {
+          cell.t = 'n';
+        }
+        cell.s = { ...cell.s, ...baseStyle };
+        worksheet[cellAddress] = cell;
       });
     });
   };
@@ -488,6 +504,9 @@ export async function generateExcelFile({
 
   const applyColumnWidths = (worksheet: XLSX.WorkSheet, data: Record<string, any>[]) => {
     const columnWidths = headers.map((header) => {
+      if (header === 'No.') {
+        return { wch: 8 };
+      }
       let maxLength = header.length;
       data.forEach((row: any) => {
         const cellValue = row?.[header] ?? '';
@@ -524,7 +543,10 @@ export async function generateExcelFile({
 
   const buildWorksheet = (rows: any[], options: { includeTitle?: boolean; title?: string } = {}) => {
     const sortedRows = sortRows(rows, effectiveSortLevels);
-    const { filteredData, dataRows } = createDisplayRows(sortedRows);
+    const numberedRows = includeRowNumber
+      ? sortedRows.map((row, idx) => ({ ...row, __rowNumber: idx + 1 }))
+      : sortedRows;
+    const { filteredData, dataRows } = createDisplayRows(numberedRows);
     const worksheet = XLSX.utils.aoa_to_sheet([]);
     const includeTitle = !!options.includeTitle;
     let currentRow = 0;
@@ -622,13 +644,24 @@ export async function generateExcelFile({
       : filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
 
     const sortedMergedRows = sortRows(rowsToInclude, effectiveSortLevels);
+    const numberedMergedRows = includeRowNumber
+      ? (() => {
+          const iterator = perOfficeCounter(
+            sortedMergedRows.map((row: any) => ({ officeId: row.__officeId || '' }))
+          );
+          return sortedMergedRows.map((row: any, idx: number) => {
+            const next = iterator.next().value as { no: number } | undefined;
+            return { ...row, __rowNumber: next?.no ?? idx + 1 };
+          });
+        })()
+      : sortedMergedRows;
     const officeOrderBase = selectionCount === 0
       ? Array.from(new Set(sortedMergedRows.map((emp: any) => emp.__officeId || '')))
       : normalizedSelection;
     const officeOrder = officeOrderBase.length > 0 ? officeOrderBase : [''];
 
     const rowsByOffice = new Map<string, any[]>();
-    sortedMergedRows.forEach((row: any) => {
+    numberedMergedRows.forEach((row: any) => {
       const key = row.__officeId || '';
       if (!rowsByOffice.has(key)) rowsByOffice.set(key, []);
       rowsByOffice.get(key)!.push(row);
@@ -735,4 +768,36 @@ export function sortRows<T>(rows: T[], levels: { field: string; dir: 'asc' | 'de
       return a.i - b.i;
     })
     .map((x) => x.r);
+}
+
+// Persist last active tab
+export function setActiveExportTab(key: string) {
+  try {
+    localStorage.setItem('export.activeTab', key);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getActiveExportTab(): string | null {
+  try {
+    return localStorage.getItem('export.activeTab');
+  } catch {
+    return null;
+  }
+}
+
+// Numbering for merged mode: returns an iterator over [officeId, localIndex]
+export function* perOfficeCounter(rows: { officeId: string }[]) {
+  let current: string | null = null;
+  let index = 0;
+  for (const r of rows) {
+    if (r.officeId !== current) {
+      current = r.officeId;
+      index = 1;
+    } else {
+      index += 1;
+    }
+    yield { officeId: r.officeId, no: index };
+  }
 }
