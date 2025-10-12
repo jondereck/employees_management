@@ -761,7 +761,7 @@ export default function DownloadStyledExcel() {
     { name: 'Employee No', key: 'employeeNo' },
     { name: 'Last Name', key: 'lastName' },
     { name: 'First Name', key: 'firstName' },
-    { name: 'Middle Name', key: 'middleName' },
+    { name: 'M.I.', key: 'middleName' },
     { name: 'Suffix', key: 'suffix' },
     { name: 'Nickname', key: 'nickname' },
     { name: 'Office', key: 'officeId' },

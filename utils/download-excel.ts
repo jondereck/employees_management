@@ -707,7 +707,7 @@ export async function generateExcelFile({
 
       normalizedSelection.forEach((officeId) => {
         const entries = partitioned[officeId] ?? [];
-        const rows = entries.map((entry) => entry.row);
+        const rows = entries.map((entry) => entry);
         const fallbackName = resolveOfficeTitle(officeId);
         const meta = officeMetadata[officeId];
         const sheetName = uniqueSheetName(
