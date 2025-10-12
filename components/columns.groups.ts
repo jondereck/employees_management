@@ -46,4 +46,4 @@ export const COLUMN_GROUPS = [
   },
 ] as const;
 
-export type ColumnGroupKey = typeof COLUMN_GROUPS[number]["key"];
+export type ColumnGroupKey = typeof COLUMN_GROUPS[number]["key"] | "other";
