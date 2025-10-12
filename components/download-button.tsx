@@ -4,23 +4,212 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { FaFileExcel } from 'react-icons/fa';
-import { FileDown, FileUp, Save } from "lucide-react";
+import { ChevronDown, FileDown, FileUp, Save, Trash2 } from "lucide-react";
 import Modal from './ui/modal';
-import { generateExcelFile, Mappings, PositionReplaceRule } from '@/utils/download-excel';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab } from '@/utils/download-excel';
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useParams } from 'next/navigation';
+import type { ExportTemplateV2, SortLevel } from '@/types/export';
+import { coerceDir, isSortLevel, isStringArray } from '@/lib/guards';
+import { SORT_FIELDS } from '@/utils/sort-fields';
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
-import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage, exportTemplatesToBlob, importTemplatesFromObject, isBuiltInTemplateId, overwriteUserTemplateById } from '@/utils/export-templates';
+import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage, exportTemplatesToBlob, importTemplatesFromObject, isBuiltInTemplateId, overwriteUserTemplateById, renameUserTemplateById } from '@/utils/export-templates';
 import TemplatePickerBar from './ui/export-template-picker';
+import { EXPORT_TABS, ExportTabKey } from "./tabs.registry";
+import { COLUMN_GROUPS, ColumnGroupKey } from "./columns.groups";
+import { COLUMN_DEFS, COLUMN_SEQUENCE } from '@/utils/columns.registry';
 
+type OfficeOption = { id: string; name: string; bioIndexCode?: string | null };
 
+type BioIndexGroup = {
+  key: string;
+  code: string;
+  officeIds: string[];
+  names: string[];
+  label: string;
+  count: number;
+};
 
+type ModalSize = 'cozy' | 'roomy' | 'xl';
+
+const MODAL_WIDTH_CLASSES: Record<ModalSize, string> = {
+  cozy: 'w-[min(900px,calc(100vw-48px))]',
+  roomy: 'w-[min(1100px,calc(100vw-48px))] 2xl:w-[min(1200px,calc(100vw-64px))]',
+  xl: 'w-[min(1200px,calc(100vw-64px))]',
+};
+
+const TAB_KEY_TO_VALUE: Record<ExportTabKey, string> = {
+  filter: 'filters',
+  columns: 'columns_path',
+  sort: 'sort',
+  paths: 'paths',
+  findreplace: 'position',
+  id: 'id',
+};
+
+const TAB_VALUE_TO_KEY = Object.entries(TAB_KEY_TO_VALUE).reduce<Record<string, ExportTabKey>>(
+  (acc, [key, value]) => {
+    acc[value] = key as ExportTabKey;
+    return acc;
+  },
+  {}
+);
+
+const BIO_INDEX_EMPTY_KEY = '__NO_CODE__';
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [mappings, setMappings] = useState<Mappings | null>(null);
+
+  const params = useParams<{ departmentId?: string }>();
+  const departmentId = useMemo(() => {
+    const raw = params?.departmentId;
+    if (!raw) return undefined;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [params]);
+
+  function readStoredSortLevels(): SortLevel[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('export.sortLevels');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((item: any) => item && typeof item.field === 'string')
+        .slice(0, 3)
+        .map((item: any) => ({
+          field: String(item.field),
+          dir: item.dir === 'asc' ? 'asc' : 'desc',
+        }));
+    } catch (error) {
+      console.warn('Failed to parse export.sortLevels', error);
+      return [];
+    }
+  }
+
+  const [officeOptions, setOfficeOptions] = useState<OfficeOption[]>([]);
+  const [officeSearch, setOfficeSearch] = useState('');
+  const [selectedOffices, setSelectedOffices] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('export.officesSelection');
+      const parsed = stored ? JSON.parse(stored) : [];
+      if (Array.isArray(parsed)) {
+        return parsed.map((id) => String(id));
+      }
+    } catch (error) {
+      console.warn('Failed to parse export.officesSelection', error);
+    }
+    return [];
+  });
+
+  const [filterGroupMode, setFilterGroupMode] = useState<'office' | 'bioIndex'>(() => {
+    if (typeof window === 'undefined') return 'office';
+    const stored = localStorage.getItem('export.filterGroupMode');
+    return stored === 'bioIndex' ? 'bioIndex' : 'office';
+  });
+
+  const officeMetadata = useMemo(() => {
+    return officeOptions.reduce<Record<string, { name: string; bioIndexCode?: string | null }>>((acc, office) => {
+      acc[office.id] = { name: office.name, bioIndexCode: office.bioIndexCode ?? undefined };
+      return acc;
+    }, {});
+  }, [officeOptions]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.officesSelection', JSON.stringify(selectedOffices));
+    } catch (error) {
+      console.warn('Failed to persist export.officesSelection', error);
+    }
+  }, [selectedOffices]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.filterGroupMode', filterGroupMode);
+    } catch (error) {
+      console.warn('Failed to persist export.filterGroupMode', error);
+    }
+  }, [filterGroupMode]);
+
+  const [sheetMode, setSheetMode] = useState<'perOffice' | 'merged'>(() => {
+    if (typeof window === 'undefined') return 'perOffice';
+    const stored = localStorage.getItem('export.sheetMode');
+    return stored === 'merged' ? 'merged' : 'perOffice';
+  });
+
+  const [modalSize, setModalSize] = useState<ModalSize>(() => {
+    if (typeof window === 'undefined') return 'roomy';
+    const stored = localStorage.getItem('export.modalSize');
+    return stored === 'cozy' || stored === 'xl' ? stored : 'roomy';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.modalSize', modalSize);
+    } catch (error) {
+      console.warn('Failed to persist export.modalSize', error);
+    }
+  }, [modalSize]);
+
+  const toggleModalSize = () => {
+    setModalSize((prev) => {
+      if (prev === 'cozy') return 'roomy';
+      if (prev === 'roomy') return 'xl';
+      return 'cozy';
+    });
+  };
+
+  const modalSizeLabel = modalSize === 'xl' ? 'Shrink' : 'Expand';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.sheetMode', sheetMode);
+    } catch (error) {
+      console.warn('Failed to persist export.sheetMode', error);
+    }
+  }, [sheetMode]);
+
+  useEffect(() => {
+    if (!modalOpen || !departmentId) return;
+    let cancelled = false;
+    const loadOffices = async () => {
+      try {
+        const res = await fetch(`/api/offices?departmentId=${departmentId}`);
+        if (!res.ok) return;
+        const data: OfficeOption[] = await res.json();
+        if (!cancelled) {
+          setOfficeOptions(data);
+        }
+      } catch (error) {
+        console.error('Failed to load offices for export modal', error);
+      }
+    };
+    loadOffices();
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOpen, departmentId]);
+
+  useEffect(() => {
+    if (!officeOptions.length) return;
+    setSelectedOffices((prev) => {
+      const allowed = new Set(officeOptions.map((office) => office.id));
+      const filtered = prev.filter((id) => allowed.has(id));
+      if (filtered.length === prev.length) return prev;
+      return filtered;
+    });
+  }, [officeOptions]);
 
   const [allPositions, setAllPositions] = useState<string[]>([]);
   const [posSearch, setPosSearch] = useState('');
@@ -34,16 +223,59 @@ export default function DownloadStyledExcel() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(undefined);
 
   const [templates, setTemplates] = useState(getAllTemplates());
-  const [sortBy, setSortBy] = useState<'updatedAt' | 'createdAt'>(() => {
-    if (typeof window !== 'undefined') return (localStorage.getItem('hrps_sort_by') as any) || 'updatedAt';
+  const [sortBy, setSortBy] = useState<string>(() => {
+    const stored = readStoredSortLevels();
+    if (stored[0]?.field) return stored[0].field;
+    if (typeof window !== 'undefined') {
+      const legacy = localStorage.getItem('hrps_sort_by');
+      if (legacy) return legacy;
+    }
     return 'updatedAt';
   });
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => {
-    if (typeof window !== 'undefined') return (localStorage.getItem('hrps_sort_dir') as any) || 'desc';
+    const stored = readStoredSortLevels();
+    if (stored[0]?.dir === 'asc' || stored[0]?.dir === 'desc') return stored[0].dir;
+    if (typeof window !== 'undefined') {
+      const legacy = localStorage.getItem('hrps_sort_dir');
+      if (legacy === 'asc' || legacy === 'desc') return legacy;
+    }
     return 'desc';
   });
-  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_by', sortBy); }, [sortBy]);
-  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_dir', sortDir); }, [sortDir]);
+  const [additionalSortLevels, setAdditionalSortLevels] = useState<SortLevel[]>(() => {
+    const stored = readStoredSortLevels();
+    return stored.slice(1);
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (sortBy === 'updatedAt' || sortBy === 'createdAt') {
+      localStorage.setItem('hrps_sort_by', sortBy);
+    }
+  }, [sortBy]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_dir', sortDir);
+  }, [sortDir]);
+
+  const combinedSortLevels = useMemo(() => {
+    const levels: SortLevel[] = [];
+    if (sortBy) {
+      levels.push({ field: sortBy, dir: sortDir });
+    }
+    additionalSortLevels.forEach((level) => {
+      if (level?.field) {
+        levels.push({ field: level.field, dir: level.dir });
+      }
+    });
+    return levels.slice(0, 3);
+  }, [sortBy, sortDir, additionalSortLevels]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.sortLevels', JSON.stringify(combinedSortLevels));
+    } catch (error) {
+      console.warn('Failed to persist export.sortLevels', error);
+    }
+  }, [combinedSortLevels]);
 
 
   function refreshTemplates() {
@@ -52,10 +284,65 @@ export default function DownloadStyledExcel() {
   }
 
 
+  const normalizeTemplate = (tpl: ExportTemplate): ExportTemplateV2 => {
+    const rawOffices = tpl?.officesSelection as unknown;
+
+    const officesSelection: string[] = isStringArray(rawOffices)
+      ? rawOffices
+      : Array.isArray(rawOffices)
+        ? (rawOffices as unknown[])
+            .map((id: unknown): string => String(id))
+            .filter((id: string): boolean => id.length > 0)
+        : [];
+
+    const sheetModeValue: 'perOffice' | 'merged' = tpl?.sheetMode === 'merged' ? 'merged' : 'perOffice';
+
+    const rawLevels: unknown[] = Array.isArray(tpl?.sortLevels) ? (tpl.sortLevels as unknown[]) : [];
+
+    const sortLevels: SortLevel[] = rawLevels
+      .map((level: unknown): SortLevel | null => {
+        if (!isSortLevel(level)) return null;
+        const field: string = (level as any).field;
+        const dir: 'asc' | 'desc' = coerceDir((level as any).dir);
+        return { field, dir };
+      })
+      .filter((level: SortLevel | null): level is SortLevel => level !== null)
+      .slice(0, 3);
+
+    const filterGroupModeValue: 'office' | 'bioIndex' = tpl?.filterGroupMode === 'bioIndex' ? 'bioIndex' : 'office';
+
+    const normalizedSelectedKeys = Array.isArray(tpl?.selectedKeys)
+      ? tpl.selectedKeys.map((key: string) => normalizeColumnKey(String(key)))
+      : [];
+
+    return {
+      ...tpl,
+      templateVersion: 2 as const,
+      selectedKeys: normalizedSelectedKeys,
+      officesSelection,
+      sheetMode: sheetModeValue,
+      sortLevels,
+      filterGroupMode: filterGroupModeValue,
+    };
+  };
+
+
 
   function applyTemplate(tpl: ExportTemplate) {
     setSelectedTemplateId(tpl.id);
-    setSelectedColumns(tpl.selectedKeys);
+    setSelectedColumns(tpl.selectedKeys.map((key) => normalizeColumnKey(String(key))));
+    const normalized = normalizeTemplate(tpl);
+    setSelectedOffices(normalized.officesSelection);
+    setSheetMode(normalized.sheetMode);
+    setFilterGroupMode(normalized.filterGroupMode);
+    if (normalized.sortLevels.length > 0) {
+      const [first, ...rest] = normalized.sortLevels;
+      setSortBy(first.field);
+      setSortDir(first.dir);
+      setAdditionalSortLevels(rest.slice(0, 2));
+    } else {
+      setAdditionalSortLevels([]);
+    }
     if (tpl.statusFilter) setStatusFilter(tpl.statusFilter);
     if (tpl.idColumnSource) setIdColumnSource(tpl.idColumnSource);
 
@@ -200,17 +487,18 @@ export default function DownloadStyledExcel() {
 
 
   const [advancedTab, setAdvancedTab] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("hrps_advanced_tab") || "paths";
+    if (typeof window !== 'undefined') {
+      return getActiveExportTab() || localStorage.getItem('hrps_advanced_tab') || 'filters';
     }
-    return "paths";
+    return 'filters';
   });
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("hrps_advanced_tab", advancedTab);
-    }
-  }, [advancedTab]);
+  const handleAdvancedTabChange = (value: string) => {
+    setAdvancedTab(value);
+    setActiveExportTab(value);
+  };
+
+  const activeTabKey = TAB_VALUE_TO_KEY[advancedTab] ?? 'filter';
 
 
   // full rule list (persisted)
@@ -429,6 +717,127 @@ export default function DownloadStyledExcel() {
   const toggleAllAppointments = () =>
     setAppointmentFilters(isAllAppointments ? [] : [...APPOINTMENT_OPTIONS]);
 
+  const filteredOfficeOptions = useMemo(() => {
+    const query = officeSearch.trim().toLowerCase();
+    if (!query) return officeOptions;
+    return officeOptions.filter((office) => {
+      const name = office.name.toLowerCase();
+      const code = office.bioIndexCode?.toLowerCase() ?? '';
+      return name.includes(query) || (!!code && code.includes(query));
+    });
+  }, [officeOptions, officeSearch]);
+
+  const bioIndexGroups = useMemo<BioIndexGroup[]>(() => {
+    const map = new Map<string, BioIndexGroup>();
+    officeOptions.forEach((office) => {
+      const codeValue = (office.bioIndexCode ?? '').trim();
+      const key = codeValue ? codeValue : BIO_INDEX_EMPTY_KEY;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          code: codeValue,
+          officeIds: [],
+          names: [],
+          label: codeValue || 'No Bio Index Code',
+          count: 0,
+        });
+      }
+      const group = map.get(key)!;
+      group.officeIds.push(office.id);
+      group.names.push(office.name);
+      group.count = group.officeIds.length;
+    });
+    return Array.from(map.values());
+  }, [officeOptions]);
+
+  const bioIndexGroupMap = useMemo(() => {
+    const map = new Map<string, BioIndexGroup>();
+    bioIndexGroups.forEach((group) => map.set(group.key, group));
+    return map;
+  }, [bioIndexGroups]);
+
+  const filteredBioIndexGroups = useMemo(() => {
+    const query = officeSearch.trim().toLowerCase();
+    if (!query) return bioIndexGroups;
+    return bioIndexGroups.filter((group) => {
+      const matchesCode = group.label.toLowerCase().includes(query);
+      const matchesName = group.names.some((name) => name.toLowerCase().includes(query));
+      return matchesCode || matchesName;
+    });
+  }, [bioIndexGroups, officeSearch]);
+
+  const toggleOfficeSelection = (officeId: string) => {
+    setSelectedOffices((prev) =>
+      prev.includes(officeId)
+        ? prev.filter((id) => id !== officeId)
+        : [...prev, officeId]
+    );
+  };
+
+  const toggleBioIndexGroup = (groupKey: string) => {
+    const group = bioIndexGroupMap.get(groupKey);
+    if (!group) return;
+    setSelectedOffices((prev) => {
+      const set = new Set(prev);
+      const allSelected = group.officeIds.every((id) => set.has(id));
+      if (allSelected) {
+        group.officeIds.forEach((id) => set.delete(id));
+      } else {
+        group.officeIds.forEach((id) => set.add(id));
+      }
+      return Array.from(set);
+    });
+  };
+
+  const selectAllFilteredOffices = () => {
+    if (filterGroupMode === 'bioIndex') {
+      if (!filteredBioIndexGroups.length) {
+        setSelectedOffices([]);
+        return;
+      }
+      setSelectedOffices((prev) => {
+        const set = new Set(prev);
+        filteredBioIndexGroups.forEach((group) => {
+          group.officeIds.forEach((id) => set.add(id));
+        });
+        return Array.from(set);
+      });
+      return;
+    }
+
+    if (!filteredOfficeOptions.length) {
+      setSelectedOffices([]);
+      return;
+    }
+    setSelectedOffices((prev) => {
+      const set = new Set(prev);
+      filteredOfficeOptions.forEach((office) => set.add(office.id));
+      return Array.from(set);
+    });
+  };
+
+  const deselectAllFilteredOffices = () => {
+    if (filterGroupMode === 'bioIndex') {
+      if (!filteredBioIndexGroups.length) {
+        setSelectedOffices([]);
+        return;
+      }
+      const remove = new Set<string>();
+      filteredBioIndexGroups.forEach((group) => {
+        group.officeIds.forEach((id) => remove.add(id));
+      });
+      setSelectedOffices((prev) => prev.filter((id) => !remove.has(id)));
+      return;
+    }
+
+    if (!filteredOfficeOptions.length) {
+      setSelectedOffices([]);
+      return;
+    }
+    const remove = new Set(filteredOfficeOptions.map((office) => office.id));
+    setSelectedOffices((prev) => prev.filter((id) => !remove.has(id)));
+  };
+
 
   // under your other path states
   const [imageExt, setImageExt] = useState<string>(() =>
@@ -466,54 +875,48 @@ export default function DownloadStyledExcel() {
   useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('qrPrefix', qrPrefix); }, [qrPrefix]);
 
 
-  const columnOrder = [
-    { name: 'Employee No', key: 'employeeNo' },
-    { name: 'Last Name', key: 'lastName' },
-    { name: 'First Name', key: 'firstName' },
-    { name: 'Middle Name', key: 'middleName' },
-    { name: 'Suffix', key: 'suffix' },
-    { name: 'Nickname', key: 'nickname' },
-    { name: 'Office', key: 'officeId' },
-    { name: 'Position', key: 'position' },
-    { name: 'Employee Type', key: 'employeeTypeId' },
-    { name: 'Eligibility', key: 'eligibilityId' },
-    { name: 'Gender', key: 'gender' },
-    { name: 'Contact Number', key: 'contactNumber' },
-    { name: 'Education', key: 'education' },
+  type GroupedColumn = {
+    key: ColumnGroupKey;
+    title: string;
+    columns: { key: string; name: string }[];
+  };
 
-    { name: 'Salary Grade', key: 'salaryGrade' },
-    { name: 'Retired', key: 'isArchived' },
-    { name: 'House No', key: 'houseNo' },
-    { name: 'Street', key: 'street' },
-    { name: 'Barangay', key: 'barangay' },
-    { name: 'Comma', key: 'comma' },
-    { name: 'City', key: 'city' },
-    { name: 'Province', key: 'province' },
-    { name: 'GSIS No', key: 'gsisNo' },
-    { name: 'TIN No', key: 'tinNo' },
-    { name: 'PhilHealth No', key: 'philHealthNo' },
-    { name: 'PagIbig No', key: 'pagIbigNo' },
-    { name: 'Terminate Date', key: 'terminateDate' },
-    { name: 'Member Policy No', key: 'memberPolicyNo' },
-    { name: 'Emergency Contact Name', key: 'emergencyContactName' },
-    { name: 'Emergency Contact Number', key: 'emergencyContactNumber' },
-    { name: 'isHead', key: 'isHead' },
-    { name: 'Image Path', key: 'imagePath' },
-    { name: 'QR Path', key: 'qrPath' },
-    { name: 'Plantilla', key: 'plantilla' },
-    { name: 'Salary', key: 'salaryExport' },
-    { name: 'Birthday', key: 'birthday' }, // Will format the birthday
-    { name: 'Age', key: 'age' }, // Calculated from birthday
-    { name: 'Latest Appointment', key: 'latestAppointment' },
-    { name: 'Date Hired', key: 'dateHired' }, // Will format the date
-    { name: 'Year(s) of Service', key: 'yearsOfService' },
-  ];
+  const columnOrder = useMemo(
+    () => COLUMN_SEQUENCE.map((key) => {
+      const def = COLUMN_DEFS[key] ?? { key, label: key };
+      return { name: def.label, key: def.key };
+    }),
+    []
+  );
+
+  const groupedColumns = useMemo<GroupedColumn[]>(() => {
+    const map = new Map(columnOrder.map((col) => [col.key, col]));
+    const assigned = new Set<string>();
+
+    const groups: GroupedColumn[] = COLUMN_GROUPS.map((group) => {
+      const columns = group.items
+        .map((key) => map.get(key))
+        .filter((col): col is { key: string; name: string } => Boolean(col));
+      columns.forEach((col) => assigned.add(col.key));
+      return { key: group.key, title: group.title, columns };
+    }).filter((group) => group.columns.length > 0);
+
+    const extras = columnOrder.filter((col) => col.key !== 'rowNumber' && !assigned.has(col.key));
+    if (extras.length) {
+      groups.push({ key: 'other' as ColumnGroupKey, title: 'Other Fields', columns: extras });
+    }
+
+    return groups;
+  }, [columnOrder]);
+
+  const rowNumberLabel = columnOrder.find((col) => col.key === 'rowNumber')?.name ?? 'No. (row number)';
 
   const defaultSelectedColumns = [
+    'rowNumber',
     'lastName',
     'firstName',
     'middleName',
-    'officeId',
+    'office',
     'position',
     'employeeTypeId',
     'imagePath',
@@ -522,13 +925,27 @@ export default function DownloadStyledExcel() {
 
 
 
+  const normalizeColumnKey = (key: string) => (key === 'officeId' ? 'office' : key);
+
   const [selectedColumns, setSelectedColumns] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('selectedColumns');
-      return stored ? JSON.parse(stored) : defaultSelectedColumns;
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            return parsed.map((key: string) => normalizeColumnKey(String(key)));
+          }
+        } catch (error) {
+          console.warn('Failed to parse selectedColumns', error);
+        }
+      }
+      return defaultSelectedColumns;
     }
     return defaultSelectedColumns;
   });
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const isAllSelected = selectedColumns.length === columnOrder.length;
 
@@ -541,7 +958,9 @@ export default function DownloadStyledExcel() {
       if (storedColumns) {
         try {
           const parsed = JSON.parse(storedColumns);
-          if (Array.isArray(parsed)) setSelectedColumns(parsed);
+          if (Array.isArray(parsed)) {
+            setSelectedColumns(parsed.map((key: string) => normalizeColumnKey(String(key))));
+          }
         } catch (err) {
           console.error('Invalid stored selectedColumns:', err);
         }
@@ -584,6 +1003,23 @@ export default function DownloadStyledExcel() {
     }
   };
 
+  const toggleGroupOpen = (key: string) => {
+    setOpenGroups((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
+  };
+
+  const handleGroupSelectAll = (columnKeys: string[]) => {
+    setSelectedColumns((prev) => {
+      const set = new Set(prev);
+      const allSelected = columnKeys.every((key) => set.has(key));
+      if (allSelected) {
+        columnKeys.forEach((key) => set.delete(key));
+      } else {
+        columnKeys.forEach((key) => set.add(key));
+      }
+      return Array.from(set);
+    });
+  };
+
 
   const selectedColumnsRef = useRef<string[]>(selectedColumns);
 
@@ -597,10 +1033,54 @@ export default function DownloadStyledExcel() {
         idColumnSource === 'bio' ? 'Employee Code' :
           'Employee No';
 
-    return columnOrder.map(col =>
-      col.key === 'employeeNo' ? { ...col, name: label } : col
-    );
+    return columnOrder.map((col) => {
+      if (col.key === 'rowNumber') {
+        return { ...col, name: 'No.' };
+      }
+      if (col.key === 'employeeNo') {
+        return { ...col, name: label };
+      }
+      return col;
+    });
   }, [columnOrder, idColumnSource]);
+
+  const sortFieldOptions = useMemo(() => {
+    const entries = new Map<string, string>();
+    effectiveColumnOrder.forEach((col) => {
+      const label = col.key === 'office' ? 'Office Name' : col.name;
+      entries.set(col.key, label);
+    });
+    SORT_FIELDS.forEach((field) => {
+      entries.set(field.key, field.label);
+    });
+    return Array.from(entries.entries()).map(([value, label]) => ({ value, label }));
+  }, [effectiveColumnOrder]);
+
+  const handleAddSortLevel = () => {
+    if (additionalSortLevels.length >= 2) return;
+    const fallback = sortFieldOptions[0]?.value || sortBy || 'updatedAt';
+    setAdditionalSortLevels((prev) => [...prev, { field: fallback, dir: 'asc' }]);
+  };
+
+  const updateSortLevelField = (index: number, field: string) => {
+    setAdditionalSortLevels((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], field };
+      return next;
+    });
+  };
+
+  const updateSortLevelDir = (index: number, dir: 'asc' | 'desc') => {
+    setAdditionalSortLevels((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], dir };
+      return next;
+    });
+  };
+
+  const removeSortLevel = (index: number) => {
+    setAdditionalSortLevels((prev) => prev.filter((_, i) => i !== index));
+  };
 
 
   useEffect(() => {
@@ -618,6 +1098,22 @@ export default function DownloadStyledExcel() {
     setLoading(true);
     const toastId = toast.loading('Generating Excel file...');
     try {
+      let officesSelection: string[] = [];
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('export.officesSelection');
+          const parsed = stored ? JSON.parse(stored) : [];
+          if (Array.isArray(parsed)) {
+            officesSelection = Array.from(new Set(parsed.map((id: any) => String(id))));
+          }
+        } catch (error) {
+          console.warn('Failed to parse export.officesSelection before download', error);
+          officesSelection = [...selectedOffices];
+        }
+      } else {
+        officesSelection = [...selectedOffices];
+      }
+
       const blob = await generateExcelFile({
         selectedKeys,
         columnOrder: effectiveColumnOrder,
@@ -633,10 +1129,34 @@ export default function DownloadStyledExcel() {
         qrExt,
         sortBy,
         sortDir,
+        officesSelection,
+        officeMetadata,
+        sortLevels: combinedSortLevels,
+        sheetMode,
+        filterGroupMode,
 
       });
 
-      const base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
+      let base: string;
+      if (sheetMode === 'merged') {
+        const now = new Date();
+        const datePart = now.toISOString().slice(0, 10);
+        const timePart = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+        base = makeSafeFilename(`Employees_MergedOffices_${datePart}_${timePart}`);
+      } else {
+        base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
+        if (officesSelection.length === 1) {
+          const officeId = officesSelection[0];
+          const info = officeMetadata[officeId];
+          const suffixSource = info?.bioIndexCode || info?.name || officeId;
+          if (suffixSource) {
+            const safeSuffix = makeSafeFilename(`${suffixSource}`);
+            if (safeSuffix) {
+              base = makeSafeFilename(`${base}_${safeSuffix}`);
+            }
+          }
+        }
+      }
       const filename = `${base}.xlsx`;
 
 
@@ -694,29 +1214,23 @@ export default function DownloadStyledExcel() {
   };
 
 
-  const handleUpdateCurrentTemplate = (id: string, newName?: string) => {
+  const buildTemplatePayload = (id: string, overrideName?: string) => {
+    const fallbackName = templates.find((tpl) => tpl.id === id)?.name ?? selectedTemplateName;
+    const finalName = (overrideName ?? fallbackName)?.trim() || fallbackName;
 
-    if (isBuiltInTemplateId(id)) {
-      toast.warning("Built-in templates can't be updated. Save as a new template instead.");
-      return;
-    }
-    if (!selectedTemplateId) {
-      toast.info("No template selected to update.");
-      return;
-    }
-    if (isBuiltInTemplateId(selectedTemplateId)) {
-      toast.warning("Built-in templates can't be updated. Save as a new template instead.");
-      return;
-    }
-
-    const ok = overwriteUserTemplateById(selectedTemplateId, {
-      name: (newName ?? selectedTemplateName)?.trim() || selectedTemplateName,
+    return {
+      name: finalName,
+      templateVersion: 2 as const,
       selectedKeys: selectedColumnsRef.current,
       statusFilter,
       idColumnSource,
       appointmentFilters,
       positionReplaceRules,
-      sheetName: "Sheet1",
+      officesSelection: selectedOffices.map((value) => String(value)),
+      sheetMode,
+      sortLevels: combinedSortLevels,
+      filterGroupMode,
+      sheetName: 'Sheet1',
       paths: {
         imageBaseDir,
         imageExt,
@@ -724,13 +1238,51 @@ export default function DownloadStyledExcel() {
         qrExt,
         qrPrefix,
       },
-    });
+    };
+  };
+
+  const handleOverwriteTemplate = (id: string) => {
+    if (!id) {
+      toast.info('Select a template first.');
+      return;
+    }
+    if (isBuiltInTemplateId(id)) {
+      toast.warning("Built-in templates can't be updated. Save as a new template instead.");
+      return;
+    }
+
+    const ok = overwriteUserTemplateById(id, buildTemplatePayload(id));
 
     if (ok) {
       refreshTemplates();
-      toast.success("Template updated.");
+      toast.success('Template updated.');
     } else {
-      toast.error("Could not update template.");
+      toast.error('Could not update template.');
+    }
+  };
+
+  const handleRenameTemplate = (id: string, newName: string) => {
+    if (!id) {
+      toast.info('Select a template first.');
+      return;
+    }
+    if (isBuiltInTemplateId(id)) {
+      toast.warning("Built-in templates can't be renamed. Save as a new template instead.");
+      return;
+    }
+
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      toast.error('Enter a template name.');
+      return;
+    }
+
+    const ok = renameUserTemplateById(id, trimmed);
+    if (ok) {
+      refreshTemplates();
+      toast.success('Template renamed.');
+    } else {
+      toast.error('Could not rename template.');
     }
   };
 
@@ -766,107 +1318,134 @@ export default function DownloadStyledExcel() {
         description="Choose which fields to include in the Excel file."
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
+        hideDefaultHeader
+        contentClassName={cn(
+          'z-[90] max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-hidden sm:max-w-none gap-0 p-0',
+          MODAL_WIDTH_CLASSES[modalSize]
+        )}
+        bodyClassName="flex h-full flex-col overflow-hidden"
       >
+        <div className="flex h-full w-full min-w-0 flex-col">
+          <div className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold leading-tight text-foreground">Select Columns to Export</h2>
+                <p className="text-sm text-muted-foreground">Choose which fields to include in the Excel file.</p>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground md:justify-end">
+                <button
+                  onClick={() => {
+                    const name = prompt("Template name?");
+                    if (!name) return;
 
-        <div className="flex items-center gap-3 mb-2">
-          <button
-            onClick={() => {
-              const name = prompt("Template name?");
-              if (!name) return;
+                      const newTpl = saveTemplateToLocalStorage(name, {
+                        templateVersion: 2,
+                        selectedKeys: selectedColumnsRef.current,
+                        statusFilter,
+                        idColumnSource,
+                        appointmentFilters,
+                        positionReplaceRules,
+                        officesSelection: selectedOffices.map((id) => String(id)),
+                        sheetMode,
+                        sortLevels: combinedSortLevels,
+                        filterGroupMode,
+                        sheetName: "Sheet1",
+                        paths: {
+                          imageBaseDir,
+                        imageExt,
+                        qrBaseDir,
+                        qrExt,
+                        qrPrefix,
+                      },
+                    });
 
-              const newTpl = saveTemplateToLocalStorage(name, {
-                selectedKeys: selectedColumnsRef.current,
-                statusFilter,
-                idColumnSource,
-                appointmentFilters,
-                positionReplaceRules,
-                sheetName: "Sheet1",
-                paths: {                         // ✅ save paths
-                  imageBaseDir,
-                  imageExt,
-                  qrBaseDir,
-                  qrExt,
-                  qrPrefix,
-                },
-              });
+                    refreshTemplates();
+                    setSelectedTemplateId(newTpl.id);
+                    toast.success(`Saved template "${name}"`);
+                  }}
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                  title="Save current selections as a new template"
+                >
+                  <Save className="h-4 w-4" />
+                  Save Template
+                </button>
 
-              refreshTemplates();
-              setSelectedTemplateId(newTpl.id);
-              toast.success(`Saved template "${name}"`);
-            }}
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-            title="Save current selections as a new template"
-          >
-            <Save className="h-4 w-4" />
-            Save Template
-          </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport(false)}
+                  title="Export user templates (.json)"
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Export
+                </button>
 
-          {/* Export user templates */}
-          <button
-            type="button"
-            onClick={() => handleExport(false)}
-            title="Export user templates (.json)"
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-          >
-            <FileDown className="h-4 w-4" />
-            Export
-          </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport(true)}
+                  title="Export all templates (.json)"
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Export All
+                </button>
 
-          {/* Export all templates (built-ins + user) */}
-          <button
-            type="button"
-            onClick={() => handleExport(true)}
-            title="Export all templates (.json)"
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-          >
-            <FileDown className="h-4 w-4" />
-            Export All
-          </button>
+                <button
+                  type="button"
+                  onClick={handleClickImport}
+                  title="Import templates (.json)"
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileUp className="h-4 w-4" />
+                  Import
+                </button>
 
-          {/* Import */}
-          <button
-            type="button"
-            onClick={handleClickImport}
-            title="Import templates (.json)"
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-          >
-            <FileUp className="h-4 w-4" />
-            Import
-          </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  title="Toggle modal size"
+                  onClick={toggleModalSize}
+                >
+                  {modalSizeLabel}
+                </Button>
 
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json"
-            onChange={handleImportFile}
-            className="hidden"
-          />
-        </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/json"
+                  onChange={handleImportFile}
+                  className="hidden"
+                />
+              </div>
+            </div>
+          </div>
 
+          <div className="flex-1 w-full min-w-0 pl-4 pr-2 py-4 overflow-y-auto overflow-x-hidden max-h-[calc(88vh-112px)] scrollbar-gutter-stable">
+            <TemplatePickerBar
+              className="mb-3 w-full"
+              value={selectedTemplateId}
+              templates={templates}
+              onApply={(tpl) => {
+                applyTemplate(tpl);
+                setSelectedTemplateId(tpl.id);
+              }}
+              onChangeSelected={setSelectedTemplateId}
+              clearLastUsedTemplate={clearLastUsedTemplate}
+              clearAllUserTemplates={clearAllUserTemplates}
+              deleteUserTemplate={deleteUserTemplate}
+              refreshTemplates={refreshTemplates}
+              onRequestOverwrite={(id) => handleOverwriteTemplate(id)}
+              onRequestRename={(id, newName) => handleRenameTemplate(id, newName)}
+            />
 
-        <TemplatePickerBar
-          className="mb-3"
-          value={selectedTemplateId}
-          templates={templates}
-          onApply={(tpl) => {
-            applyTemplate(tpl);
-            setSelectedTemplateId(tpl.id);
-          }}
-          onChangeSelected={setSelectedTemplateId}
-          clearLastUsedTemplate={clearLastUsedTemplate}
-          clearAllUserTemplates={clearAllUserTemplates}
-          deleteUserTemplate={deleteUserTemplate}
-          refreshTemplates={refreshTemplates}
-          onRequestUpdate={(id, newName) => handleUpdateCurrentTemplate(id, newName)}
-        />
-
-        {/* ADVANCED (single collapsible with both subsections) */}
-        <div className="max-h-[75vh] overflow-y-auto pr-1">
-          {/* ADVANCED (single box; sticky header + conditional mount for content) */}
-          <div className="mb-4 rounded-lg border bg-white shadow-sm">
+            {/* ADVANCED (single collapsible with both subsections) */}
+            <div className="w-full min-w-0">
+              {/* ADVANCED (single box; sticky header + conditional mount for content) */}
+              <div className="mb-4 rounded-lg border bg-white shadow-sm">
             {/* Sticky header so the toggle stays visible */}
-            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur px-3 py-2 border-b">
+            <div className="sticky top-0 z-10 border-b bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
@@ -885,21 +1464,36 @@ export default function DownloadStyledExcel() {
             >
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
-                  <Tabs value={advancedTab} onValueChange={setAdvancedTab} className="w-full">
-                    <TabsList className="grid grid-cols-5 w-full gap-5">
-                      <TabsTrigger value="filters">Filter</TabsTrigger>
-                      <TabsTrigger value="columns_path">Columns</TabsTrigger>
-                      <TabsTrigger value="paths">Paths</TabsTrigger>
-                      <TabsTrigger value="position">Find &amp; Replace</TabsTrigger>
-                      <TabsTrigger value="id">ID Column</TabsTrigger> {/* NEW */}
-
-                    </TabsList>
+                    <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full min-w-0">
+                      <div className="sticky top-[48px] z-20 bg-background border-b flex flex-wrap items-center gap-2 px-2 py-2">
+                        {EXPORT_TABS.map((tab) => {
+                          const Icon = tab.icon;
+                          const isActive = activeTabKey === tab.key;
+                          return (
+                            <Button
+                              key={tab.key}
+                              variant={isActive ? 'secondary' : 'ghost'}
+                              size="sm"
+                              onClick={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
+                              aria-label={tab.label}
+                              title={tab.label}
+                              aria-selected={isActive}
+                              aria-current={isActive ? 'page' : undefined}
+                              aria-controls={`panel-${tab.key}`}
+                              className="h-8 px-2 gap-2"
+                            >
+                              <Icon className="size-4" />
+                              <span className="whitespace-nowrap">{tab.label}</span>
+                            </Button>
+                          );
+                        })}
+                      </div>
 
                     {/* TAB: Paths */}
-                    <TabsContent value="paths" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-3">
+                    <TabsContent value="paths" id="panel-paths" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 space-y-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Paths</h4>
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-3 sm:grid-cols-2 w-full min-w-0">
                           {/* Image base folder */}
                           <div className="flex flex-col">
                             <label className="text-xs text-gray-600 mb-1">Image base folder</label>
@@ -983,9 +1577,9 @@ export default function DownloadStyledExcel() {
                     </TabsContent>
 
                     {/* TAB: Position Find & Replace */}
-                    <TabsContent value="position" className="mt-3">
-                      <div className="rounded-md border bg-white p-3">
-                        <div className=" space-y-2">
+                    <TabsContent value="position" id="panel-findreplace" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
+                        <div className="space-y-2 min-w-0">
                           <div className="flex items-center justify-between">
                             <h5 className="text-sm font-semibold">Position</h5>
                             <div className="space-x-3">
@@ -1000,7 +1594,7 @@ export default function DownloadStyledExcel() {
                             </div>
                           </div>
 
-                          <div className="border rounded">
+                          <div className="border rounded w-full min-w-0">
                             {/* === Global Target Picker at the top === */}
                             <div className="p-2 border-b bg-white">
                               <CheckboxListPicker
@@ -1159,9 +1753,9 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
                     {/* TAB: Columns */}
-                    <TabsContent value="columns_path" className="mt-3">
-                      <div className="rounded-md border bg-white p-3">
-                        <div className="mb-2 flex justify-between items-center text-sm">
+                    <TabsContent value="columns_path" id="panel-columns" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
                           <label className="font-medium">Select Columns</label>
                           <button
                             onClick={toggleSelectAll}
@@ -1171,51 +1765,154 @@ export default function DownloadStyledExcel() {
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow">
-                          {columnOrder.map((col) => (
-                            <label key={col.key} className="flex items-center space-x-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={selectedColumns.includes(col.key)}
-                                onChange={() => toggleColumn(col.key)}
-                              />
-                              <span>{col.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                        
+                        <div className="space-y-4">
+                          <label className="flex items-center gap-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={selectedColumns.includes('rowNumber')}
+                              onChange={() => toggleColumn('rowNumber')}
+                            />
+                            <span>{rowNumberLabel}</span>
+                          </label>
 
+                          {groupedColumns.map((group) => {
+                            const groupSelectedCount = group.columns.filter((col) => selectedColumns.includes(col.key)).length;
+                            const totalInGroup = group.columns.length;
+                            const allGroupSelected = totalInGroup > 0 && groupSelectedCount === totalInGroup;
+                            const isOpen = openGroups[group.key] ?? true;
+                            return (
+                              <div key={group.key} className="overflow-hidden rounded-md border">
+                                <div className="flex items-center justify-between gap-3 px-3 py-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGroupOpen(group.key)}
+                                    className="flex items-center gap-2 text-sm font-semibold"
+                                    aria-expanded={isOpen}
+                                  >
+                                    <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen ? 'rotate-180' : '')} />
+                                    <span>{group.title}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {groupSelectedCount}/{totalInGroup}
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleGroupSelectAll(group.columns.map((col) => col.key))}
+                                    className="text-xs text-blue-600 hover:underline"
+                                  >
+                                    {allGroupSelected ? 'Deselect All' : 'Select All'}
+                                  </button>
+                                </div>
+                                {isOpen ? (
+                                  <div className="grid gap-2 border-t bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {group.columns.map((col) => (
+                                      <label key={col.key} className="flex items-center gap-2 text-sm">
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedColumns.includes(col.key)}
+                                          onChange={() => toggleColumn(col.key)}
+                                        />
+                                        <span className="truncate">{col.name}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </TabsContent>
-                    <div className="mt-3 rounded-md border bg-white p-3">
-                          <h4 className="text-sm font-semibold">Sort</h4>
-                          <div className="flex flex-wrap items-center gap-3 text-sm mt-2">
+                    <TabsContent value="sort" id="panel-sort" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
+                        <h4 className="text-sm font-semibold">Sort</h4>
+                        <div className="mt-2 space-y-3 text-sm">
+                          <div className="flex flex-wrap items-center gap-3">
                             <label className="flex items-center gap-2">
                               <span>Field:</span>
                               <select
                                 value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value as any)}
+                                onChange={(e) => setSortBy(e.target.value)}
                                 className="border rounded px-2 py-1 text-xs"
                               >
-                                <option value="updatedAt">Updated date</option>
-                                <option value="createdAt">Created date</option>
+                                {sortFieldOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                                {!sortFieldOptions.some((option) => option.value === sortBy) && sortBy ? (
+                                  <option value={sortBy}>{sortBy}</option>
+                                ) : null}
                               </select>
                             </label>
                             <label className="flex items-center gap-2">
                               <span>Order:</span>
                               <select
                                 value={sortDir}
-                                onChange={(e) => setSortDir(e.target.value as any)}
+                                onChange={(e) => setSortDir(e.target.value === 'asc' ? 'asc' : 'desc')}
                                 className="border rounded px-2 py-1 text-xs"
                               >
-                                <option value="desc">Newest first</option>
-                                <option value="asc">Oldest first</option>
+                                <option value="desc">Descending</option>
+                                <option value="asc">Ascending</option>
                               </select>
                             </label>
                           </div>
+
+                          {additionalSortLevels.map((level, index) => (
+                            <div key={index} className="flex flex-wrap items-center gap-3">
+                              <span className="text-xs font-semibold text-gray-500">Then by:</span>
+                              <label className="flex items-center gap-2">
+                                <span>Field:</span>
+                                <select
+                                  value={level.field}
+                                  onChange={(e) => updateSortLevelField(index, e.target.value)}
+                                  className="border rounded px-2 py-1 text-xs"
+                                >
+                                  {sortFieldOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                  {!sortFieldOptions.some((option) => option.value === level.field) && level.field ? (
+                                    <option value={level.field}>{level.field}</option>
+                                  ) : null}
+                                </select>
+                              </label>
+                              <label className="flex items-center gap-2">
+                                <span>Order:</span>
+                                <select
+                                  value={level.dir}
+                                  onChange={(e) => updateSortLevelDir(index, e.target.value === 'asc' ? 'asc' : 'desc')}
+                                  className="border rounded px-2 py-1 text-xs"
+                                >
+                                  <option value="desc">Descending</option>
+                                  <option value="asc">Ascending</option>
+                                </select>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => removeSortLevel(index)}
+                                className="text-gray-500 hover:text-red-600"
+                                aria-label={`Remove sort level ${index + 2}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={handleAddSortLevel}
+                            disabled={additionalSortLevels.length >= 2}
+                            className="text-xs text-blue-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            + Add sort level
+                          </button>
                         </div>
-                    <TabsContent value="filters" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-4">
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="filters" id="panel-filter" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 space-y-4 w-full min-w-0">
                         {/* Appointment filter */}
                         <div>
                           <div className="mb-2 flex justify-between items-center text-sm">
@@ -1228,7 +1925,7 @@ export default function DownloadStyledExcel() {
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto border p-2 rounded bg-white shadow">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
                             {APPOINTMENT_OPTIONS.map((label) => (
                               <label key={label} className="flex items-center space-x-2 text-sm">
                                 <input
@@ -1242,11 +1939,148 @@ export default function DownloadStyledExcel() {
                           </div>
                         </div>
 
+                        <div>
+                          <div className="mb-2 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                            <label className="font-medium">Filter by Office</label>
+                            <div className="flex gap-2 text-xs">
+                              <button
+                                type="button"
+                                onClick={selectAllFilteredOffices}
+                                className="text-blue-600 hover:underline"
+                              >
+                                Select All
+                              </button>
+                              <button
+                                type="button"
+                                onClick={deselectAllFilteredOffices}
+                                className="text-blue-600 hover:underline"
+                              >
+                                Deselect All
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mb-2 space-y-2 text-sm">
+                            <span className="font-medium text-foreground">Group &amp; Filter by</span>
+                            <div className="flex flex-wrap gap-4">
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name="filterGroupMode"
+                                  value="office"
+                                  checked={filterGroupMode === 'office'}
+                                  onChange={() => setFilterGroupMode('office')}
+                                />
+                                <span>Office</span>
+                              </label>
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name="filterGroupMode"
+                                  value="bioIndex"
+                                  checked={filterGroupMode === 'bioIndex'}
+                                  onChange={() => setFilterGroupMode('bioIndex')}
+                                />
+                                <span>Bio Index Code (merge same codes)</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          <input
+                            type="text"
+                            value={officeSearch}
+                            onChange={(e) => setOfficeSearch(e.target.value)}
+                            placeholder={filterGroupMode === 'bioIndex' ? 'Search codes or offices...' : 'Search offices...'}
+                            className="w-full mb-2 rounded border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                          />
+
+                          <div className="space-y-2 max-h-48 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
+                            {filterGroupMode === 'bioIndex' ? (
+                              filteredBioIndexGroups.length === 0 ? (
+                                <p className="px-1 text-xs text-gray-500">No bio index codes match your search.</p>
+                              ) : (
+                                filteredBioIndexGroups.map((group) => {
+                                  const allSelected = group.officeIds.every((id) => selectedOffices.includes(id));
+                                  const partiallySelected = !allSelected && group.officeIds.some((id) => selectedOffices.includes(id));
+                                  const label = group.code ? `BIO ${group.code}` : 'BIO (Unassigned)';
+                                  return (
+                                    <label key={group.key} className="flex items-start gap-2 text-sm">
+                                      <input
+                                        type="checkbox"
+                                        checked={allSelected}
+                                        ref={(el) => {
+                                          if (el) el.indeterminate = partiallySelected;
+                                        }}
+                                        onChange={() => toggleBioIndexGroup(group.key)}
+                                        className="mt-1"
+                                      />
+                                      <span className="flex flex-col">
+                                        <span className="font-medium">{label}</span>
+                                        <span className="text-xs text-muted-foreground">
+                                          {group.count} office{group.count === 1 ? '' : 's'}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground truncate">
+                                          {group.names.join(', ')}
+                                        </span>
+                                      </span>
+                                    </label>
+                                  );
+                                })
+                              )
+                            ) : filteredOfficeOptions.length === 0 ? (
+                              <p className="px-1 text-xs text-gray-500">No offices match your search.</p>
+                            ) : (
+                              filteredOfficeOptions.map((office) => (
+                                <label key={office.id} className="flex items-start gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedOffices.includes(office.id)}
+                                    onChange={() => toggleOfficeSelection(office.id)}
+                                    className="mt-1"
+                                  />
+                                  <span className="flex flex-col">
+                                    <span>{office.name}</span>
+                                    {office.bioIndexCode ? (
+                                      <span className="text-xs text-gray-500">{office.bioIndexCode}</span>
+                                    ) : null}
+                                  </span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-gray-200 pt-3">
+                          <span className="text-sm font-medium">Sheet mode</span>
+                          <div className="mt-2 space-y-2 text-sm">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="sheetMode"
+                                value="perOffice"
+                                checked={sheetMode === 'perOffice'}
+                                onChange={() => setSheetMode('perOffice')}
+                              />
+                              <span>One sheet per office</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="sheetMode"
+                                value="merged"
+                                checked={sheetMode === 'merged'}
+                                onChange={() => setSheetMode('merged')}
+                              />
+                              <span>Single sheet (merge selected offices)</span>
+                            </label>
+                          </div>
+                        </div>
+
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="id" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-3">
+                    <TabsContent value="id" id="panel-id" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 space-y-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Which ID should appear in the exported “Employee No” column?</h4>
 
                         <div className="space-y-2 text-sm">
@@ -1366,6 +2200,8 @@ export default function DownloadStyledExcel() {
             Download
           </button>
         </div>
+        </div>
+      </div>
       </Modal>
 
     </div>

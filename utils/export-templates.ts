@@ -1,5 +1,5 @@
 // utils/export-templates.ts
-import type { Column, IdColumnSource, PositionReplaceRule } from "@/utils/download-excel";
+import type { Column, IdColumnSource, PositionReplaceRule, SortLevel } from "@/utils/download-excel";
 
 
 
@@ -35,7 +35,20 @@ export type ExportTemplate = {
   positionReplaceRules?: PositionReplaceRule[];
   paths?: ExportTemplatePaths;
   sheetName?: string;
+  templateVersion?: number;
+  officesSelection?: string[];
+  sheetMode?: 'perOffice' | 'merged';
+  sortLevels?: SortLevel[];
+  filterGroupMode?: 'office' | 'bioIndex';
     __version__?: number;
+};
+
+export type ExportTemplateV2 = ExportTemplate & {
+  templateVersion: 2;
+  officesSelection: string[];
+  sheetMode: 'perOffice' | 'merged';
+  sortLevels: SortLevel[];
+  filterGroupMode: 'office' | 'bioIndex';
 };
 
 export const EXPORT_TEMPLATES: ExportTemplate[] = [
@@ -44,20 +57,25 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
     name: "HR Core",
     description: "Basic identity + office + plantilla + position",
     selectedKeys: [
-      "employeeNo", "lastName", "firstName", "middleName", "officeId", "plantilla", "position",
+      "employeeNo", "lastName", "firstName", "middleName", "office", "plantilla", "position",
       "birthday", "age", "dateHired", "yearsOfService", "status", "appointment", "eligibility",
 
     ],
     statusFilter: "active",
     idColumnSource: "employeeNo",
     sheetName: "HR Core",
+    templateVersion: 2,
+    officesSelection: [],
+    sheetMode: "perOffice",
+    sortLevels: [],
+    filterGroupMode: 'office',
   },
   {
     id: "plantilla",
     name: "Plantilla",
     description: "Plantilla view with computed salary",
     selectedKeys: [
-      "employeeNo", "lastName", "firstName", "middleName", "suffix", "nickname", "officeId", "position", "barangay", "city", "emergencyContactName", "emergencyContactNumber",
+      "employeeNo", "lastName", "firstName", "middleName", "suffix", "nickname", "office", "position", "barangay", "city", "emergencyContactName", "emergencyContactNumber",
       "gsisNo", "tinNo", "philHealthNo", "pagIbigNo", "imagePath", "qrPath",
       "birthday", "age", "dateHired", "yearsOfService",
     ],
@@ -65,6 +83,11 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
     appointmentFilters: ["Permanent", "Coterminous"],
     idColumnSource: "employeeNo",
     sheetName: "Plantilla",
+    templateVersion: 2,
+    officesSelection: [],
+    sheetMode: "perOffice",
+    sortLevels: [],
+    filterGroupMode: 'office',
   },
 
   {
@@ -72,12 +95,17 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
     name: "Government IDs",
     description: "ID numbers + basic identity",
     selectedKeys: [
-      "employeeNo", "lastName", "firstName", "middleName", "suffix", "nickname", "officeId", "position", "barangay", "city", "emergencyContactName", "emergencyContactNumber",
+      "employeeNo", "lastName", "firstName", "middleName", "suffix", "nickname", "office", "position", "barangay", "city", "emergencyContactName", "emergencyContactNumber",
       "gsisNo", "tinNo", "philHealthNo", "pagIbigNo", "imagePath", "qrPath"
     ],
     statusFilter: "active",
     idColumnSource: "bio",
     sheetName: "Gov IDs",
+    templateVersion: 2,
+    officesSelection: [],
+    sheetMode: "perOffice",
+    sortLevels: [],
+    filterGroupMode: 'office',
   },
 ];
 
@@ -289,6 +317,26 @@ export function overwriteUserTemplateById(
     ...patch,
     id,     // ensure id stays the same
     name,   // safe keep
+  };
+
+  saveUserTemplates(list);
+  return true;
+}
+
+export function renameUserTemplateById(id: string, name: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (isBuiltInTemplateId(id)) return false;
+
+  const list = loadUserTemplates();
+  const idx = list.findIndex((tpl) => tpl.id === id);
+  if (idx === -1) return false;
+
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+
+  list[idx] = {
+    ...list[idx],
+    name: trimmed,
   };
 
   saveUserTemplates(list);

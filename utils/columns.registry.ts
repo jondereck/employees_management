@@ -1,0 +1,117 @@
+export type ColumnDefinition = {
+  key: string;
+  label: string;
+  accessor?: (row: any) => unknown;
+};
+
+export const COLUMN_SEQUENCE = [
+  'rowNumber',
+  'employeeNo',
+  'lastName',
+  'firstName',
+  'middleName',
+  'suffix',
+  'nickname',
+  'office',
+  'position',
+  'employeeTypeId',
+  'eligibilityId',
+  'gender',
+  'contactNumber',
+  'education',
+  'salaryGrade',
+  'isArchived',
+  'houseNo',
+  'street',
+  'barangay',
+  'comma',
+  'city',
+  'province',
+  'gsisNo',
+  'tinNo',
+  'philHealthNo',
+  'pagIbigNo',
+  'terminateDate',
+  'memberPolicyNo',
+  'emergencyContactName',
+  'emergencyContactNumber',
+  'isHead',
+  'imagePath',
+  'qrPath',
+  'plantilla',
+  'salaryExport',
+  'birthday',
+  'age',
+  'latestAppointment',
+  'dateHired',
+  'yearsOfService',
+] as const;
+
+export const COLUMN_DEFS: Record<string, ColumnDefinition> = {
+  rowNumber: { key: 'rowNumber', label: 'No. (row number)' },
+  employeeNo: { key: 'employeeNo', label: 'Employee No' },
+  lastName: { key: 'lastName', label: 'Last Name' },
+  firstName: { key: 'firstName', label: 'First Name' },
+  middleName: { key: 'middleName', label: 'Middle Name' },
+  suffix: { key: 'suffix', label: 'Suffix' },
+  nickname: { key: 'nickname', label: 'Nickname' },
+  office: {
+    key: 'office',
+    label: 'Office',
+    accessor: (row: any) => {
+      const resolved =
+        row?.offices?.name ??
+        row?.office?.name ??
+        row?.officeName ??
+        row?.office;
+
+      return resolved == null ? '' : String(resolved);
+    },
+  },
+  position: { key: 'position', label: 'Position' },
+  employeeTypeId: { key: 'employeeTypeId', label: 'Employee Type' },
+  eligibilityId: { key: 'eligibilityId', label: 'Eligibility' },
+  gender: { key: 'gender', label: 'Gender' },
+  contactNumber: { key: 'contactNumber', label: 'Contact Number' },
+  education: { key: 'education', label: 'Education' },
+  salaryGrade: { key: 'salaryGrade', label: 'Salary Grade' },
+  isArchived: { key: 'isArchived', label: 'Retired' },
+  houseNo: { key: 'houseNo', label: 'House No' },
+  street: { key: 'street', label: 'Street' },
+  barangay: { key: 'barangay', label: 'Barangay' },
+  comma: { key: 'comma', label: 'Comma' },
+  city: { key: 'city', label: 'City' },
+  province: { key: 'province', label: 'Province' },
+  gsisNo: { key: 'gsisNo', label: 'GSIS No' },
+  tinNo: { key: 'tinNo', label: 'TIN No' },
+  philHealthNo: { key: 'philHealthNo', label: 'PhilHealth No' },
+  pagIbigNo: { key: 'pagIbigNo', label: 'PagIbig No' },
+  terminateDate: { key: 'terminateDate', label: 'Terminate Date' },
+  memberPolicyNo: { key: 'memberPolicyNo', label: 'Member Policy No' },
+  emergencyContactName: {
+    key: 'emergencyContactName',
+    label: 'Emergency Contact Name',
+  },
+  emergencyContactNumber: {
+    key: 'emergencyContactNumber',
+    label: 'Emergency Contact Number',
+  },
+  isHead: { key: 'isHead', label: 'isHead' },
+  imagePath: { key: 'imagePath', label: 'Image Path' },
+  qrPath: { key: 'qrPath', label: 'QR Path' },
+  plantilla: { key: 'plantilla', label: 'Plantilla' },
+  salaryExport: { key: 'salaryExport', label: 'Salary' },
+  birthday: { key: 'birthday', label: 'Birthday' },
+  age: { key: 'age', label: 'Age' },
+  latestAppointment: {
+    key: 'latestAppointment',
+    label: 'Latest Appointment',
+  },
+  dateHired: { key: 'dateHired', label: 'Date Hired' },
+  yearsOfService: {
+    key: 'yearsOfService',
+    label: 'Year(s) of Service',
+  },
+} as const;
+
+export type ColumnKey = typeof COLUMN_SEQUENCE[number];
