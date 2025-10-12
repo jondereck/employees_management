@@ -4,16 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { FaFileExcel } from 'react-icons/fa';
-import { ChevronDown, FileDown, FileUp, Save, Trash2 } from "lucide-react";
+import { FileDown, FileUp, Save, Trash2 } from "lucide-react";
 import Modal from './ui/modal';
 import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useParams } from 'next/navigation';
 import type { ExportTemplateV2, SortLevel } from '@/types/export';
 import { coerceDir, isSortLevel, isStringArray } from '@/lib/guards';
+import { SORT_FIELDS } from '@/utils/sort-fields';
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
@@ -47,10 +47,6 @@ const TAB_VALUE_TO_KEY = Object.entries(TAB_KEY_TO_VALUE).reduce<Record<string, 
   },
   {}
 );
-
-const PRIMARY_TAB_KEYS: ExportTabKey[] = ['filter', 'columns', 'sort'];
-const PRIMARY_TABS = EXPORT_TABS.filter((tab) => PRIMARY_TAB_KEYS.includes(tab.key));
-const OVERFLOW_TABS = EXPORT_TABS.filter((tab) => !PRIMARY_TAB_KEYS.includes(tab.key));
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
@@ -466,12 +462,6 @@ export default function DownloadStyledExcel() {
   };
 
   const activeTabKey = TAB_VALUE_TO_KEY[advancedTab] ?? 'filter';
-  const activeTabMeta = useMemo(() => EXPORT_TABS.find((tab) => tab.key === activeTabKey), [activeTabKey]);
-  const activeInOverflow = useMemo(
-    () => OVERFLOW_TABS.some((tab) => tab.key === activeTabKey),
-    [activeTabKey]
-  );
-  const moreButtonLabel = activeInOverflow && activeTabMeta ? `More (${activeTabMeta.label})` : 'More';
 
 
   // full rule list (persisted)
@@ -916,11 +906,9 @@ export default function DownloadStyledExcel() {
       const label = col.key === 'officeId' ? 'Office Name' : col.name;
       entries.set(col.key, label);
     });
-    entries.set('status', 'Status');
-    entries.set('appointment', 'Appointment');
-    entries.set('eligibility', 'Eligibility');
-    entries.set('updatedAt', 'Updated date');
-    entries.set('createdAt', 'Created date');
+    SORT_FIELDS.forEach((field) => {
+      entries.set(field.key, field.label);
+    });
     return Array.from(entries.entries()).map(([value, label]) => ({ value, label }));
   }, [effectiveColumnOrder]);
 
@@ -1260,7 +1248,7 @@ export default function DownloadStyledExcel() {
             </div>
           </div>
 
-          <div className="flex-1 w-full min-w-0 overflow-y-auto overflow-x-hidden px-4 py-4">
+          <div className="flex-1 w-full min-w-0 pl-4 pr-2 py-4 overflow-y-auto overflow-x-hidden max-h-[calc(88vh-112px)] scrollbar-gutter-stable">
             <TemplatePickerBar
               className="mb-3 w-full"
               value={selectedTemplateId}
@@ -1301,81 +1289,33 @@ export default function DownloadStyledExcel() {
             >
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
-                  <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full min-w-0">
-                    <div className="sticky top-[48px] z-20 border-b bg-background px-2 py-2">
-                      <div className="flex w-full min-w-0 items-center gap-2">
-                        <div className="flex items-center gap-2">
-                          {PRIMARY_TABS.map((tab) => {
-                            const Icon = tab.icon;
-                            const isActive = activeTabKey === tab.key;
-                            return (
-                              <Button
-                                key={tab.key}
-                                variant={isActive ? 'secondary' : 'ghost'}
-                                size="sm"
-                                onClick={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
-                                aria-label={tab.label}
-                                title={tab.label}
-                                aria-selected={isActive}
-                                aria-current={isActive ? 'page' : undefined}
-                                className={cn('h-8 px-2 gap-2 font-medium whitespace-nowrap', isActive ? 'pointer-events-none' : undefined)}
-                              >
-                                <Icon className="size-4" />
-                                <span>{tab.label}</span>
-                              </Button>
-                            );
-                          })}
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
+                    <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full min-w-0">
+                      <div className="sticky top-[48px] z-20 bg-background border-b flex flex-wrap items-center gap-2 px-2 py-2">
+                        {EXPORT_TABS.map((tab) => {
+                          const Icon = tab.icon;
+                          const isActive = activeTabKey === tab.key;
+                          return (
                             <Button
-                              variant={activeInOverflow ? 'secondary' : 'ghost'}
+                              key={tab.key}
+                              variant={isActive ? 'secondary' : 'ghost'}
                               size="sm"
-                              className="h-8 px-2 gap-2 font-medium whitespace-nowrap"
-                              aria-label={moreButtonLabel}
-                              title={moreButtonLabel}
-                              aria-selected={activeInOverflow}
-                              aria-haspopup="menu"
+                              onClick={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
+                              aria-label={tab.label}
+                              title={tab.label}
+                              aria-selected={isActive}
+                              aria-current={isActive ? 'page' : undefined}
+                              aria-controls={`panel-${tab.key}`}
+                              className="h-8 px-2 gap-2"
                             >
-                              <ChevronDown className="size-4" />
-                              <span className="truncate">{moreButtonLabel}</span>
-                              {activeInOverflow ? (
-                                <span className="ml-1 inline-block size-2 rounded-full bg-primary" aria-hidden="true" />
-                              ) : null}
+                              <Icon className="size-4" />
+                              <span className="whitespace-nowrap">{tab.label}</span>
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            sideOffset={6}
-                            collisionPadding={8}
-                            avoidCollisions
-                            className="min-w-44 z-[100]"
-                          >
-                            {OVERFLOW_TABS.map((tab) => {
-                              const Icon = tab.icon;
-                              const isActive = activeTabKey === tab.key;
-                              return (
-                                <DropdownMenuItem
-                                  key={tab.key}
-                                  onSelect={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
-                                  className={cn('flex items-center gap-2', isActive ? 'bg-accent text-accent-foreground' : undefined)}
-                                  aria-label={tab.label}
-                                  title={tab.label}
-                                  aria-current={isActive ? 'page' : undefined}
-                                  aria-selected={isActive}
-                                >
-                                  <Icon className="size-4" />
-                                  <span>{tab.label}</span>
-                                </DropdownMenuItem>
-                              );
-                            })}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                          );
+                        })}
                       </div>
-                    </div>
 
                     {/* TAB: Paths */}
-                    <TabsContent value="paths" className="mt-3">
+                    <TabsContent value="paths" id="panel-paths" className="mt-3">
                       <div className="rounded-md border bg-white p-3 space-y-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Paths</h4>
                         <div className="grid gap-3 sm:grid-cols-2 w-full min-w-0">
@@ -1462,7 +1402,7 @@ export default function DownloadStyledExcel() {
                     </TabsContent>
 
                     {/* TAB: Position Find & Replace */}
-                    <TabsContent value="position" className="mt-3">
+                    <TabsContent value="position" id="panel-findreplace" className="mt-3">
                       <div className="rounded-md border bg-white p-3 w-full min-w-0">
                         <div className="space-y-2 min-w-0">
                           <div className="flex items-center justify-between">
@@ -1638,7 +1578,7 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
                     {/* TAB: Columns */}
-                    <TabsContent value="columns_path" className="mt-3">
+                    <TabsContent value="columns_path" id="panel-columns" className="mt-3">
                       <div className="rounded-md border bg-white p-3 w-full min-w-0">
                         <div className="mb-2 flex justify-between items-center text-sm">
                           <label className="font-medium">Select Columns</label>
@@ -1666,7 +1606,7 @@ export default function DownloadStyledExcel() {
 
                       </div>
                     </TabsContent>
-                    <TabsContent value="sort" className="mt-3">
+                    <TabsContent value="sort" id="panel-sort" className="mt-3">
                       <div className="rounded-md border bg-white p-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Sort</h4>
                         <div className="mt-2 space-y-3 text-sm">
@@ -1754,7 +1694,7 @@ export default function DownloadStyledExcel() {
                         </div>
                       </div>
                     </TabsContent>
-                    <TabsContent value="filters" className="mt-3">
+                    <TabsContent value="filters" id="panel-filter" className="mt-3">
                       <div className="rounded-md border bg-white p-3 space-y-4 w-full min-w-0">
                         {/* Appointment filter */}
                         <div>
@@ -1864,7 +1804,7 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="id" className="mt-3">
+                    <TabsContent value="id" id="panel-id" className="mt-3">
                       <div className="rounded-md border bg-white p-3 space-y-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Which ID should appear in the exported “Employee No” column?</h4>
 

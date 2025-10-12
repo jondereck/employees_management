@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx-js-style';
 
 import type { SortLevel as ExportSortLevel } from '@/types/export';
+import { SORT_FIELDS } from '@/utils/sort-fields';
 
 
 export type Column = { name: string; key: string };
@@ -746,7 +747,8 @@ export function partitionByOffice<T extends { officeId: string }>(rows: T[]) {
 
 // Map a column key to a comparable value (string/number/date); fallback to ""
 export function getComparable(row: any, field: string) {
-  const v = row?.[field];
+  const def = SORT_FIELDS.find((f) => f.key === field);
+  const v = def?.accessor ? def.accessor(row) : row?.[field];
   if (v == null) return '';
   if (v instanceof Date) return v.getTime();
   if (typeof v === 'number') return v;
