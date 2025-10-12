@@ -104,7 +104,7 @@ export default function TemplatePickerBar({
             position="popper"
             sideOffset={6}
             avoidCollisions
-            portal
+      
             className="z-[100]"
           >
             {templates.map((t) => (

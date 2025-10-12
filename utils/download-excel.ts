@@ -823,7 +823,7 @@ export async function generateExcelFile({
         const rows = partitioned[groupKey] ?? [];
         const sortedRows = sortRows(rows, effectiveSortLevels);
         const numberedRows = includeRowNumber
-          ? sortedRows.map((row, idx) => ({ ...row, __rowNumber: idx + 1 }))
+          ? sortedRows.map((row, idx) => ({ row, __rowNumber: idx + 1 }))
           : sortedRows;
         const { title, note, sheetNameBase } = resolveGroupMetadata(groupKey, rows);
         const worksheet = buildWorksheet(numberedRows, { includeTitle: true, title, subtitle: note });
