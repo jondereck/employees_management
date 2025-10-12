@@ -1,5 +1,5 @@
 // utils/export-templates.ts
-import type { Column, IdColumnSource, PositionReplaceRule } from "@/utils/download-excel";
+import type { Column, IdColumnSource, PositionReplaceRule, SortLevel } from "@/utils/download-excel";
 
 
 
@@ -35,7 +35,18 @@ export type ExportTemplate = {
   positionReplaceRules?: PositionReplaceRule[];
   paths?: ExportTemplatePaths;
   sheetName?: string;
+  templateVersion?: number;
+  officesSelection?: string[];
+  sheetMode?: 'perOffice' | 'merged';
+  sortLevels?: SortLevel[];
     __version__?: number;
+};
+
+export type ExportTemplateV2 = ExportTemplate & {
+  templateVersion: 2;
+  officesSelection: string[];
+  sheetMode: 'perOffice' | 'merged';
+  sortLevels: SortLevel[];
 };
 
 export const EXPORT_TEMPLATES: ExportTemplate[] = [
@@ -51,6 +62,10 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
     statusFilter: "active",
     idColumnSource: "employeeNo",
     sheetName: "HR Core",
+    templateVersion: 2,
+    officesSelection: [],
+    sheetMode: "perOffice",
+    sortLevels: [],
   },
   {
     id: "plantilla",
@@ -65,6 +80,10 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
     appointmentFilters: ["Permanent", "Coterminous"],
     idColumnSource: "employeeNo",
     sheetName: "Plantilla",
+    templateVersion: 2,
+    officesSelection: [],
+    sheetMode: "perOffice",
+    sortLevels: [],
   },
 
   {
@@ -78,6 +97,10 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
     statusFilter: "active",
     idColumnSource: "bio",
     sheetName: "Gov IDs",
+    templateVersion: 2,
+    officesSelection: [],
+    sheetMode: "perOffice",
+    sortLevels: [],
   },
 ];
 
