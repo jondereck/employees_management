@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
+import { cn } from "@/lib/utils";
+
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./dialog";
 
 interface ModalProps {
@@ -8,7 +11,11 @@ interface ModalProps {
   description: string;
   isOpen: boolean;
   onClose: () => void;
-  children?: React.ReactNode
+  children?: React.ReactNode;
+  contentClassName?: string;
+  headerClassName?: string;
+  bodyClassName?: string;
+  hideDefaultHeader?: boolean;
 }
 
 const Modal = ({
@@ -16,7 +23,11 @@ const Modal = ({
   description,
   isOpen,
   onClose,
-  children
+  children,
+  contentClassName,
+  headerClassName,
+  bodyClassName,
+  hideDefaultHeader,
 }: ModalProps) => {
 
   const [isMounted, setIsMounted] = useState(false);
@@ -37,17 +48,22 @@ const Modal = ({
   return (
     <Dialog open={isOpen} onOpenChange={onChange}>
      <DialogContent
-    className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6"
-    // iOS smooth scrolling
-    style={{ WebkitOverflowScrolling: "touch" }}
-  >
-        <DialogHeader>
-          <DialogTitle className="mt-6">{title}</DialogTitle>
-          <DialogDescription>
-            {description}
-          </DialogDescription>
-        </DialogHeader>
-        <div>
+        className={cn(
+          "w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6",
+          contentClassName
+        )}
+        // iOS smooth scrolling
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        {!hideDefaultHeader ? (
+          <DialogHeader className={headerClassName}>
+            <DialogTitle className="mt-6">{title}</DialogTitle>
+            <DialogDescription>
+              {description}
+            </DialogDescription>
+          </DialogHeader>
+        ) : null}
+        <div className={cn(bodyClassName)}>
           {children}
         </div>
       </DialogContent>

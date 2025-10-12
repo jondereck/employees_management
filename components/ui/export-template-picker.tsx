@@ -33,7 +33,8 @@ type Props = {
   deleteUserTemplate: (id: string) => void;
   refreshTemplates: () => void;
 
-  onRequestUpdate?: (id: string, newName?: string) => void;
+  onRequestOverwrite?: (id: string) => void;
+  onRequestRename?: (id: string, newName: string) => void;
 
   /** Optional list of core/built-in ids that must NOT be deletable */
   builtinIds?: string[]; // default: ["hr-core", "plantilla", "payroll", "gov-ids"]
@@ -49,7 +50,8 @@ export default function TemplatePickerBar({
   clearAllUserTemplates,
   deleteUserTemplate,
   refreshTemplates,
-  onRequestUpdate,
+  onRequestOverwrite,
+  onRequestRename,
   builtinIds = ["hr-core", "plantilla", "payroll", "gov-ids"],
 }: Props) {
   const selected = useMemo(
@@ -71,10 +73,11 @@ export default function TemplatePickerBar({
     setRenameOpen(true);
   };
 
-  const confirmRenameUpdate = () => {
+  const confirmRename = () => {
     if (!value) return;
     const finalName = newName.trim();
-    onRequestUpdate?.(value, finalName || undefined);
+    if (!finalName) return;
+    onRequestRename?.(value, finalName);
     setRenameOpen(false);
   };
 
@@ -97,7 +100,13 @@ export default function TemplatePickerBar({
           <SelectTrigger className="w-[280px]">
             <SelectValue placeholder="Choose export template…" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent
+            position="popper"
+            sideOffset={6}
+            avoidCollisions
+            portal
+            className="z-[100]"
+          >
             {templates.map((t) => (
               <SelectItem key={t.id} value={t.id}>
                 {t.name}
@@ -134,7 +143,7 @@ export default function TemplatePickerBar({
                 type="button"
                 size="icon"
                 variant="secondary"
-                onClick={() => value && !isBuiltIn && onRequestUpdate?.(value)}
+                onClick={() => value && !isBuiltIn && onRequestOverwrite?.(value)}
                 disabled={!value || isBuiltIn}
                 className="shrink-0"
               >
@@ -180,26 +189,26 @@ export default function TemplatePickerBar({
           </Tooltip>
 
           <Tooltip>
-  <TooltipTrigger asChild>
-    <Button
-      type="button"
-      size="icon"
-      variant="secondary"
-      onClick={openRename}
-      disabled={!value || isBuiltIn}
-      className="shrink-0"
-    >
-      <Pencil className="h-4 w-4" />
-    </Button>
-  </TooltipTrigger>
-  <TooltipContent>
-    {!value
-      ? "Select a template first"
-      : isBuiltIn
-      ? "Built-in templates can’t be renamed"
-      : "Rename & update template"}
-  </TooltipContent>
-</Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="secondary"
+                onClick={openRename}
+                disabled={!value || isBuiltIn}
+                className="shrink-0"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {!value
+                ? "Select a template first"
+                : isBuiltIn
+                  ? "Built-in templates can’t be renamed"
+                  : "Rename template"}
+            </TooltipContent>
+          </Tooltip>
 
           {/* Clear ALL user presets */}
           {/* <Tooltip>
@@ -239,12 +248,12 @@ export default function TemplatePickerBar({
               placeholder="Template name"
             />
             <p className="mt-2 text-xs text-muted-foreground">
-              This will overwrite the selected user template with the current settings.
+              This updates only the template name. Use the save icon to overwrite its settings.
             </p>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setRenameOpen(false)}>Cancel</Button>
-            <Button onClick={confirmRenameUpdate}>Save</Button>
+            <Button onClick={confirmRename} disabled={!newName.trim()}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
