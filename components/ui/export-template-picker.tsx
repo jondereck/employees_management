@@ -97,7 +97,12 @@ export default function TemplatePickerBar({
           <SelectTrigger className="w-[280px]">
             <SelectValue placeholder="Choose export template…" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent
+            position="popper"
+            sideOffset={6}
+            avoidCollisions
+            className="z-[100]"
+          >
             {templates.map((t) => (
               <SelectItem key={t.id} value={t.id}>
                 {t.name}

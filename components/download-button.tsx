@@ -4,23 +4,184 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { FaFileExcel } from 'react-icons/fa';
-import { FileDown, FileUp, Save } from "lucide-react";
+import { FileDown, FileUp, Save, Trash2 } from "lucide-react";
 import Modal from './ui/modal';
-import { generateExcelFile, Mappings, PositionReplaceRule } from '@/utils/download-excel';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab } from '@/utils/download-excel';
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useParams } from 'next/navigation';
+import type { ExportTemplateV2, SortLevel } from '@/types/export';
+import { coerceDir, isSortLevel, isStringArray } from '@/lib/guards';
+import { SORT_FIELDS } from '@/utils/sort-fields';
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
 import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage, exportTemplatesToBlob, importTemplatesFromObject, isBuiltInTemplateId, overwriteUserTemplateById } from '@/utils/export-templates';
 import TemplatePickerBar from './ui/export-template-picker';
+import { EXPORT_TABS, ExportTabKey } from "./tabs.registry";
 
+type OfficeOption = { id: string; name: string; bioIndexCode?: string | null };
 
+type ModalSize = 'cozy' | 'roomy' | 'xl';
 
+const MODAL_WIDTH_CLASSES: Record<ModalSize, string> = {
+  cozy: 'w-[min(900px,calc(100vw-48px))]',
+  roomy: 'w-[min(1100px,calc(100vw-48px))] 2xl:w-[min(1200px,calc(100vw-64px))]',
+  xl: 'w-[min(1200px,calc(100vw-64px))]',
+};
+
+const TAB_KEY_TO_VALUE: Record<ExportTabKey, string> = {
+  filter: 'filters',
+  columns: 'columns_path',
+  sort: 'sort',
+  paths: 'paths',
+  findreplace: 'position',
+  id: 'id',
+};
+
+const TAB_VALUE_TO_KEY = Object.entries(TAB_KEY_TO_VALUE).reduce<Record<string, ExportTabKey>>(
+  (acc, [key, value]) => {
+    acc[value] = key as ExportTabKey;
+    return acc;
+  },
+  {}
+);
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [mappings, setMappings] = useState<Mappings | null>(null);
+
+  const params = useParams<{ departmentId?: string }>();
+  const departmentId = useMemo(() => {
+    const raw = params?.departmentId;
+    if (!raw) return undefined;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [params]);
+
+  function readStoredSortLevels(): SortLevel[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('export.sortLevels');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((item: any) => item && typeof item.field === 'string')
+        .slice(0, 3)
+        .map((item: any) => ({
+          field: String(item.field),
+          dir: item.dir === 'asc' ? 'asc' : 'desc',
+        }));
+    } catch (error) {
+      console.warn('Failed to parse export.sortLevels', error);
+      return [];
+    }
+  }
+
+  const [officeOptions, setOfficeOptions] = useState<OfficeOption[]>([]);
+  const [officeSearch, setOfficeSearch] = useState('');
+  const [selectedOffices, setSelectedOffices] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('export.officesSelection');
+      const parsed = stored ? JSON.parse(stored) : [];
+      if (Array.isArray(parsed)) {
+        return parsed.map((id) => String(id));
+      }
+    } catch (error) {
+      console.warn('Failed to parse export.officesSelection', error);
+    }
+    return [];
+  });
+
+  const officeMetadata = useMemo(() => {
+    return officeOptions.reduce<Record<string, { name: string; bioIndexCode?: string | null }>>((acc, office) => {
+      acc[office.id] = { name: office.name, bioIndexCode: office.bioIndexCode ?? undefined };
+      return acc;
+    }, {});
+  }, [officeOptions]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.officesSelection', JSON.stringify(selectedOffices));
+    } catch (error) {
+      console.warn('Failed to persist export.officesSelection', error);
+    }
+  }, [selectedOffices]);
+
+  const [sheetMode, setSheetMode] = useState<'perOffice' | 'merged'>(() => {
+    if (typeof window === 'undefined') return 'perOffice';
+    const stored = localStorage.getItem('export.sheetMode');
+    return stored === 'merged' ? 'merged' : 'perOffice';
+  });
+
+  const [modalSize, setModalSize] = useState<ModalSize>(() => {
+    if (typeof window === 'undefined') return 'roomy';
+    const stored = localStorage.getItem('export.modalSize');
+    return stored === 'cozy' || stored === 'xl' ? stored : 'roomy';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.modalSize', modalSize);
+    } catch (error) {
+      console.warn('Failed to persist export.modalSize', error);
+    }
+  }, [modalSize]);
+
+  const toggleModalSize = () => {
+    setModalSize((prev) => {
+      if (prev === 'cozy') return 'roomy';
+      if (prev === 'roomy') return 'xl';
+      return 'cozy';
+    });
+  };
+
+  const modalSizeLabel = modalSize === 'xl' ? 'Shrink' : 'Expand';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.sheetMode', sheetMode);
+    } catch (error) {
+      console.warn('Failed to persist export.sheetMode', error);
+    }
+  }, [sheetMode]);
+
+  useEffect(() => {
+    if (!modalOpen || !departmentId) return;
+    let cancelled = false;
+    const loadOffices = async () => {
+      try {
+        const res = await fetch(`/api/offices?departmentId=${departmentId}`);
+        if (!res.ok) return;
+        const data: OfficeOption[] = await res.json();
+        if (!cancelled) {
+          setOfficeOptions(data);
+        }
+      } catch (error) {
+        console.error('Failed to load offices for export modal', error);
+      }
+    };
+    loadOffices();
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOpen, departmentId]);
+
+  useEffect(() => {
+    if (!officeOptions.length) return;
+    setSelectedOffices((prev) => {
+      const allowed = new Set(officeOptions.map((office) => office.id));
+      const filtered = prev.filter((id) => allowed.has(id));
+      if (filtered.length === prev.length) return prev;
+      return filtered;
+    });
+  }, [officeOptions]);
 
   const [allPositions, setAllPositions] = useState<string[]>([]);
   const [posSearch, setPosSearch] = useState('');
@@ -34,16 +195,59 @@ export default function DownloadStyledExcel() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(undefined);
 
   const [templates, setTemplates] = useState(getAllTemplates());
-  const [sortBy, setSortBy] = useState<'updatedAt' | 'createdAt'>(() => {
-    if (typeof window !== 'undefined') return (localStorage.getItem('hrps_sort_by') as any) || 'updatedAt';
+  const [sortBy, setSortBy] = useState<string>(() => {
+    const stored = readStoredSortLevels();
+    if (stored[0]?.field) return stored[0].field;
+    if (typeof window !== 'undefined') {
+      const legacy = localStorage.getItem('hrps_sort_by');
+      if (legacy) return legacy;
+    }
     return 'updatedAt';
   });
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => {
-    if (typeof window !== 'undefined') return (localStorage.getItem('hrps_sort_dir') as any) || 'desc';
+    const stored = readStoredSortLevels();
+    if (stored[0]?.dir === 'asc' || stored[0]?.dir === 'desc') return stored[0].dir;
+    if (typeof window !== 'undefined') {
+      const legacy = localStorage.getItem('hrps_sort_dir');
+      if (legacy === 'asc' || legacy === 'desc') return legacy;
+    }
     return 'desc';
   });
-  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_by', sortBy); }, [sortBy]);
-  useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_dir', sortDir); }, [sortDir]);
+  const [additionalSortLevels, setAdditionalSortLevels] = useState<SortLevel[]>(() => {
+    const stored = readStoredSortLevels();
+    return stored.slice(1);
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (sortBy === 'updatedAt' || sortBy === 'createdAt') {
+      localStorage.setItem('hrps_sort_by', sortBy);
+    }
+  }, [sortBy]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem('hrps_sort_dir', sortDir);
+  }, [sortDir]);
+
+  const combinedSortLevels = useMemo(() => {
+    const levels: SortLevel[] = [];
+    if (sortBy) {
+      levels.push({ field: sortBy, dir: sortDir });
+    }
+    additionalSortLevels.forEach((level) => {
+      if (level?.field) {
+        levels.push({ field: level.field, dir: level.dir });
+      }
+    });
+    return levels.slice(0, 3);
+  }, [sortBy, sortDir, additionalSortLevels]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('export.sortLevels', JSON.stringify(combinedSortLevels));
+    } catch (error) {
+      console.warn('Failed to persist export.sortLevels', error);
+    }
+  }, [combinedSortLevels]);
 
 
   function refreshTemplates() {
@@ -52,10 +256,56 @@ export default function DownloadStyledExcel() {
   }
 
 
+  const normalizeTemplate = (tpl: ExportTemplate): ExportTemplateV2 => {
+    const rawOffices = tpl?.officesSelection as unknown;
+
+    const officesSelection: string[] = isStringArray(rawOffices)
+      ? rawOffices
+      : Array.isArray(rawOffices)
+        ? (rawOffices as unknown[])
+            .map((id: unknown): string => String(id))
+            .filter((id: string): boolean => id.length > 0)
+        : [];
+
+    const sheetModeValue: 'perOffice' | 'merged' = tpl?.sheetMode === 'merged' ? 'merged' : 'perOffice';
+
+    const rawLevels: unknown[] = Array.isArray(tpl?.sortLevels) ? (tpl.sortLevels as unknown[]) : [];
+
+    const sortLevels: SortLevel[] = rawLevels
+      .map((level: unknown): SortLevel | null => {
+        if (!isSortLevel(level)) return null;
+        const field: string = (level as any).field;
+        const dir: 'asc' | 'desc' = coerceDir((level as any).dir);
+        return { field, dir };
+      })
+      .filter((level: SortLevel | null): level is SortLevel => level !== null)
+      .slice(0, 3);
+
+    return {
+      ...tpl,
+      templateVersion: 2 as const,
+      officesSelection,
+      sheetMode: sheetModeValue,
+      sortLevels,
+    };
+  };
+
+
 
   function applyTemplate(tpl: ExportTemplate) {
     setSelectedTemplateId(tpl.id);
     setSelectedColumns(tpl.selectedKeys);
+    const normalized = normalizeTemplate(tpl);
+    setSelectedOffices(normalized.officesSelection);
+    setSheetMode(normalized.sheetMode);
+    if (normalized.sortLevels.length > 0) {
+      const [first, ...rest] = normalized.sortLevels;
+      setSortBy(first.field);
+      setSortDir(first.dir);
+      setAdditionalSortLevels(rest.slice(0, 2));
+    } else {
+      setAdditionalSortLevels([]);
+    }
     if (tpl.statusFilter) setStatusFilter(tpl.statusFilter);
     if (tpl.idColumnSource) setIdColumnSource(tpl.idColumnSource);
 
@@ -200,17 +450,18 @@ export default function DownloadStyledExcel() {
 
 
   const [advancedTab, setAdvancedTab] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("hrps_advanced_tab") || "paths";
+    if (typeof window !== 'undefined') {
+      return getActiveExportTab() || localStorage.getItem('hrps_advanced_tab') || 'filters';
     }
-    return "paths";
+    return 'filters';
   });
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("hrps_advanced_tab", advancedTab);
-    }
-  }, [advancedTab]);
+  const handleAdvancedTabChange = (value: string) => {
+    setAdvancedTab(value);
+    setActiveExportTab(value);
+  };
+
+  const activeTabKey = TAB_VALUE_TO_KEY[advancedTab] ?? 'filter';
 
 
   // full rule list (persisted)
@@ -429,6 +680,45 @@ export default function DownloadStyledExcel() {
   const toggleAllAppointments = () =>
     setAppointmentFilters(isAllAppointments ? [] : [...APPOINTMENT_OPTIONS]);
 
+  const filteredOffices = useMemo(() => {
+    const query = officeSearch.trim().toLowerCase();
+    if (!query) return officeOptions;
+    return officeOptions.filter((office) => {
+      const name = office.name.toLowerCase();
+      const code = office.bioIndexCode?.toLowerCase() ?? '';
+      return name.includes(query) || (!!code && code.includes(query));
+    });
+  }, [officeOptions, officeSearch]);
+
+  const toggleOfficeSelection = (officeId: string) => {
+    setSelectedOffices((prev) =>
+      prev.includes(officeId)
+        ? prev.filter((id) => id !== officeId)
+        : [...prev, officeId]
+    );
+  };
+
+  const selectAllFilteredOffices = () => {
+    if (!filteredOffices.length) {
+      setSelectedOffices([]);
+      return;
+    }
+    setSelectedOffices((prev) => {
+      const set = new Set(prev);
+      filteredOffices.forEach((office) => set.add(office.id));
+      return Array.from(set);
+    });
+  };
+
+  const deselectAllFilteredOffices = () => {
+    if (!filteredOffices.length) {
+      setSelectedOffices([]);
+      return;
+    }
+    const remove = new Set(filteredOffices.map((office) => office.id));
+    setSelectedOffices((prev) => prev.filter((id) => !remove.has(id)));
+  };
+
 
   // under your other path states
   const [imageExt, setImageExt] = useState<string>(() =>
@@ -467,6 +757,7 @@ export default function DownloadStyledExcel() {
 
 
   const columnOrder = [
+    { name: 'No. (row number)', key: 'rowNumber' },
     { name: 'Employee No', key: 'employeeNo' },
     { name: 'Last Name', key: 'lastName' },
     { name: 'First Name', key: 'firstName' },
@@ -510,6 +801,7 @@ export default function DownloadStyledExcel() {
   ];
 
   const defaultSelectedColumns = [
+    'rowNumber',
     'lastName',
     'firstName',
     'middleName',
@@ -597,10 +889,54 @@ export default function DownloadStyledExcel() {
         idColumnSource === 'bio' ? 'Employee Code' :
           'Employee No';
 
-    return columnOrder.map(col =>
-      col.key === 'employeeNo' ? { ...col, name: label } : col
-    );
+    return columnOrder.map((col) => {
+      if (col.key === 'rowNumber') {
+        return { ...col, name: 'No.' };
+      }
+      if (col.key === 'employeeNo') {
+        return { ...col, name: label };
+      }
+      return col;
+    });
   }, [columnOrder, idColumnSource]);
+
+  const sortFieldOptions = useMemo(() => {
+    const entries = new Map<string, string>();
+    effectiveColumnOrder.forEach((col) => {
+      const label = col.key === 'officeId' ? 'Office Name' : col.name;
+      entries.set(col.key, label);
+    });
+    SORT_FIELDS.forEach((field) => {
+      entries.set(field.key, field.label);
+    });
+    return Array.from(entries.entries()).map(([value, label]) => ({ value, label }));
+  }, [effectiveColumnOrder]);
+
+  const handleAddSortLevel = () => {
+    if (additionalSortLevels.length >= 2) return;
+    const fallback = sortFieldOptions[0]?.value || sortBy || 'updatedAt';
+    setAdditionalSortLevels((prev) => [...prev, { field: fallback, dir: 'asc' }]);
+  };
+
+  const updateSortLevelField = (index: number, field: string) => {
+    setAdditionalSortLevels((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], field };
+      return next;
+    });
+  };
+
+  const updateSortLevelDir = (index: number, dir: 'asc' | 'desc') => {
+    setAdditionalSortLevels((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], dir };
+      return next;
+    });
+  };
+
+  const removeSortLevel = (index: number) => {
+    setAdditionalSortLevels((prev) => prev.filter((_, i) => i !== index));
+  };
 
 
   useEffect(() => {
@@ -618,6 +954,22 @@ export default function DownloadStyledExcel() {
     setLoading(true);
     const toastId = toast.loading('Generating Excel file...');
     try {
+      let officesSelection: string[] = [];
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('export.officesSelection');
+          const parsed = stored ? JSON.parse(stored) : [];
+          if (Array.isArray(parsed)) {
+            officesSelection = Array.from(new Set(parsed.map((id: any) => String(id))));
+          }
+        } catch (error) {
+          console.warn('Failed to parse export.officesSelection before download', error);
+          officesSelection = [...selectedOffices];
+        }
+      } else {
+        officesSelection = [...selectedOffices];
+      }
+
       const blob = await generateExcelFile({
         selectedKeys,
         columnOrder: effectiveColumnOrder,
@@ -633,10 +985,33 @@ export default function DownloadStyledExcel() {
         qrExt,
         sortBy,
         sortDir,
+        officesSelection,
+        officeMetadata,
+        sortLevels: combinedSortLevels,
+        sheetMode,
 
       });
 
-      const base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
+      let base: string;
+      if (sheetMode === 'merged') {
+        const now = new Date();
+        const datePart = now.toISOString().slice(0, 10);
+        const timePart = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+        base = makeSafeFilename(`Employees_MergedOffices_${datePart}_${timePart}`);
+      } else {
+        base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
+        if (officesSelection.length === 1) {
+          const officeId = officesSelection[0];
+          const info = officeMetadata[officeId];
+          const suffixSource = info?.bioIndexCode || info?.name || officeId;
+          if (suffixSource) {
+            const safeSuffix = makeSafeFilename(`${suffixSource}`);
+            if (safeSuffix) {
+              base = makeSafeFilename(`${base}_${safeSuffix}`);
+            }
+          }
+        }
+      }
       const filename = `${base}.xlsx`;
 
 
@@ -711,11 +1086,15 @@ export default function DownloadStyledExcel() {
 
     const ok = overwriteUserTemplateById(selectedTemplateId, {
       name: (newName ?? selectedTemplateName)?.trim() || selectedTemplateName,
+      templateVersion: 2,
       selectedKeys: selectedColumnsRef.current,
       statusFilter,
       idColumnSource,
       appointmentFilters,
       positionReplaceRules,
+      officesSelection: selectedOffices.map((id) => String(id)),
+      sheetMode,
+      sortLevels: combinedSortLevels,
       sheetName: "Sheet1",
       paths: {
         imageBaseDir,
@@ -766,107 +1145,132 @@ export default function DownloadStyledExcel() {
         description="Choose which fields to include in the Excel file."
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
+        hideDefaultHeader
+        contentClassName={cn(
+          'z-[90] max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-hidden sm:max-w-none gap-0 p-0',
+          MODAL_WIDTH_CLASSES[modalSize]
+        )}
+        bodyClassName="flex h-full flex-col overflow-hidden"
       >
+        <div className="flex h-full w-full min-w-0 flex-col">
+          <div className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold leading-tight text-foreground">Select Columns to Export</h2>
+                <p className="text-sm text-muted-foreground">Choose which fields to include in the Excel file.</p>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground md:justify-end">
+                <button
+                  onClick={() => {
+                    const name = prompt("Template name?");
+                    if (!name) return;
 
-        <div className="flex items-center gap-3 mb-2">
-          <button
-            onClick={() => {
-              const name = prompt("Template name?");
-              if (!name) return;
+                    const newTpl = saveTemplateToLocalStorage(name, {
+                      templateVersion: 2,
+                      selectedKeys: selectedColumnsRef.current,
+                      statusFilter,
+                      idColumnSource,
+                      appointmentFilters,
+                      positionReplaceRules,
+                      officesSelection: selectedOffices.map((id) => String(id)),
+                      sheetMode,
+                      sortLevels: combinedSortLevels,
+                      sheetName: "Sheet1",
+                      paths: {
+                        imageBaseDir,
+                        imageExt,
+                        qrBaseDir,
+                        qrExt,
+                        qrPrefix,
+                      },
+                    });
 
-              const newTpl = saveTemplateToLocalStorage(name, {
-                selectedKeys: selectedColumnsRef.current,
-                statusFilter,
-                idColumnSource,
-                appointmentFilters,
-                positionReplaceRules,
-                sheetName: "Sheet1",
-                paths: {                         // ✅ save paths
-                  imageBaseDir,
-                  imageExt,
-                  qrBaseDir,
-                  qrExt,
-                  qrPrefix,
-                },
-              });
+                    refreshTemplates();
+                    setSelectedTemplateId(newTpl.id);
+                    toast.success(`Saved template "${name}"`);
+                  }}
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                  title="Save current selections as a new template"
+                >
+                  <Save className="h-4 w-4" />
+                  Save Template
+                </button>
 
-              refreshTemplates();
-              setSelectedTemplateId(newTpl.id);
-              toast.success(`Saved template "${name}"`);
-            }}
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-            title="Save current selections as a new template"
-          >
-            <Save className="h-4 w-4" />
-            Save Template
-          </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport(false)}
+                  title="Export user templates (.json)"
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Export
+                </button>
 
-          {/* Export user templates */}
-          <button
-            type="button"
-            onClick={() => handleExport(false)}
-            title="Export user templates (.json)"
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-          >
-            <FileDown className="h-4 w-4" />
-            Export
-          </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport(true)}
+                  title="Export all templates (.json)"
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Export All
+                </button>
 
-          {/* Export all templates (built-ins + user) */}
-          <button
-            type="button"
-            onClick={() => handleExport(true)}
-            title="Export all templates (.json)"
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-          >
-            <FileDown className="h-4 w-4" />
-            Export All
-          </button>
+                <button
+                  type="button"
+                  onClick={handleClickImport}
+                  title="Import templates (.json)"
+                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileUp className="h-4 w-4" />
+                  Import
+                </button>
 
-          {/* Import */}
-          <button
-            type="button"
-            onClick={handleClickImport}
-            title="Import templates (.json)"
-            className="inline-flex items-center gap-1 text-xs text-gray-700 hover:text-black"
-          >
-            <FileUp className="h-4 w-4" />
-            Import
-          </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  title="Toggle modal size"
+                  onClick={toggleModalSize}
+                >
+                  {modalSizeLabel}
+                </Button>
 
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json"
-            onChange={handleImportFile}
-            className="hidden"
-          />
-        </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/json"
+                  onChange={handleImportFile}
+                  className="hidden"
+                />
+              </div>
+            </div>
+          </div>
 
+          <div className="flex-1 w-full min-w-0 pl-4 pr-2 py-4 overflow-y-auto overflow-x-hidden max-h-[calc(88vh-112px)] scrollbar-gutter-stable">
+            <TemplatePickerBar
+              className="mb-3 w-full"
+              value={selectedTemplateId}
+              templates={templates}
+              onApply={(tpl) => {
+                applyTemplate(tpl);
+                setSelectedTemplateId(tpl.id);
+              }}
+              onChangeSelected={setSelectedTemplateId}
+              clearLastUsedTemplate={clearLastUsedTemplate}
+              clearAllUserTemplates={clearAllUserTemplates}
+              deleteUserTemplate={deleteUserTemplate}
+              refreshTemplates={refreshTemplates}
+              onRequestUpdate={(id, newName) => handleUpdateCurrentTemplate(id, newName)}
+            />
 
-        <TemplatePickerBar
-          className="mb-3"
-          value={selectedTemplateId}
-          templates={templates}
-          onApply={(tpl) => {
-            applyTemplate(tpl);
-            setSelectedTemplateId(tpl.id);
-          }}
-          onChangeSelected={setSelectedTemplateId}
-          clearLastUsedTemplate={clearLastUsedTemplate}
-          clearAllUserTemplates={clearAllUserTemplates}
-          deleteUserTemplate={deleteUserTemplate}
-          refreshTemplates={refreshTemplates}
-          onRequestUpdate={(id, newName) => handleUpdateCurrentTemplate(id, newName)}
-        />
-
-        {/* ADVANCED (single collapsible with both subsections) */}
-        <div className="max-h-[75vh] overflow-y-auto pr-1">
-          {/* ADVANCED (single box; sticky header + conditional mount for content) */}
-          <div className="mb-4 rounded-lg border bg-white shadow-sm">
+            {/* ADVANCED (single collapsible with both subsections) */}
+            <div className="w-full min-w-0">
+              {/* ADVANCED (single box; sticky header + conditional mount for content) */}
+              <div className="mb-4 rounded-lg border bg-white shadow-sm">
             {/* Sticky header so the toggle stays visible */}
-            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur px-3 py-2 border-b">
+            <div className="sticky top-0 z-10 border-b bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
@@ -885,21 +1289,36 @@ export default function DownloadStyledExcel() {
             >
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
-                  <Tabs value={advancedTab} onValueChange={setAdvancedTab} className="w-full">
-                    <TabsList className="grid grid-cols-5 w-full gap-5">
-                      <TabsTrigger value="filters">Filter</TabsTrigger>
-                      <TabsTrigger value="columns_path">Columns</TabsTrigger>
-                      <TabsTrigger value="paths">Paths</TabsTrigger>
-                      <TabsTrigger value="position">Find &amp; Replace</TabsTrigger>
-                      <TabsTrigger value="id">ID Column</TabsTrigger> {/* NEW */}
-
-                    </TabsList>
+                    <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full min-w-0">
+                      <div className="sticky top-[48px] z-20 bg-background border-b flex flex-wrap items-center gap-2 px-2 py-2">
+                        {EXPORT_TABS.map((tab) => {
+                          const Icon = tab.icon;
+                          const isActive = activeTabKey === tab.key;
+                          return (
+                            <Button
+                              key={tab.key}
+                              variant={isActive ? 'secondary' : 'ghost'}
+                              size="sm"
+                              onClick={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
+                              aria-label={tab.label}
+                              title={tab.label}
+                              aria-selected={isActive}
+                              aria-current={isActive ? 'page' : undefined}
+                              aria-controls={`panel-${tab.key}`}
+                              className="h-8 px-2 gap-2"
+                            >
+                              <Icon className="size-4" />
+                              <span className="whitespace-nowrap">{tab.label}</span>
+                            </Button>
+                          );
+                        })}
+                      </div>
 
                     {/* TAB: Paths */}
-                    <TabsContent value="paths" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-3">
+                    <TabsContent value="paths" id="panel-paths" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 space-y-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Paths</h4>
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="grid gap-3 sm:grid-cols-2 w-full min-w-0">
                           {/* Image base folder */}
                           <div className="flex flex-col">
                             <label className="text-xs text-gray-600 mb-1">Image base folder</label>
@@ -983,9 +1402,9 @@ export default function DownloadStyledExcel() {
                     </TabsContent>
 
                     {/* TAB: Position Find & Replace */}
-                    <TabsContent value="position" className="mt-3">
-                      <div className="rounded-md border bg-white p-3">
-                        <div className=" space-y-2">
+                    <TabsContent value="position" id="panel-findreplace" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
+                        <div className="space-y-2 min-w-0">
                           <div className="flex items-center justify-between">
                             <h5 className="text-sm font-semibold">Position</h5>
                             <div className="space-x-3">
@@ -1000,7 +1419,7 @@ export default function DownloadStyledExcel() {
                             </div>
                           </div>
 
-                          <div className="border rounded">
+                          <div className="border rounded w-full min-w-0">
                             {/* === Global Target Picker at the top === */}
                             <div className="p-2 border-b bg-white">
                               <CheckboxListPicker
@@ -1159,8 +1578,8 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
                     {/* TAB: Columns */}
-                    <TabsContent value="columns_path" className="mt-3">
-                      <div className="rounded-md border bg-white p-3">
+                    <TabsContent value="columns_path" id="panel-columns" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
                         <div className="mb-2 flex justify-between items-center text-sm">
                           <label className="font-medium">Select Columns</label>
                           <button
@@ -1171,7 +1590,7 @@ export default function DownloadStyledExcel() {
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
                           {columnOrder.map((col) => (
                             <label key={col.key} className="flex items-center space-x-2 text-sm">
                               <input
@@ -1183,39 +1602,100 @@ export default function DownloadStyledExcel() {
                             </label>
                           ))}
                         </div>
-                        
+
 
                       </div>
                     </TabsContent>
-                    <div className="mt-3 rounded-md border bg-white p-3">
-                          <h4 className="text-sm font-semibold">Sort</h4>
-                          <div className="flex flex-wrap items-center gap-3 text-sm mt-2">
+                    <TabsContent value="sort" id="panel-sort" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
+                        <h4 className="text-sm font-semibold">Sort</h4>
+                        <div className="mt-2 space-y-3 text-sm">
+                          <div className="flex flex-wrap items-center gap-3">
                             <label className="flex items-center gap-2">
                               <span>Field:</span>
                               <select
                                 value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value as any)}
+                                onChange={(e) => setSortBy(e.target.value)}
                                 className="border rounded px-2 py-1 text-xs"
                               >
-                                <option value="updatedAt">Updated date</option>
-                                <option value="createdAt">Created date</option>
+                                {sortFieldOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                                {!sortFieldOptions.some((option) => option.value === sortBy) && sortBy ? (
+                                  <option value={sortBy}>{sortBy}</option>
+                                ) : null}
                               </select>
                             </label>
                             <label className="flex items-center gap-2">
                               <span>Order:</span>
                               <select
                                 value={sortDir}
-                                onChange={(e) => setSortDir(e.target.value as any)}
+                                onChange={(e) => setSortDir(e.target.value === 'asc' ? 'asc' : 'desc')}
                                 className="border rounded px-2 py-1 text-xs"
                               >
-                                <option value="desc">Newest first</option>
-                                <option value="asc">Oldest first</option>
+                                <option value="desc">Descending</option>
+                                <option value="asc">Ascending</option>
                               </select>
                             </label>
                           </div>
+
+                          {additionalSortLevels.map((level, index) => (
+                            <div key={index} className="flex flex-wrap items-center gap-3">
+                              <span className="text-xs font-semibold text-gray-500">Then by:</span>
+                              <label className="flex items-center gap-2">
+                                <span>Field:</span>
+                                <select
+                                  value={level.field}
+                                  onChange={(e) => updateSortLevelField(index, e.target.value)}
+                                  className="border rounded px-2 py-1 text-xs"
+                                >
+                                  {sortFieldOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                  {!sortFieldOptions.some((option) => option.value === level.field) && level.field ? (
+                                    <option value={level.field}>{level.field}</option>
+                                  ) : null}
+                                </select>
+                              </label>
+                              <label className="flex items-center gap-2">
+                                <span>Order:</span>
+                                <select
+                                  value={level.dir}
+                                  onChange={(e) => updateSortLevelDir(index, e.target.value === 'asc' ? 'asc' : 'desc')}
+                                  className="border rounded px-2 py-1 text-xs"
+                                >
+                                  <option value="desc">Descending</option>
+                                  <option value="asc">Ascending</option>
+                                </select>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => removeSortLevel(index)}
+                                className="text-gray-500 hover:text-red-600"
+                                aria-label={`Remove sort level ${index + 2}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={handleAddSortLevel}
+                            disabled={additionalSortLevels.length >= 2}
+                            className="text-xs text-blue-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            + Add sort level
+                          </button>
                         </div>
-                    <TabsContent value="filters" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-4">
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="filters" id="panel-filter" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 space-y-4 w-full min-w-0">
                         {/* Appointment filter */}
                         <div>
                           <div className="mb-2 flex justify-between items-center text-sm">
@@ -1228,7 +1708,7 @@ export default function DownloadStyledExcel() {
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto border p-2 rounded bg-white shadow">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
                             {APPOINTMENT_OPTIONS.map((label) => (
                               <label key={label} className="flex items-center space-x-2 text-sm">
                                 <input
@@ -1242,11 +1722,90 @@ export default function DownloadStyledExcel() {
                           </div>
                         </div>
 
+                        <div>
+                          <div className="mb-2 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                            <label className="font-medium">Filter by Office</label>
+                            <div className="flex gap-2 text-xs">
+                              <button
+                                type="button"
+                                onClick={selectAllFilteredOffices}
+                                className="text-blue-600 hover:underline"
+                              >
+                                Select All
+                              </button>
+                              <button
+                                type="button"
+                                onClick={deselectAllFilteredOffices}
+                                className="text-blue-600 hover:underline"
+                              >
+                                Deselect All
+                              </button>
+                            </div>
+                          </div>
+
+                          <input
+                            type="text"
+                            value={officeSearch}
+                            onChange={(e) => setOfficeSearch(e.target.value)}
+                            placeholder="Search offices..."
+                            className="w-full mb-2 rounded border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                          />
+
+                          <div className="space-y-2 max-h-48 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
+                            {filteredOffices.length === 0 ? (
+                              <p className="text-xs text-gray-500 px-1">No offices match your search.</p>
+                            ) : (
+                              filteredOffices.map((office) => (
+                                <label key={office.id} className="flex items-start gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedOffices.includes(office.id)}
+                                    onChange={() => toggleOfficeSelection(office.id)}
+                                    className="mt-1"
+                                  />
+                                  <span className="flex flex-col">
+                                    <span>{office.name}</span>
+                                    {office.bioIndexCode ? (
+                                      <span className="text-xs text-gray-500">{office.bioIndexCode}</span>
+                                    ) : null}
+                                  </span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-gray-200 pt-3">
+                          <span className="text-sm font-medium">Sheet mode</span>
+                          <div className="mt-2 space-y-2 text-sm">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="sheetMode"
+                                value="perOffice"
+                                checked={sheetMode === 'perOffice'}
+                                onChange={() => setSheetMode('perOffice')}
+                              />
+                              <span>One sheet per office</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="sheetMode"
+                                value="merged"
+                                checked={sheetMode === 'merged'}
+                                onChange={() => setSheetMode('merged')}
+                              />
+                              <span>Single sheet (merge selected offices)</span>
+                            </label>
+                          </div>
+                        </div>
+
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="id" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-3">
+                    <TabsContent value="id" id="panel-id" className="mt-3">
+                      <div className="rounded-md border bg-white p-3 space-y-3 w-full min-w-0">
                         <h4 className="text-sm font-semibold">Which ID should appear in the exported “Employee No” column?</h4>
 
                         <div className="space-y-2 text-sm">
@@ -1366,6 +1925,8 @@ export default function DownloadStyledExcel() {
             Download
           </button>
         </div>
+        </div>
+      </div>
       </Modal>
 
     </div>
