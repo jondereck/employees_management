@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx-js-style';
 
-import type { SortLevel as ExportSortLevel } from '@/types/export';
+import type { SortDir, SortLevel as ExportSortLevel } from '@/types/export';
 import { SORT_FIELDS } from '@/utils/sort-fields';
 
 
@@ -351,14 +351,19 @@ export async function generateExcelFile({
   const headers = visibleColumns.map(col => col.name);
 
   const legacySortField = sortBy ?? 'updatedAt';
-  const legacySortDir = sortDir ?? 'desc';
+  const legacySortDir = (sortDir === 'asc' || sortDir === 'desc' ? sortDir : 'desc') as SortDir;
 
-  const normalizedLevels = (sortLevels ?? [])
-    .filter((level): level is SortLevel => !!level && typeof level.field === 'string')
-    .map((level) => ({
-      field: String(level.field),
-      dir: level.dir === 'asc' ? 'asc' : 'desc',
-    }));
+  const rawLevels: unknown[] = Array.isArray(sortLevels) ? (sortLevels as unknown[]) : [];
+
+  const normalizedLevels: SortLevel[] = rawLevels
+    .map((lvl: unknown): SortLevel | null => {
+      if (!lvl || typeof (lvl as any).field !== 'string') return null;
+      const field: string = (lvl as any).field;
+      const dir: SortDir = (lvl as any).dir === 'desc' ? 'desc' : 'asc';
+      return { field, dir };
+    })
+    .filter((v): v is SortLevel => v !== null)
+    .slice(0, 3);
 
   const effectiveSortLevels: SortLevel[] = normalizedLevels.length
     ? normalizedLevels
@@ -702,7 +707,7 @@ export async function generateExcelFile({
 
       normalizedSelection.forEach((officeId) => {
         const entries = partitioned[officeId] ?? [];
-        const rows = entries.map((entry) => entry.row);
+        const rows = entries.map((entry) => entry);
         const fallbackName = resolveOfficeTitle(officeId);
         const meta = officeMetadata[officeId];
         const sheetName = uniqueSheetName(
