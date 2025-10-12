@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { FaFileExcel } from 'react-icons/fa';
 import { ChevronDown, FileDown, FileUp, Save, Trash2 } from "lucide-react";
+import { FileDown, FileUp, Save, Trash2 } from "lucide-react";
 import Modal from './ui/modal';
 import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -33,6 +34,9 @@ type BioIndexGroup = {
   label: string;
   count: number;
 };
+
+
+type OfficeOption = { id: string; name: string; bioIndexCode?: string | null };
 
 type ModalSize = 'cozy' | 'roomy' | 'xl';
 
@@ -319,6 +323,12 @@ export default function DownloadStyledExcel() {
       sheetMode: sheetModeValue,
       sortLevels,
       filterGroupMode: filterGroupModeValue,
+    return {
+      ...tpl,
+      templateVersion: 2 as const,
+      officesSelection,
+      sheetMode: sheetModeValue,
+      sortLevels,
     };
   };
 
@@ -331,6 +341,10 @@ export default function DownloadStyledExcel() {
     setSelectedOffices(normalized.officesSelection);
     setSheetMode(normalized.sheetMode);
     setFilterGroupMode(normalized.filterGroupMode);
+    setSelectedColumns(tpl.selectedKeys);
+    const normalized = normalizeTemplate(tpl);
+    setSelectedOffices(normalized.officesSelection);
+    setSheetMode(normalized.sheetMode);
     if (normalized.sortLevels.length > 0) {
       const [first, ...rest] = normalized.sortLevels;
       setSortBy(first.field);
@@ -714,6 +728,7 @@ export default function DownloadStyledExcel() {
     setAppointmentFilters(isAllAppointments ? [] : [...APPOINTMENT_OPTIONS]);
 
   const filteredOfficeOptions = useMemo(() => {
+  const filteredOffices = useMemo(() => {
     const query = officeSearch.trim().toLowerCase();
     if (!query) return officeOptions;
     return officeOptions.filter((office) => {
@@ -802,12 +817,15 @@ export default function DownloadStyledExcel() {
     }
 
     if (!filteredOfficeOptions.length) {
+  const selectAllFilteredOffices = () => {
+    if (!filteredOffices.length) {
       setSelectedOffices([]);
       return;
     }
     setSelectedOffices((prev) => {
       const set = new Set(prev);
       filteredOfficeOptions.forEach((office) => set.add(office.id));
+      filteredOffices.forEach((office) => set.add(office.id));
       return Array.from(set);
     });
   };
@@ -831,6 +849,11 @@ export default function DownloadStyledExcel() {
       return;
     }
     const remove = new Set(filteredOfficeOptions.map((office) => office.id));
+    if (!filteredOffices.length) {
+      setSelectedOffices([]);
+      return;
+    }
+    const remove = new Set(filteredOffices.map((office) => office.id));
     setSelectedOffices((prev) => prev.filter((id) => !remove.has(id)));
   };
 
@@ -900,6 +923,49 @@ export default function DownloadStyledExcel() {
   }, [columnOrder]);
 
   const rowNumberLabel = columnOrder.find((col) => col.key === 'rowNumber')?.name ?? 'No. (row number)';
+  const columnOrder = [
+    { name: 'No. (row number)', key: 'rowNumber' },
+    { name: 'Employee No', key: 'employeeNo' },
+    { name: 'Last Name', key: 'lastName' },
+    { name: 'First Name', key: 'firstName' },
+    { name: 'M.I.', key: 'middleName' },
+    { name: 'Suffix', key: 'suffix' },
+    { name: 'Nickname', key: 'nickname' },
+    { name: 'Office', key: 'officeId' },
+    { name: 'Position', key: 'position' },
+    { name: 'Employee Type', key: 'employeeTypeId' },
+    { name: 'Eligibility', key: 'eligibilityId' },
+    { name: 'Gender', key: 'gender' },
+    { name: 'Contact Number', key: 'contactNumber' },
+    { name: 'Education', key: 'education' },
+
+    { name: 'Salary Grade', key: 'salaryGrade' },
+    { name: 'Retired', key: 'isArchived' },
+    { name: 'House No', key: 'houseNo' },
+    { name: 'Street', key: 'street' },
+    { name: 'Barangay', key: 'barangay' },
+    { name: 'Comma', key: 'comma' },
+    { name: 'City', key: 'city' },
+    { name: 'Province', key: 'province' },
+    { name: 'GSIS No', key: 'gsisNo' },
+    { name: 'TIN No', key: 'tinNo' },
+    { name: 'PhilHealth No', key: 'philHealthNo' },
+    { name: 'PagIbig No', key: 'pagIbigNo' },
+    { name: 'Terminate Date', key: 'terminateDate' },
+    { name: 'Member Policy No', key: 'memberPolicyNo' },
+    { name: 'Emergency Contact Name', key: 'emergencyContactName' },
+    { name: 'Emergency Contact Number', key: 'emergencyContactNumber' },
+    { name: 'isHead', key: 'isHead' },
+    { name: 'Image Path', key: 'imagePath' },
+    { name: 'QR Path', key: 'qrPath' },
+    { name: 'Plantilla', key: 'plantilla' },
+    { name: 'Salary', key: 'salaryExport' },
+    { name: 'Birthday', key: 'birthday' }, // Will format the birthday
+    { name: 'Age', key: 'age' }, // Calculated from birthday
+    { name: 'Latest Appointment', key: 'latestAppointment' },
+    { name: 'Date Hired', key: 'dateHired' }, // Will format the date
+    { name: 'Year(s) of Service', key: 'yearsOfService' },
+  ];
 
   const defaultSelectedColumns = [
     'rowNumber',
@@ -1038,6 +1104,7 @@ export default function DownloadStyledExcel() {
     const entries = new Map<string, string>();
     effectiveColumnOrder.forEach((col) => {
       const label = col.key === 'office' ? 'Office Name' : col.name;
+      const label = col.key === 'officeId' ? 'Office Name' : col.name;
       entries.set(col.key, label);
     });
     SORT_FIELDS.forEach((field) => {
@@ -1211,6 +1278,22 @@ export default function DownloadStyledExcel() {
     return {
       name: finalName,
       templateVersion: 2 as const,
+    if (isBuiltInTemplateId(id)) {
+      toast.warning("Built-in templates can't be updated. Save as a new template instead.");
+      return;
+    }
+    if (!selectedTemplateId) {
+      toast.info("No template selected to update.");
+      return;
+    }
+    if (isBuiltInTemplateId(selectedTemplateId)) {
+      toast.warning("Built-in templates can't be updated. Save as a new template instead.");
+      return;
+    }
+
+    const ok = overwriteUserTemplateById(selectedTemplateId, {
+      name: (newName ?? selectedTemplateName)?.trim() || selectedTemplateName,
+      templateVersion: 2,
       selectedKeys: selectedColumnsRef.current,
       statusFilter,
       idColumnSource,
@@ -1221,6 +1304,10 @@ export default function DownloadStyledExcel() {
       sortLevels: combinedSortLevels,
       filterGroupMode,
       sheetName: 'Sheet1',
+      officesSelection: selectedOffices.map((id) => String(id)),
+      sheetMode,
+      sortLevels: combinedSortLevels,
+      sheetName: "Sheet1",
       paths: {
         imageBaseDir,
         imageExt,
@@ -1342,6 +1429,19 @@ export default function DownloadStyledExcel() {
                         sheetName: "Sheet1",
                         paths: {
                           imageBaseDir,
+                    const newTpl = saveTemplateToLocalStorage(name, {
+                      templateVersion: 2,
+                      selectedKeys: selectedColumnsRef.current,
+                      statusFilter,
+                      idColumnSource,
+                      appointmentFilters,
+                      positionReplaceRules,
+                      officesSelection: selectedOffices.map((id) => String(id)),
+                      sheetMode,
+                      sortLevels: combinedSortLevels,
+                      sheetName: "Sheet1",
+                      paths: {
+                        imageBaseDir,
                         imageExt,
                         qrBaseDir,
                         qrExt,
@@ -1428,6 +1528,7 @@ export default function DownloadStyledExcel() {
               refreshTemplates={refreshTemplates}
               onRequestOverwrite={(id) => handleOverwriteTemplate(id)}
               onRequestRename={(id, newName) => handleRenameTemplate(id, newName)}
+              onRequestUpdate={(id, newName) => handleUpdateCurrentTemplate(id, newName)}
             />
 
             {/* ADVANCED (single collapsible with both subsections) */}
@@ -1746,6 +1847,7 @@ export default function DownloadStyledExcel() {
                     <TabsContent value="columns_path" id="panel-columns" className="mt-3">
                       <div className="rounded-md border bg-white p-3 w-full min-w-0">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <div className="mb-2 flex justify-between items-center text-sm">
                           <label className="font-medium">Select Columns</label>
                           <button
                             onClick={toggleSelectAll}
@@ -1764,6 +1866,19 @@ export default function DownloadStyledExcel() {
                             />
                             <span>{rowNumberLabel}</span>
                           </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
+                          {columnOrder.map((col) => (
+                            <label key={col.key} className="flex items-center space-x-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.includes(col.key)}
+                                onChange={() => toggleColumn(col.key)}
+                              />
+                              <span>{col.name}</span>
+                            </label>
+                          ))}
+                        </div>
+
 
                           {groupedColumns.map((group) => {
                             const groupSelectedCount = group.columns.filter((col) => selectedColumns.includes(col.key)).length;
@@ -1981,6 +2096,7 @@ export default function DownloadStyledExcel() {
                             value={officeSearch}
                             onChange={(e) => setOfficeSearch(e.target.value)}
                             placeholder={filterGroupMode === 'bioIndex' ? 'Search codes or offices...' : 'Search offices...'}
+                            placeholder="Search offices..."
                             className="w-full mb-2 rounded border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                           />
 
@@ -2021,6 +2137,10 @@ export default function DownloadStyledExcel() {
                               <p className="px-1 text-xs text-gray-500">No offices match your search.</p>
                             ) : (
                               filteredOfficeOptions.map((office) => (
+                            {filteredOffices.length === 0 ? (
+                              <p className="text-xs text-gray-500 px-1">No offices match your search.</p>
+                            ) : (
+                              filteredOffices.map((office) => (
                                 <label key={office.id} className="flex items-start gap-2 text-sm">
                                   <input
                                     type="checkbox"

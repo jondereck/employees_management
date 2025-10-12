@@ -1,4 +1,3 @@
-// app/(dashboard)/[departmentId]/(routes)/tools/infix-to-postfix/page.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -9,8 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Copy, RefreshCcw, Wand2, Dice3 } from "lucide-react";
 import { infixToPostfix } from "@/lib/algos/infix-to-postfix";
 import { generateRandomInfix } from "@/lib/algos/random-infix";
-import PublicFooter from "@/components/public/footer";
-import AppFooter from "./components/footer";
 
 export default function InfixToPostfixPage() {
   const [expr, setExpr] = useState<string>("((x1 + x2) * (y1 - y2)) / 2");

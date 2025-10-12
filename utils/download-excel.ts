@@ -246,6 +246,11 @@ export async function generateExcelFile({
     copy.__bioIndexCode = bioIndexCodeRaw ? String(bioIndexCodeRaw).trim() : '';
 
     // --- map IDs to labels ---
+
+    // --- map IDs to labels ---
+    if (originalOfficeId && officeMapping[originalOfficeId]) {
+      copy.officeId = officeMapping[originalOfficeId];
+    }
     if (copy.eligibilityId && eligibilityMapping[copy.eligibilityId]) {
       copy.eligibilityId = eligibilityMapping[copy.eligibilityId];
     }
@@ -264,6 +269,7 @@ export async function generateExcelFile({
       copy.plantilla = officeMapping[copy.designationId];
     } else {
       copy.plantilla = copy.office || '';
+      copy.plantilla = copy.officeId || '';
     }
 
     // --- Dates ---
@@ -399,6 +405,7 @@ export async function generateExcelFile({
 
     visibleColumns.forEach((col) => {
       let val: any;
+      let val = row[col.key];
       if (col.key === 'rowNumber') {
         val = typeof row.__rowNumber === 'number' ? row.__rowNumber : '';
       } else if (col.key === 'employeeNo') {
@@ -418,6 +425,7 @@ export async function generateExcelFile({
         }
       }
       if (val == null) val = '';
+      }
       newRow[col.name] = val;
     });
 
@@ -560,6 +568,7 @@ export async function generateExcelFile({
   };
 
   const addMergedTitleRow = (worksheet: XLSX.WorkSheet, rowIndex: number, title: string, note?: string) => {
+  const addMergedTitleRow = (worksheet: XLSX.WorkSheet, rowIndex: number, title: string) => {
     XLSX.utils.sheet_add_aoa(worksheet, [[title]], { origin: { r: rowIndex, c: 0 } });
     worksheet['!merges'] = worksheet['!merges'] || [];
     worksheet['!merges'].push({
@@ -614,6 +623,24 @@ export async function generateExcelFile({
       const titleText = options.title ?? '';
       const rowsAdded = addMergedTitleRow(worksheet, currentRow, titleText, options.subtitle);
       currentRow += rowsAdded;
+    }
+
+  };
+
+  const buildWorksheet = (rows: any[], options: { includeTitle?: boolean; title?: string } = {}) => {
+    const sortedRows = sortRows(rows, effectiveSortLevels);
+    const numberedRows = includeRowNumber
+      ? sortedRows.map((row, idx) => ({ ...row, __rowNumber: idx + 1 }))
+      : sortedRows;
+    const { filteredData, dataRows } = createDisplayRows(numberedRows);
+    const worksheet = XLSX.utils.aoa_to_sheet([]);
+    const includeTitle = !!options.includeTitle;
+    let currentRow = 0;
+
+    if (includeTitle) {
+      const titleText = options.title ?? '';
+      addMergedTitleRow(worksheet, currentRow, titleText);
+      currentRow += 1;
     }
 
     const headerRowIdx = currentRow;
@@ -680,6 +707,9 @@ export async function generateExcelFile({
 
     worksheet['!freeze'] = { xSplit: 1, ySplit: 1 };
     applyColumnWidths(worksheet, allFilteredData);
+
+    worksheet['!freeze'] = { xSplit: 1, ySplit: includeTitle ? 2 : 1 };
+    applyColumnWidths(worksheet, filteredData);
 
     return worksheet;
   };
@@ -833,6 +863,133 @@ export async function generateExcelFile({
     }
   }
 
+  type GroupDefinition = { officeId: string; title: string; rows: any[] };
+
+  const buildMergedWorksheet = (groups: GroupDefinition[]) => {
+    const worksheet = XLSX.utils.aoa_to_sheet([]);
+    const headerRowIdx = 0;
+    XLSX.utils.sheet_add_aoa(worksheet, [headers], { origin: { r: headerRowIdx, c: 0 } });
+    styleHeaderRow(worksheet, headerRowIdx);
+
+    let nextRow = headerRowIdx + 1;
+    const allFilteredData: Record<string, any>[] = [];
+
+    groups.forEach((group) => {
+      addMergedTitleRow(worksheet, nextRow, group.title);
+      nextRow += 1;
+
+      const { filteredData, dataRows } = createDisplayRows(group.rows);
+      allFilteredData.push(...filteredData);
+
+      if (dataRows.length > 0) {
+        XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: { r: nextRow, c: 0 } });
+        styleDataRows(worksheet, filteredData, nextRow);
+        applyDateFormulas(worksheet, filteredData, nextRow);
+        nextRow += dataRows.length;
+      } else {
+        const noteAddress = XLSX.utils.encode_cell({ r: nextRow, c: 0 });
+        worksheet[noteAddress] = {
+          t: 's',
+          v: 'No employees',
+          s: { font: { italic: true, color: { rgb: '555555' } } },
+        };
+        nextRow += 1;
+      }
+    });
+
+    worksheet['!freeze'] = { xSplit: 1, ySplit: 1 };
+    applyColumnWidths(worksheet, allFilteredData);
+
+    return worksheet;
+  };
+
+  const normalizedSelection = Array.from(new Set((officesSelection ?? []).map((id) => String(id)).filter(Boolean)));
+  const selectionSet = new Set(normalizedSelection);
+  const selectionCount = normalizedSelection.length;
+
+  const workbook = XLSX.utils.book_new();
+  const takenSheetNames = new Set<string>();
+  const resolvedSheetMode = sheetMode === 'merged' ? 'merged' : 'perOffice';
+
+  const resolveOfficeTitle = (officeId: string, fallbackLabel: string = 'Office') => {
+    const meta = officeMetadata[officeId];
+    return meta?.name || officeMapping[officeId] || officeId || fallbackLabel;
+  };
+
+  if (resolvedSheetMode === 'merged') {
+    const rowsToInclude = selectionCount === 0
+      ? filteredEmployees
+      : filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
+
+    const sortedMergedRows = sortRows(rowsToInclude, effectiveSortLevels);
+    const numberedMergedRows = includeRowNumber
+      ? (() => {
+          const iterator = perOfficeCounter(
+            sortedMergedRows.map((row: any) => ({ officeId: row.__officeId || '' }))
+          );
+          return sortedMergedRows.map((row: any, idx: number) => {
+            const next = iterator.next().value as { no: number } | undefined;
+            return { ...row, __rowNumber: next?.no ?? idx + 1 };
+          });
+        })()
+      : sortedMergedRows;
+    const officeOrderBase = selectionCount === 0
+      ? Array.from(new Set(sortedMergedRows.map((emp: any) => emp.__officeId || '')))
+      : normalizedSelection;
+    const officeOrder = officeOrderBase.length > 0 ? officeOrderBase : [''];
+
+    const rowsByOffice = new Map<string, any[]>();
+    numberedMergedRows.forEach((row: any) => {
+      const key = row.__officeId || '';
+      if (!rowsByOffice.has(key)) rowsByOffice.set(key, []);
+      rowsByOffice.get(key)!.push(row);
+    });
+
+    const groups: GroupDefinition[] = officeOrder.map((officeId) => ({
+      officeId,
+      title: resolveOfficeTitle(officeId, selectionCount === 0 ? 'All Offices' : 'Office'),
+      rows: rowsByOffice.get(officeId) ?? [],
+    }));
+
+    const worksheet = buildMergedWorksheet(groups);
+    const sheetName = uniqueSheetName(sanitizeSheetName('Merged Offices'), takenSheetNames);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  } else {
+    if (selectionCount === 0) {
+      const worksheet = buildWorksheet(filteredEmployees, { includeTitle: false });
+      const sheetName = uniqueSheetName(sanitizeSheetName('Sheet1'), takenSheetNames);
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    } else if (selectionCount === 1) {
+      const officeId = normalizedSelection[0];
+      const rows = filteredEmployees.filter((emp: any) => emp.__officeId === officeId);
+      const fallbackName = resolveOfficeTitle(officeId);
+      const meta = officeMetadata[officeId];
+      const sheetName = uniqueSheetName(
+        sanitizeSheetName(meta?.bioIndexCode || fallbackName || 'Sheet'),
+        takenSheetNames
+      );
+      const worksheet = buildWorksheet(rows, { includeTitle: true, title: fallbackName });
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    } else {
+      const filteredBySelection = filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
+      const partitionInput = filteredBySelection.map((emp: any) => ({ officeId: emp.__officeId, row: emp }));
+      const partitioned = partitionByOffice(partitionInput);
+
+      normalizedSelection.forEach((officeId) => {
+        const entries = partitioned[officeId] ?? [];
+        const rows = entries.map((entry) => entry);
+        const fallbackName = resolveOfficeTitle(officeId);
+        const meta = officeMetadata[officeId];
+        const sheetName = uniqueSheetName(
+          sanitizeSheetName(meta?.bioIndexCode || fallbackName || 'Sheet'),
+          takenSheetNames
+        );
+        const worksheet = buildWorksheet(rows, { includeTitle: true, title: fallbackName });
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+      });
+    }
+  }
+
   const excelBuffer = XLSX.write(workbook, {
     bookType: 'xlsx',
     type: 'array',
@@ -956,3 +1113,17 @@ export function getActiveExportTab(): string | null {
 }
 
 // Numbering for merged mode: returns an iterator over [officeId, localIndex]
+// Numbering for merged mode: returns an iterator over [officeId, localIndex]
+export function* perOfficeCounter(rows: { officeId: string }[]) {
+  let current: string | null = null;
+  let index = 0;
+  for (const r of rows) {
+    if (r.officeId !== current) {
+      current = r.officeId;
+      index = 1;
+    } else {
+      index += 1;
+    }
+    yield { officeId: r.officeId, no: index };
+  }
+}
