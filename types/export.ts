@@ -12,4 +12,5 @@ export type ExportTemplateV2 = ExportTemplate & {
   officesSelection: string[];
   sheetMode: "perOffice" | "merged";
   sortLevels: SortLevel[];
+  filterGroupMode: "office" | "bioIndex";
 };
