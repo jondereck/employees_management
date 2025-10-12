@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx-js-style';
 
 import type { SortDir, SortLevel as ExportSortLevel } from '@/types/export';
 import { SORT_FIELDS } from '@/utils/sort-fields';
+import { COLUMN_DEFS } from '@/utils/columns.registry';
 
 
 export type Column = { name: string; key: string };
@@ -9,6 +10,11 @@ export type Column = { name: string; key: string };
 export type IdColumnSource = 'uuid' | 'bio' | 'employeeNo';
 
 export type SortLevel = ExportSortLevel;
+
+
+const BIO_INDEX_GROUP_KEY = '__NO_CODE__';
+
+type GroupMode = 'office' | 'bioIndex';
 
 
 export type PositionReplaceRule = {
@@ -47,6 +53,7 @@ type DownloadExcelParams = {
   officeMetadata?: Record<string, { name: string; bioIndexCode?: string | null }>;
   sortLevels?: SortLevel[];
   sheetMode?: 'perOffice' | 'merged';
+  filterGroupMode?: 'office' | 'bioIndex';
 };
 
 function ts(v: any) {
@@ -156,6 +163,7 @@ export async function generateExcelFile({
   officeMetadata = {},
   sortLevels,
   sheetMode,
+  filterGroupMode,
 }: DownloadExcelParams): Promise<Blob> {
 
   const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
@@ -221,10 +229,23 @@ export async function generateExcelFile({
     const originalOfficeId = copy.officeId ?? '';
     copy.__officeId = originalOfficeId ? String(originalOfficeId) : '';
 
+    copy.officeId = copy.__officeId;
+
+    const meta = officeMetadata[copy.__officeId] ?? {};
+    const officeName = meta.name
+      || officeMapping[copy.__officeId]
+      || row.offices?.name
+      || row.office?.name
+      || '';
+    const bioIndexCodeRaw = meta.bioIndexCode
+      ?? row.offices?.bioIndexCode
+      ?? row.office?.bioIndexCode
+      ?? row.bioIndexCode
+      ?? '';
+    copy.office = officeName;
+    copy.__bioIndexCode = bioIndexCodeRaw ? String(bioIndexCodeRaw).trim() : '';
+
     // --- map IDs to labels ---
-    if (originalOfficeId && officeMapping[originalOfficeId]) {
-      copy.officeId = officeMapping[originalOfficeId];
-    }
     if (copy.eligibilityId && eligibilityMapping[copy.eligibilityId]) {
       copy.eligibilityId = eligibilityMapping[copy.eligibilityId];
     }
@@ -242,7 +263,7 @@ export async function generateExcelFile({
     if (copy.designationId && officeMapping[copy.designationId]) {
       copy.plantilla = officeMapping[copy.designationId];
     } else {
-      copy.plantilla = copy.officeId || '';
+      copy.plantilla = copy.office || '';
     }
 
     // --- Dates ---
@@ -377,7 +398,7 @@ export async function generateExcelFile({
     const codePart = (codePartRaw ?? '').trim();
 
     visibleColumns.forEach((col) => {
-      let val = row[col.key];
+      let val: any;
       if (col.key === 'rowNumber') {
         val = typeof row.__rowNumber === 'number' ? row.__rowNumber : '';
       } else if (col.key === 'employeeNo') {
@@ -388,7 +409,15 @@ export async function generateExcelFile({
         } else {
           val = codePart || bioPart || row.id || '';
         }
+      } else {
+        const def = COLUMN_DEFS[col.key];
+        if (def?.accessor) {
+          val = def.accessor(row);
+        } else {
+          val = row[col.key];
+        }
       }
+      if (val == null) val = '';
       newRow[col.name] = val;
     });
 
@@ -530,7 +559,7 @@ export async function generateExcelFile({
     }
   };
 
-  const addMergedTitleRow = (worksheet: XLSX.WorkSheet, rowIndex: number, title: string) => {
+  const addMergedTitleRow = (worksheet: XLSX.WorkSheet, rowIndex: number, title: string, note?: string) => {
     XLSX.utils.sheet_add_aoa(worksheet, [[title]], { origin: { r: rowIndex, c: 0 } });
     worksheet['!merges'] = worksheet['!merges'] || [];
     worksheet['!merges'].push({
@@ -547,9 +576,31 @@ export async function generateExcelFile({
       fill: { fgColor: { rgb: 'DDDDDD' } },
     };
     worksheet[cellAddress] = cell;
+    let rowsUsed = 1;
+
+    if (note) {
+      const noteRowIndex = rowIndex + 1;
+      XLSX.utils.sheet_add_aoa(worksheet, [[note]], { origin: { r: noteRowIndex, c: 0 } });
+      worksheet['!merges'].push({
+        s: { r: noteRowIndex, c: 0 },
+        e: { r: noteRowIndex, c: Math.max(headers.length - 1, 0) },
+      });
+      const noteAddress = XLSX.utils.encode_cell({ r: noteRowIndex, c: 0 });
+      const noteCell = worksheet[noteAddress] || { t: 's', v: note };
+      noteCell.t = 's';
+      noteCell.v = note;
+      noteCell.s = {
+        font: { sz: 11, italic: true, color: { rgb: '666666' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+      };
+      worksheet[noteAddress] = noteCell;
+      rowsUsed += 1;
+    }
+
+    return rowsUsed;
   };
 
-  const buildWorksheet = (rows: any[], options: { includeTitle?: boolean; title?: string } = {}) => {
+  const buildWorksheet = (rows: any[], options: { includeTitle?: boolean; title?: string; subtitle?: string } = {}) => {
     const sortedRows = sortRows(rows, effectiveSortLevels);
     const numberedRows = includeRowNumber
       ? sortedRows.map((row, idx) => ({ ...row, __rowNumber: idx + 1 }))
@@ -561,8 +612,8 @@ export async function generateExcelFile({
 
     if (includeTitle) {
       const titleText = options.title ?? '';
-      addMergedTitleRow(worksheet, currentRow, titleText);
-      currentRow += 1;
+      const rowsAdded = addMergedTitleRow(worksheet, currentRow, titleText, options.subtitle);
+      currentRow += rowsAdded;
     }
 
     const headerRowIdx = currentRow;
@@ -593,7 +644,7 @@ export async function generateExcelFile({
     return worksheet;
   };
 
-  type GroupDefinition = { officeId: string; title: string; rows: any[] };
+  type GroupDefinition = { key: string; title: string; rows: any[]; note?: string };
 
   const buildMergedWorksheet = (groups: GroupDefinition[]) => {
     const worksheet = XLSX.utils.aoa_to_sheet([]);
@@ -605,8 +656,8 @@ export async function generateExcelFile({
     const allFilteredData: Record<string, any>[] = [];
 
     groups.forEach((group) => {
-      addMergedTitleRow(worksheet, nextRow, group.title);
-      nextRow += 1;
+      const rowsUsed = addMergedTitleRow(worksheet, nextRow, group.title, group.note);
+      nextRow += rowsUsed;
 
       const { filteredData, dataRows } = createDisplayRows(group.rows);
       allFilteredData.push(...filteredData);
@@ -640,10 +691,61 @@ export async function generateExcelFile({
   const workbook = XLSX.utils.book_new();
   const takenSheetNames = new Set<string>();
   const resolvedSheetMode = sheetMode === 'merged' ? 'merged' : 'perOffice';
+  const resolvedGroupMode: GroupMode = filterGroupMode === 'bioIndex' ? 'bioIndex' : 'office';
+
+  const getBioKeyForOffice = (officeId: string) => {
+    const meta = officeMetadata[officeId];
+    const code = normalizeBioIndex(meta?.bioIndexCode);
+    return code || BIO_INDEX_GROUP_KEY;
+  };
+
+  const dedupeKeys = (keys: string[]) => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    keys.forEach((key) => {
+      const normalizedKey = resolvedGroupMode === 'bioIndex' ? (key || BIO_INDEX_GROUP_KEY) : key;
+      if (!seen.has(normalizedKey)) {
+        seen.add(normalizedKey);
+        out.push(normalizedKey);
+      }
+    });
+    return out;
+  };
 
   const resolveOfficeTitle = (officeId: string, fallbackLabel: string = 'Office') => {
     const meta = officeMetadata[officeId];
     return meta?.name || officeMapping[officeId] || officeId || fallbackLabel;
+  };
+
+  const resolveGroupMetadata = (groupKey: string, rows: any[]) => {
+    if (resolvedGroupMode === 'bioIndex') {
+      const normalizedKey = groupKey === BIO_INDEX_GROUP_KEY ? '' : groupKey;
+      const title = normalizedKey ? `BIO ${normalizedKey}` : 'BIO (Unassigned)';
+      const names = collectOfficeNamesForGroup(groupKey, rows);
+      const note = names.length ? `Offices: ${names.join(', ')}` : undefined;
+      const sheetNameBase = sanitizeSheetName(title);
+      return { title, note, sheetNameBase };
+    }
+    const title = resolveOfficeTitle(groupKey, selectionCount === 0 ? 'All Offices' : 'Office');
+    const meta = officeMetadata[groupKey];
+    const sheetNameBase = sanitizeSheetName(meta?.bioIndexCode || title || 'Sheet');
+    return { title, note: undefined, sheetNameBase };
+  };
+
+  const collectOfficeNamesForGroup = (groupKey: string, rows: any[]) => {
+    if (resolvedGroupMode !== 'bioIndex') return [] as string[];
+    const normalizedKey = groupKey === BIO_INDEX_GROUP_KEY ? '' : groupKey;
+    const names = new Set<string>();
+    rows.forEach((row) => {
+      if (row?.office) names.add(String(row.office));
+    });
+    Object.entries(officeMetadata).forEach(([id, meta]) => {
+      const code = normalizeBioIndex(meta.bioIndexCode);
+      if (code === normalizedKey && (selectionCount === 0 || selectionSet.has(id))) {
+        names.add(meta?.name || officeMapping[id] || id);
+      }
+    });
+    return Array.from(names);
   };
 
   if (resolvedSheetMode === 'merged') {
@@ -652,69 +754,80 @@ export async function generateExcelFile({
       : filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
 
     const sortedMergedRows = sortRows(rowsToInclude, effectiveSortLevels);
-    const numberedMergedRows = includeRowNumber
-      ? (() => {
-          const iterator = perOfficeCounter(
-            sortedMergedRows.map((row: any) => ({ officeId: row.__officeId || '' }))
-          );
-          return sortedMergedRows.map((row: any, idx: number) => {
-            const next = iterator.next().value as { no: number } | undefined;
-            return { ...row, __rowNumber: next?.no ?? idx + 1 };
-          });
-        })()
-      : sortedMergedRows;
-    const officeOrderBase = selectionCount === 0
-      ? Array.from(new Set(sortedMergedRows.map((emp: any) => emp.__officeId || '')))
-      : normalizedSelection;
-    const officeOrder = officeOrderBase.length > 0 ? officeOrderBase : [''];
+    const partitioned = partitionRows(sortedMergedRows, resolvedGroupMode);
 
-    const rowsByOffice = new Map<string, any[]>();
-    numberedMergedRows.forEach((row: any) => {
-      const key = row.__officeId || '';
-      if (!rowsByOffice.has(key)) rowsByOffice.set(key, []);
-      rowsByOffice.get(key)!.push(row);
+    const groupOrder = (() => {
+      if (resolvedGroupMode === 'office') {
+        if (selectionCount === 0) {
+          const keys = sortedMergedRows.map((row: any) => row.__officeId || '');
+          const unique = dedupeKeys(keys);
+          return unique.length ? unique : [''];
+        }
+        return dedupeKeys(normalizedSelection);
+      }
+      if (selectionCount === 0) {
+        const keys = sortedMergedRows.map((row: any) => groupKeyOf(row, resolvedGroupMode));
+        const unique = dedupeKeys(keys);
+        return unique.length ? unique : [BIO_INDEX_GROUP_KEY];
+      }
+      const keys = normalizedSelection.map((officeId) => getBioKeyForOffice(officeId));
+      const unique = dedupeKeys(keys);
+      return unique.length ? unique : [BIO_INDEX_GROUP_KEY];
+    })();
+
+    const flattened = groupOrder.flatMap((groupKey) => partitioned[groupKey] ?? []);
+    const numberedFlattened = includeRowNumber ? addNumbersMerged(flattened, resolvedGroupMode) : flattened;
+    const partitionedNumbered = partitionRows(numberedFlattened, resolvedGroupMode);
+
+    const groups: GroupDefinition[] = groupOrder.map((groupKey) => {
+      const numberedRows = partitionedNumbered[groupKey] ?? [];
+      const originalRows = partitioned[groupKey] ?? [];
+      const { title, note } = resolveGroupMetadata(groupKey, originalRows);
+      return { key: groupKey, title, rows: numberedRows, note };
     });
 
-    const groups: GroupDefinition[] = officeOrder.map((officeId) => ({
-      officeId,
-      title: resolveOfficeTitle(officeId, selectionCount === 0 ? 'All Offices' : 'Office'),
-      rows: rowsByOffice.get(officeId) ?? [],
-    }));
-
     const worksheet = buildMergedWorksheet(groups);
-    const sheetName = uniqueSheetName(sanitizeSheetName('Merged Offices'), takenSheetNames);
+    const mergedSheetLabel = resolvedGroupMode === 'bioIndex' ? 'Merged Bio Index' : 'Merged Offices';
+    const sheetName = uniqueSheetName(sanitizeSheetName(mergedSheetLabel), takenSheetNames);
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
   } else {
-    if (selectionCount === 0) {
+    if (selectionCount === 0 && resolvedGroupMode === 'office') {
       const worksheet = buildWorksheet(filteredEmployees, { includeTitle: false });
       const sheetName = uniqueSheetName(sanitizeSheetName('Sheet1'), takenSheetNames);
       XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-    } else if (selectionCount === 1) {
-      const officeId = normalizedSelection[0];
-      const rows = filteredEmployees.filter((emp: any) => emp.__officeId === officeId);
-      const fallbackName = resolveOfficeTitle(officeId);
-      const meta = officeMetadata[officeId];
-      const sheetName = uniqueSheetName(
-        sanitizeSheetName(meta?.bioIndexCode || fallbackName || 'Sheet'),
-        takenSheetNames
-      );
-      const worksheet = buildWorksheet(rows, { includeTitle: true, title: fallbackName });
-      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
     } else {
-      const filteredBySelection = filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
-      const partitionInput = filteredBySelection.map((emp: any) => ({ officeId: emp.__officeId, row: emp }));
-      const partitioned = partitionByOffice(partitionInput);
+      const baseRows = selectionCount === 0
+        ? filteredEmployees
+        : filteredEmployees.filter((emp: any) => selectionSet.has(emp.__officeId));
+      const partitioned = partitionRows(baseRows, resolvedGroupMode);
 
-      normalizedSelection.forEach((officeId) => {
-        const entries = partitioned[officeId] ?? [];
-        const rows = entries.map((entry) => entry);
-        const fallbackName = resolveOfficeTitle(officeId);
-        const meta = officeMetadata[officeId];
-        const sheetName = uniqueSheetName(
-          sanitizeSheetName(meta?.bioIndexCode || fallbackName || 'Sheet'),
-          takenSheetNames
-        );
-        const worksheet = buildWorksheet(rows, { includeTitle: true, title: fallbackName });
+      const groupOrder = (() => {
+        if (resolvedGroupMode === 'office') {
+          const keys = normalizedSelection.length
+            ? normalizedSelection
+            : baseRows.map((row: any) => row.__officeId || '');
+          const unique = dedupeKeys(keys);
+          return unique.length ? unique : [''];
+        }
+        if (selectionCount === 0) {
+          const keys = baseRows.map((row: any) => groupKeyOf(row, resolvedGroupMode));
+          const unique = dedupeKeys(keys);
+          return unique.length ? unique : [BIO_INDEX_GROUP_KEY];
+        }
+        const keys = normalizedSelection.map((officeId) => getBioKeyForOffice(officeId));
+        const unique = dedupeKeys(keys);
+        return unique.length ? unique : [BIO_INDEX_GROUP_KEY];
+      })();
+
+      groupOrder.forEach((groupKey) => {
+        const rows = partitioned[groupKey] ?? [];
+        const sortedRows = sortRows(rows, effectiveSortLevels);
+        const numberedRows = includeRowNumber
+          ? sortedRows.map((row, idx) => ({ row, __rowNumber: idx + 1 }))
+          : sortedRows;
+        const { title, note, sheetNameBase } = resolveGroupMetadata(groupKey, rows);
+        const worksheet = buildWorksheet(numberedRows, { includeTitle: true, title, subtitle: note });
+        const sheetName = uniqueSheetName(sheetNameBase, takenSheetNames);
         XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
       });
     }
@@ -741,6 +854,52 @@ export function uniqueSheetName(base: string, taken: Set<string>) {
   while (taken.has(name)) name = `${base}-${i++}`;
   taken.add(name);
   return name;
+}
+
+function normalizeBioIndex(value: unknown): string {
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+export function groupKeyOf(row: any, mode: GroupMode): string {
+  if (mode === 'bioIndex') {
+    const raw = normalizeBioIndex(
+      row?.__bioIndexCode
+        ?? row?.bioIndexCode
+        ?? row?.offices?.bioIndexCode
+        ?? row?.office?.bioIndexCode
+    );
+    return raw || BIO_INDEX_GROUP_KEY;
+  }
+  const id = row?.__officeId
+    ?? row?.officeId
+    ?? row?.offices?.id
+    ?? row?.office?.id
+    ?? '';
+  return id ? String(id) : '';
+}
+
+export function partitionRows<T>(rows: T[], mode: GroupMode) {
+  return rows.reduce<Record<string, T[]>>((acc, row: any) => {
+    const key = groupKeyOf(row, mode);
+    (acc[key] ||= []).push(row);
+    return acc;
+  }, {});
+}
+
+export function addNumbersMerged(rows: any[], mode: GroupMode) {
+  let currentKey: string | null = null;
+  let counter = 0;
+  return rows.map((row) => {
+    const key = groupKeyOf(row, mode);
+    if (key !== currentKey) {
+      currentKey = key;
+      counter = 1;
+    } else {
+      counter += 1;
+    }
+    return { ...row, __rowNumber: counter };
+  });
 }
 
 export function partitionByOffice<T extends { officeId: string }>(rows: T[]) {
@@ -797,16 +956,3 @@ export function getActiveExportTab(): string | null {
 }
 
 // Numbering for merged mode: returns an iterator over [officeId, localIndex]
-export function* perOfficeCounter(rows: { officeId: string }[]) {
-  let current: string | null = null;
-  let index = 0;
-  for (const r of rows) {
-    if (r.officeId !== current) {
-      current = r.officeId;
-      index = 1;
-    } else {
-      index += 1;
-    }
-    yield { officeId: r.officeId, no: index };
-  }
-}
