@@ -483,20 +483,28 @@ export function AttendanceClient({
           let name: string | undefined;
           let officeHint: string | undefined;
           const searchStart = Math.min(c, idColumn);
-          for (let offset = searchStart; offset <= Math.min(range.e.c, searchStart + 6); offset++) {
-            const neighbor = readCell(r, offset);
-            if (!name) {
-              const nameMatch = PREVIEW_NAME_REGEX.exec(neighbor);
-              if (nameMatch) {
-                name = nameMatch[1].trim();
+          const searchEnd = Math.min(range.e.c, searchStart + 6);
+          for (let rowOffset = 0; rowOffset <= 3; rowOffset++) {
+            const rowIndex = r + rowOffset;
+            if (rowIndex > range.e.r) break;
+            for (let offset = searchStart; offset <= searchEnd; offset++) {
+              const neighbor = readCell(rowIndex, offset);
+              if (!neighbor) continue;
+              if (!name) {
+                const nameMatch = PREVIEW_NAME_REGEX.exec(neighbor);
+                if (nameMatch) {
+                  name = nameMatch[1].trim();
+                }
               }
-            }
-            if (!officeHint) {
-              const deptMatch = PREVIEW_DEPT_REGEX.exec(neighbor);
-              if (deptMatch) {
-                officeHint = deptMatch[1].trim();
+              if (!officeHint) {
+                const deptMatch = PREVIEW_DEPT_REGEX.exec(neighbor);
+                if (deptMatch) {
+                  officeHint = deptMatch[1].trim();
+                }
               }
+              if (name && officeHint) break;
             }
+            if (name && officeHint) break;
           }
 
           headerPreview.push({ bioUserId, name, officeHint });
