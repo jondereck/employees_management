@@ -6,6 +6,8 @@ export type RawRecord = {
   punches: RawPunch[];
 };
 
+export type BioSource = { kind: "header" } | { kind: "column"; column: string };
+
 export type Schedule = { start: string; end: string; graceMin: number };
 
 export type DayResult = {

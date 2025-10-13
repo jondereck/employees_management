@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   RawRecord,
   EmployeeMatch,
@@ -9,6 +9,7 @@ import {
   UploadResponse,
   UnmatchedRecord,
   AttendanceEmployeeInfo,
+  BioSource,
 } from "@/lib/attendance/types";
 import { aggregateEmployee } from "@/lib/attendance/compute";
 import { UNASSIGNED_OFFICE_KEY } from "@/lib/attendance/types";
@@ -24,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/data-table";
@@ -63,6 +65,36 @@ import {
 } from "lucide-react";
 
 const defaultSchedule: Schedule = { start: "08:00", end: "17:00", graceMin: 0 };
+
+const PREVIEW_LIMIT = 5;
+const PREVIEW_USER_ID_REGEX = /^User\s*ID\s*:\s*(\d+)/i;
+const PREVIEW_NAME_REGEX = /^Name\s*:\s*(.+)$/i;
+const PREVIEW_DEPT_REGEX = /^Department\s*:\s*(.+)$/i;
+const PREVIEW_BIO_HEADER_REGEX = /^(user\s*id|bio)/i;
+const PREVIEW_NAME_HEADER_REGEX = /name/i;
+const PREVIEW_OFFICE_HEADER_REGEX = /(office|dept|department)/i;
+
+type BioPreviewEntry = {
+  bioUserId: string;
+  name?: string;
+  officeHint?: string;
+};
+
+type BioPreviewColumn = {
+  letter: string;
+  label: string;
+  preview: BioPreviewEntry[];
+};
+
+type BioPreviewData = {
+  header: BioPreviewEntry[];
+  columns: BioPreviewColumn[];
+};
+
+const normalizePreview = (value: any): string => (value ?? "").toString().trim();
+
+const formatColumnLabel = (letter: string, label: string) =>
+  label ? `${letter} — ${label}` : `Column ${letter}`;
 
 const formatDateRange = (raw: RawRecord[]) => {
   const dates = new Set<string>();
@@ -197,6 +229,10 @@ export function AttendanceClient({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadData, setUploadData] = useState<UploadResponse | null>(null);
+  const [bioSourceChoice, setBioSourceChoice] = useState<BioSource>({ kind: "header" });
+  const [bioPreview, setBioPreview] = useState<BioPreviewData | null>(null);
+  const [showBioExtraction, setShowBioExtraction] = useState(false);
+  const [isPreparingBio, setIsPreparingBio] = useState(false);
   const [monthValue, setMonthValue] = useState("");
   const [employees, setEmployees] = useState(initialEmployees);
   const [offices, setOffices] = useState(initialOffices);
@@ -211,8 +247,68 @@ export function AttendanceClient({
   const [pendingMappings, setPendingMappings] = useState<Record<string, string>>({});
   const [isSavingMappings, setIsSavingMappings] = useState(false);
   const [exportState, setExportState] = useState<Record<string, boolean>>({});
+  const storedPreferenceRef = React.useRef<BioSource | null>(null);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem("hrps.bioSource");
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as BioSource;
+      if (!parsed || typeof parsed !== "object" || !("kind" in parsed)) {
+        return;
+      }
+      if (parsed.kind === "header") {
+        const choice: BioSource = { kind: "header" };
+        storedPreferenceRef.current = choice;
+        setBioSourceChoice(choice);
+      } else if (parsed.kind === "column" && typeof parsed.column === "string" && parsed.column.trim()) {
+        const column = parsed.column.trim().toUpperCase();
+        const choice: BioSource = { kind: "column", column };
+        storedPreferenceRef.current = choice;
+        setBioSourceChoice(choice);
+      }
+    } catch (error) {
+      console.error("[HRPS_ATTENDANCE_BIO_PREF]", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    storedPreferenceRef.current = bioSourceChoice;
+  }, [bioSourceChoice]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (bioSourceChoice.kind === "column" && !bioSourceChoice.column) return;
+    try {
+      window.localStorage.setItem("hrps.bioSource", JSON.stringify(bioSourceChoice));
+    } catch (error) {
+      console.error("[HRPS_ATTENDANCE_STORE_BIO_PREF]", error);
+    }
+  }, [bioSourceChoice]);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setShowBioExtraction(false);
+      setBioPreview(null);
+    }
+  }, [selectedFile]);
+
+  useEffect(() => {
+    if (!bioPreview) return;
+    if (bioSourceChoice.kind === "column") {
+      const available = bioPreview.columns.some((column) => column.letter === bioSourceChoice.column);
+      if (!available) {
+        if (bioPreview.columns.length) {
+          setBioSourceChoice({ kind: "column", column: bioPreview.columns[0].letter });
+        } else {
+          setBioSourceChoice({ kind: "header" });
+        }
+      }
+    }
+  }, [bioPreview, bioSourceChoice]);
 
   const employeeById = useMemo(() => {
     return new Map<string, AttendanceEmployeeInfo>(
@@ -294,9 +390,25 @@ export function AttendanceClient({
     return formatDateRange(uploadData.raw);
   }, [uploadData]);
 
+  const previewEntries = useMemo(() => {
+    if (!bioPreview) return [] as BioPreviewEntry[];
+    if (bioSourceChoice.kind === "column") {
+      const column = bioPreview.columns.find((entry) => entry.letter === bioSourceChoice.column);
+      return column?.preview ?? [];
+    }
+    return bioPreview.header;
+  }, [bioPreview, bioSourceChoice]);
+
+  const columnOptions = bioPreview?.columns ?? [];
+
   const handleFileSelect = (file: File | null) => {
     setSelectedFile(file);
     setUploadError(null);
+    if (!file) {
+      setIsPreparingBio(false);
+    }
+    setBioPreview(null);
+    setShowBioExtraction(false);
   };
 
   const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -318,9 +430,189 @@ export function AttendanceClient({
     setIsDragging(false);
   };
 
+  const prepareBioPreview = useCallback(
+    async (file: File): Promise<BioPreviewData> => {
+      const arrayBuffer = await file.arrayBuffer();
+      const XLSXModule = await import("xlsx");
+      const workbook = XLSXModule.read(arrayBuffer, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        throw new Error("No worksheet found in file.");
+      }
+      const worksheet = workbook.Sheets[sheetName];
+      if (!worksheet || !worksheet["!ref"]) {
+        throw new Error("Worksheet is empty.");
+      }
+
+      const range = XLSXModule.utils.decode_range(worksheet["!ref"]);
+      const readCell = (row: number, col: number): string => {
+        const cell = worksheet[XLSXModule.utils.encode_cell({ r: row, c: col })];
+        return normalizePreview(cell?.w ?? cell?.v);
+      };
+
+      const headerPreview: BioPreviewEntry[] = [];
+      const processed = new Set<string>();
+
+      for (let r = range.s.r; r <= range.e.r && headerPreview.length < PREVIEW_LIMIT; r++) {
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const address = XLSXModule.utils.encode_cell({ r, c });
+          if (processed.has(address)) continue;
+          const text = readCell(r, c);
+          if (!text) continue;
+          const match = PREVIEW_USER_ID_REGEX.exec(text);
+          if (!match) continue;
+          processed.add(address);
+          const bioUserId = match[1];
+
+          let name: string | undefined;
+          let officeHint: string | undefined;
+          for (let offset = c; offset <= Math.min(range.e.c, c + 6); offset++) {
+            const neighbor = readCell(r, offset);
+            if (!name) {
+              const nameMatch = PREVIEW_NAME_REGEX.exec(neighbor);
+              if (nameMatch) {
+                name = nameMatch[1].trim();
+              }
+            }
+            if (!officeHint) {
+              const deptMatch = PREVIEW_DEPT_REGEX.exec(neighbor);
+              if (deptMatch) {
+                officeHint = deptMatch[1].trim();
+              }
+            }
+          }
+
+          headerPreview.push({ bioUserId, name, officeHint });
+          if (headerPreview.length >= PREVIEW_LIMIT) {
+            break;
+          }
+        }
+      }
+
+      const headerRowEntries = [] as {
+        col: number;
+        letter: string;
+        value: string;
+      }[];
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const value = readCell(range.s.r, c);
+        headerRowEntries.push({ col: c, letter: XLSXModule.utils.encode_col(c), value });
+      }
+
+      let candidateColumns = headerRowEntries.filter((entry) =>
+        PREVIEW_BIO_HEADER_REGEX.test(entry.value)
+      );
+
+      const storedColumn = storedPreferenceRef.current?.kind === "column"
+        ? storedPreferenceRef.current.column
+        : null;
+      if (storedColumn) {
+        const storedEntry = headerRowEntries.find((entry) => entry.letter === storedColumn);
+        if (storedEntry && !candidateColumns.some((entry) => entry.letter === storedEntry.letter)) {
+          candidateColumns = [...candidateColumns, storedEntry];
+        }
+      }
+
+      if (!candidateColumns.length) {
+        const fallbackCol = range.s.c + 5;
+        if (fallbackCol <= range.e.c) {
+          const fallback = headerRowEntries.find((entry) => entry.col === fallbackCol);
+          if (fallback) {
+            candidateColumns = [fallback];
+          }
+        }
+      }
+
+      const nameColumn = headerRowEntries.find((entry) => PREVIEW_NAME_HEADER_REGEX.test(entry.value))?.col ?? -1;
+      const officeColumn = headerRowEntries.find((entry) => PREVIEW_OFFICE_HEADER_REGEX.test(entry.value))?.col ?? -1;
+
+      const columns: BioPreviewColumn[] = candidateColumns.map((candidate) => {
+        const preview: BioPreviewEntry[] = [];
+        const seen = new Set<string>();
+        for (let r = range.s.r + 1; r <= range.e.r && preview.length < PREVIEW_LIMIT; r++) {
+          const bioValue = readCell(r, candidate.col);
+          if (!bioValue) continue;
+          if (seen.has(bioValue)) continue;
+          seen.add(bioValue);
+
+          const nameValue = nameColumn >= 0 ? readCell(r, nameColumn) : "";
+          const officeValue = officeColumn >= 0 ? readCell(r, officeColumn) : "";
+
+          preview.push({
+            bioUserId: bioValue,
+            name: nameValue || undefined,
+            officeHint: officeValue || undefined,
+          });
+        }
+        return {
+          letter: candidate.letter,
+          label: candidate.value,
+          preview,
+        };
+      });
+
+      return {
+        header: headerPreview.slice(0, PREVIEW_LIMIT),
+        columns,
+      };
+    },
+    []
+  );
+
   const handleUpload = async () => {
     if (!selectedFile) {
       setUploadError("Select a .xls or .xlsx file to continue.");
+      return;
+    }
+
+    setIsPreparingBio(true);
+    setUploadError(null);
+    try {
+      const preview = await prepareBioPreview(selectedFile);
+      setBioPreview(preview);
+      setShowBioExtraction(true);
+      if (bioSourceChoice.kind === "column") {
+        const hasColumn = preview.columns.some((column) => column.letter === bioSourceChoice.column);
+        if (!hasColumn) {
+          if (preview.columns.length) {
+            setBioSourceChoice({ kind: "column", column: preview.columns[0].letter });
+          } else {
+            setBioSourceChoice({ kind: "header" });
+          }
+        }
+      } else if (bioSourceChoice.kind === "header" && storedPreferenceRef.current?.kind === "column") {
+        const storedColumn = storedPreferenceRef.current.column;
+        const hasStored = preview.columns.some((column) => column.letter === storedColumn);
+        if (hasStored) {
+          setBioSourceChoice({ kind: "column", column: storedColumn });
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      const message =
+        error instanceof Error ? error.message : "Unexpected error while preparing the file.";
+      setUploadError(message);
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: message,
+      });
+    } finally {
+      setIsPreparingBio(false);
+    }
+  };
+
+  const handleConfirmBioSource = async () => {
+    if (!selectedFile) {
+      setUploadError("Select a .xls or .xlsx file to continue.");
+      return;
+    }
+    if (bioSourceChoice.kind === "column" && !bioSourceChoice.column) {
+      toast({
+        variant: "destructive",
+        title: "Column required",
+        description: "Choose a column before continuing.",
+      });
       return;
     }
 
@@ -333,6 +625,7 @@ export function AttendanceClient({
       if (monthValue) {
         formData.append("month", monthValue);
       }
+      formData.append("bioSource", JSON.stringify(bioSourceChoice));
 
       const response = await fetch("/api/hrps/attendance/uploads", {
         method: "POST",
@@ -359,6 +652,8 @@ export function AttendanceClient({
       setOfficeFilter([]);
       setMappingDrafts({});
       setPendingMappings({});
+      setBioPreview(null);
+      setShowBioExtraction(false);
       handleFileSelect(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -371,11 +666,13 @@ export function AttendanceClient({
       });
     } catch (error) {
       console.error(error);
-      setUploadError("Unexpected error while uploading attendance file.");
+      const message =
+        error instanceof Error ? error.message : "Unexpected error while uploading attendance file.";
+      setUploadError(message);
       toast({
         variant: "destructive",
         title: "Upload failed",
-        description: "Unexpected error while uploading attendance file.",
+        description: message,
       });
     } finally {
       setIsUploading(false);
@@ -707,12 +1004,12 @@ export function AttendanceClient({
               <Button
                 type="button"
                 onClick={handleUpload}
-                disabled={isUploading}
+                disabled={isUploading || isPreparingBio}
                 className="w-full"
               >
-                {isUploading ? (
+                {isPreparingBio ? (
                   <span className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Uploading &amp; Parsing
+                    <Loader2 className="h-4 w-4 animate-spin" /> Scanning file
                   </span>
                 ) : (
                   "Upload & Parse"
@@ -728,17 +1025,174 @@ export function AttendanceClient({
                 </Alert>
               )}
             </div>
-          </div>
+        </div>
 
-          {uploadError && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Upload error</AlertTitle>
-              <AlertDescription>{uploadError}</AlertDescription>
-            </Alert>
-          )}
+        {showBioExtraction && bioPreview && (
+          <Card>
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-base">Bio number extraction</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Confirm where we read biometric IDs before parsing the report.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition",
+                    bioSourceChoice.kind === "header"
+                      ? "border-primary bg-primary/5"
+                      : "border-muted-foreground/30"
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="bio-source"
+                    className="mt-1 h-4 w-4 border-muted-foreground text-primary focus:ring-primary"
+                    checked={bioSourceChoice.kind === "header"}
+                    onChange={() => setBioSourceChoice({ kind: "header" })}
+                  />
+                  <div className="space-y-1">
+                    <span className="font-medium">Header field</span>
+                    <p className="text-xs text-muted-foreground">
+                      Use values like “User ID: 362003” found in each employee block.
+                    </p>
+                  </div>
+                </label>
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition",
+                    bioSourceChoice.kind === "column"
+                      ? "border-primary bg-primary/5"
+                      : "border-muted-foreground/30",
+                    !columnOptions.length && "opacity-60"
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="bio-source"
+                    className="mt-1 h-4 w-4 border-muted-foreground text-primary focus:ring-primary"
+                    checked={bioSourceChoice.kind === "column"}
+                    disabled={!columnOptions.length}
+                    onChange={() => {
+                      if (!columnOptions.length) return;
+                      const current = columnOptions.find(
+                        (option) => option.letter === bioSourceChoice.column
+                      );
+                      const nextColumn = current?.letter ?? columnOptions[0].letter;
+                      setBioSourceChoice({ kind: "column", column: nextColumn });
+                    }}
+                  />
+                  <div className="flex-1 space-y-3">
+                    <div className="space-y-1">
+                      <span className="font-medium">Table column</span>
+                      <p className="text-xs text-muted-foreground">
+                        Read Bio # from a specific table column (e.g., column F).
+                      </p>
+                    </div>
+                    {bioSourceChoice.kind === "column" && columnOptions.length ? (
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Column</Label>
+                        <Select
+                          value={bioSourceChoice.column}
+                          onValueChange={(value) =>
+                            setBioSourceChoice({ kind: "column", column: value.toUpperCase() })
+                          }
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Select column" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {columnOptions.map((option) => (
+                              <SelectItem key={option.letter} value={option.letter}>
+                                {formatColumnLabel(option.letter, option.label)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : columnOptions.length ? (
+                      <p className="text-xs text-muted-foreground">
+                        Columns detected: {columnOptions.map((option) => option.letter).join(", ")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        We couldn’t find a Bio ID column in the header row.
+                      </p>
+                    )}
+                  </div>
+                </label>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold">Preview (first 5)</h4>
+                  <span className="text-xs text-muted-foreground">
+                    {bioSourceChoice.kind === "column"
+                      ? `Column ${bioSourceChoice.column}`
+                      : "Header values"}
+                  </span>
+                </div>
+                {previewEntries.length ? (
+                  <ul className="space-y-2">
+                    {previewEntries.map((entry, index) => (
+                      <li
+                        key={`${entry.bioUserId}-${index}`}
+                        className="rounded-md border bg-muted/40 p-3 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold">{entry.bioUserId || "—"}</span>
+                          {entry.officeHint && (
+                            <Badge variant="outline" className="text-xs">
+                              Dept: {entry.officeHint}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {entry.name ? entry.name : "Name unavailable"}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No sample rows detected yet. Double-check your selection.
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  We read Bio # from the report header (e.g., “User ID: 362003”). If this ID is new,
+                  link it once and it will be remembered.
+                </p>
+                <Button
+                  type="button"
+                  onClick={handleConfirmBioSource}
+                  disabled={
+                    isUploading || (bioSourceChoice.kind === "column" && !columnOptions.length)
+                  }
+                >
+                  {isUploading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Uploading &amp; Parsing
+                    </span>
+                  ) : (
+                    "Continue"
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-          {renderUploadSummary()}
+        {uploadError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Upload error</AlertTitle>
+            <AlertDescription>{uploadError}</AlertDescription>
+          </Alert>
+        )}
+
+        {renderUploadSummary()}
         </TabsContent>
 
         <TabsContent value="review" className="space-y-6">
@@ -878,6 +1332,10 @@ export function AttendanceClient({
                       <SheetTitle>Unmatched Bio IDs</SheetTitle>
                       <SheetDescription>
                         Map biometric IDs to employees so they can be included in the report.
+                        <span className="mt-2 block text-xs text-muted-foreground">
+                          We read Bio # from the report header (e.g., “User ID: 362003”). If this ID doesn’t
+                          exist yet, link it once and it will be remembered.
+                        </span>
                       </SheetDescription>
                     </SheetHeader>
                     <div className="mt-6 space-y-4 overflow-y-auto pr-2">
@@ -897,17 +1355,19 @@ export function AttendanceClient({
                             : undefined;
 
                           return (
-                            <div key={entry.bioUserId} className="rounded-lg border p-4 space-y-3">
-                              <div>
-                                <div className="text-sm font-semibold">Bio ID: {entry.bioUserId}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  Name hint: {entry.name || "—"}
+                            <div key={entry.bioUserId} className="space-y-3 rounded-lg border p-4">
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="secondary" className="text-xs font-medium">
+                                    Bio #{entry.bioUserId}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs font-normal">
+                                    Dept: {entry.officeHint ?? "—"}
+                                  </Badge>
                                 </div>
-                                {entry.officeHint && (
-                                  <div className="text-xs text-muted-foreground">
-                                    Office hint: {entry.officeHint}
-                                  </div>
-                                )}
+                                <div className="text-xs text-muted-foreground">
+                                  Name: {entry.name ?? "—"}
+                                </div>
                               </div>
                               <div className="space-y-2">
                                 <Label className="text-xs font-medium text-muted-foreground">
@@ -930,25 +1390,27 @@ export function AttendanceClient({
                                         <CommandEmpty>No matches found.</CommandEmpty>
                                         <CommandGroup>
                                           {employees.map((employee) => (
-                                            <CommandItem
-                                              key={employee.id}
-                                              onSelect={() => handleDraftChange(entry.bioUserId, employee.id)}
-                                            >
-                                              <Check
+                                          <CommandItem
+                                            key={employee.id}
+                                            onSelect={() => handleDraftChange(entry.bioUserId, employee.id)}
+                                          >
+                                            <Check
                                                 className={cn(
                                                   "mr-2 h-4 w-4",
                                                   draftEmployeeId === employee.id
                                                     ? "opacity-100"
                                                     : "opacity-0"
                                                 )}
-                                              />
-                                              <div className="flex flex-col">
-                                                <span>{employee.name}</span>
-                                                <span className="text-xs text-muted-foreground">
+                                            />
+                                            <div className="flex flex-col">
+                                              <span>{employee.name}</span>
+                                              <div className="mt-1 flex items-center gap-2">
+                                                <Badge variant="outline" className="text-[10px] font-medium">
                                                   {employee.officeName ?? "Unassigned"}
-                                                </span>
+                                                </Badge>
                                               </div>
-                                            </CommandItem>
+                                            </div>
+                                          </CommandItem>
                                           ))}
                                         </CommandGroup>
                                       </CommandList>

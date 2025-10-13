@@ -6,6 +6,7 @@ import { matchEmployees } from "@/lib/attendance/match";
 import { cleanupUploads, saveUpload } from "@/lib/attendance/store";
 import {
   AttendanceEmployeeInfo,
+  BioSource,
   UploadResponse,
 } from "@/lib/attendance/types";
 import { formatEmployeeName } from "@/lib/attendance/utils";
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const departmentId = formData.get("departmentId");
     const manualMonth = formData.get("month");
+    const bioSourceRaw = formData.get("bioSource");
     const file = formData.get("file");
 
     if (typeof departmentId !== "string" || !departmentId) {
@@ -48,8 +50,39 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
     }
 
+    let bioSource: BioSource | null = null;
+    if (typeof bioSourceRaw === "string") {
+      try {
+        const parsedSource = JSON.parse(bioSourceRaw) as BioSource;
+        if (parsedSource && typeof parsedSource === "object" && "kind" in parsedSource) {
+          if (parsedSource.kind === "header") {
+            bioSource = { kind: "header" };
+          } else if (
+            parsedSource.kind === "column" &&
+            typeof parsedSource.column === "string" &&
+            parsedSource.column.trim()
+          ) {
+            bioSource = {
+              kind: "column",
+              column: parsedSource.column.trim().toUpperCase(),
+            };
+          }
+        }
+      } catch (error) {
+        console.error("[HRPS_ATTENDANCE_UPLOAD_PARSE_BIO]", error);
+      }
+    }
+
+    if (!bioSource) {
+      return NextResponse.json({ error: "Select how to extract Bio numbers before continuing." }, { status: 400 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
-    const parsed = parseAttendanceFile(buffer, filename);
+    const parsed = parseAttendanceFile(buffer, {
+      filename,
+      monthHint: typeof manualMonth === "string" ? manualMonth : undefined,
+      bioSource,
+    });
 
     let month = parsed.month;
     let inferred = parsed.inferred;
