@@ -754,12 +754,12 @@ export async function generateExcelFile({
     return match?.offices?.bioIndexCode ?? match?.office?.bioIndexCode ?? '';
   });
 
-  const selectedKeys = mode === 'bioIndex'
+  const selectedGroupKeys = mode === 'bioIndex'
     ? dedupeBioKeys(selectedBioCodes)
     : dedupeOfficeKeys(selectedOfficeIds);
 
-  const selectedKeySet = new Set(selectedKeys);
-  const hasSelection = selectedKeys.length > 0;
+  const selectedKeySet = new Set(selectedGroupKeys);
+  const hasSelection = selectedGroupKeys.length > 0;
 
   debugRowShape(filteredEmployees, 'after filters');
 
@@ -769,7 +769,7 @@ export async function generateExcelFile({
 
   const partitioned = partitionRows(filteredRowsBySelection, mode);
   const availableKeys = Object.keys(partitioned);
-  const keysForSheets = hasSelection ? selectedKeys : availableKeys;
+  const keysForSheets = hasSelection ? selectedGroupKeys : availableKeys;
   const keysToProcess = keysForSheets.length
     ? keysForSheets
     : mode === 'bioIndex'
@@ -840,7 +840,7 @@ export async function generateExcelFile({
       const groupRows = partitioned[key] ?? [];
       const sortedRows = sortRows(groupRows, effectiveSortLevels);
       const rowsForWs = withNoColumn
-        ? sortedRows.map((row, idx) => ({ ...row, __rowNumber: idx + 1, __no__: idx + 1 }))
+        ? sortedRows.map((row: any, idx) => ({ ...row, __rowNumber: idx + 1, __no__: idx + 1 }))
         : sortedRows;
       const { title, note, sheetNameBase } = resolveGroupMetadata(key, groupRows);
       const sheetName = uniqueSheetName(sheetNameBase, takenSheetNames);
