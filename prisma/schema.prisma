@@ -198,6 +198,18 @@ model Award {
   @@index([employeeId])
 }
 
+model BioUserMap {
+  bioUserId    String
+  departmentId String
+  employeeId   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@id([departmentId, bioUserId])
+  @@index([employeeId])
+  @@index([departmentId])
+}
+
 model ChangeRequest {
   id             String       @id @default(uuid())
   departmentId   String
