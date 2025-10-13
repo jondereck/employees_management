@@ -161,6 +161,20 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                         <p className="text-sm leading-tight">Browse and manage the list of department employees.</p>
                       </button>
                     </NavigationMenuLink>
+                    <NavigationMenuLink asChild>
+                      <button
+                        onClick={() => handleNavClick(`/${params.departmentId}/hrps/attendance`)}
+                        className={cn(
+                          "mt-4 flex h-auto flex-col justify-end rounded-md border border-dashed border-green-200 bg-white p-4 text-left text-sm font-semibold text-green-700 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500",
+                          pathname === `/${params.departmentId}/hrps/attendance` ? "ring-2 ring-green-500" : ""
+                        )}
+                      >
+                        <div className="text-base font-semibold">HRPS ▸ Tardiness &amp; Undertime</div>
+                        <p className="mt-1 text-xs font-normal text-muted-foreground">
+                          Upload biometric attendance, map Bio IDs, and review tardiness/undertime.
+                        </p>
+                      </button>
+                    </NavigationMenuLink>
                   </li>
 
                   {itemroutes.map(({ href, label, active, description, icon }) => (
