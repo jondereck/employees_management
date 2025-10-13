@@ -7,7 +7,14 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    const employees = await prisma.employee.findMany();
+    const employees = await prisma.employee.findMany({
+      include: {
+        offices: { select: { id: true, name: true, bioIndexCode: true } },
+        employeeType: { select: { id: true, name: true, value: true } },
+        eligibility: { select: { id: true, name: true, value: true } },
+        designation: { select: { id: true, name: true, bioIndexCode: true } },
+      },
+    });
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
