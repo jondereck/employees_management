@@ -27,6 +27,7 @@ import {
   Monitor,
   ShieldCheck,
   Building,
+  Clock3,
 } from "lucide-react";
 import LoadingSkeleton from "./loading-state";
 import Loading from "@/app/loading";
@@ -159,6 +160,23 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                       >
                         <div className="text-xl mb-1">Manage Employees</div>
                         <p className="text-sm leading-tight">Browse and manage the list of department employees.</p>
+                      </button>
+                    </NavigationMenuLink>
+                    <NavigationMenuLink asChild>
+                      <button
+                        onClick={() => handleNavClick(`/${params.departmentId}/hrps/attendance`)}
+                        className={cn(
+                          "mt-4 flex h-auto w-full flex-col justify-end rounded-md border border-dashed border-green-200 bg-white p-4 text-left text-green-700 transition hover:border-green-400 hover:bg-green-50",
+                          pathname === `/${params.departmentId}/hrps/attendance` ? "ring-2 ring-green-500" : ""
+                        )}
+                      >
+                        <div className="flex items-center gap-2 text-lg font-semibold">
+                          <Clock3 className="h-5 w-5" />
+                          HRPS ▸ Tardiness & Undertime
+                        </div>
+                        <p className="mt-1 text-sm leading-tight text-muted-foreground">
+                          Upload biometric logs, map Bio IDs, and review tardiness & undertime computations.
+                        </p>
                       </button>
                     </NavigationMenuLink>
                   </li>
