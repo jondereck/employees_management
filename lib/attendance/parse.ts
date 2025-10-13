@@ -10,42 +10,21 @@ export type ParseResult = {
   dates: string[];
 };
 
-type HeaderBlock = {
-  bioUserId: string;
-  name?: string;
-  officeHint?: string;
-  days: { day: number; times: string[] }[];
-};
-
-type HeaderParseResult = {
-  blocks: HeaderBlock[];
-  monthCandidates: string[];
-};
-
-type ColumnParseResult = {
-  records: RawRecord[];
-  rows: number;
-  dates: string[];
-};
-
-type ParseOptions = {
+export type ParseOptions = {
   filename?: string;
   monthHint?: string;
   bioSource: BioSource;
 };
 
-const NAME_HEADER_REGEX = /name/i;
-const OFFICE_HEADER_REGEX = /(office|dept|department)/i;
-const DATE_HEADER_REGEX = /date/i;
-const TIME_HEADER_REGEX = /(time|in|out|punch)/i;
-
-const USER_ID_REGEX = /^User\s*ID\s*:\s*(\d+)/i;
-const USER_ID_LABEL_REGEX = /^User\s*ID\s*:?$/i;
-const BIO_ID_VALUE_REGEX = /^\d{3,}$/;
-const NAME_BLOCK_REGEX = /^Name\s*:\s*(.+)$/i;
-const DEPT_BLOCK_REGEX = /^Department\s*:\s*(.+)$/i;
-const MONTH_IN_TEXT_REGEX = /(20\d{2})[-\/]?(0?[1-9]|1[0-2])/g;
-const MONTH_NAME_REGEX = /(January|February|March|April|May|June|July|August|September|October|November|December)\s*(20\d{2})/gi;
+const RX_USER = /^User\s*ID\s*:\s*(\d+)/i;
+const RX_USER_LABEL = /^User\s*ID\s*:?\s*\$/i;
+const RX_BIO_VALUE = /^\d{3,}$/;
+const RX_NAME = /^Name\s*:\s*(.+)$/i;
+const RX_DEPT = /^Department\s*:\s*(.+)$/i;
+const RX_DAY = /^(0?[1-9]|[12]\d|3[01])$/;
+const RX_YEAR_MONTH = /(20\d{2})[-/_\s]*(0?[1-9]|1[0-2])/;
+const RX_MONTH_YEAR = /(0?[1-9]|1[0-2])[-/_\s]*(20\d{2})/;
+const RX_MONTH_NAME = /(January|February|March|April|May|June|July|August|September|October|November|December)[^0-9]*(20\d{2})/i;
 
 const MONTH_NAME_TO_NUMBER: Record<string, string> = {
   january: "01",
@@ -86,7 +65,33 @@ export function yyyymmdd(month: string, day: number): string {
   return `${month}-${String(day).padStart(2, "0")}`;
 }
 
-const toDateString = (value: any): string | null => {
+function dedupeTimes(times: string[]): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const time of times) {
+    if (!seen.has(time)) {
+      seen.add(time);
+      ordered.push(time);
+    }
+  }
+  return ordered;
+}
+
+function columnLetterToIndex(letter: string): number {
+  if (!letter) return -1;
+  let result = 0;
+  const trimmed = letter.trim().toUpperCase();
+  for (let i = 0; i < trimmed.length; i++) {
+    const code = trimmed.charCodeAt(i);
+    if (code < 65 || code > 90) {
+      return -1;
+    }
+    result = result * 26 + (code - 64);
+  }
+  return result - 1;
+}
+
+function toDateString(value: any): string | null {
   if (value == null) return null;
   if (value instanceof Date) {
     const y = value.getFullYear();
@@ -126,327 +131,258 @@ const toDateString = (value: any): string | null => {
     }
   }
   return null;
-};
+}
 
-const inferMonthFromDates = (dates: string[]): string => {
-  if (!dates.length) return "";
-  const sorted = [...dates].sort();
-  const first = sorted[0];
-  if (!first) return "";
-  return first.slice(0, 7);
-};
-
-const inferMonthFromFilename = (filename: string): string => {
-  const numericMatch = filename.match(/(20\d{2})[-_\s]?(0?[1-9]|1[0-2])/);
-  if (numericMatch) {
-    const year = numericMatch[1];
-    const month = numericMatch[2].padStart(2, "0");
-    return `${year}-${month}`;
-  }
-  const nameMatch = filename.match(
-    /(January|February|March|April|May|June|July|August|September|October|November|December)[-_\s]*(20\d{2})/i
-  );
-  if (!nameMatch) return "";
-  const monthName = nameMatch[1].toLowerCase();
-  const year = nameMatch[2];
-  const month = MONTH_NAME_TO_NUMBER[monthName];
-  return month ? `${year}-${month}` : "";
-};
-
-const columnLetterToIndex = (letter: string): number => {
-  if (!letter) return -1;
-  let result = 0;
-  const upper = letter.trim().toUpperCase();
-  for (let i = 0; i < upper.length; i++) {
-    const code = upper.charCodeAt(i);
-    if (code < 65 || code > 90) {
-      return -1;
-    }
-    result = result * 26 + (code - 64);
-  }
-  return result - 1;
-};
-
-const getCell = (worksheet: XLSX.WorkSheet, row: number, col: number) => {
-  return worksheet[XLSX.utils.encode_cell({ r: row, c: col })];
-};
-
-const getCellText = (worksheet: XLSX.WorkSheet, row: number, col: number): string => {
-  const cell = getCell(worksheet, row, col);
-  if (!cell) return "";
-  if (cell.w != null) {
-    return norm(cell.w);
-  }
-  return norm(cell.v);
-};
-
-const getCellValue = (worksheet: XLSX.WorkSheet, row: number, col: number) => {
-  const cell = getCell(worksheet, row, col);
-  if (!cell) return "";
-  return cell.v ?? cell.w ?? "";
-};
-
-const extractTimes = (value: any): string[] => {
+function extractTimes(value: any): string[] {
   if (value == null) return [];
   if (typeof value === "number") {
     const parsed = XLSX.SSF.parse_date_code(value, { date1904: false });
     if (!parsed) return [];
     const totalMinutes = (parsed.H || 0) * 60 + (parsed.M || 0);
-    if (isNaN(totalMinutes)) return [];
+    if (Number.isNaN(totalMinutes)) return [];
     const hh = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
     const mm = String(totalMinutes % 60).padStart(2, "0");
     return [`${hh}:${mm}`];
   }
-  const parts = splitTimes(value);
-  const unique = Array.from(new Set(parts));
-  return unique;
-};
+  return splitTimes(value);
+}
 
-const findNextUserRow = (
-  worksheet: XLSX.WorkSheet,
-  currentRow: number,
-  range: XLSX.Range
-) => {
-  for (let r = currentRow + 1; r <= range.e.r; r++) {
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const text = getCellText(worksheet, r, c);
+function cellText(ws: XLSX.WorkSheet, r: number, c: number): string {
+  const address = XLSX.utils.encode_cell({ r, c });
+  const cell = ws[address];
+  if (!cell) return "";
+  if (cell.w != null) return norm(cell.w);
+  return norm(cell.v);
+}
+
+function extractMonthFromText(text: string): string | undefined {
+  const numericYearMonth = RX_YEAR_MONTH.exec(text);
+  if (numericYearMonth) {
+    const year = numericYearMonth[1];
+    const month = numericYearMonth[2].padStart(2, "0");
+    return `${year}-${month}`;
+  }
+  const numericMonthYear = RX_MONTH_YEAR.exec(text);
+  if (numericMonthYear) {
+    const month = numericMonthYear[1].padStart(2, "0");
+    const year = numericMonthYear[2];
+    return `${year}-${month}`;
+  }
+  const nameMatch = RX_MONTH_NAME.exec(text);
+  if (nameMatch) {
+    const monthName = nameMatch[1].toLowerCase();
+    const year = nameMatch[2];
+    const month = MONTH_NAME_TO_NUMBER[monthName];
+    if (month) {
+      return `${year}-${month}`;
+    }
+  }
+  return undefined;
+}
+
+export function detectMonthFromSheet(ws: XLSX.WorkSheet): string | undefined {
+  const ref = ws["!ref"];
+  if (!ref) return undefined;
+  const range = XLSX.utils.decode_range(ref);
+  const maxRow = Math.min(range.e.r, range.s.r + 15);
+  const maxCol = Math.min(range.e.c, range.s.c + 10);
+
+  for (let r = range.s.r; r <= maxRow; r++) {
+    for (let c = range.s.c; c <= maxCol; c++) {
+      const text = cellText(ws, r, c);
       if (!text) continue;
-      if (USER_ID_REGEX.test(text) || USER_ID_LABEL_REGEX.test(text)) {
-        return r;
+      const month = extractMonthFromText(text);
+      if (month) {
+        return month;
       }
     }
   }
-  return range.e.r + 1;
-};
+  return undefined;
+}
 
-const locateDayHeaderRow = (
-  worksheet: XLSX.WorkSheet,
-  startRow: number,
-  startCol: number,
-  range: XLSX.Range,
-  stopRow: number
-) => {
-  for (let r = startRow; r < stopRow; r++) {
-    let numericCount = 0;
-    for (let c = startCol; c <= range.e.c; c++) {
-      const value = getCellText(worksheet, r, c);
-      if (/^\d{1,2}$/.test(value)) {
-        numericCount += 1;
-        if (numericCount >= 1) {
-          return r;
-        }
-      } else if (numericCount > 0 && value) {
-        break;
-      }
+type Anchor = { r: number; c: number; valueCol: number; bio: string };
+
+type DayColumn = { col: number; day: number };
+
+function buildTextMatrix(ws: XLSX.WorkSheet, range: XLSX.Range): string[][] {
+  const text: string[][] = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    text[r] = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      text[r][c] = cellText(ws, r, c);
     }
   }
-  return -1;
-};
+  return text;
+}
 
-const collectDayColumns = (
-  worksheet: XLSX.WorkSheet,
-  headerRow: number,
-  startCol: number,
-  range: XLSX.Range
-) => {
-  const columns: { day: number; col: number }[] = [];
-  for (let col = startCol; col <= range.e.c; col++) {
-    const headerValue = getCellText(worksheet, headerRow, col);
-    if (/^\d{1,2}$/.test(headerValue)) {
-      columns.push({ day: Number(headerValue), col });
-      continue;
-    }
-    if (columns.length) {
-      if (!headerValue) {
+function findAnchors(range: XLSX.Range, text: string[][]): Anchor[] {
+  const anchors: Anchor[] = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const value = text[r]?.[c] ?? "";
+      if (!value) continue;
+      const inline = RX_USER.exec(value);
+      if (inline) {
+        anchors.push({ r, c, valueCol: c, bio: inline[1] });
         continue;
       }
-      break;
+      if (RX_USER_LABEL.test(value)) {
+        const right = text[r]?.[c + 1] ?? "";
+        if (RX_BIO_VALUE.test(right)) {
+          anchors.push({ r, c, valueCol: c + 1, bio: right });
+        }
+      }
+    }
+  }
+  return anchors;
+}
+
+function scanForInfo(
+  text: string[][],
+  range: XLSX.Range,
+  anchor: Anchor,
+  regex: RegExp
+): string | undefined {
+  const startCol = Math.min(anchor.c, anchor.valueCol);
+  const endCol = Math.min(range.e.c, startCol + 10);
+  const maxRow = Math.min(range.e.r, anchor.r + 2);
+  for (let r = anchor.r; r <= maxRow; r++) {
+    for (let c = startCol; c <= endCol; c++) {
+      const value = text[r]?.[c] ?? "";
+      if (!value) continue;
+      const match = regex.exec(value);
+      if (match) {
+        return match[1].trim();
+      }
+    }
+  }
+  return undefined;
+}
+
+function findDayHeaderRow(range: XLSX.Range, text: string[][], anchor: Anchor): number | undefined {
+  const startRow = anchor.r + 1;
+  const endRow = Math.min(range.e.r, anchor.r + 4);
+  for (let r = startRow; r <= endRow; r++) {
+    let dayCount = 0;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      if (RX_DAY.test(text[r]?.[c] ?? "")) {
+        dayCount += 1;
+      }
+    }
+    if (dayCount >= 5) {
+      return r;
+    }
+  }
+  return undefined;
+}
+
+function collectDayColumns(range: XLSX.Range, text: string[][], dayRow: number): DayColumn[] {
+  const columns: DayColumn[] = [];
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const value = text[dayRow]?.[c] ?? "";
+    if (!value) continue;
+    if (RX_DAY.test(value)) {
+      const day = Number(value);
+      columns.push({ col: c, day });
     }
   }
   return columns;
-};
+}
 
-const parseHeaderWorksheet = (worksheet: XLSX.WorkSheet): HeaderParseResult => {
-  const ref = worksheet["!ref"];
-  if (!ref) {
-    return { blocks: [], monthCandidates: [] };
-  }
+function buildDate(month: string, day: number): string {
+  return `${month}-${String(day).padStart(2, "0")}`;
+}
+
+export function parseBlockSheet(ws: XLSX.WorkSheet, month: string): RawRecord[] {
+  if (!month) return [];
+  const ref = ws["!ref"];
+  if (!ref) return [];
   const range = XLSX.utils.decode_range(ref);
-  const processed = new Set<string>();
-  const blocks: HeaderBlock[] = [];
-  const monthCandidates = new Set<string>();
+  const text = buildTextMatrix(ws, range);
+  const anchors = findAnchors(range, text);
+  const records: RawRecord[] = [];
 
-  for (let r = range.s.r; r <= range.e.r; r++) {
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const address = XLSX.utils.encode_cell({ r, c });
-      if (processed.has(address)) continue;
-
-      const text = getCellText(worksheet, r, c);
-      if (!text) continue;
-
-      MONTH_IN_TEXT_REGEX.lastIndex = 0;
-      let monthMatch: RegExpExecArray | null;
-      while ((monthMatch = MONTH_IN_TEXT_REGEX.exec(text))) {
-        const year = monthMatch[1];
-        const month = monthMatch[2].padStart(2, "0");
-        monthCandidates.add(`${year}-${month}`);
-      }
-      MONTH_NAME_REGEX.lastIndex = 0;
-      let monthNameMatch: RegExpExecArray | null;
-      while ((monthNameMatch = MONTH_NAME_REGEX.exec(text))) {
-        const monthName = monthNameMatch[1].toLowerCase();
-        const year = monthNameMatch[2];
-        const monthNumber = MONTH_NAME_TO_NUMBER[monthName];
-        if (monthNumber) {
-          monthCandidates.add(`${year}-${monthNumber}`);
-        }
-      }
-
-      let bioUserId: string | null = null;
-      let idColumn = c;
-
-      const userMatch = USER_ID_REGEX.exec(text);
-      if (userMatch) {
-        bioUserId = userMatch[1];
-      } else if (USER_ID_LABEL_REGEX.test(text)) {
-        const rightText = getCellText(worksheet, r, c + 1);
-        if (BIO_ID_VALUE_REGEX.test(rightText)) {
-          bioUserId = rightText;
-          idColumn = c + 1;
-          processed.add(XLSX.utils.encode_cell({ r, c: idColumn }));
-        }
-      }
-
-      if (!bioUserId) continue;
-
-      processed.add(address);
-
-      let name: string | undefined;
-      let officeHint: string | undefined;
-      const searchStart = Math.min(c, idColumn);
-      const searchEnd = Math.min(range.e.c, searchStart + 6);
-      for (let rowOffset = 0; rowOffset <= 3; rowOffset++) {
-        const rowIndex = r + rowOffset;
-        if (rowIndex > range.e.r) break;
-        for (let offset = searchStart; offset <= searchEnd; offset++) {
-          const cellText = getCellText(worksheet, rowIndex, offset);
-          if (!cellText) continue;
-          if (!name) {
-            const nameMatch = NAME_BLOCK_REGEX.exec(cellText);
-            if (nameMatch) {
-              name = nameMatch[1].trim();
-            }
-          }
-          if (!officeHint) {
-            const deptMatch = DEPT_BLOCK_REGEX.exec(cellText);
-            if (deptMatch) {
-              officeHint = deptMatch[1].trim();
-            }
-          }
-          if (name && officeHint) break;
-        }
-        if (name && officeHint) break;
-      }
-
-      const nextUserRow = findNextUserRow(worksheet, r, range);
-      const scanStartRow = r;
-      const scanEndRow = nextUserRow;
-      const candidateHeaderRow = locateDayHeaderRow(
-        worksheet,
-        scanStartRow,
-        Math.max(c, idColumn) + 1,
-        range,
-        scanEndRow
-      );
-
-      const dayHeaderRow =
-        candidateHeaderRow >= 0 ? candidateHeaderRow : Math.max(r + 1, scanStartRow + 1);
-      const dayColumns = collectDayColumns(
-        worksheet,
-        dayHeaderRow,
-        Math.max(c, idColumn) + 1,
-        range
-      );
-
-      const dataRow = Math.min(dayHeaderRow + 1, range.e.r);
-      const days: { day: number; times: string[] }[] = [];
-      for (const { day, col } of dayColumns) {
-        if (dataRow > range.e.r) break;
-        const rawValue = getCellValue(worksheet, dataRow, col);
-        const times = extractTimes(rawValue);
-        days.push({ day, times });
-      }
-
-      blocks.push({
-        bioUserId,
-        name,
-        officeHint,
-        days,
-      });
+  for (const anchor of anchors) {
+    if (!RX_BIO_VALUE.test(anchor.bio)) {
+      continue;
     }
-  }
 
-  return { blocks, monthCandidates: Array.from(monthCandidates) };
-};
+    const name = scanForInfo(text, range, anchor, RX_NAME) ?? undefined;
+    const dept = scanForInfo(text, range, anchor, RX_DEPT) ?? undefined;
+    const dayRow = findDayHeaderRow(range, text, anchor);
+    if (dayRow == null) {
+      continue;
+    }
 
-const finalizeHeaderBlocks = (blocks: HeaderBlock[], month: string) => {
-  const dates = new Set<string>();
-  let rows = 0;
-  const records: RawRecord[] = blocks.map((block) => {
-    const punches = block.days
-      .filter((day) => day.times.length)
-      .map((day) => {
-        const date = month ? yyyymmdd(month, day.day) : "";
-        if (date) {
-          dates.add(date);
+    const dayColumns = collectDayColumns(range, text, dayRow);
+    if (!dayColumns.length) {
+      continue;
+    }
+
+    const punches = dayColumns
+      .map(({ col, day }) => {
+        const row1 = text[dayRow + 1]?.[col] ?? "";
+        const row2 = text[dayRow + 2]?.[col] ?? "";
+        const merged = dedupeTimes([...splitTimes(row1), ...splitTimes(row2)]);
+        if (!merged.length) {
+          return null;
         }
-        rows += 1;
         return {
-          date,
-          times: [...day.times],
+          date: buildDate(month, day),
+          times: merged,
         };
-      });
-    return {
-      bioUserId: block.bioUserId,
-      name: block.name,
-      officeHint: block.officeHint,
+      })
+      .filter((entry): entry is { date: string; times: string[] } => entry !== null);
+
+    records.push({
+      bioUserId: anchor.bio,
+      name,
+      officeHint: dept,
       punches,
-    };
-  });
+    });
+  }
 
   records.sort((a, b) => a.bioUserId.localeCompare(b.bioUserId));
+  return records;
+}
 
-  return { records, dates: Array.from(dates).sort(), rows };
-};
+export function parseColumnSheet(
+  ws: XLSX.WorkSheet,
+  columnLetter: string
+): { records: RawRecord[]; dates: string[]; rows: number } {
+  const columnIndex = columnLetterToIndex(columnLetter);
+  if (columnIndex < 0) {
+    return { records: [], dates: [], rows: 0 };
+  }
 
-const parseColumnWorksheet = (
-  worksheet: XLSX.WorkSheet,
-  bioColumnIndex: number
-): ColumnParseResult => {
-  const rows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, raw: true, defval: "" });
+  const rows = XLSX.utils.sheet_to_json<any[]>(ws, {
+    header: 1,
+    raw: true,
+    defval: "",
+  });
+
   if (!rows.length) {
-    return { records: [], rows: 0, dates: [] };
+    return { records: [], dates: [], rows: 0 };
   }
 
   const headerRow = rows[0].map((cell) => norm(cell));
   const dataRows = rows.slice(1);
 
-  const nameColumn = headerRow.findIndex((cell) => NAME_HEADER_REGEX.test(cell));
-  const officeColumn = headerRow.findIndex((cell) => OFFICE_HEADER_REGEX.test(cell));
-  const dateColumn = headerRow.findIndex((cell) => DATE_HEADER_REGEX.test(cell));
+  const nameColumn = headerRow.findIndex((cell) => /name/i.test(cell));
+  const officeColumn = headerRow.findIndex((cell) => /(office|dept|department)/i.test(cell));
+  const dateColumn = headerRow.findIndex((cell) => /date/i.test(cell));
   const timeColumns = headerRow
-    .map((cell, idx) => (TIME_HEADER_REGEX.test(cell) ? idx : -1))
+    .map((cell, idx) => (/(time|in|out|punch)/i.test(cell) ? idx : -1))
     .filter((idx) => idx >= 0);
 
-  const skipIndices = new Set<number>();
-  skipIndices.add(bioColumnIndex);
-  if (dateColumn >= 0) skipIndices.add(dateColumn);
-  if (nameColumn >= 0) skipIndices.add(nameColumn);
-  if (officeColumn >= 0) skipIndices.add(officeColumn);
+  const skip = new Set<number>([columnIndex]);
+  if (dateColumn >= 0) skip.add(dateColumn);
+  if (nameColumn >= 0) skip.add(nameColumn);
+  if (officeColumn >= 0) skip.add(officeColumn);
 
   const timeCandidates = timeColumns.length
     ? timeColumns
-    : headerRow.map((_, idx) => idx).filter((idx) => !skipIndices.has(idx));
+    : headerRow.map((_, idx) => idx).filter((idx) => !skip.has(idx));
 
   const recordMap = new Map<
     string,
@@ -456,35 +392,39 @@ const parseColumnWorksheet = (
   let processedRows = 0;
 
   for (const row of dataRows) {
-    const bioValueRaw = norm(row[bioColumnIndex]);
-    if (!bioValueRaw) continue;
-    if (!BIO_ID_VALUE_REGEX.test(bioValueRaw)) continue;
-    const bioValue = bioValueRaw;
+    const rawBio = norm(row[columnIndex]);
+    if (!RX_BIO_VALUE.test(rawBio)) {
+      continue;
+    }
 
     const dateValue = dateColumn >= 0 ? row[dateColumn] : undefined;
     const date = toDateString(dateValue);
 
     const times: string[] = [];
     for (const idx of timeCandidates) {
-      if (idx === bioColumnIndex) continue;
-      const cellValue = row[idx];
-      const extracted = extractTimes(cellValue);
-      for (const time of extracted) {
-        if (!times.includes(time)) {
-          times.push(time);
+      if (idx === columnIndex) continue;
+      const candidate = row[idx];
+      const extracted = extractTimes(candidate);
+      for (const t of extracted) {
+        if (!times.includes(t)) {
+          times.push(t);
         }
       }
     }
 
-    if (!date && !times.length) continue;
+    if (!date && !times.length) {
+      continue;
+    }
+
     if (date) {
       allDates.add(date);
     }
+
     if (times.length) {
       processedRows += 1;
     }
 
-    let record = recordMap.get(bioValue);
+    let record = recordMap.get(rawBio);
     if (!record) {
       const name = nameColumn >= 0 ? norm(row[nameColumn]) : undefined;
       const officeHint = officeColumn >= 0 ? norm(row[officeColumn]) : undefined;
@@ -493,13 +433,13 @@ const parseColumnWorksheet = (
         officeHint: officeHint || undefined,
         dayMap: new Map<string, Set<string>>(),
       };
-      recordMap.set(bioValue, record);
+      recordMap.set(rawBio, record);
     }
 
     if (date) {
-      const daySet = record.dayMap.get(date) ?? new Set<string>();
-      times.forEach((time) => daySet.add(time));
-      record.dayMap.set(date, daySet);
+      const existing = record.dayMap.get(date) ?? new Set<string>();
+      times.forEach((time) => existing.add(time));
+      record.dayMap.set(date, existing);
     }
   }
 
@@ -511,6 +451,7 @@ const parseColumnWorksheet = (
         times: Array.from(set).sort(),
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
+
     records.push({
       bioUserId,
       name: info.name,
@@ -521,15 +462,92 @@ const parseColumnWorksheet = (
 
   records.sort((a, b) => a.bioUserId.localeCompare(b.bioUserId));
 
-  return { records, rows: processedRows, dates: Array.from(allDates).sort() };
-};
+  return {
+    records,
+    dates: Array.from(allDates).sort(),
+    rows: processedRows,
+  };
+}
 
-export function parseAttendanceFile(
-  buffer: Buffer | ArrayBuffer,
-  options: ParseOptions
+export function summarizeRecords(records: RawRecord[]): { rows: number; distinctBio: number; dates: string[] } {
+  const dates = new Set<string>();
+  let rows = 0;
+  for (const record of records) {
+    for (const punch of record.punches) {
+      if (punch.times.length) {
+        rows += 1;
+      }
+      if (punch.date) {
+        dates.add(punch.date);
+      }
+    }
+  }
+  return { rows, distinctBio: records.length, dates: Array.from(dates).sort() };
+}
+
+export function parseWorksheet(
+  ws: XLSX.WorkSheet,
+  options: ParseOptions & { month?: string }
 ): ParseResult {
+  const { bioSource, monthHint, filename } = options;
+  let month = options.month || detectMonthFromSheet(ws) || "";
+  let inferred = !!month && !monthHint;
+
+  if (monthHint) {
+    month = monthHint;
+    inferred = false;
+  } else if (!month && filename) {
+    const fallback = extractMonthFromText(filename);
+    if (fallback) {
+      month = fallback;
+      inferred = true;
+    }
+  }
+
+  if (bioSource.kind === "header") {
+    if (!month) {
+      return { ...EMPTY_RESULT };
+    }
+    const records = parseBlockSheet(ws, month);
+    const meta = summarizeRecords(records);
+    return {
+      records,
+      month,
+      inferred,
+      rows: meta.rows,
+      distinctBio: meta.distinctBio,
+      dates: meta.dates,
+    };
+  }
+
+  const column = bioSource.column;
+  const { records, dates, rows } = parseColumnSheet(ws, column);
+  if (!month) {
+    const inferredMonth = dates.length ? dates[0].slice(0, 7) : "";
+    if (inferredMonth) {
+      month = inferredMonth;
+      inferred = !monthHint;
+    }
+  }
+
+  return {
+    records,
+    month,
+    inferred,
+    rows,
+    distinctBio: records.length,
+    dates,
+  };
+}
+
+export function parseAttendanceFile(buffer: Buffer | ArrayBuffer, options: ParseOptions): ParseResult {
   const dataBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  const workbook = XLSX.read(dataBuffer, { type: "buffer" });
+  const workbook = XLSX.read(dataBuffer, {
+    type: "buffer",
+    cellDates: true,
+    cellText: true,
+    raw: false,
+  });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
     return { ...EMPTY_RESULT };
@@ -538,54 +556,5 @@ export function parseAttendanceFile(
   if (!worksheet) {
     return { ...EMPTY_RESULT };
   }
-
-  const { bioSource, monthHint, filename } = options;
-
-  if (bioSource.kind === "header") {
-    const headerResult = parseHeaderWorksheet(worksheet);
-    let month = monthHint ?? headerResult.monthCandidates[0] ?? "";
-    let inferred = !monthHint && !!month;
-    if (!month && filename) {
-      const fallback = inferMonthFromFilename(filename);
-      if (fallback) {
-        month = fallback;
-        inferred = true;
-      }
-    }
-
-    const { records, dates, rows } = finalizeHeaderBlocks(headerResult.blocks, month);
-    return {
-      records,
-      month,
-      inferred,
-      rows,
-      distinctBio: records.length,
-      dates,
-    };
-  }
-
-  const columnIndex = columnLetterToIndex(bioSource.column);
-  if (columnIndex < 0) {
-    return { ...EMPTY_RESULT };
-  }
-
-  const columnResult = parseColumnWorksheet(worksheet, columnIndex);
-  let month = monthHint || inferMonthFromDates(columnResult.dates);
-  let inferred = !monthHint && !!month;
-  if (!month && filename) {
-    const fallback = inferMonthFromFilename(filename);
-    if (fallback) {
-      month = fallback;
-      inferred = true;
-    }
-  }
-
-  return {
-    records: columnResult.records,
-    month,
-    inferred,
-    rows: columnResult.rows,
-    distinctBio: columnResult.records.length,
-    dates: columnResult.dates,
-  };
+  return parseWorksheet(worksheet, options);
 }

@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import prismadb from "@/lib/prismadb";
-import { parseAttendanceFile } from "@/lib/attendance/parse";
+import * as XLSX from "xlsx";
+import {
+  detectMonthFromSheet,
+  parseBlockSheet,
+  parseColumnSheet,
+  summarizeRecords,
+} from "@/lib/attendance/parse";
 import { matchEmployees } from "@/lib/attendance/match";
 import { cleanupUploads, saveUpload } from "@/lib/attendance/store";
 import {
   AttendanceEmployeeInfo,
   BioSource,
+  RawRecord,
   UploadResponse,
 } from "@/lib/attendance/types";
 import { formatEmployeeName } from "@/lib/attendance/utils";
@@ -78,18 +85,63 @@ export async function POST(req: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const parsed = parseAttendanceFile(buffer, {
-      filename,
-      monthHint: typeof manualMonth === "string" ? manualMonth : undefined,
-      bioSource,
-    });
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(buffer, {
+        type: "buffer",
+        cellDates: true,
+        cellText: true,
+        raw: false,
+      });
+    } catch (error) {
+      console.error("[HRPS_ATTENDANCE_UPLOAD_READ]", error);
+      return NextResponse.json({ error: "Failed to process upload" }, { status: 400 });
+    }
 
-    let month = parsed.month;
-    let inferred = parsed.inferred;
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      return NextResponse.json({ error: "No worksheet found in file." }, { status: 400 });
+    }
 
-    if (!month && typeof manualMonth === "string" && manualMonth) {
-      month = manualMonth;
-      inferred = false;
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) {
+      return NextResponse.json({ error: "No worksheet found in file." }, { status: 400 });
+    }
+
+    const manualMonthValue = typeof manualMonth === "string" && manualMonth ? manualMonth : undefined;
+    const detectedMonth = detectMonthFromSheet(worksheet);
+
+    let month = manualMonthValue || detectedMonth || "";
+    let inferred = !manualMonthValue && !!detectedMonth;
+
+    let records = [] as RawRecord[];
+    let rowsCount = 0;
+    let distinctBio = 0;
+
+    if (bioSource.kind === "header") {
+      if (!month) {
+        return NextResponse.json(
+          { error: "Unable to infer month. Please select a month before uploading." },
+          { status: 400 }
+        );
+      }
+      records = parseBlockSheet(worksheet, month);
+      const summary = summarizeRecords(records);
+      rowsCount = summary.rows;
+      distinctBio = summary.distinctBio;
+    } else {
+      const columnResult = parseColumnSheet(worksheet, bioSource.column);
+      records = columnResult.records;
+      rowsCount = columnResult.rows;
+      distinctBio = records.length;
+      const dateValues = columnResult.dates;
+      if (!month) {
+        const inferredMonth = dateValues.length ? dateValues[0].slice(0, 7) : "";
+        if (inferredMonth) {
+          month = inferredMonth;
+          inferred = !manualMonthValue;
+        }
+      }
     }
 
     if (!month) {
@@ -104,7 +156,7 @@ export async function POST(req: Request) {
     const uploadId = randomUUID();
 
     const [matchResult, employeesRaw, offices] = await Promise.all([
-      matchEmployees({ departmentId, records: parsed.records }),
+      matchEmployees({ departmentId, records }),
       prismadb.employee.findMany({
         where: { departmentId },
         orderBy: { lastName: "asc" },
@@ -134,15 +186,15 @@ export async function POST(req: Request) {
     }));
 
     const meta = {
-      rows: parsed.rows,
-      distinctBio: parsed.distinctBio,
+      rows: rowsCount,
+      distinctBio,
       inferred,
     };
 
     const response: UploadResponse = {
       uploadId,
       month,
-      raw: parsed.records,
+      raw: records,
       meta,
       matched: matchResult.matched,
       unmatched: matchResult.unmatched,
@@ -153,7 +205,7 @@ export async function POST(req: Request) {
     saveUpload({
       id: uploadId,
       departmentId,
-      raw: parsed.records,
+      raw: records,
       month,
       meta,
       createdAt: Date.now(),
