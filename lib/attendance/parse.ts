@@ -40,6 +40,8 @@ const DATE_HEADER_REGEX = /date/i;
 const TIME_HEADER_REGEX = /(time|in|out|punch)/i;
 
 const USER_ID_REGEX = /^User\s*ID\s*:\s*(\d+)/i;
+const USER_ID_LABEL_REGEX = /^User\s*ID\s*:?$/i;
+const BIO_ID_VALUE_REGEX = /^\d{3,}$/;
 const NAME_BLOCK_REGEX = /^Name\s*:\s*(.+)$/i;
 const DEPT_BLOCK_REGEX = /^Department\s*:\s*(.+)$/i;
 const MONTH_IN_TEXT_REGEX = /(20\d{2})[-\/]?(0?[1-9]|1[0-2])/g;
@@ -201,15 +203,29 @@ const parseHeaderWorksheet = (worksheet: XLSX.WorkSheet): HeaderParseResult => {
         monthCandidates.add(`${year}-${month}`);
       }
 
+      let bioUserId: string | null = null;
+      let idColumn = c;
+
       const userMatch = USER_ID_REGEX.exec(text);
-      if (!userMatch) continue;
+      if (userMatch) {
+        bioUserId = userMatch[1];
+      } else if (USER_ID_LABEL_REGEX.test(text)) {
+        const rightText = getCellText(worksheet, r, c + 1);
+        if (BIO_ID_VALUE_REGEX.test(rightText)) {
+          bioUserId = rightText;
+          idColumn = c + 1;
+          processed.add(XLSX.utils.encode_cell({ r, c: idColumn }));
+        }
+      }
+
+      if (!bioUserId) continue;
 
       processed.add(address);
-      const bioUserId = userMatch[1];
 
       let name: string | undefined;
       let officeHint: string | undefined;
-      for (let offset = c; offset <= Math.min(range.e.c, c + 6); offset++) {
+      const searchStart = Math.min(c, idColumn);
+      for (let offset = searchStart; offset <= Math.min(range.e.c, searchStart + 6); offset++) {
         const cellText = getCellText(worksheet, r, offset);
         if (!name) {
           const nameMatch = NAME_BLOCK_REGEX.exec(cellText);
@@ -228,7 +244,8 @@ const parseHeaderWorksheet = (worksheet: XLSX.WorkSheet): HeaderParseResult => {
       const gridStartRow = r + 2;
       const dayHeaderRow = gridStartRow - 1;
       const dayColumns: { day: number; col: number }[] = [];
-      for (let col = c; col <= range.e.c; col++) {
+      const primaryScanStart = Math.max(c, idColumn) + 1;
+      for (let col = primaryScanStart; col <= range.e.c; col++) {
         const headerValue = getCellText(worksheet, dayHeaderRow, col);
         if (/^\d{1,2}$/.test(headerValue)) {
           dayColumns.push({ day: Number(headerValue), col });
@@ -239,6 +256,22 @@ const parseHeaderWorksheet = (worksheet: XLSX.WorkSheet): HeaderParseResult => {
             continue;
           }
           break;
+        }
+      }
+
+      if (!dayColumns.length) {
+        for (let col = searchStart; col <= range.e.c; col++) {
+          const headerValue = getCellText(worksheet, dayHeaderRow, col);
+          if (/^\d{1,2}$/.test(headerValue)) {
+            dayColumns.push({ day: Number(headerValue), col });
+            continue;
+          }
+          if (dayColumns.length) {
+            if (!headerValue) {
+              continue;
+            }
+            break;
+          }
         }
       }
 
@@ -328,8 +361,10 @@ const parseColumnWorksheet = (
   let processedRows = 0;
 
   for (const row of dataRows) {
-    const bioValue = norm(row[bioColumnIndex]);
-    if (!bioValue) continue;
+    const bioValueRaw = norm(row[bioColumnIndex]);
+    if (!bioValueRaw) continue;
+    if (!BIO_ID_VALUE_REGEX.test(bioValueRaw)) continue;
+    const bioValue = bioValueRaw;
 
     const dateValue = dateColumn >= 0 ? row[dateColumn] : undefined;
     const date = toDateString(dateValue);

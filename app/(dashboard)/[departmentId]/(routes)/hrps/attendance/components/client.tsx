@@ -68,6 +68,8 @@ const defaultSchedule: Schedule = { start: "08:00", end: "17:00", graceMin: 0 };
 
 const PREVIEW_LIMIT = 5;
 const PREVIEW_USER_ID_REGEX = /^User\s*ID\s*:\s*(\d+)/i;
+const PREVIEW_USER_ID_LABEL_REGEX = /^User\s*ID\s*:?$/i;
+const PREVIEW_BIO_VALUE_REGEX = /^\d{3,}$/;
 const PREVIEW_NAME_REGEX = /^Name\s*:\s*(.+)$/i;
 const PREVIEW_DEPT_REGEX = /^Department\s*:\s*(.+)$/i;
 const PREVIEW_BIO_HEADER_REGEX = /^(user\s*id|bio)/i;
@@ -459,14 +461,29 @@ export function AttendanceClient({
           if (processed.has(address)) continue;
           const text = readCell(r, c);
           if (!text) continue;
+          let bioUserId: string | null = null;
+          let idColumn = c;
+
           const match = PREVIEW_USER_ID_REGEX.exec(text);
-          if (!match) continue;
+          if (match) {
+            bioUserId = match[1];
+          } else if (PREVIEW_USER_ID_LABEL_REGEX.test(text)) {
+            const right = readCell(r, c + 1);
+            if (PREVIEW_BIO_VALUE_REGEX.test(right)) {
+              bioUserId = right;
+              idColumn = c + 1;
+              processed.add(XLSXModule.utils.encode_cell({ r, c: idColumn }));
+            }
+          }
+
+          if (!bioUserId) continue;
+
           processed.add(address);
-          const bioUserId = match[1];
 
           let name: string | undefined;
           let officeHint: string | undefined;
-          for (let offset = c; offset <= Math.min(range.e.c, c + 6); offset++) {
+          const searchStart = Math.min(c, idColumn);
+          for (let offset = searchStart; offset <= Math.min(range.e.c, searchStart + 6); offset++) {
             const neighbor = readCell(r, offset);
             if (!name) {
               const nameMatch = PREVIEW_NAME_REGEX.exec(neighbor);
@@ -531,7 +548,7 @@ export function AttendanceClient({
         const seen = new Set<string>();
         for (let r = range.s.r + 1; r <= range.e.r && preview.length < PREVIEW_LIMIT; r++) {
           const bioValue = readCell(r, candidate.col);
-          if (!bioValue) continue;
+          if (!PREVIEW_BIO_VALUE_REGEX.test(bioValue)) continue;
           if (seen.has(bioValue)) continue;
           seen.add(bioValue);
 
