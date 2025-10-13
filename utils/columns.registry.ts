@@ -58,15 +58,7 @@ export const COLUMN_DEFS: Record<string, ColumnDefinition> = {
   office: {
     key: 'office',
     label: 'Office',
-    accessor: (row: any) => {
-      const resolved =
-        row?.offices?.name ??
-        row?.office?.name ??
-        row?.officeName ??
-        row?.office;
-
-      return resolved == null ? '' : String(resolved);
-    },
+    accessor: (row: any) => row?.offices?.name ?? row?.office?.name ?? '',
   },
   position: { key: 'position', label: 'Position' },
   employeeTypeId: { key: 'employeeTypeId', label: 'Employee Type' },
