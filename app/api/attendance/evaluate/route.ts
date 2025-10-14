@@ -7,6 +7,7 @@ import {
   normalizeSchedule,
   type NormalizedSchedule,
 } from "@/lib/schedules";
+import { prisma } from "@/lib/prisma";
 import { evaluateDay } from "@/utils/evaluateDay";
 import type { PerDayRow } from "@/utils/parseBioAttendance";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
@@ -86,8 +87,37 @@ export async function POST(req: Request) {
         allTimes: string[];
       } => Boolean(row));
 
-    const scheduleKeys = validRows.map((row) => ({ employeeId: row.employeeId, dateISO: row.dateISO }));
+    const uniqueEmployeeIds = Array.from(new Set(validRows.map((row) => row.employeeId))).filter(Boolean);
+    const employeeIdMap = new Map<string, string>();
+    if (uniqueEmployeeIds.length) {
+      const employees = await prisma.employee.findMany({
+        where: { employeeNo: { in: uniqueEmployeeIds } },
+        select: { id: true, employeeNo: true },
+      });
+      for (const employee of employees) {
+        if (employee.employeeNo) {
+          employeeIdMap.set(employee.employeeNo, employee.id);
+        }
+      }
+    }
+
+    const rows = validRows.map((row) => ({
+      ...row,
+      scheduleEmployeeId: employeeIdMap.get(row.employeeId) ?? null,
+    }));
+
     const scheduleKey = (employeeId: string, dateISO: string) => `${employeeId}||${dateISO}`;
+    const scheduleRequestMap = new Map<string, { employeeId: string; dateISO: string }>();
+    for (const row of rows) {
+      if (!row.scheduleEmployeeId) {
+        continue;
+      }
+      const key = scheduleKey(row.scheduleEmployeeId, row.dateISO);
+      if (!scheduleRequestMap.has(key)) {
+        scheduleRequestMap.set(key, { employeeId: row.scheduleEmployeeId, dateISO: row.dateISO });
+      }
+    }
+    const scheduleKeys = Array.from(scheduleRequestMap.values());
     const { map: normalizedSchedules, employeesWithConfiguredPolicy } = await withTimeout(
       loadNormalizedSchedulesForMonth(scheduleKeys, monthISO),
       5_000
@@ -113,11 +143,11 @@ export async function POST(req: Request) {
     const defaultSchedule = normalizeSchedule(DEFAULT_SCHEDULE);
     const evaluatedPerDay: PerDayRow[] = [];
 
-    for (const row of validRows) {
-      const key = scheduleKey(row.employeeId, row.dateISO);
+    for (const row of rows) {
+      const resolvedKey = row.scheduleEmployeeId ? scheduleKey(row.scheduleEmployeeId, row.dateISO) : null;
       const schedule =
-        normalizedSchedules.get(key) ??
-        fallbackSchedules.get(key) ??
+        (resolvedKey ? normalizedSchedules.get(resolvedKey) : undefined) ??
+        (resolvedKey ? fallbackSchedules.get(resolvedKey) : undefined) ??
         defaultSchedule;
 
       const evaluation = evaluateDay({
