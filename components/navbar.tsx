@@ -36,15 +36,15 @@ export const Navbar = async () => {
   
 
   return (
-    <div className="border-b">
+    <div className="border-b bg-background">
       <ApprovalsGlobalListener />
-      <nav className="grid h-16 grid-cols-[auto_1fr_auto] items-center gap-2 px-4">
+      <nav className="grid h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4">
         <div className="flex items-center gap-2 min-w-0">
           <MobileSidebar />
           <Back />
           <DepartmentSwitcher items={department} className="hidden min-w-0 md:flex" />
         </div>
-        <div className="flex items-center justify-center gap-6 min-w-0">
+        <div className="flex min-w-0 items-center justify-start gap-6 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <MainNav className="hidden min-w-0 md:flex" />
         </div>
         <div className="flex items-center justify-end gap-2">
