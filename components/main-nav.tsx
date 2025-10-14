@@ -83,6 +83,14 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
 
   ];
 
+  const manageEmployeesRoute = {
+    href: `/${params.departmentId}/employees`,
+    label: "Manage Employees",
+    active: pathname === `/${params.departmentId}/employees`,
+    description: "Browse and manage the list of department employees.",
+    icon: <Users className="h-5 w-5 mr-1" />,
+  };
+
   const itemroutes = [
     {
       href: `/${params.departmentId}/biometrics`,
@@ -114,7 +122,9 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
     },
   ];
 
-  const activeRoute = itemroutes.find((route) => route.active);
+  const activeRoute = manageEmployeesRoute.active
+    ? manageEmployeesRoute
+    : itemroutes.find((route) => route.active);
 
   return (
     <>
@@ -159,10 +169,10 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                   <li className="row-span-3">
                     <NavigationMenuLink asChild>
                       <button
-                        onClick={() => handleNavClick(`/${params.departmentId}/employees`)}
+                        onClick={() => handleNavClick(manageEmployeesRoute.href)}
                         className={cn(
                           "flex h-auto flex-col justify-end rounded-md bg-gradient-to-b from-green-50 to-green-100 p-6 no-underline outline-none focus:ring-2 focus:ring-green-500 text-green-700 font-semibold",
-                          pathname === `/${params.departmentId}/employees` ? "ring-2 ring-green-500" : ""
+                          manageEmployeesRoute.active ? "ring-2 ring-green-500" : ""
                         )}
                       >
                         <div className="text-xl mb-1">Manage Employees</div>
@@ -171,7 +181,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                     </NavigationMenuLink>
                   </li>
 
-                  {itemroutes.map(({ href, label, active, description, icon }) => (
+                  {[manageEmployeesRoute, ...itemroutes].map(({ href, label, active, description, icon }) => (
                     <ListItem
                       key={href}
                       href={href}
@@ -179,10 +189,10 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                         "text-sm font-medium transition-colors hover:text-green-600",
                         active ? "text-green-700 font-semibold" : "text-muted-foreground"
                       )}
-                      title={""} // <-- keep this a string for tooltip
-                      onClick={() => handleNavClick(href)} 
+                      title={label}
+                      onClick={() => handleNavClick(href)}
                     >
-                      <div className="flex items-center">
+                      <div className="flex items-center gap-2">
                         {icon}
                         <span>{label}</span>
                       </div>

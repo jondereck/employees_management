@@ -72,7 +72,7 @@ const getNavGroups = (departmentId: string): NavGroup[] => [
     items: [
       {
         label: "Manage Employees",
-        path: `/employees`,
+        path: `employees`,
         icon: Users,
       },
       {
@@ -179,7 +179,7 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
                               disabled={loading} // disable during global loading
                               onClick={() => handleLinkClick(href)}
                               className={cn(
-                                "flex items-center gap-2 rounded px-2 py-2 text-sm w-full text-left transition-colors",
+                                "flex items-center gap-3 rounded-md px-3 py-2 text-sm w-full text-left transition-colors",
                                 isActive
                                   ? "bg-green-100 text-green-700 font-semibold"
                                   : "text-muted-foreground hover:bg-muted",
