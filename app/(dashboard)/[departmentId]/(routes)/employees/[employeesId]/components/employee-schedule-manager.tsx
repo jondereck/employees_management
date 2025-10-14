@@ -15,6 +15,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormDescription,
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type ScheduleTypeEnum = (typeof ScheduleType)[keyof typeof ScheduleType];
 
@@ -221,6 +228,40 @@ const describeException = (exception: ScheduleExceptionDTO) => {
   }
 };
 
+const BANDWIDTH_START_HELP = "Earliest time counted as presence in a flexible day.";
+const BANDWIDTH_END_HELP = "Latest time counted as presence in a flexible day.";
+const CORE_START_HELP = "If set, arriving after this is late. Leave empty for floating day.";
+const CORE_END_HELP = "If set, you must stay at least until this time.";
+const REQUIRED_MINUTES_HELP = "Minimum total minutes to avoid undertime (e.g., 720 = 12h).";
+const SHIFT_TIMING_HELP = "Late if first punch > Start (+grace). Undertime if last punch < End.";
+
+type InfoLabelProps = {
+  label: string;
+  tooltip: string;
+};
+
+const InfoLabel = ({ label, tooltip }: InfoLabelProps) => (
+  <div className="flex items-center gap-2">
+    <FormLabel className="mb-0">{label}</FormLabel>
+    <TooltipProvider delayDuration={50}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="h-5 w-5 grid place-items-center rounded border border-input bg-muted/40 text-[10px] font-semibold uppercase text-muted-foreground transition-colors hover:bg-muted"
+            aria-label={tooltip}
+          >
+            i
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[260px] text-sm">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  </div>
+);
+
 const sortByDateDesc = <T extends { effectiveFrom?: string; date?: string }>(items: T[]): T[] => {
   return [...items].sort((a, b) => {
     const aDate = a.effectiveFrom ?? a.date ?? "";
@@ -242,6 +283,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   const [editingException, setEditingException] = useState<ScheduleExceptionDTO | null>(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingException, setSavingException] = useState(false);
+  const [deletingScheduleId, setDeletingScheduleId] = useState<string | null>(null);
 
   const scheduleForm = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleFormSchema),
@@ -401,11 +443,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   const handleDeleteSchedule = useCallback(
     async (schedule: WorkScheduleDTO) => {
       if (!confirm("Remove this work schedule?")) return;
+      setDeletingScheduleId(schedule.id);
       try {
-        const response = await fetch(
-          `/api/employee/${employeeId}/work-schedules/${schedule.id}`,
-          { method: "DELETE" }
-        );
+        const response = await fetch(`/api/schedules/${schedule.id}`, {
+          method: "DELETE",
+        });
         const body = await response.json().catch(() => null);
         if (!response.ok) {
           throw new Error(body?.error ?? "Unable to delete schedule");
@@ -418,9 +460,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
       } catch (error) {
         console.error(error);
         toast.error(error instanceof Error ? error.message : "Unable to delete schedule");
+      } finally {
+        setDeletingScheduleId(null);
       }
     },
-    [editingSchedule, employeeId, resetScheduleForm]
+    [editingSchedule, resetScheduleForm]
   );
 
   const handleDeleteException = useCallback(
@@ -522,6 +566,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                       <FormControl>
                         <Input placeholder="08:00" {...field} />
                       </FormControl>
+                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -535,6 +580,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                       <FormControl>
                         <Input placeholder="17:00" {...field} />
                       </FormControl>
+                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -568,10 +614,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="coreStart"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Core start</FormLabel>
+                      <InfoLabel label="Core Hours Start (optional)" tooltip={CORE_START_HELP} />
                       <FormControl>
                         <Input placeholder="10:00" {...field} />
                       </FormControl>
+                      <FormDescription>{CORE_START_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -581,10 +628,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="coreEnd"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Core end</FormLabel>
+                      <InfoLabel label="Core Hours End (optional)" tooltip={CORE_END_HELP} />
                       <FormControl>
                         <Input placeholder="15:00" {...field} />
                       </FormControl>
+                      <FormDescription>{CORE_END_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -594,7 +642,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="requiredDailyMinutes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Required minutes</FormLabel>
+                      <InfoLabel label="Required Work Minutes" tooltip={REQUIRED_MINUTES_HELP} />
                       <FormControl>
                         <Input
                           type="number"
@@ -604,6 +652,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                           onChange={(event) => field.onChange(event.target.valueAsNumber)}
                         />
                       </FormControl>
+                      <FormDescription>{REQUIRED_MINUTES_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -613,10 +662,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="bandwidthStart"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Bandwidth start</FormLabel>
+                      <InfoLabel label="Work Window Start (Bandwidth)" tooltip={BANDWIDTH_START_HELP} />
                       <FormControl>
                         <Input placeholder="06:00" {...field} />
                       </FormControl>
+                      <FormDescription>{BANDWIDTH_START_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -626,10 +676,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="bandwidthEnd"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Bandwidth end</FormLabel>
+                      <InfoLabel label="Work Window End (Bandwidth)" tooltip={BANDWIDTH_END_HELP} />
                       <FormControl>
                         <Input placeholder="20:00" {...field} />
                       </FormControl>
+                      <FormDescription>{BANDWIDTH_END_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -648,6 +699,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                       <FormControl>
                         <Input placeholder="22:00" {...field} />
                       </FormControl>
+                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -661,6 +713,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                       <FormControl>
                         <Input placeholder="06:00" {...field} />
                       </FormControl>
+                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -761,6 +814,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                     <td className="p-2 text-center">
                       <div className="flex justify-center gap-2">
                         <Button
+                          type="button"
                           variant="outline"
                           size="sm"
                           onClick={() => handleEditSchedule(schedule)}
@@ -768,11 +822,13 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                           Edit
                         </Button>
                         <Button
+                          type="button"
                           variant="destructive"
                           size="sm"
                           onClick={() => handleDeleteSchedule(schedule)}
+                          disabled={deletingScheduleId === schedule.id}
                         >
-                          Remove
+                          {deletingScheduleId === schedule.id ? "Removing…" : "Remove"}
                         </Button>
                       </div>
                     </td>
@@ -847,6 +903,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                       <FormControl>
                         <Input placeholder="08:00" {...field} />
                       </FormControl>
+                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -860,6 +917,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                       <FormControl>
                         <Input placeholder="17:00" {...field} />
                       </FormControl>
+                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -893,10 +951,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="coreStart"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Core start</FormLabel>
+                      <InfoLabel label="Core Hours Start (optional)" tooltip={CORE_START_HELP} />
                       <FormControl>
                         <Input placeholder="10:00" {...field} />
                       </FormControl>
+                      <FormDescription>{CORE_START_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -906,10 +965,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="coreEnd"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Core end</FormLabel>
+                      <InfoLabel label="Core Hours End (optional)" tooltip={CORE_END_HELP} />
                       <FormControl>
                         <Input placeholder="15:00" {...field} />
                       </FormControl>
+                      <FormDescription>{CORE_END_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -919,7 +979,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="requiredDailyMinutes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Required minutes</FormLabel>
+                      <InfoLabel label="Required Work Minutes" tooltip={REQUIRED_MINUTES_HELP} />
                       <FormControl>
                         <Input
                           type="number"
@@ -929,6 +989,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                           onChange={(event) => field.onChange(event.target.valueAsNumber)}
                         />
                       </FormControl>
+                      <FormDescription>{REQUIRED_MINUTES_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -938,10 +999,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="bandwidthStart"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Bandwidth start</FormLabel>
+                      <InfoLabel label="Work Window Start (Bandwidth)" tooltip={BANDWIDTH_START_HELP} />
                       <FormControl>
                         <Input placeholder="06:00" {...field} />
                       </FormControl>
+                      <FormDescription>{BANDWIDTH_START_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -951,10 +1013,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="bandwidthEnd"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Bandwidth end</FormLabel>
+                      <InfoLabel label="Work Window End (Bandwidth)" tooltip={BANDWIDTH_END_HELP} />
                       <FormControl>
                         <Input placeholder="20:00" {...field} />
                       </FormControl>
+                      <FormDescription>{BANDWIDTH_END_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -973,6 +1036,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                       <FormControl>
                         <Input placeholder="22:00" {...field} />
                       </FormControl>
+                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -986,6 +1050,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                       <FormControl>
                         <Input placeholder="06:00" {...field} />
                       </FormControl>
+                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1073,6 +1138,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                     <td className="p-2 text-center">
                       <div className="flex justify-center gap-2">
                         <Button
+                          type="button"
                           variant="outline"
                           size="sm"
                           onClick={() => handleEditException(exception)}
@@ -1080,6 +1146,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                           Edit
                         </Button>
                         <Button
+                          type="button"
                           variant="destructive"
                           size="sm"
                           onClick={() => handleDeleteException(exception)}

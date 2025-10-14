@@ -1,13 +1,15 @@
 import { UserButton, auth } from "@clerk/nextjs";
-import DepartmentSwitcher from "./department-switcher";
 import { redirect } from "next/navigation";
-import prismadb from "@/lib/prismadb";
-import Back from "./back";
+
 import Notifications from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/notifications";
-import { Employees } from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/types";
-import MobileSidebar from "./mobile-sidebar";
-import { MainNav } from "./main-nav";
 import ApprovalsGlobalListener from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/notification/approvals-global-listerner";
+import { Employees } from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/types";
+import prismadb from "@/lib/prismadb";
+
+import Back from "./back";
+import DepartmentSwitcher from "./department-switcher";
+import { MainNav } from "./main-nav";
+import MobileSidebar from "./mobile-sidebar";
 
 
 
@@ -34,21 +36,22 @@ export const Navbar = async () => {
   
 
   return (
-    <div className="border-b ">
-         <ApprovalsGlobalListener />
-      <div className="flex items-center lg:justify-between px-4 my-5 md:my-2 h-16 ">
-        <MobileSidebar/>
-        <Back />
-        <div>
-          <DepartmentSwitcher items={department} className="hidden md:flex px-2" />
+    <div className="border-b">
+      <ApprovalsGlobalListener />
+      <nav className="grid h-16 grid-cols-[auto_1fr_auto] items-center gap-2 px-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <MobileSidebar />
+          <Back />
+          <DepartmentSwitcher items={department} className="hidden min-w-0 md:flex" />
         </div>
-        <MainNav className="hidden md:flex px-2" />
-        <div className="ml-auto flex items-center space-x-4">
+        <div className="flex items-center justify-center gap-6 min-w-0">
+          <MainNav className="hidden min-w-0 md:flex" />
+        </div>
+        <div className="flex items-center justify-end gap-2">
           <Notifications data={employees} />
           <UserButton afterSignOutUrl="/" />
-
         </div>
-      </div>
+      </nav>
     </div>
   );
 }
