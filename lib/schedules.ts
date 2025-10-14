@@ -1,4 +1,4 @@
-import { addDays, startOfDay } from "date-fns";
+import { addDays, addMonths, startOfDay } from "date-fns";
 import { ScheduleException, WorkSchedule } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -130,6 +130,111 @@ export function normalizeSchedule(record: ScheduleLookupResult): Schedule {
       };
       return schedule;
     }
+  }
+}
+
+type ScheduleKey = `${string}||${string}`;
+
+const toScheduleKey = (employeeId: string, dateISO: string): ScheduleKey => `${employeeId}||${dateISO}`;
+
+const toDateISO = (value: Date) => value.toISOString().slice(0, 10);
+
+export async function loadNormalizedSchedulesForMonth(
+  rows: Array<{ employeeId: string; dateISO: string }>,
+  monthISO: string
+): Promise<Map<ScheduleKey, Schedule>> {
+  const employeeIds = Array.from(new Set(rows.map((row) => row.employeeId).filter(Boolean)));
+  if (!employeeIds.length) {
+    return new Map();
+  }
+
+  const monthStart = startOfDay(new Date(`${monthISO}-01T00:00:00Z`));
+  const nextMonthStart = startOfDay(addMonths(monthStart, 1));
+
+  try {
+    const [exceptions, schedules] = await prisma.$transaction([
+      prisma.scheduleException.findMany({
+        where: {
+          employeeId: { in: employeeIds },
+          date: {
+            gte: monthStart,
+            lt: nextMonthStart,
+          },
+        },
+        orderBy: { date: "desc" },
+      }),
+      prisma.workSchedule.findMany({
+        where: {
+          employeeId: { in: employeeIds },
+          effectiveFrom: { lt: nextMonthStart },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: monthStart } }],
+        },
+        orderBy: { effectiveFrom: "desc" },
+      }),
+    ]);
+
+    const exceptionMap = new Map<ScheduleKey, ScheduleException & { source: "EXCEPTION" }>();
+    for (const exception of exceptions) {
+      const key = toScheduleKey(exception.employeeId, toDateISO(exception.date));
+      if (!exceptionMap.has(key)) {
+        exceptionMap.set(key, { ...exception, source: "EXCEPTION" });
+      }
+    }
+
+    const scheduleByEmployee = new Map<string, Array<WorkSchedule & { source: "WORKSCHEDULE" }>>();
+    for (const schedule of schedules) {
+      const list = scheduleByEmployee.get(schedule.employeeId) ?? [];
+      list.push({ ...schedule, source: "WORKSCHEDULE" });
+      scheduleByEmployee.set(schedule.employeeId, list);
+    }
+
+    for (const list of scheduleByEmployee.values()) {
+      list.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
+    }
+
+    const normalized = new Map<ScheduleKey, Schedule>();
+
+    for (const { employeeId, dateISO } of rows) {
+      const key = toScheduleKey(employeeId, dateISO);
+      if (normalized.has(key)) {
+        continue;
+      }
+
+      const exception = exceptionMap.get(key);
+      if (exception) {
+        normalized.set(key, normalizeSchedule(exception));
+        continue;
+      }
+
+      const schedulesForEmployee = scheduleByEmployee.get(employeeId) ?? [];
+      if (schedulesForEmployee.length) {
+        const base = startOfDay(new Date(`${dateISO}T00:00:00Z`));
+        const nextDay = addDays(base, 1);
+        const match = schedulesForEmployee.find((schedule) => {
+          const effectiveFrom = schedule.effectiveFrom;
+          const effectiveTo = schedule.effectiveTo;
+          return effectiveFrom <= nextDay && (!effectiveTo || effectiveTo >= base);
+        });
+        if (match) {
+          normalized.set(key, normalizeSchedule(match));
+          continue;
+        }
+      }
+
+      normalized.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
+    }
+
+    return normalized;
+  } catch (error) {
+    console.error("Failed to load schedules in bulk", error);
+    const fallback = new Map<ScheduleKey, Schedule>();
+    for (const { employeeId, dateISO } of rows) {
+      const key = toScheduleKey(employeeId, dateISO);
+      if (!fallback.has(key)) {
+        fallback.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
+      }
+    }
+    return fallback;
   }
 }
 

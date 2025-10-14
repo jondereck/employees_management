@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { DEFAULT_SCHEDULE, getScheduleFor, normalizeSchedule } from "@/lib/schedules";
+import { DEFAULT_SCHEDULE, loadNormalizedSchedulesForMonth, normalizeSchedule } from "@/lib/schedules";
 import { evaluateDay } from "@/utils/evaluateDay";
 import type { PerDayRow } from "@/utils/parseBioAttendance";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
@@ -48,8 +48,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    const normalizedSchedules = new Map<string, Awaited<ReturnType<typeof normalizeSchedule>>>();
-
     const validRows = perDay
       .map((row) => {
         const day = Number(row?.day);
@@ -80,26 +78,26 @@ export async function POST(req: Request) {
         allTimes: string[];
       } => Boolean(row));
 
-    for (const row of validRows) {
-      const cacheKey = `${row.employeeId}||${row.dateISO}`;
-      if (normalizedSchedules.has(cacheKey)) {
-        continue;
+    const scheduleKeys = validRows.map((row) => ({ employeeId: row.employeeId, dateISO: row.dateISO }));
+    const normalizedSchedules = await withTimeout(
+      loadNormalizedSchedulesForMonth(scheduleKeys, monthISO),
+      5_000
+    ).catch((error) => {
+      console.error("Bulk schedule lookup failed", error);
+      const fallback = new Map<string, ReturnType<typeof normalizeSchedule>>();
+      for (const { employeeId, dateISO } of scheduleKeys) {
+        const key = `${employeeId}||${dateISO}`;
+        if (!fallback.has(key)) {
+          fallback.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
+        }
       }
-
-      const schedule = await withTimeout(getScheduleFor(row.employeeId, row.dateISO), 5_000)
-        .catch((error) => {
-          console.error("Schedule lookup failed", { employeeId: row.employeeId, dateISO: row.dateISO, error });
-          return { ...DEFAULT_SCHEDULE };
-        })
-        .then((record) => normalizeSchedule(record));
-
-      normalizedSchedules.set(cacheKey, schedule);
-    }
+      return fallback;
+    });
 
     const evaluatedPerDay = await Promise.all(
       validRows.map(async (row) => {
         const scheduleKey = `${row.employeeId}||${row.dateISO}`;
-        const schedule = normalizedSchedules.get(scheduleKey) ?? normalizeSchedule({ ...DEFAULT_SCHEDULE });
+        const schedule = normalizedSchedules.get(scheduleKey) ?? normalizeSchedule(DEFAULT_SCHEDULE);
         const evaluation = evaluateDay({
           dateISO: row.dateISO,
           earliest: row.earliest ?? undefined,
