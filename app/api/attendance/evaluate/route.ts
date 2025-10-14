@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getScheduleFor, normalizeSchedule } from "@/lib/schedules";
+import { DEFAULT_SCHEDULE, getScheduleFor, normalizeSchedule } from "@/lib/schedules";
 import { evaluateDay } from "@/utils/evaluateDay";
 import type { PerDayRow } from "@/utils/parseBioAttendance";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
@@ -11,6 +11,25 @@ function isValidMonth(value: unknown): value is string {
 
 function toDateISO(monthISO: string, day: number) {
   return `${monthISO}-${String(day).padStart(2, "0")}`;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("Schedule lookup timed out"));
+    }, ms);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
 }
 
 export async function POST(req: Request) {
@@ -29,7 +48,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    const scheduleCache = new Map<string, ReturnType<typeof getScheduleFor>>();
+    const scheduleCache = new Map<string, Promise<ReturnType<typeof normalizeSchedule>>>();
+
+    const loadSchedule = (employeeId: string, dateISO: string) => {
+      const cacheKey = `${employeeId}||${dateISO}`;
+      let cached = scheduleCache.get(cacheKey);
+      if (!cached) {
+        cached = withTimeout(getScheduleFor(employeeId, dateISO), 5_000)
+          .catch((error) => {
+            console.error("Schedule lookup failed", { employeeId, dateISO, error });
+            return { ...DEFAULT_SCHEDULE };
+          })
+          .then((record) => normalizeSchedule(record));
+        scheduleCache.set(cacheKey, cached);
+      }
+      return cached;
+    };
 
     const evaluatedPerDay = await Promise.all(
       perDay.map(async (row) => {
@@ -42,14 +76,7 @@ export async function POST(req: Request) {
         const punches = Array.isArray(row.allTimes)
           ? row.allTimes.filter((value): value is string => typeof value === "string")
           : [];
-        const cacheKey = `${row.employeeId}||${dateISO}`;
-        let schedulePromise = scheduleCache.get(cacheKey);
-        if (!schedulePromise) {
-          schedulePromise = getScheduleFor(row.employeeId, dateISO);
-          scheduleCache.set(cacheKey, schedulePromise);
-        }
-        const scheduleRecord = await schedulePromise;
-        const schedule = normalizeSchedule(scheduleRecord);
+        const schedule = await loadSchedule(row.employeeId, dateISO);
         const evaluation = evaluateDay({
           dateISO,
           earliest: (row.earliest ?? undefined) as PerDayRow["earliest"],

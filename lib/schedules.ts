@@ -43,47 +43,52 @@ const asHHMM = (value: string | null | undefined, fallback: string): string => {
   const trimmed = (value ?? "").trim();
   return trimmed || fallback;
 };
+export const DEFAULT_SCHEDULE: DefaultSchedule = Object.freeze({
+  type: "FIXED",
+  startTime: "08:00",
+  endTime: "17:00",
+  breakMinutes: 60,
+  graceMinutes: 0,
+  source: "DEFAULT",
+});
 
 export async function getScheduleFor(employeeId: string, dateISO: string): Promise<ScheduleLookupResult> {
-  const base = startOfDay(new Date(`${dateISO}T00:00:00Z`));
-  const nextDay = addDays(base, 1);
+  try {
+    const base = startOfDay(new Date(`${dateISO}T00:00:00Z`));
+    const nextDay = addDays(base, 1);
 
-  const exception = await prisma.scheduleException.findFirst({
-    where: {
-      employeeId,
-      date: {
-        gte: base,
-        lt: nextDay,
+    const exception = await prisma.scheduleException.findFirst({
+      where: {
+        employeeId,
+        date: {
+          gte: base,
+          lt: nextDay,
+        },
       },
-    },
-    orderBy: { date: "desc" },
-  });
+      orderBy: { date: "desc" },
+    });
 
-  if (exception) {
-    return { ...exception, source: "EXCEPTION" };
+    if (exception) {
+      return { ...exception, source: "EXCEPTION" };
+    }
+
+    const schedule = await prisma.workSchedule.findFirst({
+      where: {
+        employeeId,
+        effectiveFrom: { lte: nextDay },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: base } }],
+      },
+      orderBy: { effectiveFrom: "desc" },
+    });
+
+    if (schedule) {
+      return { ...schedule, source: "WORKSCHEDULE" };
+    }
+  } catch (error) {
+    console.error("Failed to load schedule", { employeeId, dateISO, error });
   }
 
-  const schedule = await prisma.workSchedule.findFirst({
-    where: {
-      employeeId,
-      effectiveFrom: { lte: nextDay },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gte: base } }],
-    },
-    orderBy: { effectiveFrom: "desc" },
-  });
-
-  if (schedule) {
-    return { ...schedule, source: "WORKSCHEDULE" };
-  }
-
-  return {
-    type: "FIXED",
-    startTime: "08:00",
-    endTime: "17:00",
-    breakMinutes: 60,
-    graceMinutes: 0,
-    source: "DEFAULT",
-  };
+  return { ...DEFAULT_SCHEDULE };
 }
 
 export function normalizeSchedule(record: ScheduleLookupResult): Schedule {
