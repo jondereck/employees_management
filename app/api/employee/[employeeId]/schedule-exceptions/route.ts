@@ -12,21 +12,22 @@ const exceptionSchema = z.object({
   startTime: z.string().optional(),
   endTime: z.string().optional(),
   graceMinutes: z.coerce.number().int().min(0).max(180).optional(),
-  coreStart: z.string().optional(),
-  coreEnd: z.string().optional(),
+  coreStart: z.string().optional().nullable(),
+  coreEnd: z.string().optional().nullable(),
   bandwidthStart: z.string().optional(),
   bandwidthEnd: z.string().optional(),
   requiredDailyMinutes: z.coerce.number().int().min(0).max(1440).optional(),
   shiftStart: z.string().optional(),
   shiftEnd: z.string().optional(),
   breakMinutes: z.coerce.number().int().min(0).max(720).optional(),
+  requireCore: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (data.type === ScheduleType.FIXED) {
     if (!data.startTime || !data.endTime) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Start and end times are required", path: ["startTime"] });
     }
   }
-  if (data.type === ScheduleType.FLEX) {
+  if (data.type === ScheduleType.FLEX && data.requireCore !== false) {
     const required = ["coreStart", "coreEnd", "bandwidthStart", "bandwidthEnd", "requiredDailyMinutes"] as const;
     for (const key of required) {
       if (!data[key]) {
