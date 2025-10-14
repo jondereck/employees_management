@@ -8,7 +8,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import type { ParsedPerDayRow, PerDayRow, PerEmployeeRow } from "@/utils/parseBioAttendance";
+import type { PerDayRow, PerEmployeeRow } from "@/utils/parseBioAttendance";
+
+function timeout<T>(promise: Promise<T>, ms = 10_000) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("Request timed out"));
+    }, ms);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 
 const PAGE_SIZE = 25;
 
@@ -43,8 +62,7 @@ export default function BioLogUploader() {
   const [perEmployee, setPerEmployee] = useState<PerEmployeeRow[] | null>(null);
   const [perDay, setPerDay] = useState<PerDayRow[] | null>(null);
   const [fileName, setFileName] = useState<string>("");
-  const [isParsing, setIsParsing] = useState(false);
-  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("lateDays");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -123,47 +141,7 @@ export default function BioLogUploader() {
     return perDay.slice(start, start + PAGE_SIZE);
   }, [perDay, page]);
 
-  const evaluateRows = useCallback(async (rows: ParsedPerDayRow[]) => {
-    if (!month) {
-      throw new Error("Please select the attendance month before uploading.");
-    }
-    if (rows.length === 0) {
-      setPerDay([]);
-      setPerEmployee([]);
-      toast({
-        title: "No rows detected",
-        description: "We could not find any attendance entries in this workbook.",
-      });
-      return;
-    }
-
-    setIsEvaluating(true);
-    try {
-      const response = await fetch("/api/biometrics/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ month, entries: rows }),
-      });
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || "Unable to evaluate attendance.");
-      }
-
-      const data = (await response.json()) as EvaluationResponse;
-      setPerDay(data.perDay);
-      setPerEmployee(data.perEmployee);
-      setPage(0);
-      toast({
-        title: "Parsed successfully",
-        description: `${data.perEmployee.length} employees evaluated for ${toMonthLabel(month)}.`,
-      });
-    } finally {
-      setIsEvaluating(false);
-    }
-  }, [month, toast]);
-
-  const parseFile = useCallback(async (file: File) => {
+  const handleFile = useCallback(async (file: File) => {
     const extension = file.name.split(".").pop()?.toLowerCase();
     if (extension !== "xlsx") {
       toast({
@@ -174,43 +152,79 @@ export default function BioLogUploader() {
       return;
     }
 
+    setProcessing(true);
+    setFileName(file.name);
+    setPerDay(null);
+    setPerEmployee(null);
+
     try {
-      setIsParsing(true);
-      setFileName(file.name);
-      setPerDay(null);
-      setPerEmployee(null);
-      const buf = await file.arrayBuffer();
+      if (!month) {
+        throw new Error("Please select the attendance month before uploading.");
+      }
+
       const parser = await loadParserModule();
-      const { perDay: parsedPerDay } = parser.parseBioAttendance(buf);
-      await evaluateRows(parsedPerDay);
+      const buf = await file.arrayBuffer();
+      const parsed = parser.parseBioAttendance(buf);
+
+      if (!parsed.perDay.length) {
+        setPerDay([]);
+        setPerEmployee([]);
+        toast({
+          title: "No rows detected",
+          description: "We could not find any attendance entries in this workbook.",
+        });
+        return;
+      }
+
+      const response = await timeout(
+        fetch("/api/attendance/evaluate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ monthISO: month, perDay: parsed.perDay }),
+        })
+      );
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Unable to evaluate attendance.");
+      }
+
+      const evaluated = (await response.json()) as EvaluationResponse;
+      setPerDay(evaluated.perDay);
+      setPerEmployee(evaluated.perEmployee);
+      setPage(0);
+      toast({
+        title: "Parsed successfully",
+        description: `${evaluated.perEmployee.length} employees evaluated for ${toMonthLabel(month)}.`,
+      });
     } catch (error) {
       console.error(error);
-      const message = error instanceof Error ? error.message : "Invalid file";
+      const message = error instanceof Error ? error.message : "Unable to process file";
       toast({
-        title: "Parse failed",
+        title: "Processing failed",
         description: message,
         variant: "destructive",
       });
     } finally {
-      setIsParsing(false);
+      setProcessing(false);
     }
-  }, [evaluateRows, loadParserModule, toast]);
+  }, [loadParserModule, month, toast]);
 
   const onInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      void parseFile(file);
+      void handleFile(file);
     }
-  }, [parseFile]);
+  }, [handleFile]);
 
   const onDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
     const file = event.dataTransfer.files?.[0];
     if (file) {
-      void parseFile(file);
+      void handleFile(file);
     }
-  }, [parseFile]);
+  }, [handleFile]);
 
   const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -247,7 +261,7 @@ export default function BioLogUploader() {
     inputRef.current?.click();
   }, []);
 
-  const isBusy = isParsing || isEvaluating;
+  const isBusy = processing;
 
   const handleMonthChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setMonth(event.target.value);

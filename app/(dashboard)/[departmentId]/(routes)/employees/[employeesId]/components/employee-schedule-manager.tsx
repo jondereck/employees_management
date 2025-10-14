@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Prisma, ScheduleType } from "@prisma/client";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -273,16 +273,16 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
         ...values,
         effectiveTo: values.effectiveTo ? values.effectiveTo : null,
       };
-      const response = await fetch(
-        editingSchedule
-          ? `/api/employee/${employeeId}/work-schedules/${editingSchedule.id}`
-          : `/api/employee/${employeeId}/work-schedules`,
-        {
-          method: editingSchedule ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
+      const endpoint = editingSchedule
+        ? `/api/employee/${employeeId}/work-schedules/${editingSchedule.id}`
+        : `/api/schedules`;
+      const method = editingSchedule ? "PATCH" : "POST";
+      const bodyPayload = editingSchedule ? payload : { ...payload, employeeId };
+      const response = await fetch(endpoint, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyPayload),
+      });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(body?.error ?? "Unable to save schedule");
@@ -304,6 +304,19 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
       setSavingSchedule(false);
     }
   });
+
+  const handleScheduleFormSubmit = useCallback(
+    (event?: FormEvent<HTMLFormElement>) => {
+      event?.preventDefault();
+      event?.stopPropagation();
+      void onSubmitSchedule();
+    },
+    [onSubmitSchedule]
+  );
+
+  const handleScheduleButtonClick = useCallback(() => {
+    void onSubmitSchedule();
+  }, [onSubmitSchedule]);
 
   const onSubmitException = exceptionForm.handleSubmit(async (values) => {
     try {
@@ -448,7 +461,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
           </p>
         </div>
         <Form {...scheduleForm}>
-          <form onSubmit={onSubmitSchedule} className="space-y-4">
+          <form onSubmit={handleScheduleFormSubmit} className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
                 control={scheduleForm.control}
@@ -704,7 +717,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" disabled={savingSchedule}>
+              <Button type="button" onClick={handleScheduleButtonClick} disabled={savingSchedule}>
                 {savingSchedule ? "Saving..." : editingSchedule ? "Update schedule" : "Add schedule"}
               </Button>
               {editingSchedule && (
