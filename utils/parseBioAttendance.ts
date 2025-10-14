@@ -24,6 +24,7 @@ export type PerEmployeeRow = {
   undertimeDays: number;
   lateRate: number;
   undertimeRate: number;
+  scheduleTypes?: string[];
 };
 
 const toParts = (t?: string | null) => {
@@ -141,6 +142,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
     UndertimeDays: r.undertimeDays,
     LateRatePercent: r.lateRate,
     UndertimeRatePercent: r.undertimeRate,
+    ScheduleTypes: (r.scheduleTypes ?? []).join(", "),
   })));
   XLSX.utils.book_append_sheet(wb, s1, "PerEmployee");
 
@@ -160,8 +162,21 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
   XLSX.writeFile(wb, "biometrics_results.xlsx");
 }
 
-export function summarizePerEmployee(perDay: Array<Pick<PerDayRow, "employeeId" | "employeeName" | "earliest" | "latest" | "allTimes" | "isLate" | "isUndertime">>): PerEmployeeRow[] {
-  const map = new Map<string, PerEmployeeRow>();
+type AggregateRow = {
+  employeeId: string;
+  employeeName: string;
+  daysWithLogs: number;
+  lateDays: number;
+  undertimeDays: number;
+  lateRate: number;
+  undertimeRate: number;
+  scheduleTypes: Set<string>;
+};
+
+export function summarizePerEmployee(
+  perDay: Array<Pick<PerDayRow, "employeeId" | "employeeName" | "earliest" | "latest" | "allTimes" | "isLate" | "isUndertime" | "scheduleType">>
+): PerEmployeeRow[] {
+  const map = new Map<string, AggregateRow>();
   for (const row of perDay) {
     const key = `${row.employeeId}||${row.employeeName}`;
     if (!map.has(key)) {
@@ -173,6 +188,7 @@ export function summarizePerEmployee(perDay: Array<Pick<PerDayRow, "employeeId" 
         undertimeDays: 0,
         lateRate: 0,
         undertimeRate: 0,
+        scheduleTypes: new Set<string>(),
       });
     }
     const agg = map.get(key)!;
@@ -182,11 +198,19 @@ export function summarizePerEmployee(perDay: Array<Pick<PerDayRow, "employeeId" 
       if (row.isLate) agg.lateDays++;
       if (row.isUndertime) agg.undertimeDays++;
     }
+    if (row.scheduleType) {
+      agg.scheduleTypes.add(row.scheduleType);
+    }
   }
 
   return Array.from(map.values()).map((entry) => ({
-    ...entry,
+    employeeId: entry.employeeId,
+    employeeName: entry.employeeName,
+    daysWithLogs: entry.daysWithLogs,
+    lateDays: entry.lateDays,
+    undertimeDays: entry.undertimeDays,
     lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
     undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
+    scheduleTypes: Array.from(entry.scheduleTypes).sort(),
   }));
 }

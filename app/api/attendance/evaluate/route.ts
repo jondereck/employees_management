@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { DEFAULT_SCHEDULE, loadNormalizedSchedulesForMonth, normalizeSchedule } from "@/lib/schedules";
+import { DEFAULT_SCHEDULE, getScheduleFor, loadNormalizedSchedulesForMonth, normalizeSchedule } from "@/lib/schedules";
 import { evaluateDay } from "@/utils/evaluateDay";
 import type { PerDayRow } from "@/utils/parseBioAttendance";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
@@ -94,33 +94,49 @@ export async function POST(req: Request) {
       return fallback;
     });
 
-    const evaluatedPerDay = await Promise.all(
-      validRows.map(async (row) => {
-        const scheduleKey = `${row.employeeId}||${row.dateISO}`;
-        const schedule = normalizedSchedules.get(scheduleKey) ?? normalizeSchedule(DEFAULT_SCHEDULE);
-        const evaluation = evaluateDay({
-          dateISO: row.dateISO,
-          earliest: row.earliest ?? undefined,
-          latest: row.latest ?? undefined,
-          allTimes: row.allTimes,
-          schedule,
-        });
+    const scheduleCache = new Map<string, ReturnType<typeof normalizeSchedule>>();
+    const defaultSchedule = normalizeSchedule(DEFAULT_SCHEDULE);
+    const evaluatedPerDay: PerDayRow[] = [];
 
-        return {
-          employeeId: row.employeeId,
-          employeeName: row.employeeName,
-          day: row.day,
-          dateISO: row.dateISO,
-          earliest: row.earliest,
-          latest: row.latest,
-          allTimes: row.allTimes,
-          isLate: evaluation.isLate,
-          isUndertime: evaluation.isUndertime,
-          workedHHMM: evaluation.workedHHMM,
-          scheduleType: schedule.type,
-        } satisfies PerDayRow;
-      })
-    );
+    for (const row of validRows) {
+      const scheduleKey = `${row.employeeId}||${row.dateISO}`;
+      let schedule = normalizedSchedules.get(scheduleKey);
+
+      if (!schedule) {
+        if (!scheduleCache.has(scheduleKey)) {
+          try {
+            const fallback = await getScheduleFor(row.employeeId, row.dateISO);
+            scheduleCache.set(scheduleKey, normalizeSchedule(fallback));
+          } catch (error) {
+            console.error("Fallback schedule lookup failed", { employeeId: row.employeeId, dateISO: row.dateISO, error });
+            scheduleCache.set(scheduleKey, defaultSchedule);
+          }
+        }
+        schedule = scheduleCache.get(scheduleKey) ?? defaultSchedule;
+      }
+
+      const evaluation = evaluateDay({
+        dateISO: row.dateISO,
+        earliest: row.earliest ?? undefined,
+        latest: row.latest ?? undefined,
+        allTimes: row.allTimes,
+        schedule,
+      });
+
+      evaluatedPerDay.push({
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        day: row.day,
+        dateISO: row.dateISO,
+        earliest: row.earliest,
+        latest: row.latest,
+        allTimes: row.allTimes,
+        isLate: evaluation.isLate,
+        isUndertime: evaluation.isUndertime,
+        workedHHMM: evaluation.workedHHMM,
+        scheduleType: schedule.type,
+      });
+    }
 
     const perEmployee = summarizePerEmployee(evaluatedPerDay);
 

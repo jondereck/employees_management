@@ -111,21 +111,6 @@ export default function BioLogUploader() {
     return rows;
   }, [perEmployee, sortDirection, sortKey]);
 
-  const scheduleTypesByEmployee = useMemo(() => {
-    const map = new Map<string, string[]>();
-    if (!perDay) return map;
-    for (const row of perDay) {
-      if (!row.scheduleType) continue;
-      const key = `${row.employeeId}||${row.employeeName}`;
-      const list = map.get(key) ?? [];
-      if (!list.includes(row.scheduleType)) {
-        list.push(row.scheduleType);
-        map.set(key, list);
-      }
-    }
-    return map;
-  }, [perDay]);
-
   useEffect(() => {
     setPage(0);
   }, [perDay]);
@@ -381,7 +366,7 @@ export default function BioLogUploader() {
               <tbody>
                 {sortedPerEmployee.map((row) => {
                   const key = `${row.employeeId}||${row.employeeName}`;
-                  const types = scheduleTypesByEmployee.get(key) ?? [];
+                  const types = row.scheduleTypes ?? [];
                   return (
                     <tr key={key} className="odd:bg-muted/20">
                       <td className="p-2">{row.employeeId || "—"}</td>
