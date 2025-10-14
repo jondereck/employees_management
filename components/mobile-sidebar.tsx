@@ -30,6 +30,7 @@ import {
   ShieldCheck,
   Building,
   UserCheck2,
+  UploadCloud,
 } from "lucide-react";
 import { use, useEffect, useState } from "react";
 import Loading from "@/app/loading";
@@ -73,6 +74,11 @@ const getNavGroups = (departmentId: string): NavGroup[] => [
         label: "Manage Employees",
         path: `/employees`,
         icon: Users,
+      },
+      {
+        label: "Biometrics Uploader",
+        path: `biometrics`,
+        icon: UploadCloud,
       },
       {
         label: "View Employees",
