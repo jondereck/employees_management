@@ -25,30 +25,52 @@ type EvaluatedDay = {
   workedHHMM: string;
   scheduleType: string;
   scheduleSource: ScheduleSource;
+  punches?: Array<{
+    time: string;
+    minuteOfDay: number;
+    source: "original" | "merged";
+    files: string[];
+  }>;
+  sourceFiles?: string[];
+  employeeToken?: string;
 };
 
 const hhmmRegex = /^\d{1,2}:\d{2}$/;
 
+const Punch = z.object({
+  time: z.string().regex(hhmmRegex),
+  minuteOfDay: z.number().int().min(0).max(1439),
+  source: z.enum(["original", "merged"]),
+  files: z.array(z.string()),
+});
+
 const Row = z.object({
   employeeId: z.string().min(1),
   employeeName: z.string().min(1),
+  employeeToken: z.string().min(1),
+  dateISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   day: z.number().int().min(1).max(31),
   earliest: z.string().regex(hhmmRegex).nullable().optional(),
   latest: z.string().regex(hhmmRegex).nullable().optional(),
-  allTimes: z.array(z.string().regex(hhmmRegex)).optional(),
+  allTimes: z.array(z.string().regex(hhmmRegex)).default([]),
+  punches: z.array(Punch).default([]),
+  sourceFiles: z.array(z.string()).default([]),
 });
 
 const Payload = z.object({
-  monthISO: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
-  perDay: z.array(Row),
+  entries: z.array(Row),
 });
 
 export async function POST(req: Request) {
   try {
     const json = await req.json();
-    const { monthISO, perDay } = Payload.parse(json);
+    const { entries } = Payload.parse(json);
 
-    const bioIds = Array.from(new Set(perDay.map((row) => row.employeeId)));
+    if (!entries.length) {
+      return NextResponse.json({ perDay: [], perEmployee: [] });
+    }
+
+    const bioIds = Array.from(new Set(entries.map((row) => row.employeeId)));
 
     const candidates: { id: string; employeeNo: string | null }[] = [];
     const CHUNK_SIZE = 200;
@@ -71,25 +93,28 @@ export async function POST(req: Request) {
       }
     }
 
-    const from = new Date(`${monthISO}-01T00:00:00.000Z`);
-    const nextMonth = new Date(from);
-    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
-    const to = new Date(nextMonth.getTime() - 1);
+    const sortedDates = entries
+      .map((row) => row.dateISO)
+      .sort((a, b) => a.localeCompare(b));
+    const firstDate = sortedDates[0];
+    const lastDate = sortedDates[sortedDates.length - 1];
+
+    const from = new Date(`${firstDate}T00:00:00.000Z`);
+    const to = new Date(`${lastDate}T23:59:59.999Z`);
 
     const internalIds = Array.from(new Set(bioToInternal.values()));
     const maps = await getScheduleMapsForMonth(internalIds, { from, to });
 
-    const evaluatedPerDay: EvaluatedDay[] = perDay.map((row) => {
-      const dateISO = `${monthISO}-${String(row.day).padStart(2, "0")}`;
+    const evaluatedPerDay: EvaluatedDay[] = entries.map((row) => {
       const internalEmployeeId = bioToInternal.get(row.employeeId) ?? null;
-      const scheduleRecord = resolveScheduleForDate(internalEmployeeId, dateISO, maps);
+      const scheduleRecord = resolveScheduleForDate(internalEmployeeId, row.dateISO, maps);
       const normalized = normalizeSchedule(scheduleRecord);
       const earliest = (row.earliest ?? null) as HHMM | null;
       const latest = (row.latest ?? null) as HHMM | null;
       const allTimes = (row.allTimes ?? []) as HHMM[];
 
       const evaluation = evaluateDay({
-        dateISO,
+        dateISO: row.dateISO,
         earliest,
         latest,
         allTimes,
@@ -103,13 +128,16 @@ export async function POST(req: Request) {
         earliest: row.earliest ?? null,
         latest: row.latest ?? null,
         allTimes: row.allTimes ?? [],
-        dateISO,
+        dateISO: row.dateISO,
         internalEmployeeId,
         isLate: evaluation.isLate,
         isUndertime: evaluation.isUndertime,
         workedHHMM: evaluation.workedHHMM,
         scheduleType: normalized.type,
         scheduleSource: scheduleRecord.source,
+        punches: row.punches,
+        sourceFiles: row.sourceFiles,
+        employeeToken: row.employeeToken,
       };
     });
 
