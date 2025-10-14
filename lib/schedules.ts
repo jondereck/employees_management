@@ -6,6 +6,8 @@ import type { Schedule, ScheduleFlex, ScheduleFixed, ScheduleShift } from "@/uti
 
 export type ScheduleSource = "EXCEPTION" | "WORKSCHEDULE" | "DEFAULT";
 
+export type NormalizedSchedule = Schedule & { source: ScheduleSource };
+
 export type ScheduleTypeValue = "FIXED" | "FLEX" | "SHIFT";
 
 export type WorkScheduleDTO = Omit<WorkSchedule, "effectiveFrom" | "effectiveTo"> & {
@@ -91,14 +93,14 @@ export async function getScheduleFor(employeeId: string, dateISO: string): Promi
   return { ...DEFAULT_SCHEDULE };
 }
 
-export function normalizeSchedule(record: ScheduleLookupResult): Schedule {
+export function normalizeSchedule(record: ScheduleLookupResult): NormalizedSchedule {
   const type: ScheduleTypeValue = record.type ?? "FIXED";
   const breakMinutes = record.breakMinutes ?? 60;
   const raw: Record<string, unknown> = record as Record<string, unknown>;
 
   switch (type) {
     case "FLEX": {
-      const schedule: ScheduleFlex = {
+      const schedule: ScheduleFlex & { source: ScheduleSource } = {
         type: "FLEX",
         coreStart: asHHMM((raw.coreStart as string | undefined) ?? null, "10:00") as ScheduleFlex["coreStart"],
         coreEnd: asHHMM((raw.coreEnd as string | undefined) ?? null, "15:00") as ScheduleFlex["coreEnd"],
@@ -106,27 +108,30 @@ export function normalizeSchedule(record: ScheduleLookupResult): Schedule {
         bandwidthEnd: asHHMM((raw.bandwidthEnd as string | undefined) ?? null, "20:00") as ScheduleFlex["bandwidthEnd"],
         requiredDailyMinutes: (raw.requiredDailyMinutes as number | undefined) ?? 480,
         breakMinutes,
+        source: record.source ?? "DEFAULT",
       };
       return schedule;
     }
     case "SHIFT": {
-      const schedule: ScheduleShift = {
+      const schedule: ScheduleShift & { source: ScheduleSource } = {
         type: "SHIFT",
         shiftStart: asHHMM((raw.shiftStart as string | undefined) ?? null, "22:00") as ScheduleShift["shiftStart"],
         shiftEnd: asHHMM((raw.shiftEnd as string | undefined) ?? null, "06:00") as ScheduleShift["shiftEnd"],
         breakMinutes,
         graceMinutes: record.graceMinutes ?? 0,
+        source: record.source ?? "DEFAULT",
       };
       return schedule;
     }
     case "FIXED":
     default: {
-      const schedule: ScheduleFixed = {
+      const schedule: ScheduleFixed & { source: ScheduleSource } = {
         type: "FIXED",
         startTime: asHHMM(record.startTime, "08:00") as ScheduleFixed["startTime"],
         endTime: asHHMM(record.endTime, "17:00") as ScheduleFixed["endTime"],
         breakMinutes,
         graceMinutes: record.graceMinutes ?? 0,
+        source: record.source ?? "DEFAULT",
       };
       return schedule;
     }
@@ -142,7 +147,7 @@ const toDateISO = (value: Date) => value.toISOString().slice(0, 10);
 export async function loadNormalizedSchedulesForMonth(
   rows: Array<{ employeeId: string; dateISO: string }>,
   monthISO: string
-): Promise<Map<ScheduleKey, Schedule>> {
+): Promise<Map<ScheduleKey, NormalizedSchedule>> {
   const employeeIds = Array.from(new Set(rows.map((row) => row.employeeId).filter(Boolean)));
   if (!employeeIds.length) {
     return new Map();
@@ -192,7 +197,7 @@ export async function loadNormalizedSchedulesForMonth(
       list.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
     }
 
-    const normalized = new Map<ScheduleKey, Schedule>();
+    const normalized = new Map<ScheduleKey, NormalizedSchedule>();
 
     for (const { employeeId, dateISO } of rows) {
       const key = toScheduleKey(employeeId, dateISO);
@@ -227,14 +232,7 @@ export async function loadNormalizedSchedulesForMonth(
     return normalized;
   } catch (error) {
     console.error("Failed to load schedules in bulk", error);
-    const fallback = new Map<ScheduleKey, Schedule>();
-    for (const { employeeId, dateISO } of rows) {
-      const key = toScheduleKey(employeeId, dateISO);
-      if (!fallback.has(key)) {
-        fallback.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
-      }
-    }
-    return fallback;
+    return new Map<ScheduleKey, NormalizedSchedule>();
   }
 }
 

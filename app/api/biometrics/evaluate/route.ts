@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getScheduleFor, normalizeSchedule } from "@/lib/schedules";
+import { getScheduleFor, normalizeSchedule, type NormalizedSchedule } from "@/lib/schedules";
 import { evaluateDay } from "@/utils/evaluateDay";
 import type { HHMM } from "@/utils/evaluateDay";
 import type { ParsedPerDayRow, PerDayRow, PerEmployeeRow } from "@/utils/parseBioAttendance";
@@ -66,6 +66,7 @@ async function evaluate(payload: Payload): Promise<EvaluationResult> {
       isUndertime,
       workedHHMM,
       scheduleType: schedule.type,
+      scheduleSource: (schedule as NormalizedSchedule).source,
     });
   }
 

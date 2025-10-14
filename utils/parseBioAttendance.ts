@@ -14,6 +14,7 @@ export type PerDayRow = ParsedPerDayRow & {
   isUndertime: boolean;
   workedHHMM?: string | null;
   scheduleType?: string;
+  scheduleSource?: string;
 };
 
 export type PerEmployeeRow = {
@@ -25,6 +26,7 @@ export type PerEmployeeRow = {
   lateRate: number;
   undertimeRate: number;
   scheduleTypes?: string[];
+  scheduleSources?: string[];
 };
 
 const toParts = (t?: string | null) => {
@@ -143,6 +145,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
     LateRatePercent: r.lateRate,
     UndertimeRatePercent: r.undertimeRate,
     ScheduleTypes: (r.scheduleTypes ?? []).join(", "),
+    ScheduleSources: (r.scheduleSources ?? []).join(", "),
   })));
   XLSX.utils.book_append_sheet(wb, s1, "PerEmployee");
 
@@ -156,6 +159,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
     ScheduleType: r.scheduleType ?? "",
     IsLate: r.isLate ? "Yes" : "No",
     IsUndertime: r.isUndertime ? "Yes" : "No",
+    ScheduleSource: r.scheduleSource ?? "",
   })));
   XLSX.utils.book_append_sheet(wb, s2, "PerDay");
 
@@ -171,10 +175,16 @@ type AggregateRow = {
   lateRate: number;
   undertimeRate: number;
   scheduleTypes: Set<string>;
+  scheduleSources: Set<string>;
 };
 
 export function summarizePerEmployee(
-  perDay: Array<Pick<PerDayRow, "employeeId" | "employeeName" | "earliest" | "latest" | "allTimes" | "isLate" | "isUndertime" | "scheduleType">>
+  perDay: Array<
+    Pick<
+      PerDayRow,
+      "employeeId" | "employeeName" | "earliest" | "latest" | "allTimes" | "isLate" | "isUndertime" | "scheduleType" | "scheduleSource"
+    >
+  >
 ): PerEmployeeRow[] {
   const map = new Map<string, AggregateRow>();
   for (const row of perDay) {
@@ -189,6 +199,7 @@ export function summarizePerEmployee(
         lateRate: 0,
         undertimeRate: 0,
         scheduleTypes: new Set<string>(),
+        scheduleSources: new Set<string>(),
       });
     }
     const agg = map.get(key)!;
@@ -201,6 +212,9 @@ export function summarizePerEmployee(
     if (row.scheduleType) {
       agg.scheduleTypes.add(row.scheduleType);
     }
+    if (row.scheduleSource) {
+      agg.scheduleSources.add(row.scheduleSource);
+    }
   }
 
   return Array.from(map.values()).map((entry) => ({
@@ -212,5 +226,6 @@ export function summarizePerEmployee(
     lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
     undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
     scheduleTypes: Array.from(entry.scheduleTypes).sort(),
+    scheduleSources: Array.from(entry.scheduleSources).sort(),
   }));
 }

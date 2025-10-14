@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { DEFAULT_SCHEDULE, getScheduleFor, loadNormalizedSchedulesForMonth, normalizeSchedule } from "@/lib/schedules";
+import {
+  DEFAULT_SCHEDULE,
+  getScheduleFor,
+  loadNormalizedSchedulesForMonth,
+  normalizeSchedule,
+  type NormalizedSchedule,
+} from "@/lib/schedules";
 import { evaluateDay } from "@/utils/evaluateDay";
 import type { PerDayRow } from "@/utils/parseBioAttendance";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
@@ -84,17 +90,10 @@ export async function POST(req: Request) {
       5_000
     ).catch((error) => {
       console.error("Bulk schedule lookup failed", error);
-      const fallback = new Map<string, ReturnType<typeof normalizeSchedule>>();
-      for (const { employeeId, dateISO } of scheduleKeys) {
-        const key = `${employeeId}||${dateISO}`;
-        if (!fallback.has(key)) {
-          fallback.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
-        }
-      }
-      return fallback;
+      return new Map<string, NormalizedSchedule>();
     });
 
-    const scheduleCache = new Map<string, ReturnType<typeof normalizeSchedule>>();
+    const scheduleCache = new Map<string, NormalizedSchedule>();
     const defaultSchedule = normalizeSchedule(DEFAULT_SCHEDULE);
     const evaluatedPerDay: PerDayRow[] = [];
 
@@ -102,7 +101,7 @@ export async function POST(req: Request) {
       const scheduleKey = `${row.employeeId}||${row.dateISO}`;
       let schedule = normalizedSchedules.get(scheduleKey);
 
-      if (!schedule) {
+      if (!schedule || schedule.source === "DEFAULT") {
         if (!scheduleCache.has(scheduleKey)) {
           try {
             const fallback = await getScheduleFor(row.employeeId, row.dateISO);
@@ -135,6 +134,7 @@ export async function POST(req: Request) {
         isUndertime: evaluation.isUndertime,
         workedHHMM: evaluation.workedHHMM,
         scheduleType: schedule.type,
+        scheduleSource: schedule.source,
       });
     }
 

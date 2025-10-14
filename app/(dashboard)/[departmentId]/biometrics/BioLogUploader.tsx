@@ -51,6 +51,23 @@ const formatScheduleType = (value?: string | null) => {
   return value.charAt(0) + value.slice(1).toLowerCase();
 };
 
+const formatScheduleSource = (value?: string | null) => {
+  switch (value) {
+    case "WORKSCHEDULE":
+      return "Work schedule";
+    case "EXCEPTION":
+      return "Exception";
+    case "DEFAULT":
+      return "Default";
+    case "":
+    case undefined:
+    case null:
+      return null;
+    default:
+      return value.charAt(0) + value.slice(1).toLowerCase();
+  }
+};
+
 const toMonthLabel = (value: string) => {
   if (!/^\d{4}-\d{2}$/.test(value)) return "";
   const [year, month] = value.split("-").map(Number);
@@ -367,6 +384,9 @@ export default function BioLogUploader() {
                 {sortedPerEmployee.map((row) => {
                   const key = `${row.employeeId}||${row.employeeName}`;
                   const types = row.scheduleTypes ?? [];
+                  const sourceLabels = (row.scheduleSources ?? [])
+                    .map((source) => formatScheduleSource(source))
+                    .filter((label): label is string => Boolean(label));
                   return (
                     <tr key={key} className="odd:bg-muted/20">
                       <td className="p-2">{row.employeeId || "—"}</td>
@@ -383,6 +403,11 @@ export default function BioLogUploader() {
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
+                        {sourceLabels.length ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Sources: {sourceLabels.join(", ")}
+                          </p>
+                        ) : null}
                       </td>
                       <td className="p-2 text-center">{row.daysWithLogs}</td>
                       <td className="p-2 text-center">{row.lateDays}</td>
@@ -433,6 +458,7 @@ export default function BioLogUploader() {
                   <th className="p-2 text-center">Latest</th>
                   <th className="p-2 text-center">Worked</th>
                   <th className="p-2 text-center">Schedule</th>
+                  <th className="p-2 text-center">Source</th>
                   <th className="p-2 text-center">Late</th>
                   <th className="p-2 text-center">Undertime</th>
                 </tr>
@@ -453,6 +479,7 @@ export default function BioLogUploader() {
                         ""
                       )}
                     </td>
+                    <td className="p-2 text-center">{formatScheduleSource(row.scheduleSource) ?? ""}</td>
                     <td className="p-2 text-center">{row.isLate ? "Yes" : "No"}</td>
                     <td className="p-2 text-center">{row.isUndertime ? "Yes" : "No"}</td>
                   </tr>
