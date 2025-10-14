@@ -138,102 +138,123 @@ export function normalizeSchedule(record: ScheduleLookupResult): NormalizedSched
   }
 }
 
-type ScheduleKey = `${string}||${string}`;
+type NormalizedScheduleWithRange = NormalizedSchedule & {
+  effectiveFrom?: Date;
+  effectiveTo?: Date | null;
+};
 
-const toScheduleKey = (employeeId: string, dateISO: string): ScheduleKey => `${employeeId}||${dateISO}`;
+export type MonthlyScheduleContext = {
+  exceptions: Map<string, Map<string, NormalizedSchedule>>;
+  schedules: Map<string, NormalizedScheduleWithRange[]>;
+};
 
-const toDateISO = (value: Date) => value.toISOString().slice(0, 10);
+const getDateISO = (value: Date) => value.toISOString().slice(0, 10);
 
-export async function loadNormalizedSchedulesForMonth(
-  rows: Array<{ employeeId: string; dateISO: string }>,
+const emptyMonthlyContext = (): MonthlyScheduleContext => ({
+  exceptions: new Map(),
+  schedules: new Map(),
+});
+
+export async function loadMonthlyScheduleContext(
+  employeeIds: string[],
   monthISO: string
-): Promise<Map<ScheduleKey, NormalizedSchedule>> {
-  const employeeIds = Array.from(new Set(rows.map((row) => row.employeeId).filter(Boolean)));
+): Promise<MonthlyScheduleContext> {
   if (!employeeIds.length) {
-    return new Map();
+    return emptyMonthlyContext();
   }
 
   const monthStart = startOfDay(new Date(`${monthISO}-01T00:00:00Z`));
   const nextMonthStart = startOfDay(addMonths(monthStart, 1));
 
+  const context = emptyMonthlyContext();
+
   try {
-    const [exceptions, schedules] = await prisma.$transaction([
-      prisma.scheduleException.findMany({
-        where: {
-          employeeId: { in: employeeIds },
-          date: {
-            gte: monthStart,
-            lt: nextMonthStart,
-          },
+    const exceptions = await prisma.scheduleException.findMany({
+      where: {
+        employeeId: { in: employeeIds },
+        date: {
+          gte: monthStart,
+          lt: nextMonthStart,
         },
-        orderBy: { date: "desc" },
-      }),
-      prisma.workSchedule.findMany({
-        where: {
-          employeeId: { in: employeeIds },
-          effectiveFrom: { lt: nextMonthStart },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gte: monthStart } }],
-        },
-        orderBy: { effectiveFrom: "desc" },
-      }),
-    ]);
+      },
+      orderBy: { date: "desc" },
+    });
 
-    const exceptionMap = new Map<ScheduleKey, ScheduleException & { source: "EXCEPTION" }>();
     for (const exception of exceptions) {
-      const key = toScheduleKey(exception.employeeId, toDateISO(exception.date));
-      if (!exceptionMap.has(key)) {
-        exceptionMap.set(key, { ...exception, source: "EXCEPTION" });
+      const normalized = normalizeSchedule({ ...exception, source: "EXCEPTION" as const });
+      const dateISO = getDateISO(exception.date);
+      const perEmployee = context.exceptions.get(exception.employeeId) ?? new Map<string, NormalizedSchedule>();
+      if (!perEmployee.has(dateISO)) {
+        perEmployee.set(dateISO, normalized);
       }
+      context.exceptions.set(exception.employeeId, perEmployee);
     }
-
-    const scheduleByEmployee = new Map<string, Array<WorkSchedule & { source: "WORKSCHEDULE" }>>();
-    for (const schedule of schedules) {
-      const list = scheduleByEmployee.get(schedule.employeeId) ?? [];
-      list.push({ ...schedule, source: "WORKSCHEDULE" });
-      scheduleByEmployee.set(schedule.employeeId, list);
-    }
-
-    for (const list of scheduleByEmployee.values()) {
-      list.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
-    }
-
-    const normalized = new Map<ScheduleKey, NormalizedSchedule>();
-
-    for (const { employeeId, dateISO } of rows) {
-      const key = toScheduleKey(employeeId, dateISO);
-      if (normalized.has(key)) {
-        continue;
-      }
-
-      const exception = exceptionMap.get(key);
-      if (exception) {
-        normalized.set(key, normalizeSchedule(exception));
-        continue;
-      }
-
-      const schedulesForEmployee = scheduleByEmployee.get(employeeId) ?? [];
-      if (schedulesForEmployee.length) {
-        const base = startOfDay(new Date(`${dateISO}T00:00:00Z`));
-        const nextDay = addDays(base, 1);
-        const match = schedulesForEmployee.find((schedule) => {
-          const effectiveFrom = schedule.effectiveFrom;
-          const effectiveTo = schedule.effectiveTo;
-          return effectiveFrom <= nextDay && (!effectiveTo || effectiveTo >= base);
-        });
-        if (match) {
-          normalized.set(key, normalizeSchedule(match));
-          continue;
-        }
-      }
-
-      normalized.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
-    }
-
-    return normalized;
   } catch (error) {
-    console.error("Failed to load schedules in bulk", error);
-    return new Map<ScheduleKey, NormalizedSchedule>();
+    console.error("Failed to load schedule exceptions", error);
   }
+
+  try {
+    const schedules = await prisma.workSchedule.findMany({
+      where: {
+        employeeId: { in: employeeIds },
+        effectiveFrom: { lt: nextMonthStart },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: monthStart } }],
+      },
+      orderBy: { effectiveFrom: "desc" },
+    });
+
+    for (const schedule of schedules) {
+      const normalized = normalizeSchedule({ ...schedule, source: "WORKSCHEDULE" as const });
+      const list = context.schedules.get(schedule.employeeId) ?? [];
+      list.push({
+        ...normalized,
+        effectiveFrom: schedule.effectiveFrom,
+        effectiveTo: schedule.effectiveTo ?? null,
+      });
+      context.schedules.set(schedule.employeeId, list);
+    }
+
+    for (const [employeeId, list] of context.schedules.entries()) {
+      list.sort((a, b) => {
+        const aTime = a.effectiveFrom?.getTime() ?? 0;
+        const bTime = b.effectiveFrom?.getTime() ?? 0;
+        return bTime - aTime;
+      });
+      context.schedules.set(employeeId, list);
+    }
+  } catch (error) {
+    console.error("Failed to load work schedules", error);
+  }
+
+  return context;
+}
+
+const defaultNormalizedSchedule = Object.freeze(normalizeSchedule(DEFAULT_SCHEDULE));
+
+export function resolveScheduleForDate(
+  context: MonthlyScheduleContext,
+  employeeId: string,
+  dateISO: string
+): NormalizedSchedule {
+  const exception = context.exceptions.get(employeeId)?.get(dateISO);
+  if (exception) {
+    return exception;
+  }
+
+  const schedules = context.schedules.get(employeeId);
+  if (schedules?.length) {
+    const start = startOfDay(new Date(`${dateISO}T00:00:00Z`));
+    const end = addDays(start, 1);
+    for (const schedule of schedules) {
+      const effectiveFrom = schedule.effectiveFrom ?? start;
+      const effectiveTo = schedule.effectiveTo ?? null;
+      if (effectiveFrom <= end && (!effectiveTo || effectiveTo >= start)) {
+        return schedule;
+      }
+    }
+  }
+
+  return defaultNormalizedSchedule;
 }
 
 export const toWorkScheduleDto = (schedule: WorkSchedule): WorkScheduleDTO => ({

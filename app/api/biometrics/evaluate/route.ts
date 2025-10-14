@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getScheduleFor, normalizeSchedule, type NormalizedSchedule } from "@/lib/schedules";
+import {
+  DEFAULT_SCHEDULE,
+  loadMonthlyScheduleContext,
+  normalizeSchedule,
+  resolveScheduleForDate,
+  type MonthlyScheduleContext,
+} from "@/lib/schedules";
 import { evaluateDay } from "@/utils/evaluateDay";
 import type { HHMM } from "@/utils/evaluateDay";
 import type { ParsedPerDayRow, PerDayRow, PerEmployeeRow } from "@/utils/parseBioAttendance";
@@ -47,11 +53,20 @@ export async function POST(request: Request) {
 async function evaluate(payload: Payload): Promise<EvaluationResult> {
   const [year, month] = payload.month.split("-");
   const evaluated: PerDayRow[] = [];
+  const employeeIds = Array.from(new Set(payload.entries.map((entry) => entry.employeeId)));
+  let context: MonthlyScheduleContext | null = null;
+
+  try {
+    context = await loadMonthlyScheduleContext(employeeIds, payload.month);
+  } catch (error) {
+    console.error("Failed to load schedules for biometrics evaluation", error);
+  }
 
   for (const entry of payload.entries as ParsedPerDayRow[]) {
     const dateISO = `${year}-${month}-${padDay(entry.day)}`;
-    const scheduleRecord = await getScheduleFor(entry.employeeId, dateISO);
-    const schedule = normalizeSchedule(scheduleRecord);
+    const schedule = context
+      ? resolveScheduleForDate(context, entry.employeeId, dateISO)
+      : normalizeSchedule(DEFAULT_SCHEDULE);
     const { isLate, isUndertime, workedHHMM } = evaluateDay({
       dateISO,
       earliest: (entry.earliest ?? undefined) as HHMM | undefined,
@@ -66,7 +81,7 @@ async function evaluate(payload: Payload): Promise<EvaluationResult> {
       isUndertime,
       workedHHMM,
       scheduleType: schedule.type,
-      scheduleSource: (schedule as NormalizedSchedule).source,
+      scheduleSource: schedule.source,
     });
   }
 

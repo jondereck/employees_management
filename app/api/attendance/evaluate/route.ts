@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 
 import {
   DEFAULT_SCHEDULE,
-  getScheduleFor,
-  loadNormalizedSchedulesForMonth,
+  loadMonthlyScheduleContext,
   normalizeSchedule,
-  type NormalizedSchedule,
+  resolveScheduleForDate,
 } from "@/lib/schedules";
 import { evaluateDay } from "@/utils/evaluateDay";
 import type { PerDayRow } from "@/utils/parseBioAttendance";
@@ -17,27 +16,6 @@ function isValidMonth(value: unknown): value is string {
 
 function toDateISO(monthISO: string, day: number) {
   return `${monthISO}-${String(day).padStart(2, "0")}`;
-}
-
-const MAX_FALLBACK_CONCURRENCY = 4;
-
-function withTimeout<T>(promise: Promise<T>, ms: number) {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error("Schedule lookup timed out"));
-    }, ms);
-
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      }
-    );
-  });
 }
 
 export async function POST(req: Request) {
@@ -86,33 +64,19 @@ export async function POST(req: Request) {
         allTimes: string[];
       } => Boolean(row));
 
-    const scheduleKeys = validRows.map((row) => ({ employeeId: row.employeeId, dateISO: row.dateISO }));
-    const scheduleKey = (employeeId: string, dateISO: string) => `${employeeId}||${dateISO}`;
-    const normalizedSchedules = await withTimeout(
-      loadNormalizedSchedulesForMonth(scheduleKeys, monthISO),
-      5_000
-    ).catch((error) => {
-      console.error("Bulk schedule lookup failed", error);
-      return new Map<string, NormalizedSchedule>();
+    const employeeIds = Array.from(new Set(validRows.map((row) => row.employeeId)));
+    const scheduleContext = await loadMonthlyScheduleContext(employeeIds, monthISO).catch((error) => {
+      console.error("Failed to preload monthly schedules", error);
+      return null;
     });
-
-    const fallbackTargets = scheduleKeys.filter(({ employeeId, dateISO }) => {
-      const key = scheduleKey(employeeId, dateISO);
-      const match = normalizedSchedules.get(key);
-      return !match || match.source === "DEFAULT";
-    });
-
-    const fallbackSchedules = await loadFallbackSchedules(fallbackTargets, scheduleKey);
 
     const defaultSchedule = normalizeSchedule(DEFAULT_SCHEDULE);
     const evaluatedPerDay: PerDayRow[] = [];
 
     for (const row of validRows) {
-      const key = scheduleKey(row.employeeId, row.dateISO);
-      const schedule =
-        normalizedSchedules.get(key) ??
-        fallbackSchedules.get(key) ??
-        defaultSchedule;
+      const schedule = scheduleContext
+        ? resolveScheduleForDate(scheduleContext, row.employeeId, row.dateISO)
+        : defaultSchedule;
 
       const evaluation = evaluateDay({
         dateISO: row.dateISO,
@@ -145,55 +109,4 @@ export async function POST(req: Request) {
     console.error("Failed to evaluate attendance", error);
     return NextResponse.json({ error: "Failed to evaluate attendance" }, { status: 500 });
   }
-}
-
-async function loadFallbackSchedules(
-  entries: Array<{ employeeId: string; dateISO: string }>,
-  toKey: (employeeId: string, dateISO: string) => string
-): Promise<Map<string, NormalizedSchedule>> {
-  if (!entries.length) {
-    return new Map();
-  }
-
-  const seen = new Set<string>();
-  const unique: Array<{ employeeId: string; dateISO: string }> = [];
-  for (const entry of entries) {
-    const key = toKey(entry.employeeId, entry.dateISO);
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(entry);
-    }
-  }
-
-  if (!unique.length) {
-    return new Map();
-  }
-
-  const results = new Map<string, NormalizedSchedule>();
-  const queue = [...unique];
-  const workers = Array.from({ length: Math.min(MAX_FALLBACK_CONCURRENCY, queue.length) }, () =>
-    (async function run() {
-      while (queue.length) {
-        const next = queue.pop();
-        if (!next) {
-          break;
-        }
-        const key = toKey(next.employeeId, next.dateISO);
-        try {
-          const record = await getScheduleFor(next.employeeId, next.dateISO);
-          results.set(key, normalizeSchedule(record));
-        } catch (error) {
-          console.error("Fallback schedule lookup failed", {
-            employeeId: next.employeeId,
-            dateISO: next.dateISO,
-            error,
-          });
-          results.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
-        }
-      }
-    })()
-  );
-
-  await Promise.all(workers);
-  return results;
 }
