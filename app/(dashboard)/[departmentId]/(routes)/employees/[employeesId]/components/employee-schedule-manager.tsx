@@ -55,7 +55,7 @@ const scheduleFormSchema = z
     shiftStart: z.string().optional(),
     shiftEnd: z.string().optional(),
     breakMinutes: z.coerce.number().int().min(0).max(720).default(60),
-    effectiveFrom: z.string().optional(),
+    effectiveFrom: z.string().min(1, "Effective from date is required"),
     effectiveTo: z.string().optional(),
   })
   .superRefine((data, ctx) => {
@@ -168,8 +168,6 @@ const exceptionFormSchema = z
 
 type ExceptionFormValues = z.infer<typeof exceptionFormSchema>;
 
-const OPEN_ENDED_START = "1970-01-01";
-
 const scheduleDefaults: ScheduleFormValues = {
   type: ScheduleType.FIXED,
   startTime: "08:00",
@@ -208,23 +206,8 @@ const scheduleTypes = Object.values(ScheduleType) as ScheduleTypeEnum[];
 const formatTypeLabel = (type: ScheduleTypeEnum) =>
   type.charAt(0) + type.slice(1).toLowerCase();
 
-const isOpenEnded = (value: string | null | undefined) =>
-  Boolean(value && value.startsWith(OPEN_ENDED_START));
-
-const toDateInput = (value: string | null | undefined) => {
-  if (!value || isOpenEnded(value)) return "";
-  return value.slice(0, 10);
-};
-
-const formatEffectiveRange = (from: string | null, to: string | null) => {
-  const hasStart = Boolean(from && !isOpenEnded(from));
-  const hasEnd = Boolean(to);
-  const startLabel = hasStart ? toDateInput(from) : "All dates";
-  if (hasEnd) {
-    return `${startLabel} to ${toDateInput(to)}`;
-  }
-  return hasStart ? `${startLabel} onward` : "All dates onward";
-};
+const toDateInput = (value: string | null | undefined) =>
+  value ? value.slice(0, 10) : "";
 
 const describeSchedule = (schedule: WorkScheduleDTO) => {
   switch (schedule.type) {
@@ -335,8 +318,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
       setSavingSchedule(true);
       const payload = {
         ...values,
-        effectiveFrom: values.effectiveFrom?.trim() ? values.effectiveFrom : null,
-        effectiveTo: values.effectiveTo?.trim() ? values.effectiveTo : null,
+        effectiveTo: values.effectiveTo ? values.effectiveTo : null,
       };
       const endpoint = editingSchedule
         ? `/api/employee/${employeeId}/work-schedules/${editingSchedule.id}`
@@ -771,9 +753,8 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   <FormItem>
                     <FormLabel>Effective from</FormLabel>
                     <FormControl>
-                      <Input type="date" value={field.value ?? ""} onChange={field.onChange} />
+                      <Input type="date" {...field} />
                     </FormControl>
-                    <FormDescription>Leave blank to apply starting from the earliest date.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -787,7 +768,6 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                     <FormControl>
                       <Input type="date" value={field.value ?? ""} onChange={field.onChange} />
                     </FormControl>
-                    <FormDescription>Leave blank if the schedule has no end date.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -832,7 +812,9 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                     </td>
                     <td className="p-2">{describeSchedule(schedule)}</td>
                     <td className="p-2">
-                      {formatEffectiveRange(schedule.effectiveFrom, schedule.effectiveTo)}
+                      {toDateInput(schedule.effectiveFrom)}
+                      {" "}
+                      {schedule.effectiveTo ? `to ${toDateInput(schedule.effectiveTo)}` : "onward"}
                     </td>
                     <td className="p-2 text-center">
                       <div className="flex justify-center gap-2">

@@ -5,8 +5,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
 
-const OPEN_ENDED_START = "1970-01-01T00:00:00.000Z";
-
 const createScheduleSchema = z.object({
   employeeId: z.string().min(1),
   type: z.nativeEnum(ScheduleType),
@@ -21,7 +19,7 @@ const createScheduleSchema = z.object({
   shiftStart: z.string().optional().nullable(),
   shiftEnd: z.string().optional().nullable(),
   breakMinutes: z.coerce.number().int().min(0).max(720).optional(),
-  effectiveFrom: z.string().optional().nullable(),
+  effectiveFrom: z.string().min(1),
   effectiveTo: z.string().optional().nullable(),
 });
 
@@ -44,9 +42,7 @@ export async function POST(request: Request) {
         shiftStart: payload.shiftStart ?? null,
         shiftEnd: payload.shiftEnd ?? null,
         breakMinutes: payload.breakMinutes ?? 60,
-        effectiveFrom: payload.effectiveFrom?.trim()
-          ? new Date(payload.effectiveFrom)
-          : new Date(OPEN_ENDED_START),
+        effectiveFrom: new Date(payload.effectiveFrom),
         effectiveTo: payload.effectiveTo ? new Date(payload.effectiveTo) : null,
       },
     });

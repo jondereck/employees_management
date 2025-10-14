@@ -22,7 +22,6 @@ import { saveAs } from "file-saver";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -47,11 +46,6 @@ const formatBytes = (value: number) => {
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
-  year: "numeric",
-});
-
-const monthFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "long",
   year: "numeric",
 });
 
@@ -163,12 +157,6 @@ const formatDateRange = (range: MergeResult["dateRange"]) => {
   return start === end ? start : `${start} – ${end}`;
 };
 
-const toMonthLabel = (value: string) => {
-  if (!/^\d{4}-\d{2}$/.test(value)) return "All months";
-  const [year, month] = value.split("-").map(Number);
-  return monthFormatter.format(new Date(year, (month ?? 1) - 1, 1));
-};
-
 export default function BioLogUploader() {
   const { toast } = useToast();
   const [files, setFiles] = useState<FileState[]>([]);
@@ -179,10 +167,6 @@ export default function BioLogUploader() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [isDragging, setIsDragging] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
-  const [month, setMonth] = useState(() => {
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-  });
   const [showMixedMonthsPrompt, setShowMixedMonthsPrompt] = useState(false);
   const [mixedMonthsContext, setMixedMonthsContext] = useState<{
     key: string;
@@ -203,12 +187,6 @@ export default function BioLogUploader() {
     if (!parsedFiles.length) return null;
     return mergeParsedWorkbooks(parsedFiles.map((file) => file.parsed!));
   }, [parsedFiles]);
-
-  const filteredPerDay = useMemo(() => {
-    if (!mergeResult) return [];
-    if (!month) return mergeResult.perDay;
-    return mergeResult.perDay.filter((row) => row.dateISO.startsWith(month));
-  }, [mergeResult, month]);
 
   useEffect(() => {
     if (!mergeResult) {
@@ -311,16 +289,7 @@ export default function BioLogUploader() {
     if (hasPendingParses) return;
     if (mergeResult.months.length > 1 && !mixedMonthsContext.confirmed) return;
 
-    const entries = filteredPerDay;
-    const keyPrefix = month || "all";
-    if (!entries.length) {
-      setPerDay([]);
-      setPerEmployee([]);
-      lastEvaluatedKey.current = `${keyPrefix}:empty`;
-      return;
-    }
-
-    const payloadKey = `${keyPrefix}:${entries.length}:${entries
+    const payloadKey = `${mergeResult.perDay.length}:${mergeResult.perDay
       .map((row) => `${row.employeeToken}:${row.dateISO}:${row.allTimes.join("|")}`)
       .join("#")}`;
     if (payloadKey === lastEvaluatedKey.current) return;
@@ -330,7 +299,7 @@ export default function BioLogUploader() {
       setEvaluating(true);
       try {
         const body = {
-          entries: entries.map((row) => ({
+          entries: mergeResult.perDay.map((row) => ({
             employeeId: row.employeeId,
             employeeName: row.employeeName,
             employeeToken: row.employeeToken,
@@ -398,22 +367,11 @@ export default function BioLogUploader() {
     return () => {
       controller.abort();
     };
-  }, [
-    mergeResult,
-    filteredPerDay,
-    month,
-    hasPendingParses,
-    mixedMonthsContext.confirmed,
-    toast,
-  ]);
+  }, [mergeResult, hasPendingParses, mixedMonthsContext.confirmed, toast]);
 
   useEffect(() => {
     setPage(0);
   }, [perDay]);
-
-  useEffect(() => {
-    setPage(0);
-  }, [month]);
 
   const sortedPerEmployee = useMemo(() => {
     if (!perEmployee) return [];
@@ -526,11 +484,6 @@ export default function BioLogUploader() {
     }
   }, []);
 
-  const handleMonthChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setMonth(event.target.value);
-    lastEvaluatedKey.current = "";
-  }, []);
-
   const handleRemoveFile = useCallback((id: string) => {
     setFiles((prev) => prev.filter((file) => file.id !== id));
   }, []);
@@ -593,12 +546,11 @@ export default function BioLogUploader() {
     return {
       fileCount: parsedFiles.length,
       rowsParsed: mergeResult.perDay.length,
-      selectedRows: filteredPerDay.length,
       totalPunches: mergeResult.totalPunches,
       employees: mergeResult.employeeCount,
       dateRange: formatDateRange(mergeResult.dateRange),
     };
-  }, [mergeResult, parsedFiles.length, filteredPerDay.length]);
+  }, [mergeResult, parsedFiles.length]);
 
   const totalFiles = files.length;
   const processedFiles = files.filter((file) => file.status === "parsed" || file.status === "failed").length;
@@ -606,27 +558,6 @@ export default function BioLogUploader() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-sm font-medium">Attendance month</p>
-          <Input
-            type="month"
-            value={month}
-            onChange={handleMonthChange}
-            max="9999-12"
-            className="w-full sm:w-60"
-          />
-          <p className="text-xs text-muted-foreground">
-            We use this month to match employee schedules when evaluating merged logs.
-          </p>
-        </div>
-        {perDay?.length ? (
-          <div className="text-sm text-muted-foreground">
-            Showing results for <span className="font-medium text-foreground">{toMonthLabel(month)}</span>
-          </div>
-        ) : null}
-      </div>
-
       <div className="space-y-2">
         <h2 className="text-lg font-semibold">Biometrics Logs</h2>
         <p className="text-sm text-muted-foreground">
@@ -797,12 +728,6 @@ export default function BioLogUploader() {
               <p className="text-muted-foreground">Rows parsed</p>
               <p className="font-semibold text-foreground">{summary.rowsParsed}</p>
             </div>
-            {summary.selectedRows !== summary.rowsParsed ? (
-              <div>
-                <p className="text-muted-foreground">Rows in month</p>
-                <p className="font-semibold text-foreground">{summary.selectedRows}</p>
-              </div>
-            ) : null}
             <div>
               <p className="text-muted-foreground">Unique employees</p>
               <p className="font-semibold text-foreground">{summary.employees}</p>
