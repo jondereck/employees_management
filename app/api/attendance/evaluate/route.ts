@@ -8,6 +8,7 @@ import {
   normalizeSchedule,
   type ScheduleSource,
 } from "@/lib/schedules";
+import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import { evaluateDay } from "@/utils/evaluateDay";
 
 type EvaluatedDay = {
@@ -49,15 +50,24 @@ export async function POST(req: Request) {
 
     const bioIds = Array.from(new Set(perDay.map((row) => row.employeeId)));
 
-    const employees = await prisma.employee.findMany({
-      where: { biometricsUserId: { in: bioIds } },
-      select: { id: true, biometricsUserId: true },
-    });
+    const candidates: { id: string; employeeNo: string | null }[] = [];
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < bioIds.length; i += CHUNK_SIZE) {
+      const slice = bioIds.slice(i, i + CHUNK_SIZE);
+      const orConditions = slice.map((id) => ({ employeeNo: { startsWith: id } }));
+      if (!orConditions.length) continue;
+      const batch = await prisma.employee.findMany({
+        where: { OR: orConditions },
+        select: { id: true, employeeNo: true },
+      });
+      candidates.push(...batch);
+    }
 
     const bioToInternal = new Map<string, string>();
-    for (const employee of employees) {
-      if (employee.biometricsUserId) {
-        bioToInternal.set(String(employee.biometricsUserId), employee.id);
+    for (const candidate of candidates) {
+      const token = firstEmployeeNoToken(candidate.employeeNo);
+      if (token && !bioToInternal.has(token)) {
+        bioToInternal.set(token, candidate.id);
       }
     }
 
@@ -66,7 +76,7 @@ export async function POST(req: Request) {
     nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
     const to = new Date(nextMonth.getTime() - 1);
 
-    const internalIds = Array.from(new Set(employees.map((employee) => employee.id)));
+    const internalIds = Array.from(new Set(bioToInternal.values()));
     const maps = await getScheduleMapsForMonth(internalIds, { from, to });
 
     const evaluatedPerDay: EvaluatedDay[] = perDay.map((row) => {
