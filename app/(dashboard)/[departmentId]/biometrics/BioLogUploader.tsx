@@ -59,6 +59,8 @@ const formatScheduleSource = (value?: string | null) => {
       return "Exception";
     case "DEFAULT":
       return "Default";
+    case "NOMAPPING":
+      return "No mapping";
     case "":
     case undefined:
     case null:
@@ -384,9 +386,7 @@ export default function BioLogUploader() {
                 {sortedPerEmployee.map((row) => {
                   const key = `${row.employeeId}||${row.employeeName}`;
                   const types = row.scheduleTypes ?? [];
-                  const sourceLabels = (row.scheduleSources ?? [])
-                    .map((source) => formatScheduleSource(source))
-                    .filter((label): label is string => Boolean(label));
+                  const sourceLabel = formatScheduleSource(row.scheduleSource);
                   return (
                     <tr key={key} className="odd:bg-muted/20">
                       <td className="p-2">{row.employeeId || "—"}</td>
@@ -403,10 +403,8 @@ export default function BioLogUploader() {
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
-                        {sourceLabels.length ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Sources: {sourceLabels.join(", ")}
-                          </p>
+                        {sourceLabel ? (
+                          <p className="mt-1 text-xs text-muted-foreground">Source: {sourceLabel}</p>
                         ) : null}
                       </td>
                       <td className="p-2 text-center">{row.daysWithLogs}</td>

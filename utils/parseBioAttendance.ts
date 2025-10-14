@@ -26,7 +26,7 @@ export type PerEmployeeRow = {
   lateRate: number;
   undertimeRate: number;
   scheduleTypes?: string[];
-  scheduleSources?: string[];
+  scheduleSource?: string;
 };
 
 const toParts = (t?: string | null) => {
@@ -145,7 +145,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
     LateRatePercent: r.lateRate,
     UndertimeRatePercent: r.undertimeRate,
     ScheduleTypes: (r.scheduleTypes ?? []).join(", "),
-    ScheduleSources: (r.scheduleSources ?? []).join(", "),
+    ScheduleSource: r.scheduleSource ?? "",
   })));
   XLSX.utils.book_append_sheet(wb, s1, "PerEmployee");
 
@@ -175,7 +175,19 @@ type AggregateRow = {
   lateRate: number;
   undertimeRate: number;
   scheduleTypes: Set<string>;
-  scheduleSources: Set<string>;
+  scheduleSourceSet: Set<string>;
+};
+
+const SOURCE_PRIORITY = ["EXCEPTION", "WORKSCHEDULE", "DEFAULT", "NOMAPPING"] as const;
+
+const sourceRank = (value: string) => {
+  const index = SOURCE_PRIORITY.indexOf(value as typeof SOURCE_PRIORITY[number]);
+  return index === -1 ? SOURCE_PRIORITY.length : index;
+};
+
+const pickSource = (sources: string[]) => {
+  if (!sources.length) return "DEFAULT";
+  return sources.sort((a, b) => sourceRank(a) - sourceRank(b))[0] ?? "DEFAULT";
 };
 
 export function summarizePerEmployee(
@@ -199,7 +211,7 @@ export function summarizePerEmployee(
         lateRate: 0,
         undertimeRate: 0,
         scheduleTypes: new Set<string>(),
-        scheduleSources: new Set<string>(),
+        scheduleSourceSet: new Set<string>(),
       });
     }
     const agg = map.get(key)!;
@@ -213,7 +225,7 @@ export function summarizePerEmployee(
       agg.scheduleTypes.add(row.scheduleType);
     }
     if (row.scheduleSource) {
-      agg.scheduleSources.add(row.scheduleSource);
+      agg.scheduleSourceSet.add(row.scheduleSource);
     }
   }
 
@@ -226,6 +238,6 @@ export function summarizePerEmployee(
     lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
     undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
     scheduleTypes: Array.from(entry.scheduleTypes).sort(),
-    scheduleSources: Array.from(entry.scheduleSources).sort(),
+    scheduleSource: pickSource(Array.from(entry.scheduleSourceSet)),
   }));
 }

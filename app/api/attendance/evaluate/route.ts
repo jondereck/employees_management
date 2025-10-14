@@ -1,236 +1,177 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
-import {
-  DEFAULT_SCHEDULE,
-  loadNormalizedSchedulesForMonth,
-  loadSchedulesForEmployee,
-  normalizeSchedule,
-  type NormalizedSchedule,
-} from "@/lib/schedules";
 import { prisma } from "@/lib/prisma";
+import {
+  getScheduleMapsForMonth,
+  resolveScheduleForDate,
+  normalizeSchedule,
+  type ScheduleSource,
+} from "@/lib/schedules";
 import { evaluateDay } from "@/utils/evaluateDay";
-import type { PerDayRow } from "@/utils/parseBioAttendance";
-import { summarizePerEmployee } from "@/utils/parseBioAttendance";
 
-function isValidMonth(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
-}
+type EvaluatedDay = {
+  employeeId: string;
+  employeeName: string;
+  day: number;
+  earliest: string | null | undefined;
+  latest: string | null | undefined;
+  allTimes?: string[];
+  dateISO: string;
+  internalEmployeeId: string | null;
+  isLate: boolean;
+  isUndertime: boolean;
+  workedHHMM: string;
+  scheduleType: string;
+  scheduleSource: ScheduleSource;
+};
 
-function toDateISO(monthISO: string, day: number) {
-  return `${monthISO}-${String(day).padStart(2, "0")}`;
-}
+const hhmmRegex = /^\d{1,2}:\d{2}$/;
 
-const MAX_FALLBACK_CONCURRENCY = 2;
+const Row = z.object({
+  employeeId: z.string().min(1),
+  employeeName: z.string().min(1),
+  day: z.number().int().min(1).max(31),
+  earliest: z.string().regex(hhmmRegex).nullable().optional(),
+  latest: z.string().regex(hhmmRegex).nullable().optional(),
+  allTimes: z.array(z.string().regex(hhmmRegex)).optional(),
+});
 
-function withTimeout<T>(promise: Promise<T>, ms: number) {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error("Schedule lookup timed out"));
-    }, ms);
-
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      }
-    );
-  });
-}
+const Payload = z.object({
+  monthISO: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  perDay: z.array(Row),
+});
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { monthISO, perDay } = body as {
-      monthISO?: unknown;
-      perDay?: Array<Partial<PerDayRow>>;
-    };
+    const json = await req.json();
+    const { monthISO, perDay } = Payload.parse(json);
 
-    if (!isValidMonth(monthISO)) {
-      return NextResponse.json({ error: "Invalid month" }, { status: 400 });
-    }
+    const bioIds = Array.from(new Set(perDay.map((row) => row.employeeId)));
 
-    if (!Array.isArray(perDay)) {
-      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
-    }
-
-    const validRows = perDay
-      .map((row) => {
-        const day = Number(row?.day);
-        if (!row?.employeeId || Number.isNaN(day) || day < 1 || day > 31) {
-          return null;
-        }
-        const dateISO = toDateISO(monthISO, day);
-        const punches = Array.isArray(row.allTimes)
-          ? row.allTimes.filter((value): value is string => typeof value === "string")
-          : [];
-        return {
-          employeeId: row.employeeId,
-          employeeName: row.employeeName ?? "",
-          day,
-          dateISO,
-          earliest: (row.earliest ?? null) as PerDayRow["earliest"],
-          latest: (row.latest ?? null) as PerDayRow["latest"],
-          allTimes: punches,
-        };
-      })
-      .filter((row): row is {
-        employeeId: string;
-        employeeName: string;
-        day: number;
-        dateISO: string;
-        earliest: PerDayRow["earliest"];
-        latest: PerDayRow["latest"];
-        allTimes: string[];
-      } => Boolean(row));
-
-    const uniqueEmployeeIds = Array.from(new Set(validRows.map((row) => row.employeeId))).filter(Boolean);
-    const employeeIdMap = new Map<string, string>();
-    if (uniqueEmployeeIds.length) {
-      const employees = await prisma.employee.findMany({
-        where: { employeeNo: { in: uniqueEmployeeIds } },
-        select: { id: true, employeeNo: true },
-      });
-      for (const employee of employees) {
-        if (employee.employeeNo) {
-          employeeIdMap.set(employee.employeeNo, employee.id);
-        }
-      }
-    }
-
-    const rows = validRows.map((row) => ({
-      ...row,
-      scheduleEmployeeId: employeeIdMap.get(row.employeeId) ?? null,
-    }));
-
-    const scheduleKey = (employeeId: string, dateISO: string) => `${employeeId}||${dateISO}`;
-    const scheduleRequestMap = new Map<string, { employeeId: string; dateISO: string }>();
-    for (const row of rows) {
-      if (!row.scheduleEmployeeId) {
-        continue;
-      }
-      const key = scheduleKey(row.scheduleEmployeeId, row.dateISO);
-      if (!scheduleRequestMap.has(key)) {
-        scheduleRequestMap.set(key, { employeeId: row.scheduleEmployeeId, dateISO: row.dateISO });
-      }
-    }
-    const scheduleKeys = Array.from(scheduleRequestMap.values());
-    const { map: normalizedSchedules, employeesWithConfiguredPolicy } = await withTimeout(
-      loadNormalizedSchedulesForMonth(scheduleKeys, monthISO),
-      5_000
-    ).catch((error) => {
-      console.error("Bulk schedule lookup failed", error);
-      return { map: new Map<string, NormalizedSchedule>(), employeesWithConfiguredPolicy: new Set<string>() };
+    const employees = await prisma.employee.findMany({
+      where: { biometricsUserId: { in: bioIds } },
+      select: { id: true, biometricsUserId: true },
     });
 
-    const fallbackTargets = scheduleKeys.filter(({ employeeId, dateISO }) => {
-      const key = scheduleKey(employeeId, dateISO);
-      const match = normalizedSchedules.get(key);
-      if (!match || match.source === "DEFAULT") {
-        return employeesWithConfiguredPolicy.has(employeeId) || normalizedSchedules.size === 0;
+    const bioToInternal = new Map<string, string>();
+    for (const employee of employees) {
+      if (employee.biometricsUserId) {
+        bioToInternal.set(String(employee.biometricsUserId), employee.id);
       }
-      return false;
-    });
+    }
 
-    const fallbackSchedules = await loadFallbackSchedules(
-      fallbackTargets,
-      scheduleKey
-    );
+    const from = new Date(`${monthISO}-01T00:00:00.000Z`);
+    const nextMonth = new Date(from);
+    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+    const to = new Date(nextMonth.getTime() - 1);
 
-    const defaultSchedule = normalizeSchedule(DEFAULT_SCHEDULE);
-    const evaluatedPerDay: PerDayRow[] = [];
+    const internalIds = Array.from(new Set(employees.map((employee) => employee.id)));
+    const maps = await getScheduleMapsForMonth(internalIds, { from, to });
 
-    for (const row of rows) {
-      const resolvedKey = row.scheduleEmployeeId ? scheduleKey(row.scheduleEmployeeId, row.dateISO) : null;
-      const schedule =
-        (resolvedKey ? normalizedSchedules.get(resolvedKey) : undefined) ??
-        (resolvedKey ? fallbackSchedules.get(resolvedKey) : undefined) ??
-        defaultSchedule;
+    const evaluatedPerDay: EvaluatedDay[] = perDay.map((row) => {
+      const dateISO = `${monthISO}-${String(row.day).padStart(2, "0")}`;
+      const internalEmployeeId = bioToInternal.get(row.employeeId) ?? null;
+      const { schedule, source } = resolveScheduleForDate(internalEmployeeId, dateISO, maps);
+      const normalized = normalizeSchedule({ ...schedule, source });
 
       const evaluation = evaluateDay({
-        dateISO: row.dateISO,
+        dateISO,
         earliest: row.earliest ?? undefined,
         latest: row.latest ?? undefined,
-        allTimes: row.allTimes,
-        schedule,
+        allTimes: row.allTimes ?? [],
+        schedule: normalized,
       });
 
-      evaluatedPerDay.push({
+      return {
         employeeId: row.employeeId,
         employeeName: row.employeeName,
         day: row.day,
-        dateISO: row.dateISO,
-        earliest: row.earliest,
-        latest: row.latest,
-        allTimes: row.allTimes,
+        earliest: row.earliest ?? null,
+        latest: row.latest ?? null,
+        allTimes: row.allTimes ?? [],
+        dateISO,
+        internalEmployeeId,
         isLate: evaluation.isLate,
         isUndertime: evaluation.isUndertime,
         workedHHMM: evaluation.workedHHMM,
-        scheduleType: schedule.type,
-        scheduleSource: schedule.source,
-      });
-    }
+        scheduleType: normalized.type,
+        scheduleSource: source,
+      };
+    });
 
     const perEmployee = summarizePerEmployee(evaluatedPerDay);
 
     return NextResponse.json({ perDay: evaluatedPerDay, perEmployee });
   } catch (error) {
     console.error("Failed to evaluate attendance", error);
-    return NextResponse.json({ error: "Failed to evaluate attendance" }, { status: 500 });
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.flatten() }, { status: 400 });
+    }
+    const message = error instanceof Error ? error.message : "Failed to evaluate attendance";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-async function loadFallbackSchedules(
-  entries: Array<{ employeeId: string; dateISO: string }>,
-  toKey: (employeeId: string, dateISO: string) => string
-): Promise<Map<string, NormalizedSchedule>> {
-  if (!entries.length) {
-    return new Map();
-  }
+type Aggregate = {
+  employeeId: string;
+  employeeName: string;
+  daysWithLogs: number;
+  lateDays: number;
+  undertimeDays: number;
+  scheduleTypes: Set<string>;
+  scheduleSourceSet: Set<ScheduleSource>;
+};
 
-  const results = new Map<string, NormalizedSchedule>();
-  const grouped = new Map<string, Set<string>>();
-  for (const { employeeId, dateISO } of entries) {
-    const key = toKey(employeeId, dateISO);
-    if (results.has(key)) {
-      continue;
+function summarizePerEmployee(rows: EvaluatedDay[]) {
+  const map = new Map<string, Aggregate>();
+
+  for (const row of rows) {
+    const key = `${row.employeeId}||${row.employeeName}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        daysWithLogs: 0,
+        lateDays: 0,
+        undertimeDays: 0,
+        scheduleTypes: new Set(),
+        scheduleSourceSet: new Set(),
+      });
     }
-    const dates = grouped.get(employeeId) ?? new Set<string>();
-    dates.add(dateISO);
-    grouped.set(employeeId, dates);
+
+    const agg = map.get(key)!;
+    const hasLogs = Boolean(row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0);
+    if (hasLogs) {
+      agg.daysWithLogs += 1;
+      if (row.isLate) agg.lateDays += 1;
+      if (row.isUndertime) agg.undertimeDays += 1;
+    }
+
+    if (row.scheduleType) {
+      agg.scheduleTypes.add(row.scheduleType);
+    }
+    if (row.scheduleSource) {
+      agg.scheduleSourceSet.add(row.scheduleSource);
+    }
   }
 
-  const queue = Array.from(grouped.entries());
-  const workers = Array.from({ length: Math.min(MAX_FALLBACK_CONCURRENCY, queue.length || 1) }, () =>
-    (async function run() {
-      while (queue.length) {
-        const next = queue.pop();
-        if (!next) {
-          break;
-        }
-        const [employeeId, dates] = next;
-        try {
-          const map = await loadSchedulesForEmployee(
-            employeeId,
-            Array.from(dates),
-            toKey
-          );
-          for (const [key, schedule] of map) {
-            results.set(key, schedule);
-          }
-        } catch (error) {
-          console.error("Fallback schedule lookup failed", { employeeId, error });
-          for (const dateISO of dates) {
-            results.set(toKey(employeeId, dateISO), normalizeSchedule(DEFAULT_SCHEDULE));
-          }
-        }
-      }
-    })()
-  );
+  return Array.from(map.values()).map((entry) => ({
+    employeeId: entry.employeeId,
+    employeeName: entry.employeeName,
+    daysWithLogs: entry.daysWithLogs,
+    lateDays: entry.lateDays,
+    undertimeDays: entry.undertimeDays,
+    lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
+    undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
+    scheduleTypes: Array.from(entry.scheduleTypes).sort(),
+    scheduleSource: pickSource(Array.from(entry.scheduleSourceSet)),
+  }));
+}
 
-  await Promise.all(workers);
-  return results;
+const SOURCE_PRIORITY: ScheduleSource[] = ["EXCEPTION", "WORKSCHEDULE", "DEFAULT", "NOMAPPING"];
+
+function pickSource(sources: ScheduleSource[]) {
+  if (!sources.length) return "DEFAULT" as ScheduleSource;
+  return sources.sort((a, b) => SOURCE_PRIORITY.indexOf(a) - SOURCE_PRIORITY.indexOf(b))[0] ?? "DEFAULT";
 }

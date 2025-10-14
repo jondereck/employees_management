@@ -1,23 +1,14 @@
-import { addDays, addMonths, startOfDay } from "date-fns";
+import { addDays, startOfDay } from "date-fns";
 import { ScheduleException, WorkSchedule } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import type { Schedule, ScheduleFlex, ScheduleFixed, ScheduleShift } from "@/utils/evaluateDay";
 
-export type ScheduleSource = "EXCEPTION" | "WORKSCHEDULE" | "DEFAULT";
+export type ScheduleSource = "EXCEPTION" | "WORKSCHEDULE" | "DEFAULT" | "NOMAPPING";
 
 export type NormalizedSchedule = Schedule & { source: ScheduleSource };
 
 export type ScheduleTypeValue = "FIXED" | "FLEX" | "SHIFT";
-
-export type WorkScheduleDTO = Omit<WorkSchedule, "effectiveFrom" | "effectiveTo"> & {
-  effectiveFrom: string;
-  effectiveTo: string | null;
-};
-
-export type ScheduleExceptionDTO = Omit<ScheduleException, "date"> & {
-  date: string;
-};
 
 type DefaultSchedule = {
   type: ScheduleTypeValue;
@@ -45,7 +36,8 @@ const asHHMM = (value: string | null | undefined, fallback: string): string => {
   const trimmed = (value ?? "").trim();
   return trimmed || fallback;
 };
-export const DEFAULT_SCHEDULE: DefaultSchedule = Object.freeze({
+
+const defaultFixed = (): DefaultSchedule => ({
   type: "FIXED",
   startTime: "08:00",
   endTime: "17:00",
@@ -53,6 +45,8 @@ export const DEFAULT_SCHEDULE: DefaultSchedule = Object.freeze({
   graceMinutes: 0,
   source: "DEFAULT",
 });
+
+export const DEFAULT_SCHEDULE: DefaultSchedule = Object.freeze(defaultFixed());
 
 export async function getScheduleFor(employeeId: string, dateISO: string): Promise<ScheduleLookupResult> {
   try {
@@ -93,6 +87,91 @@ export async function getScheduleFor(employeeId: string, dateISO: string): Promi
   return { ...DEFAULT_SCHEDULE };
 }
 
+const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
+
+export type MonthWindow = { from: Date; to: Date };
+
+export async function getScheduleMapsForMonth(
+  internalEmployeeIds: string[],
+  window: MonthWindow
+) {
+  if (!internalEmployeeIds.length) {
+    return {
+      schedulesByEmployee: new Map<string, WorkSchedule[]>(),
+      exceptionsByEmployeeDate: new Map<string, ScheduleException>(),
+    };
+  }
+
+  const [schedules, exceptions] = await Promise.all([
+    prisma.workSchedule.findMany({
+      where: {
+        employeeId: { in: internalEmployeeIds },
+        effectiveFrom: { lte: window.to },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: window.from } }],
+      },
+      orderBy: [{ employeeId: "asc" }, { effectiveFrom: "desc" }],
+    }),
+    prisma.scheduleException.findMany({
+      where: {
+        employeeId: { in: internalEmployeeIds },
+        date: { gte: window.from, lte: window.to },
+      },
+    }),
+  ]);
+
+  const schedulesByEmployee = new Map<string, WorkSchedule[]>();
+  for (const schedule of schedules) {
+    const list = schedulesByEmployee.get(schedule.employeeId) ?? [];
+    list.push(schedule);
+    schedulesByEmployee.set(schedule.employeeId, list);
+  }
+  for (const list of schedulesByEmployee.values()) {
+    list.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
+  }
+
+  const exceptionsByEmployeeDate = new Map<string, ScheduleException>();
+  for (const exception of exceptions) {
+    const key = `${exception.employeeId}::${toDateKey(exception.date)}`;
+    exceptionsByEmployeeDate.set(key, exception);
+  }
+
+  return { schedulesByEmployee, exceptionsByEmployeeDate };
+}
+
+export function resolveScheduleForDate(
+  internalEmployeeId: string | null,
+  dateISO: string,
+  maps: {
+    schedulesByEmployee: Map<string, WorkSchedule[]>;
+    exceptionsByEmployeeDate: Map<string, ScheduleException>;
+  }
+): { schedule: WorkSchedule | ScheduleException | DefaultSchedule; source: ScheduleSource } {
+  if (!internalEmployeeId) {
+    return { schedule: defaultFixed(), source: "NOMAPPING" };
+  }
+
+  const exception = maps.exceptionsByEmployeeDate.get(`${internalEmployeeId}::${dateISO}`);
+  if (exception) {
+    return { schedule: exception, source: "EXCEPTION" };
+  }
+
+  const list = maps.schedulesByEmployee.get(internalEmployeeId) ?? [];
+  if (list.length) {
+    const dayStart = startOfDay(new Date(`${dateISO}T00:00:00Z`));
+    const dayEnd = addDays(dayStart, 1);
+    const match = list.find((schedule) => {
+      const effectiveFrom = schedule.effectiveFrom;
+      const effectiveTo = schedule.effectiveTo;
+      return effectiveFrom <= dayEnd && (!effectiveTo || effectiveTo >= dayStart);
+    });
+    if (match) {
+      return { schedule: match, source: "WORKSCHEDULE" };
+    }
+  }
+
+  return { schedule: defaultFixed(), source: "DEFAULT" };
+}
+
 export function normalizeSchedule(record: ScheduleLookupResult): NormalizedSchedule {
   const type: ScheduleTypeValue = record.type ?? "FIXED";
   const breakMinutes = record.breakMinutes ?? 60;
@@ -108,7 +187,7 @@ export function normalizeSchedule(record: ScheduleLookupResult): NormalizedSched
         bandwidthEnd: asHHMM((raw.bandwidthEnd as string | undefined) ?? null, "20:00") as ScheduleFlex["bandwidthEnd"],
         requiredDailyMinutes: (raw.requiredDailyMinutes as number | undefined) ?? 480,
         breakMinutes,
-        source: record.source ?? "DEFAULT",
+        source: (record.source ?? "DEFAULT") as ScheduleSource,
       };
       return schedule;
     }
@@ -119,7 +198,7 @@ export function normalizeSchedule(record: ScheduleLookupResult): NormalizedSched
         shiftEnd: asHHMM((raw.shiftEnd as string | undefined) ?? null, "06:00") as ScheduleShift["shiftEnd"],
         breakMinutes,
         graceMinutes: record.graceMinutes ?? 0,
-        source: record.source ?? "DEFAULT",
+        source: (record.source ?? "DEFAULT") as ScheduleSource,
       };
       return schedule;
     }
@@ -131,204 +210,14 @@ export function normalizeSchedule(record: ScheduleLookupResult): NormalizedSched
         endTime: asHHMM(record.endTime, "17:00") as ScheduleFixed["endTime"],
         breakMinutes,
         graceMinutes: record.graceMinutes ?? 0,
-        source: record.source ?? "DEFAULT",
+        source: (record.source ?? "DEFAULT") as ScheduleSource,
       };
       return schedule;
     }
   }
 }
 
-type ScheduleKey = `${string}||${string}`;
-
-const toScheduleKey = (employeeId: string, dateISO: string): ScheduleKey => `${employeeId}||${dateISO}`;
-
-const toDateISO = (value: Date) => value.toISOString().slice(0, 10);
-
-export type MonthlyScheduleLoadResult = {
-  map: Map<ScheduleKey, NormalizedSchedule>;
-  employeesWithConfiguredPolicy: Set<string>;
-};
-
-export async function loadNormalizedSchedulesForMonth(
-  rows: Array<{ employeeId: string; dateISO: string }>,
-  monthISO: string
-): Promise<MonthlyScheduleLoadResult> {
-  const employeeIds = Array.from(new Set(rows.map((row) => row.employeeId).filter(Boolean)));
-  if (!employeeIds.length) {
-    return { map: new Map(), employeesWithConfiguredPolicy: new Set() };
-  }
-
-  const monthStart = startOfDay(new Date(`${monthISO}-01T00:00:00Z`));
-  const nextMonthStart = startOfDay(addMonths(monthStart, 1));
-
-  try {
-    const exceptions = await prisma.scheduleException.findMany({
-      where: {
-        employeeId: { in: employeeIds },
-        date: {
-          gte: monthStart,
-          lt: nextMonthStart,
-        },
-      },
-      orderBy: { date: "desc" },
-    });
-
-    const schedules = await prisma.workSchedule.findMany({
-      where: {
-        employeeId: { in: employeeIds },
-        effectiveFrom: { lt: nextMonthStart },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: monthStart } }],
-      },
-      orderBy: { effectiveFrom: "desc" },
-    });
-
-    const exceptionMap = new Map<ScheduleKey, ScheduleException & { source: "EXCEPTION" }>();
-    const employeesWithConfiguredPolicy = new Set<string>();
-    for (const exception of exceptions) {
-      const key = toScheduleKey(exception.employeeId, toDateISO(exception.date));
-      if (!exceptionMap.has(key)) {
-        exceptionMap.set(key, { ...exception, source: "EXCEPTION" });
-      }
-      employeesWithConfiguredPolicy.add(exception.employeeId);
-    }
-
-    const scheduleByEmployee = new Map<string, Array<WorkSchedule & { source: "WORKSCHEDULE" }>>();
-    for (const schedule of schedules) {
-      const list = scheduleByEmployee.get(schedule.employeeId) ?? [];
-      list.push({ ...schedule, source: "WORKSCHEDULE" });
-      scheduleByEmployee.set(schedule.employeeId, list);
-      employeesWithConfiguredPolicy.add(schedule.employeeId);
-    }
-
-    for (const list of scheduleByEmployee.values()) {
-      list.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
-    }
-
-    const normalized = new Map<ScheduleKey, NormalizedSchedule>();
-
-    for (const { employeeId, dateISO } of rows) {
-      const key = toScheduleKey(employeeId, dateISO);
-      if (normalized.has(key)) {
-        continue;
-      }
-
-      const exception = exceptionMap.get(key);
-      if (exception) {
-        normalized.set(key, normalizeSchedule(exception));
-        continue;
-      }
-
-      const schedulesForEmployee = scheduleByEmployee.get(employeeId) ?? [];
-      if (schedulesForEmployee.length) {
-        const base = startOfDay(new Date(`${dateISO}T00:00:00Z`));
-        const nextDay = addDays(base, 1);
-        const match = schedulesForEmployee.find((schedule) => {
-          const effectiveFrom = schedule.effectiveFrom;
-          const effectiveTo = schedule.effectiveTo;
-          return effectiveFrom <= nextDay && (!effectiveTo || effectiveTo >= base);
-        });
-        if (match) {
-          normalized.set(key, normalizeSchedule(match));
-          continue;
-        }
-      }
-
-      normalized.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
-    }
-
-    return { map: normalized, employeesWithConfiguredPolicy };
-  } catch (error) {
-    console.error("Failed to load schedules in bulk", error);
-    return { map: new Map<ScheduleKey, NormalizedSchedule>(), employeesWithConfiguredPolicy: new Set() };
-  }
-}
-
-export async function loadSchedulesForEmployee(
-  employeeId: string,
-  dateISOs: string[],
-  toKey: (employeeId: string, dateISO: string) => ScheduleKey
-): Promise<Map<ScheduleKey, NormalizedSchedule>> {
-  const uniqueDates = Array.from(new Set(dateISOs)).sort();
-  if (!uniqueDates.length) {
-    return new Map();
-  }
-
-  const dateSet = new Set(uniqueDates);
-  const startRange = startOfDay(new Date(`${uniqueDates[0]}T00:00:00Z`));
-  const endRange = startOfDay(new Date(`${uniqueDates[uniqueDates.length - 1]}T00:00:00Z`));
-  const endExclusive = addDays(endRange, 1);
-
-  try {
-    const exceptions = await prisma.scheduleException.findMany({
-      where: {
-        employeeId,
-        date: {
-          gte: startRange,
-          lt: endExclusive,
-        },
-      },
-      orderBy: { date: "desc" },
-    });
-
-    const schedules = await prisma.workSchedule.findMany({
-      where: {
-        employeeId,
-        effectiveFrom: { lte: endExclusive },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: startRange } }],
-      },
-      orderBy: { effectiveFrom: "desc" },
-    });
-
-    const exceptionMap = new Map<ScheduleKey, ScheduleException & { source: "EXCEPTION" }>();
-    for (const exception of exceptions) {
-      const iso = toDateISO(exception.date);
-      if (!dateSet.has(iso)) {
-        continue;
-      }
-      const key = toKey(employeeId, iso);
-      if (!exceptionMap.has(key)) {
-        exceptionMap.set(key, { ...exception, source: "EXCEPTION" });
-      }
-    }
-
-    schedules.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
-
-    const result = new Map<ScheduleKey, NormalizedSchedule>();
-    for (const dateISO of uniqueDates) {
-      const key = toKey(employeeId, dateISO);
-      const exception = exceptionMap.get(key);
-      if (exception) {
-        result.set(key, normalizeSchedule(exception));
-        continue;
-      }
-
-      const base = startOfDay(new Date(`${dateISO}T00:00:00Z`));
-      const nextDay = addDays(base, 1);
-      const match = schedules.find((schedule) => {
-        const effectiveFrom = schedule.effectiveFrom;
-        const effectiveTo = schedule.effectiveTo;
-        return effectiveFrom <= nextDay && (!effectiveTo || effectiveTo >= base);
-      });
-
-      if (match) {
-        result.set(key, normalizeSchedule({ ...match, source: "WORKSCHEDULE" }));
-      } else {
-        result.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
-      }
-    }
-
-    return result;
-  } catch (error) {
-    console.error("Failed to load schedules for employee", { employeeId, error });
-    const fallback = new Map<ScheduleKey, NormalizedSchedule>();
-    for (const dateISO of uniqueDates) {
-      fallback.set(toKey(employeeId, dateISO), normalizeSchedule(DEFAULT_SCHEDULE));
-    }
-    return fallback;
-  }
-}
-
-export const toWorkScheduleDto = (schedule: WorkSchedule): WorkScheduleDTO => ({
+export const toWorkScheduleDto = (schedule: WorkSchedule) => ({
   id: schedule.id,
   employeeId: schedule.employeeId,
   type: schedule.type,
@@ -348,7 +237,7 @@ export const toWorkScheduleDto = (schedule: WorkSchedule): WorkScheduleDTO => ({
   effectiveTo: schedule.effectiveTo ? schedule.effectiveTo.toISOString() : null,
 });
 
-export const toScheduleExceptionDto = (exception: ScheduleException): ScheduleExceptionDTO => ({
+export const toScheduleExceptionDto = (exception: ScheduleException) => ({
   id: exception.id,
   employeeId: exception.employeeId,
   date: exception.date.toISOString(),

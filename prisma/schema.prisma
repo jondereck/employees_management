@@ -121,6 +121,7 @@ model Employee {
   isAwardee              Boolean           @default(false)
   nickname               String            @default("")
   employeeNo             String            @default("")
+  biometricsUserId       String?           @unique
   employeeLink           String            @default("")
   salaryStep             Int?              @default(0)
   salaryGrade            Int?              @default(0)
