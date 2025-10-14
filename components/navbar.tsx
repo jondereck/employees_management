@@ -44,7 +44,7 @@ export const Navbar = async () => {
           <Back />
           <DepartmentSwitcher items={department} className="hidden min-w-0 md:flex" />
         </div>
-        <div className="flex min-w-0 items-center justify-start gap-6 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex min-w-0 items-center justify-start gap-6 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:overflow-visible">
           <MainNav className="hidden min-w-0 md:flex" />
         </div>
         <div className="flex items-center justify-end gap-2">

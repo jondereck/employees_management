@@ -9,7 +9,7 @@ import {
   type ScheduleSource,
 } from "@/lib/schedules";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
-import { evaluateDay } from "@/utils/evaluateDay";
+import { evaluateDay, type HHMM } from "@/utils/evaluateDay";
 
 type EvaluatedDay = {
   employeeId: string;
@@ -82,14 +82,17 @@ export async function POST(req: Request) {
     const evaluatedPerDay: EvaluatedDay[] = perDay.map((row) => {
       const dateISO = `${monthISO}-${String(row.day).padStart(2, "0")}`;
       const internalEmployeeId = bioToInternal.get(row.employeeId) ?? null;
-      const { schedule, source } = resolveScheduleForDate(internalEmployeeId, dateISO, maps);
-      const normalized = normalizeSchedule({ ...schedule, source });
+      const scheduleRecord = resolveScheduleForDate(internalEmployeeId, dateISO, maps);
+      const normalized = normalizeSchedule(scheduleRecord);
+      const earliest = (row.earliest ?? null) as HHMM | null;
+      const latest = (row.latest ?? null) as HHMM | null;
+      const allTimes = (row.allTimes ?? []) as HHMM[];
 
       const evaluation = evaluateDay({
         dateISO,
-        earliest: row.earliest ?? undefined,
-        latest: row.latest ?? undefined,
-        allTimes: row.allTimes ?? [],
+        earliest,
+        latest,
+        allTimes,
         schedule: normalized,
       });
 
@@ -106,7 +109,7 @@ export async function POST(req: Request) {
         isUndertime: evaluation.isUndertime,
         workedHHMM: evaluation.workedHHMM,
         scheduleType: normalized.type,
-        scheduleSource: source,
+        scheduleSource: scheduleRecord.source,
       };
     });
 

@@ -24,7 +24,7 @@ type DefaultSchedule = {
   requiredDailyMinutes?: number | null;
   shiftStart?: string | null;
   shiftEnd?: string | null;
-  source: "DEFAULT";
+  source: "DEFAULT" | "NOMAPPING";
 };
 
 type ScheduleLookupResult =
@@ -145,14 +145,14 @@ export function resolveScheduleForDate(
     schedulesByEmployee: Map<string, WorkSchedule[]>;
     exceptionsByEmployeeDate: Map<string, ScheduleException>;
   }
-): { schedule: WorkSchedule | ScheduleException | DefaultSchedule; source: ScheduleSource } {
+): ScheduleLookupResult {
   if (!internalEmployeeId) {
-    return { schedule: defaultFixed(), source: "NOMAPPING" };
+    return { ...defaultFixed(), source: "NOMAPPING" };
   }
 
   const exception = maps.exceptionsByEmployeeDate.get(`${internalEmployeeId}::${dateISO}`);
   if (exception) {
-    return { schedule: exception, source: "EXCEPTION" };
+    return { ...exception, source: "EXCEPTION" };
   }
 
   const list = maps.schedulesByEmployee.get(internalEmployeeId) ?? [];
@@ -165,11 +165,11 @@ export function resolveScheduleForDate(
       return effectiveFrom <= dayEnd && (!effectiveTo || effectiveTo >= dayStart);
     });
     if (match) {
-      return { schedule: match, source: "WORKSCHEDULE" };
+      return { ...match, source: "WORKSCHEDULE" };
     }
   }
 
-  return { schedule: defaultFixed(), source: "DEFAULT" };
+  return { ...defaultFixed() };
 }
 
 export function normalizeSchedule(record: ScheduleLookupResult): NormalizedSchedule {
@@ -237,6 +237,8 @@ export const toWorkScheduleDto = (schedule: WorkSchedule) => ({
   effectiveTo: schedule.effectiveTo ? schedule.effectiveTo.toISOString() : null,
 });
 
+export type WorkScheduleDTO = ReturnType<typeof toWorkScheduleDto>;
+
 export const toScheduleExceptionDto = (exception: ScheduleException) => ({
   id: exception.id,
   employeeId: exception.employeeId,
@@ -254,3 +256,5 @@ export const toScheduleExceptionDto = (exception: ScheduleException) => ({
   shiftEnd: exception.shiftEnd,
   breakMinutes: exception.breakMinutes,
 });
+
+export type ScheduleExceptionDTO = ReturnType<typeof toScheduleExceptionDto>;

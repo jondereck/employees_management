@@ -2,7 +2,6 @@
 
 import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Prisma, ScheduleType } from "@prisma/client";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -33,6 +32,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+const ScheduleType = {
+  FIXED: "FIXED",
+  FLEX: "FLEX",
+  SHIFT: "SHIFT",
+} as const;
 
 type ScheduleTypeEnum = (typeof ScheduleType)[keyof typeof ScheduleType];
 
