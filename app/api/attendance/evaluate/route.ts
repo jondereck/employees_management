@@ -48,43 +48,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    const scheduleCache = new Map<string, Promise<ReturnType<typeof normalizeSchedule>>>();
+    const normalizedSchedules = new Map<string, Awaited<ReturnType<typeof normalizeSchedule>>>();
 
-    const loadSchedule = (employeeId: string, dateISO: string) => {
-      const cacheKey = `${employeeId}||${dateISO}`;
-      let cached = scheduleCache.get(cacheKey);
-      if (!cached) {
-        cached = withTimeout(getScheduleFor(employeeId, dateISO), 5_000)
-          .catch((error) => {
-            console.error("Schedule lookup failed", { employeeId, dateISO, error });
-            return { ...DEFAULT_SCHEDULE };
-          })
-          .then((record) => normalizeSchedule(record));
-        scheduleCache.set(cacheKey, cached);
-      }
-      return cached;
-    };
-
-    const evaluatedPerDay = await Promise.all(
-      perDay.map(async (row) => {
-        const day = Number(row.day);
-        if (!row.employeeId || Number.isNaN(day) || day < 1 || day > 31) {
+    const validRows = perDay
+      .map((row) => {
+        const day = Number(row?.day);
+        if (!row?.employeeId || Number.isNaN(day) || day < 1 || day > 31) {
           return null;
         }
-
         const dateISO = toDateISO(monthISO, day);
         const punches = Array.isArray(row.allTimes)
           ? row.allTimes.filter((value): value is string => typeof value === "string")
           : [];
-        const schedule = await loadSchedule(row.employeeId, dateISO);
-        const evaluation = evaluateDay({
-          dateISO,
-          earliest: (row.earliest ?? undefined) as PerDayRow["earliest"],
-          latest: (row.latest ?? undefined) as PerDayRow["latest"],
-          allTimes: punches,
-          schedule,
-        });
-
         return {
           employeeId: row.employeeId,
           employeeName: row.employeeName ?? "",
@@ -93,6 +68,54 @@ export async function POST(req: Request) {
           earliest: (row.earliest ?? null) as PerDayRow["earliest"],
           latest: (row.latest ?? null) as PerDayRow["latest"],
           allTimes: punches,
+        };
+      })
+      .filter((row): row is {
+        employeeId: string;
+        employeeName: string;
+        day: number;
+        dateISO: string;
+        earliest: PerDayRow["earliest"];
+        latest: PerDayRow["latest"];
+        allTimes: string[];
+      } => Boolean(row));
+
+    for (const row of validRows) {
+      const cacheKey = `${row.employeeId}||${row.dateISO}`;
+      if (normalizedSchedules.has(cacheKey)) {
+        continue;
+      }
+
+      const schedule = await withTimeout(getScheduleFor(row.employeeId, row.dateISO), 5_000)
+        .catch((error) => {
+          console.error("Schedule lookup failed", { employeeId: row.employeeId, dateISO: row.dateISO, error });
+          return { ...DEFAULT_SCHEDULE };
+        })
+        .then((record) => normalizeSchedule(record));
+
+      normalizedSchedules.set(cacheKey, schedule);
+    }
+
+    const evaluatedPerDay = await Promise.all(
+      validRows.map(async (row) => {
+        const scheduleKey = `${row.employeeId}||${row.dateISO}`;
+        const schedule = normalizedSchedules.get(scheduleKey) ?? normalizeSchedule({ ...DEFAULT_SCHEDULE });
+        const evaluation = evaluateDay({
+          dateISO: row.dateISO,
+          earliest: row.earliest ?? undefined,
+          latest: row.latest ?? undefined,
+          allTimes: row.allTimes,
+          schedule,
+        });
+
+        return {
+          employeeId: row.employeeId,
+          employeeName: row.employeeName,
+          day: row.day,
+          dateISO: row.dateISO,
+          earliest: row.earliest,
+          latest: row.latest,
+          allTimes: row.allTimes,
           isLate: evaluation.isLate,
           isUndertime: evaluation.isUndertime,
           workedHHMM: evaluation.workedHHMM,
@@ -101,10 +124,9 @@ export async function POST(req: Request) {
       })
     );
 
-    const filteredPerDay = evaluatedPerDay.filter((row): row is PerDayRow => Boolean(row));
-    const perEmployee = summarizePerEmployee(filteredPerDay);
+    const perEmployee = summarizePerEmployee(evaluatedPerDay);
 
-    return NextResponse.json({ perDay: filteredPerDay, perEmployee });
+    return NextResponse.json({ perDay: evaluatedPerDay, perEmployee });
   } catch (error) {
     console.error("Failed to evaluate attendance", error);
     return NextResponse.json({ error: "Failed to evaluate attendance" }, { status: 500 });
