@@ -1,13 +1,19 @@
 import * as XLSX from "xlsx";
 
-export type PerDayRow = {
+export type ParsedPerDayRow = {
   employeeId: string;
   employeeName: string;
   day: number;
   earliest: string | null;
   latest: string | null;
+  allTimes: string[];
+};
+
+export type PerDayRow = ParsedPerDayRow & {
   isLate: boolean;
   isUndertime: boolean;
+  workedHHMM?: string | null;
+  scheduleType?: string;
 };
 
 export type PerEmployeeRow = {
@@ -20,9 +26,6 @@ export type PerEmployeeRow = {
   undertimeRate: number;
 };
 
-const START = "08:00";
-const END = "17:00";
-
 const toParts = (t?: string | null) => {
   if (!t) return null;
   const m = /^(\d{1,2}):(\d{2})$/.exec(t);
@@ -34,7 +37,6 @@ const lt = (a: string, b: string) => {
   if (!A || !B) return false;
   return A.h < B.h || (A.h === B.h && A.m < B.m);
 };
-const gt = (a: string, b: string) => lt(b, a);
 
 function isHeaderRow(row: any[]): boolean {
   return String(row?.[1] ?? "").trim() === "1"
@@ -72,7 +74,7 @@ const timesInCell = (raw: any): string[] => {
 
 export function parseBioAttendance(arrayBuffer: ArrayBuffer) {
   const wb = XLSX.read(arrayBuffer, { type: "array" });
-  const perDay: PerDayRow[] = [];
+  const perDay: ParsedPerDayRow[] = [];
 
   for (const sn of wb.SheetNames) {
     const ws = wb.Sheets[sn];
@@ -92,6 +94,7 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer) {
       const { employeeId, employeeName } = nearestMeta(rows, r);
       const earliest: (string|null)[] = Array(run + 1).fill(null);
       const latest: (string|null)[] = Array(run + 1).fill(null);
+      const allTimes: string[][] = Array.from({ length: run + 1 }, () => []);
 
       // scan down until next header or "User ID:"
       for (let rr = r + 1; rr < rows.length; rr++) {
@@ -100,9 +103,12 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer) {
 
         for (let d = 1; d <= run; d++) {
           const ts = timesInCell(row[d]);
-          for (const t of ts) {
-            if (!earliest[d] || lt(t, earliest[d]!)) earliest[d] = t;
-            if (!latest[d] || lt(latest[d]!, t))   latest[d]   = t;
+          if (ts.length) {
+            allTimes[d].push(...ts);
+            for (const t of ts) {
+              if (!earliest[d] || lt(t, earliest[d]!)) earliest[d] = t;
+              if (!latest[d] || lt(latest[d]!, t))   latest[d]   = t;
+            }
           }
         }
       }
@@ -116,36 +122,13 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer) {
           day: d,
           earliest: e,
           latest: l,
-          isLate: e ? gt(e, START) : false,
-          isUndertime: l ? lt(l, END) : false,
+          allTimes: [...allTimes[d]],
         });
       }
     }
   }
 
-  // per employee aggregate
-  const map = new Map<string, PerEmployeeRow>();
-  for (const row of perDay) {
-    const key = `${row.employeeId}||${row.employeeName}`;
-    if (!map.has(key)) map.set(key, {
-      employeeId: row.employeeId,
-      employeeName: row.employeeName,
-      daysWithLogs: 0, lateDays: 0, undertimeDays: 0, lateRate: 0, undertimeRate: 0
-    });
-    const agg = map.get(key)!;
-    if (row.earliest || row.latest) {
-      agg.daysWithLogs++;
-      if (row.isLate) agg.lateDays++;
-      if (row.isUndertime) agg.undertimeDays++;
-    }
-  }
-  const perEmployee = Array.from(map.values()).map(r => ({
-    ...r,
-    lateRate: r.daysWithLogs ? +((r.lateDays / r.daysWithLogs) * 100).toFixed(1) : 0,
-    undertimeRate: r.daysWithLogs ? +((r.undertimeDays / r.daysWithLogs) * 100).toFixed(1) : 0,
-  }));
-
-  return { perDay, perEmployee };
+  return { perDay };
 }
 
 export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDayRow[]) {
@@ -167,10 +150,43 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
     Day: r.day,
     Earliest: r.earliest ?? "",
     Latest: r.latest ?? "",
+    Worked: r.workedHHMM ?? "",
+    ScheduleType: r.scheduleType ?? "",
     IsLate: r.isLate ? "Yes" : "No",
     IsUndertime: r.isUndertime ? "Yes" : "No",
   })));
   XLSX.utils.book_append_sheet(wb, s2, "PerDay");
 
   XLSX.writeFile(wb, "biometrics_results.xlsx");
+}
+
+export function summarizePerEmployee(perDay: Array<Pick<PerDayRow, "employeeId" | "employeeName" | "earliest" | "latest" | "allTimes" | "isLate" | "isUndertime">>): PerEmployeeRow[] {
+  const map = new Map<string, PerEmployeeRow>();
+  for (const row of perDay) {
+    const key = `${row.employeeId}||${row.employeeName}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        daysWithLogs: 0,
+        lateDays: 0,
+        undertimeDays: 0,
+        lateRate: 0,
+        undertimeRate: 0,
+      });
+    }
+    const agg = map.get(key)!;
+    const hasLogs = Boolean(row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0);
+    if (hasLogs) {
+      agg.daysWithLogs++;
+      if (row.isLate) agg.lateDays++;
+      if (row.isUndertime) agg.undertimeDays++;
+    }
+  }
+
+  return Array.from(map.values()).map((entry) => ({
+    ...entry,
+    lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
+    undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
+  }));
 }

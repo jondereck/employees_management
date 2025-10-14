@@ -38,6 +38,8 @@ import AddTimelineEvent from "@/app/(public)/components/admin/add-timeline-event
 import AddAward from "@/app/(public)/components/admin/add-award";
 import Timeline from "@/app/(public)/components/timeline";
 import AwardsGallery from "@/app/(public)/components/awards-gallery";
+import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
+import { EmployeeScheduleManager } from "./employee-schedule-manager";
 
 
 
@@ -260,6 +262,8 @@ interface EmployeesFormProps {
   offices: Offices[];
   eligibility: Eligibility[];
   employeeType: EmployeeType[];
+  workSchedules: WorkScheduleDTO[];
+  scheduleExceptions: ScheduleExceptionDTO[];
 }
 
 
@@ -268,6 +272,8 @@ export const EmployeesForm = ({
   offices,
   eligibility,
   employeeType,
+  workSchedules,
+  scheduleExceptions,
 }: EmployeesFormProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -656,19 +662,31 @@ export const EmployeesForm = ({
               <TabsTrigger
                 value="details"
                 className="
-      flex-1 
-      data-[state=active]:bg-primary 
-      data-[state=active]:text-primary-foreground 
+      flex-1
+      data-[state=active]:bg-primary
+      data-[state=active]:text-primary-foreground
       data-[state=active]:shadow-sm
     "
               >
                 Employee Details
               </TabsTrigger>
               <TabsTrigger
+                value="schedule"
+                disabled={!employeeId}
+                className="
+      flex-1
+      data-[state=active]:bg-primary
+      data-[state=active]:text-primary-foreground
+      data-[state=active]:shadow-sm
+    "
+              >
+                Schedules
+              </TabsTrigger>
+              <TabsTrigger
                 value="timeline"
                 disabled={!employeeId}
                 className="
-      flex-1 
+      flex-1
       data-[state=active]:bg-primary 
       data-[state=active]:text-primary-foreground 
       data-[state=active]:shadow-sm
@@ -1675,6 +1693,20 @@ export const EmployeesForm = ({
                 {action}
               </Button>
 
+            </TabsContent>
+
+            <TabsContent value="schedule">
+              {employeeId ? (
+                <EmployeeScheduleManager
+                  employeeId={employeeId}
+                  schedules={workSchedules}
+                  exceptions={scheduleExceptions}
+                />
+              ) : (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Save the employee profile to configure work schedules.
+                </p>
+              )}
             </TabsContent>
 
             <TabsContent value="timeline">
