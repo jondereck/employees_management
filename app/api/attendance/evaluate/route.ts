@@ -19,6 +19,8 @@ function toDateISO(monthISO: string, day: number) {
   return `${monthISO}-${String(day).padStart(2, "0")}`;
 }
 
+const MAX_FALLBACK_CONCURRENCY = 4;
+
 function withTimeout<T>(promise: Promise<T>, ms: number) {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -85,6 +87,7 @@ export async function POST(req: Request) {
       } => Boolean(row));
 
     const scheduleKeys = validRows.map((row) => ({ employeeId: row.employeeId, dateISO: row.dateISO }));
+    const scheduleKey = (employeeId: string, dateISO: string) => `${employeeId}||${dateISO}`;
     const normalizedSchedules = await withTimeout(
       loadNormalizedSchedulesForMonth(scheduleKeys, monthISO),
       5_000
@@ -93,26 +96,23 @@ export async function POST(req: Request) {
       return new Map<string, NormalizedSchedule>();
     });
 
-    const scheduleCache = new Map<string, NormalizedSchedule>();
+    const fallbackTargets = scheduleKeys.filter(({ employeeId, dateISO }) => {
+      const key = scheduleKey(employeeId, dateISO);
+      const match = normalizedSchedules.get(key);
+      return !match || match.source === "DEFAULT";
+    });
+
+    const fallbackSchedules = await loadFallbackSchedules(fallbackTargets, scheduleKey);
+
     const defaultSchedule = normalizeSchedule(DEFAULT_SCHEDULE);
     const evaluatedPerDay: PerDayRow[] = [];
 
     for (const row of validRows) {
-      const scheduleKey = `${row.employeeId}||${row.dateISO}`;
-      let schedule = normalizedSchedules.get(scheduleKey);
-
-      if (!schedule || schedule.source === "DEFAULT") {
-        if (!scheduleCache.has(scheduleKey)) {
-          try {
-            const fallback = await getScheduleFor(row.employeeId, row.dateISO);
-            scheduleCache.set(scheduleKey, normalizeSchedule(fallback));
-          } catch (error) {
-            console.error("Fallback schedule lookup failed", { employeeId: row.employeeId, dateISO: row.dateISO, error });
-            scheduleCache.set(scheduleKey, defaultSchedule);
-          }
-        }
-        schedule = scheduleCache.get(scheduleKey) ?? defaultSchedule;
-      }
+      const key = scheduleKey(row.employeeId, row.dateISO);
+      const schedule =
+        normalizedSchedules.get(key) ??
+        fallbackSchedules.get(key) ??
+        defaultSchedule;
 
       const evaluation = evaluateDay({
         dateISO: row.dateISO,
@@ -145,4 +145,55 @@ export async function POST(req: Request) {
     console.error("Failed to evaluate attendance", error);
     return NextResponse.json({ error: "Failed to evaluate attendance" }, { status: 500 });
   }
+}
+
+async function loadFallbackSchedules(
+  entries: Array<{ employeeId: string; dateISO: string }>,
+  toKey: (employeeId: string, dateISO: string) => string
+): Promise<Map<string, NormalizedSchedule>> {
+  if (!entries.length) {
+    return new Map();
+  }
+
+  const seen = new Set<string>();
+  const unique: Array<{ employeeId: string; dateISO: string }> = [];
+  for (const entry of entries) {
+    const key = toKey(entry.employeeId, entry.dateISO);
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(entry);
+    }
+  }
+
+  if (!unique.length) {
+    return new Map();
+  }
+
+  const results = new Map<string, NormalizedSchedule>();
+  const queue = [...unique];
+  const workers = Array.from({ length: Math.min(MAX_FALLBACK_CONCURRENCY, queue.length) }, () =>
+    (async function run() {
+      while (queue.length) {
+        const next = queue.pop();
+        if (!next) {
+          break;
+        }
+        const key = toKey(next.employeeId, next.dateISO);
+        try {
+          const record = await getScheduleFor(next.employeeId, next.dateISO);
+          results.set(key, normalizeSchedule(record));
+        } catch (error) {
+          console.error("Fallback schedule lookup failed", {
+            employeeId: next.employeeId,
+            dateISO: next.dateISO,
+            error,
+          });
+          results.set(key, normalizeSchedule(DEFAULT_SCHEDULE));
+        }
+      }
+    })()
+  );
+
+  await Promise.all(workers);
+  return results;
 }
