@@ -124,6 +124,9 @@ const aggregateWarnings = (sources: ParseWarning[][]): ParseWarning[] => {
       if (existing) {
         const combinedCount = (existing.count ?? 0) + (warning.count ?? 0);
         existing.count = combinedCount || undefined;
+        if (existing.level !== "warning" && warning.level === "warning") {
+          existing.level = "warning";
+        }
         if (warning.samples?.length) {
           const samples = new Set(existing.samples ?? []);
           for (const sample of warning.samples) {
@@ -135,6 +138,7 @@ const aggregateWarnings = (sources: ParseWarning[][]): ParseWarning[] => {
       } else {
         map.set(key, {
           type: warning.type,
+          level: warning.level,
           message: warning.message,
           count: warning.count,
           samples: warning.samples ? [...warning.samples] : undefined,
@@ -264,6 +268,12 @@ export default function BioLogUploader() {
     if (!sources.length) return [];
     return aggregateWarnings(sources);
   }, [parsedFiles, mergeResult]);
+
+  const aggregatedWarningLevel = aggregatedWarnings.some(
+    (warning) => warning.level === "warning"
+  )
+    ? "warning"
+    : "info";
 
   const hasPendingParses = files.some(
     (file) => file.status === "parsing" || file.status === "queued"
@@ -731,9 +741,15 @@ export default function BioLogUploader() {
       )}
 
       {aggregatedWarnings.length > 0 && (
-        <Alert variant="destructive">
+        <Alert
+          variant={aggregatedWarningLevel === "warning" ? "destructive" : "default"}
+        >
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Warnings detected</AlertTitle>
+          <AlertTitle>
+            {aggregatedWarningLevel === "warning"
+              ? "Warnings detected"
+              : "Heads up"}
+          </AlertTitle>
           <AlertDescription>
             <div className="space-y-2">
               {aggregatedWarnings.map((warning) => (

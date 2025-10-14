@@ -1,7 +1,10 @@
 import * as XLSX from "xlsx";
 
+export type WarningLevel = "info" | "warning";
+
 export type ParseWarning = {
-  type: "DATE_PARSE" | "GENERAL";
+  type: "DATE_PARSE" | "GENERAL" | "MERGED_DUPLICATES";
+  level: WarningLevel;
   message: string;
   count?: number;
   samples?: string[];
@@ -480,6 +483,7 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer, options: { fileName
   if (invalidDateContext.count > 0) {
     warnings.push({
       type: "DATE_PARSE",
+      level: "warning",
       message: `Unable to parse ${invalidDateContext.count} date${invalidDateContext.count > 1 ? "s" : ""}.`,
       count: invalidDateContext.count,
       samples: invalidDateContext.samples,
@@ -592,8 +596,11 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
 
   if (mergedDuplicates > 0) {
     warnings.push({
-      type: "GENERAL",
-      message: `Merged ${mergedDuplicates} duplicate punch${mergedDuplicates > 1 ? "es" : ""} (within the same minute).`,
+      type: "MERGED_DUPLICATES",
+      level: "info",
+      message: `Detected and merged ${mergedDuplicates} duplicate punch${
+        mergedDuplicates > 1 ? "es" : ""
+      } that occurred within the same minute. The duplicates were removed automatically and only one entry per minute was kept.`,
     });
   }
 
