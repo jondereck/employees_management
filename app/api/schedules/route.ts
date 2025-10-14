@@ -21,6 +21,7 @@ const createScheduleSchema = z.object({
   breakMinutes: z.coerce.number().int().min(0).max(720).optional(),
   effectiveFrom: z.string().min(1),
   effectiveTo: z.string().optional().nullable(),
+  requireCore: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {

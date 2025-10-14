@@ -72,7 +72,7 @@ const getNavGroups = (departmentId: string): NavGroup[] => [
     items: [
       {
         label: "Manage Employees",
-        path: `/employees`,
+        path: `employees`,
         icon: Users,
       },
       {
@@ -175,21 +175,25 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
 
                         return (
                           <li key={label}>
-                            <button
-                              disabled={loading} // disable during global loading
-                              onClick={() => handleLinkClick(href)}
+                            <Link
+                              href={href}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                if (!loading) {
+                                  handleLinkClick(href);
+                                }
+                              }}
                               className={cn(
-                                "flex items-center gap-2 rounded px-2 py-2 text-sm w-full text-left transition-colors",
+                                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                                 isActive
-                                  ? "bg-green-100 text-green-700 font-semibold"
+                                  ? "bg-green-100 font-semibold text-green-700"
                                   : "text-muted-foreground hover:bg-muted",
-                                loading && "opacity-50 cursor-not-allowed"
+                                loading && "pointer-events-none opacity-50"
                               )}
                             >
                               {Icon && <Icon className="h-4 w-4" />}
                               <span>{label}</span>
-                             
-                            </button>
+                            </Link>
                           </li>
                         );
                       })}

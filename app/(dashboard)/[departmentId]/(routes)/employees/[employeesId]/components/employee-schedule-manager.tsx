@@ -1,11 +1,11 @@
 "use client";
 
-import { type FormEvent, useCallback, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Prisma, ScheduleType } from "@prisma/client";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FieldHelp } from "@/components/ui/field-help";
+import { useToast } from "@/components/ui/use-toast";
 import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
 
 type ScheduleTypeEnum = (typeof ScheduleType)[keyof typeof ScheduleType];
@@ -45,6 +47,7 @@ const scheduleFormSchema = z
     breakMinutes: z.coerce.number().int().min(0).max(720).default(60),
     effectiveFrom: z.string().min(1, "Effective from date is required"),
     effectiveTo: z.string().optional(),
+    requireCore: z.boolean().default(true),
   })
   .superRefine((data, ctx) => {
   if (data.type === ScheduleType.FIXED) {
@@ -57,19 +60,22 @@ const scheduleFormSchema = z
       }
     }
   if (data.type === ScheduleType.FLEX) {
+      const requireCore = data.requireCore ?? true;
       const required = [
         "coreStart",
         "coreEnd",
         "bandwidthStart",
         "bandwidthEnd",
       ] as const;
-      for (const key of required) {
-        if (!data[key]) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [key],
-            message: "All flex schedule fields are required",
-          });
+      if (requireCore) {
+        for (const key of required) {
+          if (!data[key]) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [key],
+              message: "All flex schedule fields are required",
+            });
+          }
         }
       }
       if (!data.requiredDailyMinutes) {
@@ -171,6 +177,7 @@ const scheduleDefaults: ScheduleFormValues = {
   breakMinutes: 60,
   effectiveFrom: "",
   effectiveTo: "",
+  requireCore: true,
 };
 
 const exceptionDefaults: ExceptionFormValues = {
@@ -242,6 +249,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   const [editingException, setEditingException] = useState<ScheduleExceptionDTO | null>(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingException, setSavingException] = useState(false);
+  const { toast } = useToast();
 
   const scheduleForm = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleFormSchema),
@@ -254,7 +262,14 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   });
 
   const scheduleType = scheduleForm.watch("type");
+  const requireCore = scheduleForm.watch("requireCore");
   const exceptionType = exceptionForm.watch("type");
+
+  useEffect(() => {
+    if (scheduleType !== ScheduleType.FLEX) {
+      scheduleForm.setValue("requireCore", true, { shouldDirty: false });
+    }
+  }, [scheduleForm, scheduleType]);
 
   const resetScheduleForm = useCallback(() => {
     setEditingSchedule(null);
@@ -266,44 +281,191 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
     exceptionForm.reset(exceptionDefaults);
   }, [exceptionForm]);
 
+  const normalizeScheduleFormValues = (values: ScheduleFormValues) => {
+    const shouldClearCore = values.type === ScheduleType.FLEX && !values.requireCore;
+    return {
+      type: values.type,
+      startTime: values.startTime?.trim() ? values.startTime : null,
+      endTime: values.endTime?.trim() ? values.endTime : null,
+      graceMinutes: Number.isFinite(values.graceMinutes) ? values.graceMinutes : 0,
+      coreStart: shouldClearCore ? null : values.coreStart?.trim() ? values.coreStart : null,
+      coreEnd: shouldClearCore ? null : values.coreEnd?.trim() ? values.coreEnd : null,
+      bandwidthStart: values.bandwidthStart?.trim() ? values.bandwidthStart : null,
+      bandwidthEnd: values.bandwidthEnd?.trim() ? values.bandwidthEnd : null,
+      requiredDailyMinutes: Number.isFinite(values.requiredDailyMinutes)
+        ? values.requiredDailyMinutes
+        : null,
+      shiftStart: values.shiftStart?.trim() ? values.shiftStart : null,
+      shiftEnd: values.shiftEnd?.trim() ? values.shiftEnd : null,
+      breakMinutes: Number.isFinite(values.breakMinutes) ? values.breakMinutes : 60,
+      effectiveFrom: values.effectiveFrom,
+      effectiveTo: values.effectiveTo?.trim() ? values.effectiveTo : null,
+    };
+  };
+
+  const toISODate = (value: string | null | undefined) =>
+    value ? new Date(`${value}T00:00:00`).toISOString() : null;
+
+  const buildScheduleRequestBody = (values: ScheduleFormValues) => {
+    const normalized = normalizeScheduleFormValues(values);
+    return {
+      type: normalized.type,
+      startTime: normalized.startTime,
+      endTime: normalized.endTime,
+      graceMinutes: normalized.graceMinutes,
+      coreStart: normalized.coreStart,
+      coreEnd: normalized.coreEnd,
+      bandwidthStart: normalized.bandwidthStart,
+      bandwidthEnd: normalized.bandwidthEnd,
+      requiredDailyMinutes: normalized.requiredDailyMinutes,
+      shiftStart: normalized.shiftStart,
+      shiftEnd: normalized.shiftEnd,
+      breakMinutes: normalized.breakMinutes,
+      effectiveFrom: normalized.effectiveFrom,
+      effectiveTo: normalized.effectiveTo,
+    };
+  };
+
+  const buildScheduleDto = (values: ScheduleFormValues, id: string): WorkScheduleDTO => {
+    const normalized = normalizeScheduleFormValues(values);
+    return {
+      id,
+      employeeId,
+      type: normalized.type,
+      startTime: normalized.startTime,
+      endTime: normalized.endTime,
+      graceMinutes: normalized.graceMinutes,
+      coreStart: normalized.coreStart,
+      coreEnd: normalized.coreEnd,
+      bandwidthStart: normalized.bandwidthStart,
+      bandwidthEnd: normalized.bandwidthEnd,
+      requiredDailyMinutes: normalized.requiredDailyMinutes,
+      shiftStart: normalized.shiftStart,
+      shiftEnd: normalized.shiftEnd,
+      breakMinutes: normalized.breakMinutes,
+      timezone: editingSchedule?.timezone ?? "Asia/Manila",
+      effectiveFrom: toISODate(normalized.effectiveFrom) ?? new Date().toISOString(),
+      effectiveTo: toISODate(normalized.effectiveTo),
+    };
+  };
+
   const onSubmitSchedule = scheduleForm.handleSubmit(async (values) => {
+    const requestBody = buildScheduleRequestBody(values);
+    const optimisticDto = buildScheduleDto(values, editingSchedule?.id ?? `temp-${Date.now()}`);
+    const previousSchedules = scheduleList;
+
     try {
       setSavingSchedule(true);
-      const payload = {
-        ...values,
-        effectiveTo: values.effectiveTo ? values.effectiveTo : null,
-      };
-      const endpoint = editingSchedule
-        ? `/api/employee/${employeeId}/work-schedules/${editingSchedule.id}`
-        : `/api/schedules`;
-      const method = editingSchedule ? "PATCH" : "POST";
-      const bodyPayload = editingSchedule ? payload : { ...payload, employeeId };
-      const response = await fetch(endpoint, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bodyPayload),
-      });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(body?.error ?? "Unable to save schedule");
+      if (editingSchedule) {
+        setScheduleList((prev) =>
+          sortByDateDesc(
+            prev.map((item) => (item.id === optimisticDto.id ? optimisticDto : item))
+          )
+        );
+
+        const response = await fetch(`/api/schedules/${editingSchedule.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(body?.error ?? "Unable to save schedule");
+        }
+        const data = body as WorkScheduleDTO;
+        setScheduleList((prev) =>
+          sortByDateDesc(prev.map((item) => (item.id === data.id ? data : item)))
+        );
+        toast({ title: "Schedule updated" });
+        resetScheduleForm();
+      } else {
+        setScheduleList((prev) => sortByDateDesc([optimisticDto, ...prev]));
+        const response = await fetch(`/api/schedules`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...requestBody, employeeId }),
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(body?.error ?? "Unable to save schedule");
+        }
+        const data = body as WorkScheduleDTO;
+        setScheduleList((prev) =>
+          sortByDateDesc(prev.map((item) => (item.id === optimisticDto.id ? data : item)))
+        );
+        toast({ title: "Schedule added" });
+        resetScheduleForm();
       }
-      const data = body as WorkScheduleDTO;
-      setScheduleList((prev) =>
-        sortByDateDesc(
-          editingSchedule
-            ? prev.map((item) => (item.id === data.id ? data : item))
-            : [data, ...prev]
-        )
-      );
-      toast.success(editingSchedule ? "Schedule updated" : "Schedule added");
-      resetScheduleForm();
     } catch (error) {
+      setScheduleList(previousSchedules);
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "Unable to save schedule");
+      toast({
+        title: "Unable to save schedule",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
     } finally {
       setSavingSchedule(false);
     }
   });
+
+  const normalizeExceptionFormValues = (values: ExceptionFormValues) => ({
+    type: values.type,
+    date: values.date,
+    startTime: values.startTime?.trim() ? values.startTime : null,
+    endTime: values.endTime?.trim() ? values.endTime : null,
+    graceMinutes: Number.isFinite(values.graceMinutes) ? values.graceMinutes : 0,
+    coreStart: values.coreStart?.trim() ? values.coreStart : null,
+    coreEnd: values.coreEnd?.trim() ? values.coreEnd : null,
+    bandwidthStart: values.bandwidthStart?.trim() ? values.bandwidthStart : null,
+    bandwidthEnd: values.bandwidthEnd?.trim() ? values.bandwidthEnd : null,
+    requiredDailyMinutes: Number.isFinite(values.requiredDailyMinutes)
+      ? values.requiredDailyMinutes
+      : null,
+    shiftStart: values.shiftStart?.trim() ? values.shiftStart : null,
+    shiftEnd: values.shiftEnd?.trim() ? values.shiftEnd : null,
+    breakMinutes: Number.isFinite(values.breakMinutes) ? values.breakMinutes : 60,
+  });
+
+  const buildExceptionRequestBody = (values: ExceptionFormValues) => {
+    const normalized = normalizeExceptionFormValues(values);
+    return {
+      type: normalized.type,
+      date: normalized.date,
+      startTime: normalized.startTime,
+      endTime: normalized.endTime,
+      graceMinutes: normalized.graceMinutes,
+      coreStart: normalized.coreStart,
+      coreEnd: normalized.coreEnd,
+      bandwidthStart: normalized.bandwidthStart,
+      bandwidthEnd: normalized.bandwidthEnd,
+      requiredDailyMinutes: normalized.requiredDailyMinutes,
+      shiftStart: normalized.shiftStart,
+      shiftEnd: normalized.shiftEnd,
+      breakMinutes: normalized.breakMinutes,
+    };
+  };
+
+  const buildExceptionDto = (values: ExceptionFormValues, id: string): ScheduleExceptionDTO => {
+    const normalized = normalizeExceptionFormValues(values);
+    return {
+      id,
+      employeeId,
+      type: normalized.type,
+      date: toISODate(normalized.date) ?? new Date().toISOString(),
+      startTime: normalized.startTime,
+      endTime: normalized.endTime,
+      graceMinutes: normalized.graceMinutes,
+      coreStart: normalized.coreStart,
+      coreEnd: normalized.coreEnd,
+      bandwidthStart: normalized.bandwidthStart,
+      bandwidthEnd: normalized.bandwidthEnd,
+      requiredDailyMinutes: normalized.requiredDailyMinutes,
+      shiftStart: normalized.shiftStart,
+      shiftEnd: normalized.shiftEnd,
+      breakMinutes: normalized.breakMinutes,
+    };
+  };
 
   const handleScheduleFormSubmit = useCallback(
     (event?: FormEvent<HTMLFormElement>) => {
@@ -319,35 +481,60 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   }, [onSubmitSchedule]);
 
   const onSubmitException = exceptionForm.handleSubmit(async (values) => {
+    const requestBody = buildExceptionRequestBody(values);
+    const optimisticDto = buildExceptionDto(values, editingException?.id ?? `temp-${Date.now()}`);
+    const previousExceptions = exceptionList;
+
     try {
       setSavingException(true);
-      const response = await fetch(
-        editingException
-          ? `/api/employee/${employeeId}/schedule-exceptions/${editingException.id}`
-          : `/api/employee/${employeeId}/schedule-exceptions`,
-        {
-          method: editingException ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(values),
+      if (editingException) {
+        setExceptionList((prev) =>
+          sortByDateDesc(prev.map((item) => (item.id === optimisticDto.id ? optimisticDto : item)))
+        );
+        const response = await fetch(
+          `/api/employee/${employeeId}/schedule-exceptions/${editingException.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+          }
+        );
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(body?.error ?? "Unable to save schedule exception");
         }
-      );
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(body?.error ?? "Unable to save schedule exception");
+        const data = body as ScheduleExceptionDTO;
+        setExceptionList((prev) =>
+          sortByDateDesc(prev.map((item) => (item.id === data.id ? data : item)))
+        );
+        toast({ title: "Exception updated" });
+        resetExceptionForm();
+      } else {
+        setExceptionList((prev) => sortByDateDesc([optimisticDto, ...prev]));
+        const response = await fetch(`/api/employee/${employeeId}/schedule-exceptions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(body?.error ?? "Unable to save schedule exception");
+        }
+        const data = body as ScheduleExceptionDTO;
+        setExceptionList((prev) =>
+          sortByDateDesc(prev.map((item) => (item.id === optimisticDto.id ? data : item)))
+        );
+        toast({ title: "Exception added" });
+        resetExceptionForm();
       }
-      const data = body as ScheduleExceptionDTO;
-      setExceptionList((prev) =>
-        sortByDateDesc(
-          editingException
-            ? prev.map((item) => (item.id === data.id ? data : item))
-            : [data, ...prev]
-        )
-      );
-      toast.success(editingException ? "Exception updated" : "Exception added");
-      resetExceptionForm();
     } catch (error) {
+      setExceptionList(previousExceptions);
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "Unable to save schedule exception");
+      toast({
+        title: "Unable to save schedule exception",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
     } finally {
       setSavingException(false);
     }
@@ -371,6 +558,10 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
         breakMinutes: schedule.breakMinutes ?? 60,
         effectiveFrom: toDateInput(schedule.effectiveFrom),
         effectiveTo: toDateInput(schedule.effectiveTo),
+        requireCore:
+          schedule.type === ScheduleType.FLEX
+            ? Boolean(schedule.coreStart && schedule.coreEnd)
+            : true,
       });
     },
     [scheduleForm]
@@ -400,32 +591,35 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
 
   const handleDeleteSchedule = useCallback(
     async (schedule: WorkScheduleDTO) => {
-      if (!confirm("Remove this work schedule?")) return;
+      const previousSchedules = scheduleList;
+      setScheduleList((prev) => prev.filter((item) => item.id !== schedule.id));
       try {
-        const response = await fetch(
-          `/api/employee/${employeeId}/work-schedules/${schedule.id}`,
-          { method: "DELETE" }
-        );
+        const response = await fetch(`/api/schedules/${schedule.id}`, { method: "DELETE" });
         const body = await response.json().catch(() => null);
         if (!response.ok) {
           throw new Error(body?.error ?? "Unable to delete schedule");
         }
-        setScheduleList((prev) => prev.filter((item) => item.id !== schedule.id));
-        toast.success("Schedule removed");
+        toast({ title: "Schedule removed" });
         if (editingSchedule?.id === schedule.id) {
           resetScheduleForm();
         }
       } catch (error) {
+        setScheduleList(previousSchedules);
         console.error(error);
-        toast.error(error instanceof Error ? error.message : "Unable to delete schedule");
+        toast({
+          title: "Unable to remove schedule",
+          description: error instanceof Error ? error.message : undefined,
+          variant: "destructive",
+        });
       }
     },
-    [editingSchedule, employeeId, resetScheduleForm]
+    [editingSchedule, resetScheduleForm, scheduleList, toast]
   );
 
   const handleDeleteException = useCallback(
     async (exception: ScheduleExceptionDTO) => {
-      if (!confirm("Remove this exception?")) return;
+      const previousExceptions = exceptionList;
+      setExceptionList((prev) => prev.filter((item) => item.id !== exception.id));
       try {
         const response = await fetch(
           `/api/employee/${employeeId}/schedule-exceptions/${exception.id}`,
@@ -435,17 +629,21 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
         if (!response.ok) {
           throw new Error(body?.error ?? "Unable to delete schedule exception");
         }
-        setExceptionList((prev) => prev.filter((item) => item.id !== exception.id));
-        toast.success("Exception removed");
+        toast({ title: "Exception removed" });
         if (editingException?.id === exception.id) {
           resetExceptionForm();
         }
       } catch (error) {
+        setExceptionList(previousExceptions);
         console.error(error);
-        toast.error(error instanceof Error ? error.message : "Unable to delete schedule exception");
+        toast({
+          title: "Unable to remove exception",
+          description: error instanceof Error ? error.message : undefined,
+          variant: "destructive",
+        });
       }
     },
-    [editingException, employeeId, resetExceptionForm]
+    [editingException, employeeId, exceptionList, resetExceptionForm, toast]
   );
 
   const scheduleRows = useMemo(() => sortByDateDesc(scheduleList), [scheduleList]);
@@ -495,16 +693,21 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                 name="breakMinutes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Paid break (minutes)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={720}
-                        value={field.value ?? 60}
-                        onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                      />
-                    </FormControl>
+                    <FieldHelp
+                      label="Paid break"
+                      help="Minutes automatically deducted from your day (e.g., lunch)."
+                    >
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={720}
+                          step={5}
+                          value={field.value ?? 60}
+                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                        />
+                      </FormControl>
+                    </FieldHelp>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -518,10 +721,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="startTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Start time</FormLabel>
-                      <FormControl>
-                        <Input placeholder="08:00" {...field} />
-                      </FormControl>
+                      <FieldHelp label="Start time" help="Standard day start.">
+                        <FormControl>
+                          <Input placeholder="08:00" {...field} />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -531,10 +735,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="endTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>End time</FormLabel>
-                      <FormControl>
-                        <Input placeholder="17:00" {...field} />
-                      </FormControl>
+                      <FieldHelp label="End time" help="Standard day end.">
+                        <FormControl>
+                          <Input placeholder="17:00" {...field} />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -544,16 +749,20 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="graceMinutes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Grace minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={180}
-                          value={field.value ?? 0}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
+                      <FieldHelp
+                        label="Grace minutes"
+                        help="Allowed minutes after start before counting as late."
+                      >
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={180}
+                            value={field.value ?? 0}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                          />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -562,74 +771,138 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
             )}
 
             {scheduleType === ScheduleType.FLEX && (
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={scheduleForm.control}
+                    name="coreStart"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FieldHelp
+                          label="Core start"
+                          help="Time window you must overlap at least once."
+                        >
+                          <FormControl>
+                            <Input
+                              placeholder="10:00"
+                              disabled={!requireCore}
+                              {...field}
+                            />
+                          </FormControl>
+                        </FieldHelp>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="coreEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FieldHelp
+                          label="Core end"
+                          help="Time window you must overlap at least once."
+                        >
+                          <FormControl>
+                            <Input
+                              placeholder="15:00"
+                              disabled={!requireCore}
+                              {...field}
+                            />
+                          </FormControl>
+                        </FieldHelp>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
                   control={scheduleForm.control}
-                  name="coreStart"
+                  name="requireCore"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Core start</FormLabel>
-                      <FormControl>
-                        <Input placeholder="10:00" {...field} />
-                      </FormControl>
-                      <FormMessage />
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="no-core-requirement"
+                          checked={!field.value}
+                          onCheckedChange={(checked) => {
+                            const noCore = checked === true;
+                            field.onChange(!noCore);
+                            if (noCore) {
+                              scheduleForm.setValue("coreStart", "", { shouldDirty: true });
+                              scheduleForm.setValue("coreEnd", "", { shouldDirty: true });
+                            }
+                          }}
+                        />
+                        <label
+                          htmlFor="no-core-requirement"
+                          className="text-sm font-medium leading-none"
+                        >
+                          No core requirement (floating day)
+                        </label>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Don’t enforce core hours; only total minutes matter.
+                      </p>
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={scheduleForm.control}
-                  name="coreEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Core end</FormLabel>
-                      <FormControl>
-                        <Input placeholder="15:00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={scheduleForm.control}
+                    name="bandwidthStart"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FieldHelp
+                          label="Earliest allowed"
+                          help="Work time only counts inside this window."
+                        >
+                          <FormControl>
+                            <Input placeholder="06:00" {...field} />
+                          </FormControl>
+                        </FieldHelp>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="bandwidthEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FieldHelp
+                          label="Latest allowed"
+                          help="Work time only counts inside this window."
+                        >
+                          <FormControl>
+                            <Input placeholder="20:00" {...field} />
+                          </FormControl>
+                        </FieldHelp>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
                   control={scheduleForm.control}
                   name="requiredDailyMinutes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Required minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={1440}
-                          value={field.value ?? 480}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="bandwidthStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bandwidth start</FormLabel>
-                      <FormControl>
-                        <Input placeholder="06:00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="bandwidthEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bandwidth end</FormLabel>
-                      <FormControl>
-                        <Input placeholder="20:00" {...field} />
-                      </FormControl>
+                      <FieldHelp
+                        label="Required minutes"
+                        help="Net minutes you must complete after paid break."
+                      >
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={1440}
+                            step={30}
+                            value={field.value ?? 480}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                          />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -670,16 +943,20 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="graceMinutes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Grace minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={180}
-                          value={field.value ?? 0}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
+                      <FieldHelp
+                        label="Grace minutes"
+                        help="Allowed minutes after start before counting as late."
+                      >
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={180}
+                            value={field.value ?? 0}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                          />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -843,10 +1120,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="startTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Start time</FormLabel>
-                      <FormControl>
-                        <Input placeholder="08:00" {...field} />
-                      </FormControl>
+                      <FieldHelp label="Start time" help="Standard day start.">
+                        <FormControl>
+                          <Input placeholder="08:00" {...field} />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -856,10 +1134,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="endTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>End time</FormLabel>
-                      <FormControl>
-                        <Input placeholder="17:00" {...field} />
-                      </FormControl>
+                      <FieldHelp label="End time" help="Standard day end.">
+                        <FormControl>
+                          <Input placeholder="17:00" {...field} />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -869,16 +1148,20 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="graceMinutes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Grace minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={180}
-                          value={field.value ?? 0}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
+                      <FieldHelp
+                        label="Grace minutes"
+                        help="Allowed minutes after start before counting as late."
+                      >
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={180}
+                            value={field.value ?? 0}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                          />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -887,74 +1170,99 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
             )}
 
             {exceptionType === ScheduleType.FLEX && (
-              <div className="grid gap-4 md:grid-cols-3">
-                <FormField
-                  control={exceptionForm.control}
-                  name="coreStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Core start</FormLabel>
-                      <FormControl>
-                        <Input placeholder="10:00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="coreEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Core end</FormLabel>
-                      <FormControl>
-                        <Input placeholder="15:00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={exceptionForm.control}
+                    name="coreStart"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FieldHelp
+                          label="Core start"
+                          help="Time window you must overlap at least once."
+                        >
+                          <FormControl>
+                            <Input placeholder="10:00" {...field} />
+                          </FormControl>
+                        </FieldHelp>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={exceptionForm.control}
+                    name="coreEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FieldHelp
+                          label="Core end"
+                          help="Time window you must overlap at least once."
+                        >
+                          <FormControl>
+                            <Input placeholder="15:00" {...field} />
+                          </FormControl>
+                        </FieldHelp>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={exceptionForm.control}
+                    name="bandwidthStart"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FieldHelp
+                          label="Earliest allowed"
+                          help="Work time only counts inside this window."
+                        >
+                          <FormControl>
+                            <Input placeholder="06:00" {...field} />
+                          </FormControl>
+                        </FieldHelp>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={exceptionForm.control}
+                    name="bandwidthEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FieldHelp
+                          label="Latest allowed"
+                          help="Work time only counts inside this window."
+                        >
+                          <FormControl>
+                            <Input placeholder="20:00" {...field} />
+                          </FormControl>
+                        </FieldHelp>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
                   control={exceptionForm.control}
                   name="requiredDailyMinutes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Required minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={1440}
-                          value={field.value ?? 480}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="bandwidthStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bandwidth start</FormLabel>
-                      <FormControl>
-                        <Input placeholder="06:00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="bandwidthEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bandwidth end</FormLabel>
-                      <FormControl>
-                        <Input placeholder="20:00" {...field} />
-                      </FormControl>
+                      <FieldHelp
+                        label="Required minutes"
+                        help="Net minutes you must complete after paid break."
+                      >
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={1440}
+                            step={30}
+                            value={field.value ?? 480}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                          />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -995,16 +1303,20 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                   name="graceMinutes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Grace minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={180}
-                          value={field.value ?? 0}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
+                      <FieldHelp
+                        label="Grace minutes"
+                        help="Allowed minutes after start before counting as late."
+                      >
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={180}
+                            value={field.value ?? 0}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                          />
+                        </FormControl>
+                      </FieldHelp>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1017,16 +1329,21 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
               name="breakMinutes"
               render={({ field }) => (
                 <FormItem className="w-full md:w-48">
-                  <FormLabel>Break minutes</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={720}
-                      value={field.value ?? 60}
-                      onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                    />
-                  </FormControl>
+                  <FieldHelp
+                    label="Paid break"
+                    help="Minutes automatically deducted from your day (e.g., lunch)."
+                  >
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={720}
+                        step={5}
+                        value={field.value ?? 60}
+                        onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                      />
+                    </FormControl>
+                  </FieldHelp>
                   <FormMessage />
                 </FormItem>
               )}
