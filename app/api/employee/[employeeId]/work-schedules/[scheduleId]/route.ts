@@ -6,6 +6,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
 
+const OPEN_ENDED_START = "1970-01-01T00:00:00.000Z";
+
 const scheduleSchema = z.object({
   type: z.nativeEnum(ScheduleType).optional(),
   startTime: z.string().optional(),
@@ -20,7 +22,7 @@ const scheduleSchema = z.object({
   shiftEnd: z.string().optional().nullable(),
   breakMinutes: z.coerce.number().int().min(0).max(720).optional(),
   timezone: z.string().optional(),
-  effectiveFrom: z.string().optional(),
+  effectiveFrom: z.string().optional().nullable(),
   effectiveTo: z.string().optional().nullable(),
 }).superRefine((data, ctx) => {
   if (data.type === ScheduleType.FIXED) {
@@ -69,7 +71,10 @@ export async function PATCH(request: Request, { params }: { params: { employeeId
     if (payload.shiftEnd !== undefined) data.shiftEnd = payload.shiftEnd ?? null;
     if (payload.breakMinutes !== undefined) data.breakMinutes = payload.breakMinutes;
     if (payload.timezone !== undefined) data.timezone = payload.timezone;
-    if (payload.effectiveFrom !== undefined) data.effectiveFrom = new Date(payload.effectiveFrom);
+    if (payload.effectiveFrom !== undefined)
+      data.effectiveFrom = payload.effectiveFrom?.trim()
+        ? new Date(payload.effectiveFrom)
+        : new Date(OPEN_ENDED_START);
     if (payload.effectiveTo !== undefined) {
       data.effectiveTo = payload.effectiveTo ? new Date(payload.effectiveTo) : null;
     }

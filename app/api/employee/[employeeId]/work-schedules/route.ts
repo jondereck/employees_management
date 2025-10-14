@@ -6,6 +6,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
 
+const OPEN_ENDED_START = "1970-01-01T00:00:00.000Z";
+
 const scheduleSchema = z.object({
   type: z.nativeEnum(ScheduleType),
   startTime: z.string().optional(),
@@ -20,7 +22,7 @@ const scheduleSchema = z.object({
   shiftEnd: z.string().optional(),
   breakMinutes: z.coerce.number().int().min(0).max(720).default(60),
   timezone: z.string().optional(),
-  effectiveFrom: z.string().min(1, "Effective from date is required"),
+  effectiveFrom: z.string().optional().nullable(),
   effectiveTo: z.string().optional().nullable(),
 }).superRefine((data, ctx) => {
   if (data.type === ScheduleType.FIXED) {
@@ -49,6 +51,9 @@ export async function POST(request: Request, { params }: { params: { employeeId:
   try {
     const json = await request.json();
     const payload = scheduleSchema.parse(json) as ScheduleInput;
+    const effectiveFrom = payload.effectiveFrom?.trim()
+      ? new Date(payload.effectiveFrom)
+      : new Date(OPEN_ENDED_START);
     const data: Prisma.WorkScheduleUncheckedCreateInput = {
       employeeId: params.employeeId,
       type: payload.type,
@@ -64,7 +69,7 @@ export async function POST(request: Request, { params }: { params: { employeeId:
       shiftEnd: payload.shiftEnd ?? null,
       breakMinutes: payload.breakMinutes ?? 60,
       timezone: payload.timezone ?? "Asia/Manila",
-      effectiveFrom: new Date(payload.effectiveFrom),
+      effectiveFrom,
       effectiveTo: payload.effectiveTo ? new Date(payload.effectiveTo) : null,
     };
     const schedule = await prisma.workSchedule.create({ data });
