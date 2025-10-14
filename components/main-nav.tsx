@@ -27,6 +27,7 @@ import {
   Monitor,
   ShieldCheck,
   Building,
+  UploadCloud,
 } from "lucide-react";
 import LoadingSkeleton from "./loading-state";
 import Loading from "@/app/loading";
@@ -83,6 +84,13 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   ];
 
   const itemroutes = [
+    {
+      href: `/${params.departmentId}/biometrics`,
+      label: "Biometrics Uploader",
+      active: pathname === `/${params.departmentId}/biometrics`,
+      description: "Upload monthly biometric logs and export Late/Undertime.",
+      icon: <UploadCloud className="h-5 w-5 mr-1" />,
+    },
     {
       href: `/${params.departmentId}/view`,
       label: "View Employee",

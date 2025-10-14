@@ -131,6 +131,8 @@ model Employee {
   publicVersion          Int               @default(1)
   awards                 Award[]
   changeRequests         ChangeRequest[]   @relation("EmployeeToChangeRequests")
+  workSchedules          WorkSchedule[]
+  scheduleExceptions     ScheduleException[]
   department             Department        @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onUpdate: NoAction, map: "employee_departmentid_fkey")
   designation            Offices?          @relation("OfficesToDesignation", fields: [designationId], references: [id], onUpdate: NoAction, map: "employee_designationid_fkey")
   eligibility            Eligibility       @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
@@ -261,4 +263,54 @@ enum ChangeStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum ScheduleType {
+  FIXED
+  FLEX
+  SHIFT
+}
+
+model WorkSchedule {
+  id                   String        @id @default(cuid())
+  employeeId           String
+  type                 ScheduleType
+  startTime            String?
+  endTime              String?
+  graceMinutes         Int?
+  coreStart            String?
+  coreEnd              String?
+  bandwidthStart       String?
+  bandwidthEnd         String?
+  requiredDailyMinutes Int?
+  shiftStart           String?
+  shiftEnd             String?
+  breakMinutes         Int           @default(60)
+  timezone             String        @default("Asia/Manila")
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  employee             Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "workschedule_employeeid_fkey")
+
+  @@index([employeeId, effectiveFrom, effectiveTo])
+}
+
+model ScheduleException {
+  id                   String        @id @default(cuid())
+  employeeId           String
+  date                 DateTime
+  type                 ScheduleType
+  startTime            String?
+  endTime              String?
+  graceMinutes         Int?
+  coreStart            String?
+  coreEnd              String?
+  bandwidthStart       String?
+  bandwidthEnd         String?
+  requiredDailyMinutes Int?
+  shiftStart           String?
+  shiftEnd             String?
+  breakMinutes         Int?
+  employee             Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "scheduleexception_employeeid_fkey")
+
+  @@index([employeeId, date])
 }
