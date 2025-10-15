@@ -351,13 +351,25 @@ const computeIdentityWarnings = (
     for (const [token, entry] of unmatchedSamples.entries()) {
       const employeeIds = Array.from(entry.employeeIds).filter(Boolean);
       const idLabel = employeeIds.length
-        ? `${employeeIds.length > 1 ? "Employee IDs" : "Employee ID"}: ${employeeIds.join(", ")}`
-        : "Employee ID: n/a";
+        ? `${employeeIds.length > 1 ? "Uploaded IDs" : "Uploaded ID"}: ${employeeIds.join(", ")}`
+        : "Uploaded ID: n/a";
       const sampleSnippets = Array.from(entry.samples).slice(0, 3);
-      const sampleLabel = sampleSnippets.length
-        ? `Samples: ${sampleSnippets.join(" | ")}`
-        : "";
-      const detail = [token, idLabel, sampleLabel].filter(Boolean).join(" — ");
+      const sampleLines = sampleSnippets.length
+        ? [
+            "Samples:",
+            ...sampleSnippets.map((snippet, index) => {
+              const bullet = index === sampleSnippets.length - 1 ? "└" : "├";
+              return `${bullet} ${snippet}`;
+            }),
+          ]
+        : [];
+      const detail = [
+        `Token: ${token}`,
+        idLabel,
+        ...sampleLines,
+      ]
+        .filter(Boolean)
+        .join("\n");
       samples.push(detail);
       if (samples.length >= MAX_WARNING_SAMPLE_COUNT) break;
     }
@@ -372,8 +384,11 @@ const computeIdentityWarnings = (
   }
 
   if (ambiguous.size) {
-    const samples = Array.from(ambiguous.entries()).map(
-      ([token, names]) => `${token}: ${names.join(" | ")}`
+    const samples = Array.from(ambiguous.entries()).map(([token, names]) =>
+      [`Token: ${token}`, "Matches:", ...names.map((name, index) => {
+        const bullet = index === names.length - 1 ? "└" : "├";
+        return `${bullet} ${name}`;
+      })].join("\n")
     );
     warnings.push({
       type: "GENERAL",
@@ -385,8 +400,8 @@ const computeIdentityWarnings = (
   }
 
   if (missingOffice.size) {
-    const samples = Array.from(missingOffice.entries()).map(
-      ([token, name]) => `${token}: ${name} (${UNASSIGNED_OFFICE_LABEL})`
+    const samples = Array.from(missingOffice.entries()).map(([token, name]) =>
+      [`Token: ${token}`, `${name} (${UNASSIGNED_OFFICE_LABEL})`].join("\n")
     );
     warnings.push({
       type: "GENERAL",
@@ -1640,7 +1655,12 @@ export default function BioLogUploader() {
                   {warning.samples?.length ? (
                     <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
                       {warning.samples.map((sample, index) => (
-                        <li key={`${warning.message}-${index}`}>{sample}</li>
+                        <li
+                          key={`${warning.message}-${index}`}
+                          className="whitespace-pre-line"
+                        >
+                          {sample}
+                        </li>
                       ))}
                     </ul>
                   ) : null}
