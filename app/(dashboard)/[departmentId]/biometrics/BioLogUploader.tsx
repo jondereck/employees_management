@@ -175,7 +175,7 @@ type OutOfPeriodRow = {
   reason: "outside-period" | "invalid-day";
 };
 
-type SortKey = "lateDays" | "undertimeDays";
+type SortKey = "daysWithLogs" | "lateDays" | "undertimeDays";
 type SortDirection = "asc" | "desc";
 
 type FileStatus = "queued" | "parsing" | "parsed" | "failed";
@@ -1188,7 +1188,21 @@ export default function BioLogUploader() {
                   <th className="p-2 text-left">Employee ID</th>
                   <th className="p-2 text-left">Name</th>
                   <th className="p-2 text-left">Schedule</th>
-                  <th className="p-2 text-center">Days</th>
+                  <th className="p-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("daysWithLogs")}
+                      className="inline-flex items-center gap-1 font-semibold"
+                    >
+                      Days
+                      <ArrowUpDown
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          sortKey === "daysWithLogs" ? "opacity-100" : "opacity-40"
+                        )}
+                      />
+                    </button>
+                  </th>
                   <th className="p-2 text-center">
                     <button
                       type="button"
