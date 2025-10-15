@@ -291,7 +291,14 @@ const computeIdentityWarnings = (
   if (!rows.length) return [];
   if (status === "resolving") return [];
 
-  const unmatchedSamples = new Map<string, Set<string>>();
+  const unmatchedEntries = new Map<
+    string,
+    {
+      employeeIds: Set<string>;
+      sampleSet: Set<string>;
+      samples: string[];
+    }
+  >();
   const ambiguous = new Map<string, string[]>();
   const missingOffice = new Map<string, string>();
 
@@ -302,12 +309,29 @@ const computeIdentityWarnings = (
     if (!identity) continue;
 
     if (identity.status === "unmatched") {
-      const samples = unmatchedSamples.get(token) ?? new Set<string>();
-      if (samples.size < 5) {
-        const source = row.sourceFiles?.[0] ?? "Unknown file";
-        samples.add(`${token} — ${source} • ${row.dateISO}`);
+      const source = row.sourceFiles?.[0] ?? "Unknown file";
+      const entry =
+        unmatchedEntries.get(token) ??
+        {
+          employeeIds: new Set<string>(),
+          sampleSet: new Set<string>(),
+          samples: [] as string[],
+        };
+
+      const employeeId = row.employeeId?.trim();
+      if (employeeId) {
+        entry.employeeIds.add(employeeId);
       }
-      unmatchedSamples.set(token, samples);
+
+      if (entry.samples.length < 5) {
+        const sampleKey = `${source}::${row.dateISO}`;
+        if (!entry.sampleSet.has(sampleKey)) {
+          entry.sampleSet.add(sampleKey);
+          entry.samples.push(`${source} • ${row.dateISO}`);
+        }
+      }
+
+      unmatchedEntries.set(token, entry);
       continue;
     }
 
@@ -326,21 +350,24 @@ const computeIdentityWarnings = (
 
   const warnings: ParseWarning[] = [];
 
-  if (unmatchedSamples.size) {
+  if (unmatchedEntries.size) {
     const samples: string[] = [];
-    for (const sampleSet of unmatchedSamples.values()) {
-      for (const sample of sampleSet) {
-        samples.push(sample);
-        if (samples.length >= 10) break;
-      }
+
+    for (const [token, entry] of unmatchedEntries.entries()) {
+      const employeeIds = Array.from(entry.employeeIds).filter((value) => value.trim().length);
+      const idLabel = `Employee ID${employeeIds.length === 1 ? "" : "s"}`;
+      const idText = employeeIds.length ? employeeIds.join(", ") : "(missing)";
+      const sampleDetails = entry.samples.length ? ` — Samples: ${entry.samples.join("; ")}` : "";
+
+      samples.push(`${token} — ${idLabel}: ${idText}${sampleDetails}`);
       if (samples.length >= 10) break;
     }
 
     warnings.push({
       type: "GENERAL",
       level: "warning",
-      message: `Unmatched employees (${unmatchedSamples.size})`,
-      count: unmatchedSamples.size,
+      message: `Unmatched employees (${unmatchedEntries.size})`,
+      count: unmatchedEntries.size,
       samples,
     });
   }
