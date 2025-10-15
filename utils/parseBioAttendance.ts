@@ -26,6 +26,7 @@ export type ParsedDayRecord = {
   punches: DayPunch[];
   sourceFiles: string[];
   sheetName: string;
+  composedFromDayOnly: boolean;
 };
 
 export type ParsedPerDayRow = {
@@ -39,6 +40,7 @@ export type ParsedPerDayRow = {
   allTimes: string[];
   punches: DayPunch[];
   sourceFiles: string[];
+  composedFromDayOnly: boolean;
 };
 
 export type PerDayRow = ParsedPerDayRow & {
@@ -103,6 +105,7 @@ type MutableDay = {
   punches: Map<number, MutablePunch>;
   sourceFiles: Set<string>;
   sheetName: string;
+  composedFromDayOnly: boolean;
 };
 
 const MONTH_NAMES = new Map<string, number>([
@@ -371,6 +374,7 @@ const finalizeDay = (day: MutableDay): ParsedDayRecord => {
     punches,
     sourceFiles: Array.from(day.sourceFiles.values()).sort(),
     sheetName: day.sheetName,
+    composedFromDayOnly: day.composedFromDayOnly,
   };
 };
 
@@ -421,6 +425,7 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer, options: { fileName
           punches: new Map<number, MutablePunch>(),
           sourceFiles: new Set<string>([options.fileName ?? "Unknown file"]),
           sheetName,
+          composedFromDayOnly: true,
         };
         dayMap.set(d, record);
       }
@@ -534,6 +539,7 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
           punches: new Map<number, MutablePunch>(),
           sourceFiles: new Set<string>(day.sourceFiles),
           sheetName: day.sheetName,
+          composedFromDayOnly: day.composedFromDayOnly,
         };
         for (const punch of day.punches) {
           mutable.punches.set(punch.minuteOfDay, {
@@ -548,6 +554,7 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
         if (!base.employeeName && day.employeeName) {
           base.employeeName = day.employeeName;
         }
+        base.composedFromDayOnly = base.composedFromDayOnly || day.composedFromDayOnly;
         base.sourceFiles = new Set<string>([...base.sourceFiles, ...day.sourceFiles]);
         for (const punch of day.punches) {
           const existing = base.punches.get(punch.minuteOfDay);
@@ -583,14 +590,10 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
         allTimes,
         punches: record.punches,
         sourceFiles: record.sourceFiles,
+        composedFromDayOnly: record.composedFromDayOnly,
       };
     })
-    .sort((a, b) => {
-      const tokenDiff = a.employeeToken.localeCompare(b.employeeToken);
-      if (tokenDiff !== 0) return tokenDiff;
-      if (a.dateISO !== b.dateISO) return a.dateISO.localeCompare(b.dateISO);
-      return a.employeeName.localeCompare(b.employeeName);
-    });
+    .sort(comparePerDayRows);
 
   const totalPunches = perDay.reduce((acc, row) => acc + row.allTimes.length, 0);
 
@@ -617,8 +620,13 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
 
 export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDayRow[]) {
   const wb = XLSX.utils.book_new();
+  const sortedPerEmployee = [...perEmployee].sort((a, b) => {
+    const nameDiff = (a.employeeName || "").localeCompare(b.employeeName || "");
+    if (nameDiff !== 0) return nameDiff;
+    return (a.employeeId || "").localeCompare(b.employeeId || "");
+  });
   const s1 = XLSX.utils.json_to_sheet(
-    perEmployee.map((r) => ({
+    sortedPerEmployee.map((r) => ({
       EmployeeID: r.employeeId,
       EmployeeName: r.employeeName,
       DaysWithLogs: r.daysWithLogs,
@@ -632,8 +640,9 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
   );
   XLSX.utils.book_append_sheet(wb, s1, "PerEmployee");
 
+  const sortedPerDay = sortPerDayRows([...perDay]);
   const s2 = XLSX.utils.json_to_sheet(
-    perDay.map((r) => ({
+    sortedPerDay.map((r) => ({
       EmployeeID: r.employeeId,
       EmployeeName: r.employeeName,
       Date: r.dateISO,
@@ -676,6 +685,60 @@ const sourceRank = (value: string) => {
 const pickSource = (sources: string[]) => {
   if (!sources.length) return "DEFAULT";
   return sources.sort((a, b) => sourceRank(a) - sourceRank(b))[0] ?? "DEFAULT";
+};
+
+const getToken = (row: { employeeId: string; employeeToken?: string | null }): string =>
+  (row.employeeToken || row.employeeId || "").trim();
+
+const getEarliest = (row: { earliest: string | null; allTimes: string[] }): string => {
+  if (row.earliest) return row.earliest;
+  if (row.allTimes?.length) return row.allTimes[0] ?? "";
+  return "";
+};
+
+const getLatest = (row: { latest: string | null; allTimes: string[] }): string => {
+  if (row.latest) return row.latest;
+  if (row.allTimes?.length) return row.allTimes[row.allTimes.length - 1] ?? "";
+  return "";
+};
+
+export const comparePerDayRows = <T extends {
+  employeeId: string;
+  employeeToken?: string | null;
+  employeeName?: string;
+  dateISO: string;
+  earliest: string | null;
+  latest: string | null;
+  allTimes: string[];
+}>(a: T, b: T): number => {
+  const tokenDiff = getToken(a).localeCompare(getToken(b));
+  if (tokenDiff !== 0) return tokenDiff;
+
+  const dateDiff = a.dateISO.localeCompare(b.dateISO);
+  if (dateDiff !== 0) return dateDiff;
+
+  const earliestDiff = getEarliest(a).localeCompare(getEarliest(b));
+  if (earliestDiff !== 0) return earliestDiff;
+
+  const latestDiff = getLatest(a).localeCompare(getLatest(b));
+  if (latestDiff !== 0) return latestDiff;
+
+  const lengthDiff = (a.allTimes?.length ?? 0) - (b.allTimes?.length ?? 0);
+  if (lengthDiff !== 0) return lengthDiff;
+
+  return (a.employeeName ?? "").localeCompare(b.employeeName ?? "");
+};
+
+export const sortPerDayRows = <T extends {
+  employeeId: string;
+  employeeToken?: string | null;
+  employeeName?: string;
+  dateISO: string;
+  earliest: string | null;
+  latest: string | null;
+  allTimes: string[];
+}>(rows: T[]): T[] => {
+  return [...rows].sort(comparePerDayRows);
 };
 
 export function summarizePerEmployee(
