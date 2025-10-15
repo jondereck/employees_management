@@ -101,7 +101,7 @@ export async function POST(req: Request) {
           middleName: true,
           suffix: true,
           updatedAt: true,
-          office: { select: { id: true, name: true } },
+          offices: { select: { id: true, name: true } },
         },
       });
 
@@ -111,7 +111,16 @@ export async function POST(req: Request) {
         if (!matches.has(token)) {
           matches.set(token, []);
         }
-        matches.get(token)!.push(candidate);
+        matches.get(token)!.push({
+          id: candidate.id,
+          employeeNo: candidate.employeeNo,
+          firstName: candidate.firstName,
+          lastName: candidate.lastName,
+          middleName: candidate.middleName,
+          suffix: candidate.suffix,
+          updatedAt: candidate.updatedAt,
+          office: candidate.offices ?? null,
+        });
       }
     }
 
