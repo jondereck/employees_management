@@ -59,7 +59,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Employee not found." }, { status: 404 });
     }
 
-    await prisma.biometricsIdentityMap.upsert({
+    const identityMapModel = (prisma as typeof prisma & {
+      biometricsIdentityMap?: typeof prisma.biometricsIdentityMap;
+    }).biometricsIdentityMap;
+
+    if (!identityMapModel) {
+      console.warn(
+        "Biometrics identity map model is unavailable. Returning without persisting mapping until migrations are applied."
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Biometrics identity mappings storage is unavailable. Please apply the latest database migrations and regenerate the Prisma client.",
+        },
+        { status: 503 }
+      );
+    }
+
+    await identityMapModel.upsert({
       where: { token: normalizedToken },
       update: { employeeId: employee.id },
       create: { token: normalizedToken, employeeId: employee.id },

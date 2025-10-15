@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Download,
   Filter,
-  ImageDown,
+  FileImage,
   LayoutGrid,
   Layers,
   RefreshCcw,
@@ -330,7 +330,7 @@ function ChartCard({
             <Download className="mr-2 h-4 w-4" aria-hidden="true" /> CSV
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={onExportPng} disabled={!hasData}>
-            <ImageDown className="mr-2 h-4 w-4" aria-hidden="true" /> PNG
+            <FileImage className="mr-2 h-4 w-4" aria-hidden="true" /> PNG
           </Button>
           {onReset ? (
             <Button
@@ -412,8 +412,8 @@ export default function InsightsPanel({
   const handleChartToggle = useCallback(
     (chartId: ChartId, next: boolean) => {
       onVisibleChartsChange((prev) => {
-        const current = typeof prev === "function" ? prev(DEFAULT_VISIBLE_CHARTS) : prev;
-        const set = new Set(current);
+        const baseline = prev?.length ? prev : [...DEFAULT_VISIBLE_CHARTS];
+        const set = new Set(baseline);
         if (next) {
           set.add(chartId);
         } else {

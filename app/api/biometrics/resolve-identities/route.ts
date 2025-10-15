@@ -85,23 +85,35 @@ export async function POST(req: Request) {
     const tokenSet = new Set(uniqueTokens);
     const matches = new Map<string, EmployeeCandidate[]>();
 
-    const manualMappings = await prisma.biometricsIdentityMap.findMany({
-      where: { token: { in: uniqueTokens } },
-      include: {
-        employee: {
-          select: {
-            id: true,
-            employeeNo: true,
-            firstName: true,
-            lastName: true,
-            middleName: true,
-            suffix: true,
-            updatedAt: true,
-            offices: { select: { id: true, name: true } },
+    const identityMapModel = (prisma as typeof prisma & {
+      biometricsIdentityMap?: typeof prisma.biometricsIdentityMap;
+    }).biometricsIdentityMap;
+
+    let manualMappings: Array<{ token: string; employee: any }> = [];
+
+    if (!identityMapModel) {
+      console.warn(
+        "Biometrics identity map model is unavailable. Skipping manual mapping lookup until migrations are applied."
+      );
+    } else {
+      manualMappings = await identityMapModel.findMany({
+        where: { token: { in: uniqueTokens } },
+        include: {
+          employee: {
+            select: {
+              id: true,
+              employeeNo: true,
+              firstName: true,
+              lastName: true,
+              middleName: true,
+              suffix: true,
+              updatedAt: true,
+              offices: { select: { id: true, name: true } },
+            },
           },
         },
-      },
-    });
+      });
+    }
 
     const results: Record<string, IdentityRecord> = {};
 
