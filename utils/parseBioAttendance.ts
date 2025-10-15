@@ -2,12 +2,18 @@ import * as XLSX from "xlsx";
 
 export type WarningLevel = "info" | "warning";
 
+export type UnmatchedIdentityWarningDetail = {
+  token: string;
+  employeeIds: string[];
+};
+
 export type ParseWarning = {
   type: "DATE_PARSE" | "GENERAL" | "MERGED_DUPLICATES";
   level: WarningLevel;
   message: string;
   count?: number;
   samples?: string[];
+  unmatchedIdentities?: UnmatchedIdentityWarningDetail[];
 };
 
 export type DayPunch = {

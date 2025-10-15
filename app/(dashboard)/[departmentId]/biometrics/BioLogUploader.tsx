@@ -48,6 +48,7 @@ import {
   type ParsedWorkbook,
   type PerDayRow,
   type PerEmployeeRow,
+  type UnmatchedIdentityWarningDetail,
 } from "@/utils/parseBioAttendance";
 
 const PAGE_SIZE = 25;
@@ -137,6 +138,8 @@ const UNMATCHED_LABEL = "(Unmatched)";
 const UNKNOWN_OFFICE_LABEL = "(Unknown)";
 const UNASSIGNED_OFFICE_LABEL = "(Unassigned)";
 const UNKNOWN_OFFICE_KEY_PREFIX = "__unknown__::";
+const MAX_WARNING_SAMPLE_COUNT = 10;
+const UNMATCHED_WARNING_DISPLAY_LIMIT = 3;
 
 const sortPunchesChronologically = (punches: DayPunch[]): DayPunch[] =>
   [...punches].sort((a, b) => a.minuteOfDay - b.minuteOfDay || a.time.localeCompare(b.time));
@@ -291,14 +294,8 @@ const computeIdentityWarnings = (
   if (!rows.length) return [];
   if (status === "resolving") return [];
 
-  const unmatchedEntries = new Map<
-    string,
-    {
-      employeeIds: Set<string>;
-      sampleSet: Set<string>;
-      samples: string[];
-    }
-  >();
+  const unmatchedSamples = new Map<string, Set<string>>();
+  const unmatchedDetails: UnmatchedIdentityWarningDetail[] = [];
   const ambiguous = new Map<string, string[]>();
   const missingOffice = new Map<string, string>();
 
@@ -309,29 +306,16 @@ const computeIdentityWarnings = (
     if (!identity) continue;
 
     if (identity.status === "unmatched") {
-      const source = row.sourceFiles?.[0] ?? "Unknown file";
-      const entry =
-        unmatchedEntries.get(token) ??
-        {
-          employeeIds: new Set<string>(),
-          sampleSet: new Set<string>(),
-          samples: [] as string[],
-        };
-
-      const employeeId = row.employeeId?.trim();
-      if (employeeId) {
-        entry.employeeIds.add(employeeId);
+      let entry = unmatchedSamples.get(token);
+      if (!entry) {
+        entry = new Set<string>();
+        unmatchedSamples.set(token, entry);
       }
 
-      if (entry.samples.length < 5) {
-        const sampleKey = `${source}::${row.dateISO}`;
-        if (!entry.sampleSet.has(sampleKey)) {
-          entry.sampleSet.add(sampleKey);
-          entry.samples.push(`${source} • ${row.dateISO}`);
-        }
+      if (row.employeeId) {
+        entry.add(row.employeeId);
       }
 
-      unmatchedEntries.set(token, entry);
       continue;
     }
 
@@ -350,25 +334,22 @@ const computeIdentityWarnings = (
 
   const warnings: ParseWarning[] = [];
 
-  if (unmatchedEntries.size) {
-    const samples: string[] = [];
-
-    for (const [token, entry] of unmatchedEntries.entries()) {
-      const employeeIds = Array.from(entry.employeeIds).filter((value) => value.trim().length);
-      const idLabel = `Employee ID${employeeIds.length === 1 ? "" : "s"}`;
-      const idText = employeeIds.length ? employeeIds.join(", ") : "(missing)";
-      const sampleDetails = entry.samples.length ? ` — Samples: ${entry.samples.join("; ")}` : "";
-
-      samples.push(`${token} — ${idLabel}: ${idText}${sampleDetails}`);
-      if (samples.length >= 10) break;
+  if (unmatchedSamples.size) {
+    for (const [token, employeeIdsSet] of unmatchedSamples.entries()) {
+      const employeeIds = Array.from(employeeIdsSet).filter(Boolean);
+      unmatchedDetails.push({
+        token,
+        employeeIds,
+      });
+      if (unmatchedDetails.length >= MAX_WARNING_SAMPLE_COUNT) break;
     }
 
     warnings.push({
       type: "GENERAL",
       level: "warning",
-      message: `Unmatched employees (${unmatchedEntries.size})`,
-      count: unmatchedEntries.size,
-      samples,
+      message: `Unmatched employees (${unmatchedSamples.size})`,
+      count: unmatchedSamples.size,
+      unmatchedIdentities: unmatchedDetails,
     });
   }
 
@@ -381,7 +362,7 @@ const computeIdentityWarnings = (
       level: "warning",
       message: `Ambiguous employee tokens (${ambiguous.size})`,
       count: ambiguous.size,
-      samples: samples.slice(0, 10),
+      samples: samples.slice(0, MAX_WARNING_SAMPLE_COUNT),
     });
   }
 
@@ -394,7 +375,7 @@ const computeIdentityWarnings = (
       level: "warning",
       message: `Employees without assigned office (${missingOffice.size})`,
       count: missingOffice.size,
-      samples: samples.slice(0, 10),
+      samples: samples.slice(0, MAX_WARNING_SAMPLE_COUNT),
     });
   }
 
@@ -405,6 +386,19 @@ const createFileId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random()}`;
+
+const mergeLimitedUnique = (base: string[], additions: string[], limit: number) => {
+  if (base.length >= limit) return base.slice(0, limit);
+  const seen = new Set(base);
+  const next = [...base];
+  for (const value of additions) {
+    if (seen.has(value)) continue;
+    next.push(value);
+    seen.add(value);
+    if (next.length >= limit) break;
+  }
+  return next.slice(0, limit);
+};
 
 const aggregateWarnings = (sources: ParseWarning[][]): ParseWarning[] => {
   const map = new Map<string, ParseWarning>();
@@ -422,10 +416,44 @@ const aggregateWarnings = (sources: ParseWarning[][]): ParseWarning[] => {
         if (warning.samples?.length) {
           const samples = new Set(existing.samples ?? []);
           for (const sample of warning.samples) {
-            if (samples.size >= 10) break;
+            if (samples.size >= MAX_WARNING_SAMPLE_COUNT) break;
             samples.add(sample);
           }
           existing.samples = Array.from(samples);
+        }
+        if (warning.unmatchedIdentities?.length) {
+          const currentDetails = existing.unmatchedIdentities
+            ? [...existing.unmatchedIdentities]
+            : [];
+          const byToken = new Map(
+            currentDetails.map((detail) => [detail.token, detail])
+          );
+
+          for (const detail of warning.unmatchedIdentities) {
+            const existingDetail = byToken.get(detail.token);
+            if (existingDetail) {
+              existingDetail.employeeIds = mergeLimitedUnique(
+                existingDetail.employeeIds,
+                detail.employeeIds,
+                MAX_WARNING_SAMPLE_COUNT
+              );
+            } else if (currentDetails.length < MAX_WARNING_SAMPLE_COUNT) {
+              const clone = {
+                token: detail.token,
+                employeeIds: detail.employeeIds.slice(
+                  0,
+                  MAX_WARNING_SAMPLE_COUNT
+                ),
+              };
+              currentDetails.push(clone);
+              byToken.set(detail.token, clone);
+            }
+          }
+
+          existing.unmatchedIdentities = currentDetails.slice(
+            0,
+            MAX_WARNING_SAMPLE_COUNT
+          );
         }
       } else {
         map.set(key, {
@@ -434,6 +462,15 @@ const aggregateWarnings = (sources: ParseWarning[][]): ParseWarning[] => {
           message: warning.message,
           count: warning.count,
           samples: warning.samples ? [...warning.samples] : undefined,
+          unmatchedIdentities: warning.unmatchedIdentities
+            ? warning.unmatchedIdentities.map((detail) => ({
+                token: detail.token,
+                employeeIds: detail.employeeIds.slice(
+                  0,
+                  MAX_WARNING_SAMPLE_COUNT
+                ),
+              }))
+            : undefined,
         });
       }
     }
@@ -478,6 +515,8 @@ export default function BioLogUploader() {
   const [identityMap, setIdentityMap] = useState<Map<string, IdentityRecord>>(() => new Map());
   const [selectedOffices, setSelectedOffices] = useState<string[]>([]);
   const [exportFilteredOnly, setExportFilteredOnly] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [expandedWarnings, setExpandedWarnings] = useState<Record<string, boolean>>({});
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const parseInProgress = useRef(false);
@@ -489,6 +528,13 @@ export default function BioLogUploader() {
     () => files.filter((file) => file.status === "parsed" && file.parsed),
     [files]
   );
+
+  const toggleWarningExpansion = useCallback((key: string) => {
+    setExpandedWarnings((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }, []);
 
   const mergeResult = useMemo(() => {
     if (!parsedFiles.length) return null;
@@ -878,6 +924,12 @@ export default function BioLogUploader() {
     return aggregateWarnings(sources);
   }, [identityWarnings, mergeResult, parsedFiles]);
 
+  useEffect(() => {
+    if (aggregatedWarnings.length === 0) {
+      setExpandedWarnings((prev) => (Object.keys(prev).length ? {} : prev));
+    }
+  }, [aggregatedWarnings]);
+
   const aggregatedWarningLevel = aggregatedWarnings.some(
     (warning) => warning.level === "warning"
   )
@@ -1054,6 +1106,17 @@ export default function BioLogUploader() {
     );
   }, [perEmployee, selectedOffices]);
 
+  const searchedPerEmployee = useMemo(() => {
+    if (!filteredPerEmployee.length) return filteredPerEmployee;
+    const query = employeeSearch.trim().toLowerCase();
+    if (!query) return filteredPerEmployee;
+    return filteredPerEmployee.filter((row) => {
+      const name = row.employeeName?.toLowerCase() ?? "";
+      const id = row.employeeId?.toLowerCase() ?? "";
+      return name.includes(query) || id.includes(query);
+    });
+  }, [employeeSearch, filteredPerEmployee]);
+
   const filteredPerDayPreview = useMemo(() => {
     if (!perDay) return [] as PerDayRow[];
     if (!selectedOffices.length) return perDay;
@@ -1131,8 +1194,8 @@ export default function BioLogUploader() {
   }, [identityState.completed, identityState.status, identityState.total, identityState.unmatched, identityTokens.length]);
 
   const sortedPerEmployee = useMemo(() => {
-    if (!filteredPerEmployee.length) return [];
-    const rows = [...filteredPerEmployee];
+    if (!searchedPerEmployee.length) return [];
+    const rows = [...searchedPerEmployee];
     const multiplier = sortDirection === "asc" ? 1 : -1;
     rows.sort((a, b) => {
       const diff = (a[sortKey] as number) - (b[sortKey] as number);
@@ -1142,7 +1205,7 @@ export default function BioLogUploader() {
       return a.employeeName.localeCompare(b.employeeName);
     });
     return rows;
-  }, [filteredPerEmployee, sortDirection, sortKey]);
+  }, [searchedPerEmployee, sortDirection, sortKey]);
 
   const pagedPerDay = useMemo(() => {
     if (!filteredPerDayPreview.length) return [];
@@ -1635,18 +1698,74 @@ export default function BioLogUploader() {
           </AlertTitle>
           <AlertDescription>
             <div className="space-y-2">
-              {aggregatedWarnings.map((warning) => (
-                <div key={`${warning.type}-${warning.message}`} className="text-sm">
-                  <p>{warning.message}</p>
-                  {warning.samples?.length ? (
-                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
-                      {warning.samples.map((sample, index) => (
-                        <li key={`${warning.message}-${index}`}>{sample}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              ))}
+              {aggregatedWarnings.map((warning) => {
+                const warningKey = `${warning.type}-${warning.message}`;
+                const unmatchedDetails = warning.unmatchedIdentities ?? [];
+                const hasUnmatchedDetails = unmatchedDetails.length > 0;
+                const isExpanded = hasUnmatchedDetails
+                  ? Boolean(expandedWarnings[warningKey])
+                  : false;
+                const hasOverflow =
+                  hasUnmatchedDetails &&
+                  unmatchedDetails.length > UNMATCHED_WARNING_DISPLAY_LIMIT;
+                const visibleUnmatchedDetails = hasUnmatchedDetails
+                  ? isExpanded
+                    ? unmatchedDetails
+                    : unmatchedDetails.slice(0, UNMATCHED_WARNING_DISPLAY_LIMIT)
+                  : [];
+                const overflowCount = hasOverflow
+                  ? unmatchedDetails.length - UNMATCHED_WARNING_DISPLAY_LIMIT
+                  : 0;
+
+                return (
+                  <div key={warningKey} className="text-sm">
+                    <p>{warning.message}</p>
+                    {hasUnmatchedDetails ? (
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                        {visibleUnmatchedDetails?.map((detail) => {
+                          const employeeLabel = detail.employeeIds.length
+                            ? detail.employeeIds.join(", ")
+                            : null;
+                          const showEmployeeLabel =
+                            employeeLabel &&
+                            (detail.employeeIds.length > 1 || employeeLabel !== detail.token);
+                          return (
+                            <li
+                              key={`${warning.message}-${detail.token}`}
+                              className="text-foreground"
+                            >
+                              <span className="font-semibold">{detail.token}</span>
+                              {showEmployeeLabel ? (
+                                <span className="text-muted-foreground"> — {employeeLabel}</span>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                        {hasOverflow ? (
+                          <li className="text-muted-foreground">
+                            <button
+                              type="button"
+                              onClick={() => toggleWarningExpansion(warningKey)}
+                              aria-expanded={isExpanded}
+                              className="text-left text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                            >
+                              {isExpanded
+                                ? "Show less"
+                                : `…and ${overflowCount} more`}
+                            </button>
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : warning.samples?.length ? (
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
+                        {warning.samples.map((sample, index) => (
+                          <li key={`${warning.message}-${index}`}>{sample}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </AlertDescription>
         </Alert>
@@ -1699,7 +1818,14 @@ export default function BioLogUploader() {
           )}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Input
+                value={employeeSearch}
+                onChange={(event) => setEmployeeSearch(event.target.value)}
+                placeholder="Search employee"
+                aria-label="Search employee"
+                className="h-9 w-full max-w-xs sm:w-60"
+              />
               <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingParses}>
                 Upload more
               </Button>
