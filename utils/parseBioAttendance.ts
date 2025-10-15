@@ -3,7 +3,14 @@ import * as XLSX from "xlsx";
 export type WarningLevel = "info" | "warning";
 
 export type ParseWarning = {
-  type: "DATE_PARSE" | "GENERAL" | "MERGED_DUPLICATES";
+  type:
+    | "DATE_PARSE"
+    | "GENERAL"
+    | "MERGED_DUPLICATES"
+    | "IDENTITY_UNMATCHED"
+    | "IDENTITY_AMBIGUOUS"
+    | "IDENTITY_NO_OFFICE"
+    | "IDENTITY_GENERAL";
   level: WarningLevel;
   message: string;
   count?: number;
@@ -21,6 +28,9 @@ export type ParsedDayRecord = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   dateISO: string;
   day: number;
   punches: DayPunch[];
@@ -33,6 +43,9 @@ export type ParsedPerDayRow = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   dateISO: string;
   day: number;
   earliest: string | null;
@@ -54,6 +67,9 @@ export type PerDayRow = ParsedPerDayRow & {
 export type PerEmployeeRow = {
   employeeId: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   daysWithLogs: number;
   lateDays: number;
   undertimeDays: number;
@@ -100,6 +116,9 @@ type MutableDay = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   dateISO: string;
   day: number;
   punches: Map<number, MutablePunch>;
@@ -627,8 +646,9 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
   });
   const s1 = XLSX.utils.json_to_sheet(
     sortedPerEmployee.map((r) => ({
-      EmployeeID: r.employeeId,
-      EmployeeName: r.employeeName,
+      EmployeeNo: r.employeeId,
+      Name: r.employeeName,
+      Office: r.officeName ?? "",
       DaysWithLogs: r.daysWithLogs,
       LateDays: r.lateDays,
       UndertimeDays: r.undertimeDays,
@@ -643,8 +663,9 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
   const sortedPerDay = sortPerDayRows([...perDay]);
   const s2 = XLSX.utils.json_to_sheet(
     sortedPerDay.map((r) => ({
-      EmployeeID: r.employeeId,
-      EmployeeName: r.employeeName,
+      EmployeeNo: r.employeeId,
+      Name: r.employeeName,
+      Office: r.officeName ?? "",
       Date: r.dateISO,
       Day: r.day,
       Earliest: r.earliest ?? "",
@@ -666,6 +687,9 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
 type AggregateRow = {
   employeeId: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   daysWithLogs: number;
   lateDays: number;
   undertimeDays: number;
@@ -764,6 +788,9 @@ export function summarizePerEmployee(
       map.set(key, {
         employeeId: row.employeeId,
         employeeName: row.employeeName,
+        resolvedEmployeeId: row.resolvedEmployeeId,
+        officeId: row.officeId,
+        officeName: row.officeName,
         daysWithLogs: 0,
         lateDays: 0,
         undertimeDays: 0,
@@ -774,6 +801,17 @@ export function summarizePerEmployee(
       });
     }
     const agg = map.get(key)!;
+    if (!agg.resolvedEmployeeId && row.resolvedEmployeeId) {
+      agg.resolvedEmployeeId = row.resolvedEmployeeId;
+    }
+    if (row.officeId) {
+      agg.officeId = row.officeId;
+      if (row.officeName) {
+        agg.officeName = row.officeName;
+      }
+    } else if (!agg.officeId && row.officeName && !agg.officeName) {
+      agg.officeName = row.officeName;
+    }
     const hasLogs = Boolean(row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0);
     if (hasLogs) {
       agg.daysWithLogs += 1;
@@ -787,6 +825,9 @@ export function summarizePerEmployee(
   return Array.from(map.values()).map((entry) => ({
     employeeId: entry.employeeId,
     employeeName: entry.employeeName,
+    resolvedEmployeeId: entry.resolvedEmployeeId,
+    officeId: entry.officeId ?? null,
+    officeName: entry.officeName ?? null,
     daysWithLogs: entry.daysWithLogs,
     lateDays: entry.lateDays,
     undertimeDays: entry.undertimeDays,
