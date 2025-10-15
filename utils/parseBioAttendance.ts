@@ -21,6 +21,9 @@ export type ParsedDayRecord = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   dateISO: string;
   day: number;
   punches: DayPunch[];
@@ -33,6 +36,9 @@ export type ParsedPerDayRow = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   dateISO: string;
   day: number;
   earliest: string | null;
@@ -54,6 +60,9 @@ export type PerDayRow = ParsedPerDayRow & {
 export type PerEmployeeRow = {
   employeeId: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   daysWithLogs: number;
   lateDays: number;
   undertimeDays: number;
@@ -629,6 +638,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
     sortedPerEmployee.map((r) => ({
       EmployeeID: r.employeeId,
       EmployeeName: r.employeeName,
+      Office: r.officeName ?? "",
       DaysWithLogs: r.daysWithLogs,
       LateDays: r.lateDays,
       UndertimeDays: r.undertimeDays,
@@ -645,6 +655,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
     sortedPerDay.map((r) => ({
       EmployeeID: r.employeeId,
       EmployeeName: r.employeeName,
+      Office: r.officeName ?? "",
       Date: r.dateISO,
       Day: r.day,
       Earliest: r.earliest ?? "",
@@ -666,6 +677,9 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
 type AggregateRow = {
   employeeId: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   daysWithLogs: number;
   lateDays: number;
   undertimeDays: number;
@@ -747,6 +761,9 @@ export function summarizePerEmployee(
       PerDayRow,
       | "employeeId"
       | "employeeName"
+      | "resolvedEmployeeId"
+      | "officeId"
+      | "officeName"
       | "earliest"
       | "latest"
       | "allTimes"
@@ -764,6 +781,9 @@ export function summarizePerEmployee(
       map.set(key, {
         employeeId: row.employeeId,
         employeeName: row.employeeName,
+        resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+        officeId: row.officeId ?? null,
+        officeName: row.officeName ?? null,
         daysWithLogs: 0,
         lateDays: 0,
         undertimeDays: 0,
@@ -774,6 +794,11 @@ export function summarizePerEmployee(
       });
     }
     const agg = map.get(key)!;
+    if (!agg.officeId && row.officeId) agg.officeId = row.officeId;
+    if (!agg.officeName && row.officeName) agg.officeName = row.officeName;
+    if (!agg.resolvedEmployeeId && row.resolvedEmployeeId) {
+      agg.resolvedEmployeeId = row.resolvedEmployeeId;
+    }
     const hasLogs = Boolean(row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0);
     if (hasLogs) {
       agg.daysWithLogs += 1;
@@ -787,6 +812,9 @@ export function summarizePerEmployee(
   return Array.from(map.values()).map((entry) => ({
     employeeId: entry.employeeId,
     employeeName: entry.employeeName,
+    resolvedEmployeeId: entry.resolvedEmployeeId ?? null,
+    officeId: entry.officeId ?? null,
+    officeName: entry.officeName ?? null,
     daysWithLogs: entry.daysWithLogs,
     lateDays: entry.lateDays,
     undertimeDays: entry.undertimeDays,

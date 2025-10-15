@@ -14,6 +14,9 @@ import { evaluateDay, type HHMM } from "@/utils/evaluateDay";
 type EvaluatedDay = {
   employeeId: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   day: number;
   earliest: string | null | undefined;
   latest: string | null | undefined;
@@ -47,6 +50,9 @@ const Punch = z.object({
 const Row = z.object({
   employeeId: z.string().min(1),
   employeeName: z.string().min(1),
+  resolvedEmployeeId: z.string().min(1).nullable().optional(),
+  officeId: z.string().min(1).nullable().optional(),
+  officeName: z.string().min(1).nullable().optional(),
   employeeToken: z.string().min(1),
   dateISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   day: z.number().int().min(1).max(31),
@@ -124,6 +130,9 @@ export async function POST(req: Request) {
       return {
         employeeId: row.employeeId,
         employeeName: row.employeeName,
+        resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+        officeId: row.officeId ?? null,
+        officeName: row.officeName ?? null,
         day: row.day,
         earliest: row.earliest ?? null,
         latest: row.latest ?? null,
@@ -157,6 +166,9 @@ export async function POST(req: Request) {
 type Aggregate = {
   employeeId: string;
   employeeName: string;
+  resolvedEmployeeId?: string | null;
+  officeId?: string | null;
+  officeName?: string | null;
   daysWithLogs: number;
   lateDays: number;
   undertimeDays: number;
@@ -173,6 +185,9 @@ function summarizePerEmployee(rows: EvaluatedDay[]) {
       map.set(key, {
         employeeId: row.employeeId,
         employeeName: row.employeeName,
+        resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+        officeId: row.officeId ?? null,
+        officeName: row.officeName ?? null,
         daysWithLogs: 0,
         lateDays: 0,
         undertimeDays: 0,
@@ -182,6 +197,11 @@ function summarizePerEmployee(rows: EvaluatedDay[]) {
     }
 
     const agg = map.get(key)!;
+    if (!agg.officeId && row.officeId) agg.officeId = row.officeId;
+    if (!agg.officeName && row.officeName) agg.officeName = row.officeName;
+    if (!agg.resolvedEmployeeId && row.resolvedEmployeeId) {
+      agg.resolvedEmployeeId = row.resolvedEmployeeId;
+    }
     const hasLogs = Boolean(row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0);
     if (hasLogs) {
       agg.daysWithLogs += 1;
@@ -200,6 +220,9 @@ function summarizePerEmployee(rows: EvaluatedDay[]) {
   return Array.from(map.values()).map((entry) => ({
     employeeId: entry.employeeId,
     employeeName: entry.employeeName,
+    resolvedEmployeeId: entry.resolvedEmployeeId ?? null,
+    officeId: entry.officeId ?? null,
+    officeName: entry.officeName ?? null,
     daysWithLogs: entry.daysWithLogs,
     lateDays: entry.lateDays,
     undertimeDays: entry.undertimeDays,
