@@ -22,14 +22,27 @@ import { saveAs } from "file-saver";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
   exportResultsToXlsx,
   mergeParsedWorkbooks,
   parseBioAttendance,
+  sortPerDayRows,
+  type DayPunch,
   type MergeResult,
   type ParseWarning,
+  type ParsedPerDayRow,
   type ParsedWorkbook,
   type PerDayRow,
   type PerEmployeeRow,
@@ -93,7 +106,76 @@ const timeout = <T,>(promise: Promise<T>, ms = 15_000) =>
     );
   });
 
-type SortKey = "lateDays" | "undertimeDays";
+const pad2 = (value: number) => String(value).padStart(2, "0");
+
+const MANUAL_STORAGE_KEY = "biometrics-uploader-period";
+
+const manualMonthOptions = [
+  { value: "1", label: "Jan" },
+  { value: "2", label: "Feb" },
+  { value: "3", label: "Mar" },
+  { value: "4", label: "Apr" },
+  { value: "5", label: "May" },
+  { value: "6", label: "Jun" },
+  { value: "7", label: "Jul" },
+  { value: "8", label: "Aug" },
+  { value: "9", label: "Sep" },
+  { value: "10", label: "Oct" },
+  { value: "11", label: "Nov" },
+  { value: "12", label: "Dec" },
+];
+
+const manualPeriodFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+});
+
+const sortPunchesChronologically = (punches: DayPunch[]): DayPunch[] =>
+  [...punches].sort((a, b) => a.minuteOfDay - b.minuteOfDay || a.time.localeCompare(b.time));
+
+const toChronologicalRow = <T extends {
+  punches: DayPunch[];
+  allTimes: string[];
+  earliest: string | null;
+  latest: string | null;
+}>(row: T): T => {
+  const punches = sortPunchesChronologically(row.punches);
+  const allTimes = punches.map((punch) => punch.time);
+  return {
+    ...row,
+    punches,
+    allTimes,
+    earliest: allTimes[0] ?? null,
+    latest: allTimes.length ? allTimes[allTimes.length - 1] : null,
+  } as T;
+};
+
+const composeManualDate = (year: number, month: number, day: number): string | null => {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() + 1 !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+};
+
+type ManualPeriodSelection = {
+  month: number;
+  year: number;
+};
+
+type OutOfPeriodRow = {
+  employeeId: string;
+  employeeName: string;
+  dateISO: string;
+  sourceFiles: string[];
+  reason: "outside-period" | "invalid-day";
+};
+
+type SortKey = "daysWithLogs" | "lateDays" | "undertimeDays";
 type SortDirection = "asc" | "desc";
 
 type FileStatus = "queued" | "parsing" | "parsed" | "failed";
@@ -173,6 +255,10 @@ export default function BioLogUploader() {
     months: string[];
     confirmed: boolean;
   }>({ key: "", months: [], confirmed: true });
+  const [useManualPeriod, setUseManualPeriod] = useState(false);
+  const [manualMonth, setManualMonth] = useState<string>("");
+  const [manualYear, setManualYear] = useState<string>("");
+  const [manualPeriodHydrated, setManualPeriodHydrated] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const parseInProgress = useRef(false);
@@ -187,6 +273,48 @@ export default function BioLogUploader() {
     if (!parsedFiles.length) return null;
     return mergeParsedWorkbooks(parsedFiles.map((file) => file.parsed!));
   }, [parsedFiles]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(MANUAL_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as {
+          useManualPeriod?: boolean;
+          manualMonth?: string;
+          manualYear?: string;
+        };
+        if (typeof parsed.useManualPeriod === "boolean") {
+          setUseManualPeriod(parsed.useManualPeriod);
+        }
+        if (typeof parsed.manualMonth === "string") {
+          setManualMonth(parsed.manualMonth);
+        }
+        if (typeof parsed.manualYear === "string") {
+          setManualYear(parsed.manualYear);
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to load manual period settings", error);
+    } finally {
+      setManualPeriodHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!manualPeriodHydrated) return;
+    if (typeof window === "undefined") return;
+    try {
+      const payload = JSON.stringify({
+        useManualPeriod,
+        manualMonth,
+        manualYear,
+      });
+      window.localStorage.setItem(MANUAL_STORAGE_KEY, payload);
+    } catch (error) {
+      console.warn("Failed to persist manual period settings", error);
+    }
+  }, [manualMonth, manualPeriodHydrated, manualYear, useManualPeriod]);
 
   useEffect(() => {
     if (!mergeResult) {
@@ -275,12 +403,106 @@ export default function BioLogUploader() {
     ? "warning"
     : "info";
 
+  const manualMonthNumber = manualMonth ? Number(manualMonth) : null;
+  const manualYearNumber = manualYear ? Number(manualYear) : null;
+  const manualMonthValid =
+    manualMonthNumber != null &&
+    Number.isInteger(manualMonthNumber) &&
+    manualMonthNumber >= 1 &&
+    manualMonthNumber <= 12;
+  const manualYearValid =
+    manualYearNumber != null &&
+    Number.isInteger(manualYearNumber) &&
+    manualYearNumber >= 1900 &&
+    manualYearNumber <= 2100;
+  const manualSelectionValid = !useManualPeriod || (manualMonthValid && manualYearValid);
+
+  const manualPeriodSelection = useMemo<ManualPeriodSelection | null>(() => {
+    if (!useManualPeriod) return null;
+    if (!manualMonthValid || !manualYearValid) return null;
+    if (manualMonthNumber == null || manualYearNumber == null) return null;
+    return { month: manualMonthNumber, year: manualYearNumber };
+  }, [manualMonthNumber, manualMonthValid, manualYearNumber, manualYearValid, useManualPeriod]);
+
+  const manualPeriodError = useMemo(() => {
+    if (!useManualPeriod) return null;
+    if (!manualMonthValid && !manualYearValid) {
+      return "Select a month and enter a year between 1900 and 2100.";
+    }
+    if (!manualMonthValid) return "Select a month.";
+    if (!manualYearValid) return "Enter a year between 1900 and 2100.";
+    return null;
+  }, [manualMonthValid, manualYearValid, useManualPeriod]);
+
+  const manualPeriodLabel = manualPeriodSelection
+    ? manualPeriodFormatter.format(
+        new Date(Date.UTC(manualPeriodSelection.year, manualPeriodSelection.month - 1, 1))
+      )
+    : "selected period";
+
+  const basePerDay = useMemo<ParsedPerDayRow[]>(() => {
+    if (!mergeResult) return [];
+    return sortPerDayRows(mergeResult.perDay.map((row) => toChronologicalRow(row)));
+  }, [mergeResult]);
+
+  const { filteredRows: filteredPerDayRows, outOfPeriodRows } = useMemo(() => {
+    if (!mergeResult) {
+      return { filteredRows: [] as ParsedPerDayRow[], outOfPeriodRows: [] as OutOfPeriodRow[] };
+    }
+    if (!useManualPeriod) {
+      return { filteredRows: basePerDay, outOfPeriodRows: [] as OutOfPeriodRow[] };
+    }
+    if (!manualPeriodSelection || !manualSelectionValid) {
+      return { filteredRows: [] as ParsedPerDayRow[], outOfPeriodRows: [] as OutOfPeriodRow[] };
+    }
+
+    const { month, year } = manualPeriodSelection;
+    const prefix = `${year}-${pad2(month)}`;
+    const filtered: ParsedPerDayRow[] = [];
+    const excluded: OutOfPeriodRow[] = [];
+
+    for (const row of basePerDay) {
+      if (row.composedFromDayOnly) {
+        const manualDate = composeManualDate(year, month, row.day);
+        if (!manualDate) {
+          excluded.push({
+            employeeId: row.employeeId,
+            employeeName: row.employeeName,
+            dateISO: `${year}-${pad2(month)}-${pad2(row.day)}`,
+            sourceFiles: row.sourceFiles,
+            reason: "invalid-day",
+          });
+          continue;
+        }
+        filtered.push({ ...row, dateISO: manualDate, day: Number(manualDate.slice(-2)) });
+        continue;
+      }
+
+      if (row.dateISO.startsWith(prefix)) {
+        filtered.push(row);
+      } else {
+        excluded.push({
+          employeeId: row.employeeId,
+          employeeName: row.employeeName,
+          dateISO: row.dateISO,
+          sourceFiles: row.sourceFiles,
+          reason: "outside-period",
+        });
+      }
+    }
+
+    return {
+      filteredRows: sortPerDayRows(filtered.map((row) => toChronologicalRow(row))),
+      outOfPeriodRows: excluded,
+    };
+  }, [basePerDay, manualPeriodSelection, manualSelectionValid, mergeResult, useManualPeriod]);
+
   const hasPendingParses = files.some(
     (file) => file.status === "parsing" || file.status === "queued"
   );
 
   useEffect(() => {
-    if (!mergeResult || !mergeResult.perDay.length) {
+    if (!mergeResult) {
       setPerDay(null);
       setPerEmployee(null);
       lastEvaluatedKey.current = "";
@@ -289,8 +511,32 @@ export default function BioLogUploader() {
     if (hasPendingParses) return;
     if (mergeResult.months.length > 1 && !mixedMonthsContext.confirmed) return;
 
-    const payloadKey = `${mergeResult.perDay.length}:${mergeResult.perDay
-      .map((row) => `${row.employeeToken}:${row.dateISO}:${row.allTimes.join("|")}`)
+    if (useManualPeriod && !manualSelectionValid) {
+      setPerDay(null);
+      setPerEmployee(null);
+      lastEvaluatedKey.current = "";
+      return;
+    }
+
+    const manualKey = manualPeriodSelection
+      ? `${manualPeriodSelection.year}-${pad2(manualPeriodSelection.month)}`
+      : "auto";
+
+    if (!filteredPerDayRows.length) {
+      const emptyKey = `${manualKey}:empty`;
+      if (lastEvaluatedKey.current !== emptyKey) {
+        setPerDay([]);
+        setPerEmployee([]);
+        lastEvaluatedKey.current = emptyKey;
+      }
+      return;
+    }
+
+    const payloadKey = `${manualKey}:${filteredPerDayRows.length}:${filteredPerDayRows
+      .map(
+        (row) =>
+          `${row.employeeToken ?? row.employeeId}:${row.dateISO}:${row.allTimes.join("|")}`
+      )
       .join("#")}`;
     if (payloadKey === lastEvaluatedKey.current) return;
 
@@ -299,7 +545,7 @@ export default function BioLogUploader() {
       setEvaluating(true);
       try {
         const body = {
-          entries: mergeResult.perDay.map((row) => ({
+          entries: filteredPerDayRows.map((row) => ({
             employeeId: row.employeeId,
             employeeName: row.employeeName,
             employeeToken: row.employeeToken,
@@ -332,13 +578,9 @@ export default function BioLogUploader() {
           perEmployee: PerEmployeeRow[];
         };
 
-        const chronological = [...result.perDay].sort((a, b) => {
-          const tokenDiff = (a.employeeToken ?? a.employeeId).localeCompare(
-            b.employeeToken ?? b.employeeId
-          );
-          if (tokenDiff !== 0) return tokenDiff;
-          return a.dateISO.localeCompare(b.dateISO);
-        });
+        const chronological = sortPerDayRows(
+          result.perDay.map((row) => toChronologicalRow(row))
+        );
 
         setPerDay(chronological);
         setPerEmployee(result.perEmployee);
@@ -367,7 +609,16 @@ export default function BioLogUploader() {
     return () => {
       controller.abort();
     };
-  }, [mergeResult, hasPendingParses, mixedMonthsContext.confirmed, toast]);
+  }, [
+    filteredPerDayRows,
+    hasPendingParses,
+    manualPeriodSelection,
+    manualSelectionValid,
+    mergeResult,
+    mixedMonthsContext.confirmed,
+    toast,
+    useManualPeriod,
+  ]);
 
   useEffect(() => {
     setPage(0);
@@ -490,6 +741,7 @@ export default function BioLogUploader() {
 
   const handleDownloadResults = useCallback(() => {
     if (!perEmployee?.length || !perDay?.length) return;
+    if (useManualPeriod && !manualSelectionValid) return;
     try {
       exportResultsToXlsx(perEmployee, perDay);
       toast({
@@ -504,7 +756,7 @@ export default function BioLogUploader() {
         variant: "destructive",
       });
     }
-  }, [perDay, perEmployee, toast]);
+  }, [manualSelectionValid, perDay, perEmployee, toast, useManualPeriod]);
 
   const handleDownloadNormalized = useCallback(
     (file: FileState) => {
@@ -543,14 +795,46 @@ export default function BioLogUploader() {
 
   const summary = useMemo(() => {
     if (!mergeResult) return null;
+    const rows = manualSelectionValid ? filteredPerDayRows : [];
+    const employeeTokens = new Set<string>();
+    let totalPunches = 0;
+
+    for (const row of rows) {
+      const token = row.employeeToken || row.employeeId || row.employeeName;
+      if (token) employeeTokens.add(token);
+      totalPunches += row.allTimes.length;
+    }
+
+    let dateRangeLabel = "—";
+    if (manualPeriodSelection) {
+      dateRangeLabel = manualPeriodFormatter.format(
+        new Date(Date.UTC(manualPeriodSelection.year, manualPeriodSelection.month - 1, 1))
+      );
+    } else if (rows.length) {
+      const start = rows[0]?.dateISO ?? "";
+      const end = rows[rows.length - 1]?.dateISO ?? start;
+      if (start && end) {
+        dateRangeLabel = formatDateRange({ start, end });
+      }
+    } else if (!useManualPeriod && mergeResult.dateRange) {
+      dateRangeLabel = formatDateRange(mergeResult.dateRange);
+    }
+
     return {
       fileCount: parsedFiles.length,
-      rowsParsed: mergeResult.perDay.length,
-      totalPunches: mergeResult.totalPunches,
-      employees: mergeResult.employeeCount,
-      dateRange: formatDateRange(mergeResult.dateRange),
+      rowsParsed: rows.length,
+      totalPunches,
+      employees: employeeTokens.size,
+      dateRange: dateRangeLabel,
     };
-  }, [mergeResult, parsedFiles.length]);
+  }, [
+    filteredPerDayRows,
+    manualPeriodSelection,
+    manualSelectionValid,
+    mergeResult,
+    parsedFiles.length,
+    useManualPeriod,
+  ]);
 
   const totalFiles = files.length;
   const processedFiles = files.filter((file) => file.status === "parsed" || file.status === "failed").length;
@@ -563,6 +847,78 @@ export default function BioLogUploader() {
         <p className="text-sm text-muted-foreground">
           Upload one or more biometrics logs (.xls or .xlsx). We will normalize legacy files, merge punches across files, and compute lateness/undertime per employee.
         </p>
+      </div>
+
+      <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium">📆 Period (optional):</span>
+            <div className="flex items-center gap-2">
+              <Label
+                htmlFor="manual-month"
+                className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Month
+              </Label>
+              <Select
+                value={manualMonth || undefined}
+                onValueChange={setManualMonth}
+                disabled={!useManualPeriod}
+              >
+                <SelectTrigger id="manual-month" className="h-9 w-[140px]">
+                  <SelectValue placeholder="Select month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {manualMonthOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label
+                htmlFor="manual-year"
+                className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Year
+              </Label>
+              <Input
+                id="manual-year"
+                type="number"
+                min={1900}
+                max={2100}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={manualYear}
+                onChange={(event) => {
+                  const value = event.target.value.replace(/[^0-9]/g, "");
+                  setManualYear(value);
+                }}
+                placeholder="YYYY"
+                className="h-9 w-[120px]"
+                disabled={!useManualPeriod}
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="manual-period-toggle"
+              checked={useManualPeriod}
+              onCheckedChange={(checked) => setUseManualPeriod(checked)}
+            />
+            <Label htmlFor="manual-period-toggle" className="text-sm font-medium">
+              Use manual month/year
+            </Label>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          When enabled, results include only punches within this month & year. Rows outside are listed in Warnings.
+        </p>
+        {manualPeriodError ? (
+          <p className="text-xs font-medium text-destructive">{manualPeriodError}</p>
+        ) : null}
       </div>
 
       <div
@@ -769,6 +1125,41 @@ export default function BioLogUploader() {
         </Alert>
       )}
 
+      {useManualPeriod && outOfPeriodRows.length > 0 && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Out-of-period rows</AlertTitle>
+          <AlertDescription>
+            <div className="space-y-2">
+              <p className="text-sm">
+                {outOfPeriodRows.length} row{outOfPeriodRows.length === 1 ? "" : "s"} were excluded from
+                the {manualPeriodLabel} summary.
+              </p>
+              <ul className="list-disc space-y-1 pl-4 text-xs">
+                {outOfPeriodRows.slice(0, 10).map((row, index) => {
+                  const name = row.employeeName || row.employeeId || "Unknown employee";
+                  const file = row.sourceFiles[0] ?? "Unknown file";
+                  const reason =
+                    row.reason === "invalid-day"
+                      ? "Invalid day for selected month/year"
+                      : "Outside selected month/year";
+                  return (
+                    <li key={`${row.employeeId}-${row.dateISO}-${index}`}>
+                      {name} – {row.dateISO} ({file}) • {reason}
+                    </li>
+                  );
+                })}
+              </ul>
+              {outOfPeriodRows.length > 10 ? (
+                <p className="text-xs text-muted-foreground">
+                  {outOfPeriodRows.length - 10} more row{outOfPeriodRows.length - 10 === 1 ? "" : "s"} hidden.
+                </p>
+              ) : null}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {perEmployee && perDay && perEmployee.length > 0 && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -777,7 +1168,15 @@ export default function BioLogUploader() {
               <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingParses}>
                 Upload more
               </Button>
-              <Button onClick={handleDownloadResults} disabled={!perEmployee.length || !perDay.length || evaluating}>
+              <Button
+                onClick={handleDownloadResults}
+                disabled={
+                  !perEmployee.length ||
+                  !perDay.length ||
+                  evaluating ||
+                  (useManualPeriod && !manualSelectionValid)
+                }
+              >
                 Download Results (Excel)
               </Button>
             </div>
@@ -789,7 +1188,21 @@ export default function BioLogUploader() {
                   <th className="p-2 text-left">Employee ID</th>
                   <th className="p-2 text-left">Name</th>
                   <th className="p-2 text-left">Schedule</th>
-                  <th className="p-2 text-center">Days</th>
+                  <th className="p-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("daysWithLogs")}
+                      className="inline-flex items-center gap-1 font-semibold"
+                    >
+                      Days
+                      <ArrowUpDown
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          sortKey === "daysWithLogs" ? "opacity-100" : "opacity-40"
+                        )}
+                      />
+                    </button>
+                  </th>
                   <th className="p-2 text-center">
                     <button
                       type="button"
