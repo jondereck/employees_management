@@ -22,6 +22,7 @@ import { saveAs } from "file-saver";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -31,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
@@ -130,6 +132,12 @@ const manualPeriodFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+const IDENTITY_REQUEST_LIMIT = 2000;
+const UNMATCHED_LABEL = "(Unmatched)";
+const UNKNOWN_OFFICE_LABEL = "(Unknown)";
+const UNASSIGNED_OFFICE_LABEL = "(Unassigned)";
+const UNKNOWN_OFFICE_KEY_PREFIX = "__unknown__::";
+
 const sortPunchesChronologically = (punches: DayPunch[]): DayPunch[] =>
   [...punches].sort((a, b) => a.minuteOfDay - b.minuteOfDay || a.time.localeCompare(b.time));
 
@@ -189,6 +197,181 @@ type FileState = {
   status: FileStatus;
   parsed?: ParsedWorkbook;
   error?: string;
+};
+
+type IdentityRecord = {
+  status: "matched" | "unmatched" | "ambiguous";
+  employeeId: string | null;
+  employeeName: string;
+  officeId: string | null;
+  officeName: string;
+  candidates?: string[];
+  missingOffice?: boolean;
+};
+
+type IdentityStatus = {
+  status: "idle" | "resolving" | "resolved" | "error";
+  total: number;
+  completed: number;
+  unmatched: number;
+  message?: string;
+};
+
+type OfficeOption = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+const makeOfficeKey = (officeId: string | null | undefined, officeName: string | null | undefined) => {
+  if (officeId) return officeId;
+  const label = officeName && officeName.trim().length ? officeName.trim() : UNKNOWN_OFFICE_LABEL;
+  return `${UNKNOWN_OFFICE_KEY_PREFIX}${label}`;
+};
+
+const getOfficeLabelFromKey = (key: string): string | null => {
+  if (key.startsWith(UNKNOWN_OFFICE_KEY_PREFIX)) {
+    return key.slice(UNKNOWN_OFFICE_KEY_PREFIX.length);
+  }
+  return null;
+};
+
+const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord => {
+  if (!record) {
+    return {
+      status: "unmatched",
+      employeeId: null,
+      employeeName: UNMATCHED_LABEL,
+      officeId: null,
+      officeName: UNKNOWN_OFFICE_LABEL,
+    };
+  }
+
+  const status = record.status ?? "matched";
+  const employeeName = record.employeeName?.trim();
+  const officeName = record.officeName?.trim();
+
+  if (status === "unmatched") {
+    return {
+      status: "unmatched",
+      employeeId: null,
+      employeeName: employeeName && employeeName.length ? employeeName : UNMATCHED_LABEL,
+      officeId: null,
+      officeName: UNKNOWN_OFFICE_LABEL,
+    };
+  }
+
+  return {
+    status,
+    employeeId: record.employeeId ?? null,
+    employeeName: employeeName && employeeName.length ? employeeName : UNMATCHED_LABEL,
+    officeId: record.officeId ?? null,
+    officeName: officeName && officeName.length ? officeName : UNASSIGNED_OFFICE_LABEL,
+    candidates:
+      status === "ambiguous" && record.candidates && record.candidates.length
+        ? [...record.candidates]
+        : undefined,
+    missingOffice: record.missingOffice,
+  };
+};
+
+const countUnmatchedIdentities = (map: Map<string, IdentityRecord>): number => {
+  let count = 0;
+  for (const entry of map.values()) {
+    if (entry.status === "unmatched") count += 1;
+  }
+  return count;
+};
+
+const computeIdentityWarnings = (
+  rows: ParsedPerDayRow[],
+  identityMap: Map<string, IdentityRecord>,
+  status: IdentityStatus["status"]
+): ParseWarning[] => {
+  if (!rows.length) return [];
+  if (status === "resolving") return [];
+
+  const unmatchedSamples = new Map<string, Set<string>>();
+  const ambiguous = new Map<string, string[]>();
+  const missingOffice = new Map<string, string>();
+
+  for (const row of rows) {
+    const token = row.employeeToken || row.employeeId || row.employeeName;
+    if (!token) continue;
+    const identity = identityMap.get(token);
+    if (!identity) continue;
+
+    if (identity.status === "unmatched") {
+      const samples = unmatchedSamples.get(token) ?? new Set<string>();
+      if (samples.size < 5) {
+        const source = row.sourceFiles?.[0] ?? "Unknown file";
+        samples.add(`${token} — ${source} • ${row.dateISO}`);
+      }
+      unmatchedSamples.set(token, samples);
+      continue;
+    }
+
+    if (identity.status === "ambiguous" && identity.candidates?.length) {
+      if (!ambiguous.has(token)) {
+        ambiguous.set(token, [...identity.candidates]);
+      }
+    }
+
+    if (identity.missingOffice) {
+      if (!missingOffice.has(token)) {
+        missingOffice.set(token, identity.employeeName);
+      }
+    }
+  }
+
+  const warnings: ParseWarning[] = [];
+
+  if (unmatchedSamples.size) {
+    const samples: string[] = [];
+    for (const sampleSet of unmatchedSamples.values()) {
+      for (const sample of sampleSet) {
+        samples.push(sample);
+        if (samples.length >= 10) break;
+      }
+      if (samples.length >= 10) break;
+    }
+
+    warnings.push({
+      type: "GENERAL",
+      level: "warning",
+      message: `Unmatched employees (${unmatchedSamples.size})`,
+      count: unmatchedSamples.size,
+      samples,
+    });
+  }
+
+  if (ambiguous.size) {
+    const samples = Array.from(ambiguous.entries()).map(
+      ([token, names]) => `${token}: ${names.join(" | ")}`
+    );
+    warnings.push({
+      type: "GENERAL",
+      level: "warning",
+      message: `Ambiguous employee tokens (${ambiguous.size})`,
+      count: ambiguous.size,
+      samples: samples.slice(0, 10),
+    });
+  }
+
+  if (missingOffice.size) {
+    const samples = Array.from(missingOffice.entries()).map(
+      ([token, name]) => `${token}: ${name} (${UNASSIGNED_OFFICE_LABEL})`
+    );
+    warnings.push({
+      type: "GENERAL",
+      level: "warning",
+      message: `Employees without assigned office (${missingOffice.size})`,
+      count: missingOffice.size,
+      samples: samples.slice(0, 10),
+    });
+  }
+
+  return warnings;
 };
 
 const createFileId = () =>
@@ -259,10 +442,21 @@ export default function BioLogUploader() {
   const [manualMonth, setManualMonth] = useState<string>("");
   const [manualYear, setManualYear] = useState<string>("");
   const [manualPeriodHydrated, setManualPeriodHydrated] = useState(false);
+  const [identityState, setIdentityState] = useState<IdentityStatus>({
+    status: "idle",
+    total: 0,
+    completed: 0,
+    unmatched: 0,
+  });
+  const [identityMap, setIdentityMap] = useState<Map<string, IdentityRecord>>(() => new Map());
+  const [selectedOffices, setSelectedOffices] = useState<string[]>([]);
+  const [exportFilteredOnly, setExportFilteredOnly] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const parseInProgress = useRef(false);
   const lastEvaluatedKey = useRef<string>("");
+  const identityCacheRef = useRef<Map<string, IdentityRecord>>(new Map());
+  const identitySetCacheRef = useRef<Map<string, Map<string, IdentityRecord>>>(new Map());
 
   const parsedFiles = useMemo(
     () => files.filter((file) => file.status === "parsed" && file.parsed),
@@ -273,6 +467,16 @@ export default function BioLogUploader() {
     if (!parsedFiles.length) return null;
     return mergeParsedWorkbooks(parsedFiles.map((file) => file.parsed!));
   }, [parsedFiles]);
+
+  const identityTokens = useMemo(() => {
+    if (!mergeResult) return [] as string[];
+    const tokens = new Set<string>();
+    for (const row of mergeResult.perDay) {
+      const token = row.employeeToken || row.employeeId || row.employeeName;
+      if (token) tokens.add(token.trim());
+    }
+    return Array.from(tokens).sort((a, b) => a.localeCompare(b));
+  }, [mergeResult]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -340,6 +544,132 @@ export default function BioLogUploader() {
   }, [mergeResult]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    if (!identityTokens.length) {
+      if (identityMap.size) setIdentityMap(new Map());
+      setIdentityState({ status: "idle", total: 0, completed: 0, unmatched: 0 });
+      return;
+    }
+
+    const cacheKey = identityTokens.join("|");
+    const cachedSet = identitySetCacheRef.current.get(cacheKey);
+    if (cachedSet) {
+      const map = new Map(cachedSet);
+      setIdentityMap(map);
+      setIdentityState({
+        status: "resolved",
+        total: identityTokens.length,
+        completed: identityTokens.length,
+        unmatched: countUnmatchedIdentities(map),
+      });
+      return;
+    }
+
+    const working = new Map<string, IdentityRecord>();
+    const pending: string[] = [];
+
+    for (const token of identityTokens) {
+      const cached = identityCacheRef.current.get(token);
+      if (cached) {
+        working.set(token, cached);
+      } else {
+        pending.push(token);
+      }
+    }
+
+    let completed = identityTokens.length - pending.length;
+
+    setIdentityState({
+      status: pending.length ? "resolving" : "resolved",
+      total: identityTokens.length,
+      completed: pending.length ? completed : identityTokens.length,
+      unmatched: countUnmatchedIdentities(working),
+    });
+
+    if (!pending.length) {
+      const finalMap = new Map(working);
+      identitySetCacheRef.current.set(cacheKey, finalMap);
+      setIdentityMap(finalMap);
+      return;
+    }
+
+    const fetchChunks = async () => {
+      try {
+        for (let i = 0; i < pending.length; i += IDENTITY_REQUEST_LIMIT) {
+          const slice = pending.slice(i, i + IDENTITY_REQUEST_LIMIT);
+          const response = await timeout(
+            fetch("/api/biometrics/resolve-identities", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tokens: slice }),
+            })
+          );
+
+          if (!response.ok) {
+            const message = await response.text();
+            throw new Error(message || "Unable to resolve employee identities.");
+          }
+
+          const payload = (await response.json()) as {
+            results?: Record<string, IdentityRecord>;
+          };
+
+          for (const token of slice) {
+            const normalized = normalizeIdentityRecord(payload.results?.[token]);
+            working.set(token, normalized);
+            identityCacheRef.current.set(token, normalized);
+          }
+
+          completed += slice.length;
+          if (cancelled) return;
+          setIdentityState({
+            status: "resolving",
+            total: identityTokens.length,
+            completed,
+            unmatched: countUnmatchedIdentities(working),
+          });
+        }
+
+        if (cancelled) return;
+        const finalMap = new Map(working);
+        identitySetCacheRef.current.set(cacheKey, finalMap);
+        setIdentityMap(finalMap);
+        setIdentityState({
+          status: "resolved",
+          total: identityTokens.length,
+          completed: identityTokens.length,
+          unmatched: countUnmatchedIdentities(finalMap),
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to resolve identities", error);
+        const message =
+          error instanceof Error ? error.message : "Unable to resolve employee identities.";
+        setIdentityMap(new Map(working));
+        setIdentityState({
+          status: "error",
+          total: identityTokens.length,
+          completed,
+          unmatched: countUnmatchedIdentities(working),
+          message,
+        });
+        toast({
+          title: "Identity resolution failed",
+          description: message,
+          variant: "destructive",
+        });
+      }
+    };
+
+    void fetchChunks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [identityTokens, toast]);
+
+  useEffect(() => {
     if (parseInProgress.current) return;
     const next = files.find((file) => file.status === "queued");
     if (!next) return;
@@ -383,26 +713,6 @@ export default function BioLogUploader() {
     void parse();
   }, [files, toast]);
 
-  const aggregatedWarnings = useMemo(() => {
-    const sources: ParseWarning[][] = [];
-    for (const file of parsedFiles) {
-      if (file.parsed?.warnings?.length) {
-        sources.push(file.parsed.warnings);
-      }
-    }
-    if (mergeResult?.warnings?.length) {
-      sources.push(mergeResult.warnings);
-    }
-    if (!sources.length) return [];
-    return aggregateWarnings(sources);
-  }, [parsedFiles, mergeResult]);
-
-  const aggregatedWarningLevel = aggregatedWarnings.some(
-    (warning) => warning.level === "warning"
-  )
-    ? "warning"
-    : "info";
-
   const manualMonthNumber = manualMonth ? Number(manualMonth) : null;
   const manualYearNumber = manualYear ? Number(manualYear) : null;
   const manualMonthValid =
@@ -440,10 +750,32 @@ export default function BioLogUploader() {
       )
     : "selected period";
 
-  const basePerDay = useMemo<ParsedPerDayRow[]>(() => {
+  const rawPerDay = useMemo<ParsedPerDayRow[]>(() => {
     if (!mergeResult) return [];
-    return sortPerDayRows(mergeResult.perDay.map((row) => toChronologicalRow(row)));
+    return mergeResult.perDay.map((row) => toChronologicalRow(row));
   }, [mergeResult]);
+
+  const basePerDay = useMemo<ParsedPerDayRow[]>(() => {
+    if (!rawPerDay.length) return [];
+    if (identityTokens.length && identityState.status === "resolving") {
+      return sortPerDayRows([...rawPerDay]);
+    }
+    const mapped = rawPerDay.map((row) => {
+      const token = row.employeeToken || row.employeeId || row.employeeName;
+      if (!token) return row;
+      const identity = identityMap.get(token);
+      if (!identity) return row;
+      const normalized = normalizeIdentityRecord(identity);
+      return {
+        ...row,
+        employeeName: normalized.employeeName || row.employeeName,
+        resolvedEmployeeId: normalized.employeeId,
+        officeId: normalized.officeId ?? null,
+        officeName: normalized.officeName ?? null,
+      };
+    });
+    return sortPerDayRows(mapped.map((row) => toChronologicalRow(row)));
+  }, [identityMap, identityState.status, identityTokens.length, rawPerDay]);
 
   const { filteredRows: filteredPerDayRows, outOfPeriodRows } = useMemo(() => {
     if (!mergeResult) {
@@ -497,9 +829,39 @@ export default function BioLogUploader() {
     };
   }, [basePerDay, manualPeriodSelection, manualSelectionValid, mergeResult, useManualPeriod]);
 
+  const identityWarnings = useMemo(
+    () => computeIdentityWarnings(filteredPerDayRows, identityMap, identityState.status),
+    [filteredPerDayRows, identityMap, identityState.status]
+  );
+
+  const aggregatedWarnings = useMemo(() => {
+    const sources: ParseWarning[][] = [];
+    for (const file of parsedFiles) {
+      if (file.parsed?.warnings?.length) {
+        sources.push(file.parsed.warnings);
+      }
+    }
+    if (mergeResult?.warnings?.length) {
+      sources.push(mergeResult.warnings);
+    }
+    if (identityWarnings.length) {
+      sources.push(identityWarnings);
+    }
+    if (!sources.length) return [];
+    return aggregateWarnings(sources);
+  }, [identityWarnings, mergeResult, parsedFiles]);
+
+  const aggregatedWarningLevel = aggregatedWarnings.some(
+    (warning) => warning.level === "warning"
+  )
+    ? "warning"
+    : "info";
+
   const hasPendingParses = files.some(
     (file) => file.status === "parsing" || file.status === "queued"
   );
+
+  const identityReady = identityTokens.length === 0 || identityState.status !== "resolving";
 
   useEffect(() => {
     if (!mergeResult) {
@@ -509,6 +871,7 @@ export default function BioLogUploader() {
       return;
     }
     if (hasPendingParses) return;
+    if (!identityReady) return;
     if (mergeResult.months.length > 1 && !mixedMonthsContext.confirmed) return;
 
     if (useManualPeriod && !manualSelectionValid) {
@@ -533,10 +896,10 @@ export default function BioLogUploader() {
     }
 
     const payloadKey = `${manualKey}:${filteredPerDayRows.length}:${filteredPerDayRows
-      .map(
-        (row) =>
-          `${row.employeeToken ?? row.employeeId}:${row.dateISO}:${row.allTimes.join("|")}`
-      )
+      .map((row) => {
+        const officeKey = row.officeId ?? row.officeName ?? "";
+        return `${row.employeeToken ?? row.employeeId}:${row.dateISO}:${row.allTimes.join("|")}:${row.employeeName}:${officeKey}`;
+      })
       .join("#")}`;
     if (payloadKey === lastEvaluatedKey.current) return;
 
@@ -549,6 +912,9 @@ export default function BioLogUploader() {
             employeeId: row.employeeId,
             employeeName: row.employeeName,
             employeeToken: row.employeeToken,
+            resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+            officeId: row.officeId ?? null,
+            officeName: row.officeName ?? null,
             dateISO: row.dateISO,
             day: row.day,
             earliest: row.earliest,
@@ -612,6 +978,7 @@ export default function BioLogUploader() {
   }, [
     filteredPerDayRows,
     hasPendingParses,
+    identityReady,
     manualPeriodSelection,
     manualSelectionValid,
     mergeResult,
@@ -620,13 +987,125 @@ export default function BioLogUploader() {
     useManualPeriod,
   ]);
 
-  useEffect(() => {
-    setPage(0);
+  const officeOptionMap = useMemo(() => {
+    const map = new Map<string, { label: string; count: number }>();
+    if (!perDay?.length) return map;
+    for (const row of perDay) {
+      const label = row.officeName && row.officeName.trim().length
+        ? row.officeName.trim()
+        : row.resolvedEmployeeId
+        ? UNASSIGNED_OFFICE_LABEL
+        : UNKNOWN_OFFICE_LABEL;
+      const key = makeOfficeKey(row.officeId ?? null, label);
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(key, { label, count: 1 });
+      }
+    }
+    return map;
   }, [perDay]);
 
+  const officeOptions = useMemo<OfficeOption[]>(() => {
+    return Array.from(officeOptionMap.entries())
+      .map(([key, value]) => ({ key, label: value.label, count: value.count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [officeOptionMap]);
+
+  const filteredPerEmployee = useMemo(() => {
+    if (!perEmployee) return [] as PerEmployeeRow[];
+    if (!selectedOffices.length) return perEmployee;
+    const keys = new Set(selectedOffices);
+    return perEmployee.filter((row) =>
+      keys.has(
+        makeOfficeKey(
+          row.officeId ?? null,
+          row.officeName ?? (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)
+        )
+      )
+    );
+  }, [perEmployee, selectedOffices]);
+
+  const filteredPerDayPreview = useMemo(() => {
+    if (!perDay) return [] as PerDayRow[];
+    if (!selectedOffices.length) return perDay;
+    const keys = new Set(selectedOffices);
+    return perDay.filter((row) =>
+      keys.has(
+        makeOfficeKey(
+          row.officeId ?? null,
+          row.officeName ?? (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)
+        )
+      )
+    );
+  }, [perDay, selectedOffices]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [filteredPerDayPreview]);
+
+  useEffect(() => {
+    if (perDay === null) {
+      setSelectedOffices([]);
+      setExportFilteredOnly(false);
+    }
+  }, [perDay]);
+
+  useEffect(() => {
+    if (!selectedOffices.length && exportFilteredOnly) {
+      setExportFilteredOnly(false);
+    }
+  }, [exportFilteredOnly, selectedOffices.length]);
+
+  const handleOfficeToggle = useCallback((key: string, nextChecked: boolean) => {
+    setSelectedOffices((prev) => {
+      if (nextChecked) {
+        if (prev.includes(key)) return prev;
+        return [...prev, key];
+      }
+      return prev.filter((value) => value !== key);
+    });
+  }, []);
+
+  const getOfficeLabel = useCallback(
+    (key: string) => {
+      const option = officeOptionMap.get(key);
+      if (option) return option.label;
+      return getOfficeLabelFromKey(key) ?? key;
+    },
+    [officeOptionMap]
+  );
+
+  const identityStatusBadge = useMemo(() => {
+    if (!identityTokens.length) return null;
+    if (identityState.status === "resolving") {
+      return (
+        <Badge variant="outline" className="flex items-center gap-1">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Identity: Resolving names & offices… ({identityState.completed}/{identityState.total})
+        </Badge>
+      );
+    }
+    if (identityState.status === "error") {
+      return (
+        <Badge variant="destructive" className="flex items-center gap-1">
+          <AlertCircle className="h-3.5 w-3.5" />
+          Identity resolution failed
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="secondary" className="flex items-center gap-1">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Resolved: {identityState.total} employees, {identityState.unmatched} unmatched
+      </Badge>
+    );
+  }, [identityState.completed, identityState.status, identityState.total, identityState.unmatched, identityTokens.length]);
+
   const sortedPerEmployee = useMemo(() => {
-    if (!perEmployee) return [];
-    const rows = [...perEmployee];
+    if (!filteredPerEmployee.length) return [];
+    const rows = [...filteredPerEmployee];
     const multiplier = sortDirection === "asc" ? 1 : -1;
     rows.sort((a, b) => {
       const diff = (a[sortKey] as number) - (b[sortKey] as number);
@@ -636,18 +1115,18 @@ export default function BioLogUploader() {
       return a.employeeName.localeCompare(b.employeeName);
     });
     return rows;
-  }, [perEmployee, sortDirection, sortKey]);
+  }, [filteredPerEmployee, sortDirection, sortKey]);
 
   const pagedPerDay = useMemo(() => {
-    if (!perDay) return [];
+    if (!filteredPerDayPreview.length) return [];
     const start = page * PAGE_SIZE;
-    return perDay.slice(start, start + PAGE_SIZE);
-  }, [perDay, page]);
+    return filteredPerDayPreview.slice(start, start + PAGE_SIZE);
+  }, [filteredPerDayPreview, page]);
 
   const totalPages = useMemo(() => {
-    if (!perDay?.length) return 0;
-    return Math.max(1, Math.ceil(perDay.length / PAGE_SIZE));
-  }, [perDay]);
+    if (!filteredPerDayPreview.length) return 0;
+    return Math.max(1, Math.ceil(filteredPerDayPreview.length / PAGE_SIZE));
+  }, [filteredPerDayPreview]);
 
   const handleSort = useCallback(
     (key: SortKey) => {
@@ -742,8 +1221,20 @@ export default function BioLogUploader() {
   const handleDownloadResults = useCallback(() => {
     if (!perEmployee?.length || !perDay?.length) return;
     if (useManualPeriod && !manualSelectionValid) return;
+
+    const employees = exportFilteredOnly ? filteredPerEmployee : perEmployee;
+    const days = exportFilteredOnly ? filteredPerDayPreview : perDay;
+
+    if (!employees.length || !days.length) {
+      toast({
+        title: "Export skipped",
+        description: "No rows match the current filters.",
+      });
+      return;
+    }
+
     try {
-      exportResultsToXlsx(perEmployee, perDay);
+      exportResultsToXlsx(employees, days);
       toast({
         title: "Download started",
         description: "Exporting biometrics summary to Excel.",
@@ -756,7 +1247,16 @@ export default function BioLogUploader() {
         variant: "destructive",
       });
     }
-  }, [manualSelectionValid, perDay, perEmployee, toast, useManualPeriod]);
+  }, [
+    exportFilteredOnly,
+    filteredPerDayPreview,
+    filteredPerEmployee,
+    manualSelectionValid,
+    perDay,
+    perEmployee,
+    toast,
+    useManualPeriod,
+  ]);
 
   const handleDownloadNormalized = useCallback(
     (file: FileState) => {
@@ -1162,6 +1662,14 @@ export default function BioLogUploader() {
 
       {perEmployee && perDay && perEmployee.length > 0 && (
         <div className="space-y-4">
+          {identityStatusBadge && (
+            <div className="flex flex-wrap items-center gap-2">
+              {identityStatusBadge}
+              {identityState.status === "error" && identityState.message ? (
+                <span className="text-xs text-destructive">{identityState.message}</span>
+              ) : null}
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -1171,22 +1679,100 @@ export default function BioLogUploader() {
               <Button
                 onClick={handleDownloadResults}
                 disabled={
+                  evaluating ||
+                  hasPendingParses ||
                   !perEmployee.length ||
                   !perDay.length ||
-                  evaluating ||
-                  (useManualPeriod && !manualSelectionValid)
+                  (useManualPeriod && !manualSelectionValid) ||
+                  (exportFilteredOnly && (!filteredPerEmployee.length || !filteredPerDayPreview.length))
                 }
               >
                 Download Results (Excel)
               </Button>
             </div>
           </div>
+          {officeOptions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/40 p-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Office
+                </span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      {selectedOffices.length ? `Filter (${selectedOffices.length})` : "Filter"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64" align="start">
+                    <div className="space-y-2">
+                      {officeOptions.map((option) => (
+                        <label
+                          key={option.key}
+                          className="flex items-center justify-between gap-2 text-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={selectedOffices.includes(option.key)}
+                              onCheckedChange={(checked) =>
+                                handleOfficeToggle(option.key, Boolean(checked))
+                              }
+                            />
+                            <span>{option.label}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">{option.count}</span>
+                        </label>
+                      ))}
+                      {selectedOffices.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => setSelectedOffices([])}
+                        >
+                          Clear selection
+                        </Button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              {selectedOffices.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedOffices.map((key) => (
+                    <Badge key={key} variant="secondary" className="flex items-center gap-1">
+                      {getOfficeLabel(key)}
+                      <button
+                        type="button"
+                        className="rounded-full p-0.5 hover:bg-muted"
+                        onClick={() => handleOfficeToggle(key, false)}
+                        aria-label={`Remove ${getOfficeLabel(key)} filter`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2 text-xs md:ml-auto">
+                <Switch
+                  id="export-filtered-only"
+                  checked={exportFilteredOnly}
+                  disabled={selectedOffices.length === 0}
+                  onCheckedChange={(checked) => setExportFilteredOnly(Boolean(checked))}
+                />
+                <label htmlFor="export-filtered-only" className="text-xs text-muted-foreground">
+                  Export filtered only
+                </label>
+              </div>
+            </div>
+          )}
           <div className="overflow-x-auto rounded-xl border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
                   <th className="p-2 text-left">Employee ID</th>
                   <th className="p-2 text-left">Name</th>
+                  <th className="p-2 text-left">Office</th>
                   <th className="p-2 text-left">Schedule</th>
                   <th className="p-2 text-center">
                     <button
@@ -1247,6 +1833,10 @@ export default function BioLogUploader() {
                       <td className="p-2">{row.employeeId || "—"}</td>
                       <td className="p-2">{row.employeeName || "—"}</td>
                       <td className="p-2">
+                        {row.officeName ||
+                          (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)}
+                      </td>
+                      <td className="p-2">
                         {types.length ? (
                           <div className="flex flex-wrap gap-1">
                             {types.map((type) => (
@@ -1306,6 +1896,7 @@ export default function BioLogUploader() {
                 <tr>
                   <th className="p-2 text-left">Employee ID</th>
                   <th className="p-2 text-left">Name</th>
+                  <th className="p-2 text-left">Office</th>
                   <th className="p-2 text-left">Date</th>
                   <th className="p-2 text-center">Earliest</th>
                   <th className="p-2 text-center">Latest</th>
@@ -1322,6 +1913,10 @@ export default function BioLogUploader() {
                   <tr key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`} className="odd:bg-muted/20">
                     <td className="p-2">{row.employeeId || "—"}</td>
                     <td className="p-2">{row.employeeName || "—"}</td>
+                    <td className="p-2">
+                      {row.officeName ||
+                        (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)}
+                    </td>
                     <td className="p-2">{dateFormatter.format(toDate(row.dateISO))}</td>
                     <td className="p-2 text-center">{row.earliest ?? ""}</td>
                     <td className="p-2 text-center">{row.latest ?? ""}</td>
