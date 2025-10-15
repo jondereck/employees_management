@@ -200,6 +200,17 @@ model Award {
   @@index([employeeId])
 }
 
+model BiometricsIdentityMap {
+  token      String   @id
+  employeeId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+}
+
 model ChangeRequest {
   id             String       @id @default(uuid())
   departmentId   String

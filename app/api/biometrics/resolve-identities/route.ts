@@ -85,7 +85,64 @@ export async function POST(req: Request) {
     const tokenSet = new Set(uniqueTokens);
     const matches = new Map<string, EmployeeCandidate[]>();
 
-    const orConditions = uniqueTokens.flatMap((token) => [
+    const identityMapModel = (prisma as typeof prisma & {
+      biometricsIdentityMap?: typeof prisma.biometricsIdentityMap;
+    }).biometricsIdentityMap;
+
+    let manualMappings: Array<{ token: string; employee: any }> = [];
+
+    if (!identityMapModel) {
+      console.warn(
+        "Biometrics identity map model is unavailable. Skipping manual mapping lookup until migrations are applied."
+      );
+    } else {
+      manualMappings = await identityMapModel.findMany({
+        where: { token: { in: uniqueTokens } },
+        include: {
+          employee: {
+            select: {
+              id: true,
+              employeeNo: true,
+              firstName: true,
+              lastName: true,
+              middleName: true,
+              suffix: true,
+              updatedAt: true,
+              offices: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+    }
+
+    const results: Record<string, IdentityRecord> = {};
+
+    for (const mapping of manualMappings) {
+      const employee = mapping.employee;
+      if (!employee) continue;
+      tokenSet.delete(mapping.token);
+      const officeName = employee.offices?.name?.trim() || UNASSIGNED_OFFICE;
+      const officeId = employee.offices?.id ?? null;
+      const candidate: EmployeeCandidate = {
+        id: employee.id,
+        employeeNo: employee.employeeNo,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        middleName: employee.middleName,
+        suffix: employee.suffix,
+        updatedAt: employee.updatedAt,
+        office: employee.offices ? { id: employee.offices.id, name: employee.offices.name } : null,
+      };
+      results[mapping.token] = {
+        status: "matched",
+        employeeId: employee.id,
+        employeeName: formatName(candidate),
+        officeId,
+        officeName,
+      };
+    }
+
+    const orConditions = Array.from(tokenSet).flatMap((token) => [
       { employeeNo: { startsWith: `${token},` } },
       { employeeNo: { equals: token } },
     ]);
@@ -124,9 +181,8 @@ export async function POST(req: Request) {
       }
     }
 
-    const results: Record<string, IdentityRecord> = {};
-
     for (const token of uniqueTokens) {
+      if (results[token]) continue;
       const candidates = matches.get(token) ?? [];
       if (!candidates.length) {
         results[token] = { ...UNKNOWN_RESULT };

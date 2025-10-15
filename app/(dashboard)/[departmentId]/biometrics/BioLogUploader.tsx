@@ -35,6 +35,12 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -53,6 +59,16 @@ import {
   type WorkbookParserType,
   type UnmatchedIdentityWarningDetail,
 } from "@/utils/parseBioAttendance";
+import InsightsPanel from "./InsightsPanel";
+import ResolveIdentityDialog, { ResolveSearchResult } from "./ResolveIdentityDialog";
+import {
+  ALL_CHART_IDS,
+  DEFAULT_VISIBLE_CHARTS,
+  INSIGHTS_SETTINGS_KEY,
+  type ChartId,
+  type InsightsSettings,
+  type MetricMode,
+} from "./insights-types";
 
 const PAGE_SIZE = 25;
 
@@ -92,6 +108,25 @@ const formatScheduleSource = (value?: string | null) => {
     default:
       return value.charAt(0) + value.slice(1).toLowerCase();
   }
+};
+
+const computeLatePercentMinutes = (row: PerEmployeeRow): number | null => {
+  if (!row.totalRequiredMinutes || row.totalRequiredMinutes <= 0) return null;
+  const total = row.totalLateMinutes ?? 0;
+  if (total <= 0) return 0;
+  return (total / row.totalRequiredMinutes) * 100;
+};
+
+const computeUndertimePercentMinutes = (row: PerEmployeeRow): number | null => {
+  if (!row.totalRequiredMinutes || row.totalRequiredMinutes <= 0) return null;
+  const total = row.totalUndertimeMinutes ?? 0;
+  if (total <= 0) return 0;
+  return (total / row.totalRequiredMinutes) * 100;
+};
+
+const formatPercentLabel = (value: number | null | undefined) => {
+  if (value == null || Number.isNaN(value)) return "—";
+  return `${value.toFixed(1)}%`;
 };
 
 const timeout = <T,>(promise: Promise<T>, ms = 15_000) =>
@@ -291,6 +326,48 @@ const countUnmatchedIdentities = (map: Map<string, IdentityRecord>): number => {
     if (entry.status === "unmatched") count += 1;
   }
   return count;
+};
+
+const isChartId = (value: unknown): value is ChartId =>
+  typeof value === "string" && ALL_CHART_IDS.includes(value as ChartId);
+
+const readInsightsSettings = (): InsightsSettings => {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(INSIGHTS_SETTINGS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as InsightsSettings;
+    if (!parsed || typeof parsed !== "object") return {};
+
+    const selectedOffices = Array.isArray(parsed.selectedOffices)
+      ? parsed.selectedOffices.filter((value): value is string => typeof value === "string")
+      : undefined;
+    const selectedScheduleTypes = Array.isArray(parsed.selectedScheduleTypes)
+      ? parsed.selectedScheduleTypes.filter((value): value is string => typeof value === "string")
+      : undefined;
+    const showUnmatched = typeof parsed.showUnmatched === "boolean" ? parsed.showUnmatched : undefined;
+    const metricMode: MetricMode | undefined = parsed.metricMode === "minutes"
+      ? "minutes"
+      : parsed.metricMode === "days"
+      ? "days"
+      : undefined;
+    const visibleCharts = Array.isArray(parsed.visibleCharts)
+      ? (parsed.visibleCharts.filter(isChartId) as ChartId[])
+      : undefined;
+    const collapsed = typeof parsed.collapsed === "boolean" ? parsed.collapsed : undefined;
+
+    return {
+      selectedOffices,
+      selectedScheduleTypes,
+      showUnmatched,
+      metricMode,
+      visibleCharts,
+      collapsed,
+    } satisfies InsightsSettings;
+  } catch (error) {
+    console.warn("Failed to read insights settings", error);
+    return {};
+  }
 };
 
 const computeIdentityWarnings = (
@@ -495,6 +572,11 @@ const formatDateRange = (range: MergeResult["dateRange"]) => {
 
 export default function BioLogUploader() {
   const { toast } = useToast();
+  const settingsRef = useRef<InsightsSettings | null>(null);
+  if (settingsRef.current === null && typeof window !== "undefined") {
+    settingsRef.current = readInsightsSettings();
+  }
+
   const [files, setFiles] = useState<FileState[]>([]);
   const [perEmployee, setPerEmployee] = useState<PerEmployeeRow[] | null>(null);
   const [perDay, setPerDay] = useState<PerDayRow[] | null>(null);
@@ -520,10 +602,51 @@ export default function BioLogUploader() {
     unmatched: 0,
   });
   const [identityMap, setIdentityMap] = useState<Map<string, IdentityRecord>>(() => new Map());
-  const [selectedOffices, setSelectedOffices] = useState<string[]>([]);
+  const [selectedOffices, setSelectedOffices] = useState<string[]>(
+    () => settingsRef.current?.selectedOffices ?? []
+  );
+  const [selectedScheduleTypes, setSelectedScheduleTypes] = useState<string[]>(
+    () => settingsRef.current?.selectedScheduleTypes ?? []
+  );
+  const [showUnmatched, setShowUnmatched] = useState<boolean>(
+    () => settingsRef.current?.showUnmatched ?? true
+  );
+  const [metricMode, setMetricMode] = useState<MetricMode>(
+    () => settingsRef.current?.metricMode ?? "days"
+  );
+  const [visibleCharts, setVisibleChartsState] = useState<ChartId[]>(() => {
+    const stored = settingsRef.current?.visibleCharts;
+    if (stored?.length) {
+      const unique = Array.from(new Set(stored.filter(isChartId)));
+      return unique.length ? unique : [...DEFAULT_VISIBLE_CHARTS];
+    }
+    return [...DEFAULT_VISIBLE_CHARTS];
+  });
+  const [insightsCollapsed, setInsightsCollapsed] = useState<boolean>(
+    () => settingsRef.current?.collapsed ?? false
+  );
   const [exportFilteredOnly, setExportFilteredOnly] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [expandedWarnings, setExpandedWarnings] = useState<Record<string, boolean>>({});
+  const [resolveTarget, setResolveTarget] = useState<{
+    token: string;
+    name: string | null;
+  } | null>(null);
+  const [resolveBusy, setResolveBusy] = useState(false);
+
+  const updateVisibleCharts = useCallback(
+    (updater: ChartId[] | ((prev: ChartId[]) => ChartId[])) => {
+      setVisibleChartsState((prev) => {
+        const next =
+          typeof updater === "function"
+            ? (updater as (prev: ChartId[]) => ChartId[])(prev)
+            : updater;
+        const unique = Array.from(new Set(next.filter(isChartId)));
+        return unique.length ? unique : [...DEFAULT_VISIBLE_CHARTS];
+      });
+    },
+    []
+  );
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const parseInProgress = useRef(false);
@@ -882,12 +1005,24 @@ export default function BioLogUploader() {
       const identity = identityMap.get(token);
       if (!identity) return row;
       const normalized = normalizeIdentityRecord(identity);
+      const isUnmatched = normalized.status === "unmatched";
+      const logName = row.employeeName?.trim();
+      const employeeName =
+        isUnmatched && logName?.length ? logName : normalized.employeeName || row.employeeName;
+      const officeName = isUnmatched
+        ? UNKNOWN_OFFICE_LABEL
+        : normalized.officeName ?? null;
+      const officeId = isUnmatched ? null : normalized.officeId ?? null;
+      const employeeId = isUnmatched ? token : row.employeeId;
+
       return {
         ...row,
-        employeeName: normalized.employeeName || row.employeeName,
+        employeeId,
+        employeeName,
         resolvedEmployeeId: normalized.employeeId,
-        officeId: normalized.officeId ?? null,
-        officeName: normalized.officeName ?? null,
+        officeId,
+        officeName,
+        identityStatus: normalized.status,
       };
     });
     return sortPerDayRows(mapped.map((row) => toChronologicalRow(row)));
@@ -1135,19 +1270,38 @@ export default function BioLogUploader() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [officeOptionMap]);
 
+  const scheduleTypeOptions = useMemo<string[]>(() => {
+    if (!perEmployee?.length) return [];
+    const set = new Set<string>();
+    for (const row of perEmployee) {
+      if (!row.scheduleTypes?.length) continue;
+      for (const type of row.scheduleTypes) {
+        if (type) set.add(type);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [perEmployee]);
+
   const filteredPerEmployee = useMemo(() => {
     if (!perEmployee) return [] as PerEmployeeRow[];
-    if (!selectedOffices.length) return perEmployee;
-    const keys = new Set(selectedOffices);
-    return perEmployee.filter((row) =>
-      keys.has(
-        makeOfficeKey(
+    const officeKeys = selectedOffices.length ? new Set(selectedOffices) : null;
+    const scheduleKeys = selectedScheduleTypes.length ? new Set(selectedScheduleTypes) : null;
+    return perEmployee.filter((row) => {
+      if (officeKeys) {
+        const key = makeOfficeKey(
           row.officeId ?? null,
           row.officeName ?? (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)
-        )
-      )
-    );
-  }, [perEmployee, selectedOffices]);
+        );
+        if (!officeKeys.has(key)) return false;
+      }
+      if (scheduleKeys) {
+        const hasType = row.scheduleTypes?.some((type) => scheduleKeys.has(type)) ?? false;
+        if (!hasType) return false;
+      }
+      if (!showUnmatched && row.identityStatus === "unmatched") return false;
+      return true;
+    });
+  }, [perEmployee, selectedOffices, selectedScheduleTypes, showUnmatched]);
 
   const searchedPerEmployee = useMemo(() => {
     if (!filteredPerEmployee.length) return filteredPerEmployee;
@@ -1156,31 +1310,71 @@ export default function BioLogUploader() {
     return filteredPerEmployee.filter((row) => {
       const name = row.employeeName?.toLowerCase() ?? "";
       const id = row.employeeId?.toLowerCase() ?? "";
-      return name.includes(query) || id.includes(query);
+      const token = row.employeeToken?.toLowerCase() ?? "";
+      return name.includes(query) || id.includes(query) || token.includes(query);
     });
   }, [employeeSearch, filteredPerEmployee]);
 
   const filteredPerDayPreview = useMemo(() => {
     if (!perDay) return [] as PerDayRow[];
-    if (!selectedOffices.length) return perDay;
-    const keys = new Set(selectedOffices);
-    return perDay.filter((row) =>
-      keys.has(
-        makeOfficeKey(
+    const officeKeys = selectedOffices.length ? new Set(selectedOffices) : null;
+    const scheduleKeys = selectedScheduleTypes.length ? new Set(selectedScheduleTypes) : null;
+    const query = employeeSearch.trim().toLowerCase();
+    const hasQuery = query.length > 0;
+    return perDay.filter((row) => {
+      if (officeKeys) {
+        const key = makeOfficeKey(
           row.officeId ?? null,
           row.officeName ?? (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)
-        )
-      )
-    );
-  }, [perDay, selectedOffices]);
+        );
+        if (!officeKeys.has(key)) return false;
+      }
+      if (scheduleKeys && row.scheduleType) {
+        if (!scheduleKeys.has(row.scheduleType)) return false;
+      } else if (scheduleKeys && !row.scheduleType) {
+        return false;
+      }
+      if (!showUnmatched && row.identityStatus === "unmatched") return false;
+      if (!hasQuery) return true;
+      const name = row.employeeName?.toLowerCase() ?? "";
+      const id = row.employeeId?.toLowerCase() ?? "";
+      const token = row.employeeToken?.toLowerCase() ?? "";
+      return name.includes(query) || id.includes(query) || token.includes(query);
+    });
+  }, [
+    employeeSearch,
+    perDay,
+    selectedOffices,
+    selectedScheduleTypes,
+    showUnmatched,
+  ]);
 
   useEffect(() => {
     setPage(0);
   }, [filteredPerDayPreview]);
 
   useEffect(() => {
+    setSelectedScheduleTypes((prev) => {
+      if (!prev.length) return prev;
+      const available = new Set(scheduleTypeOptions);
+      const filtered = prev.filter((type) => available.has(type));
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [scheduleTypeOptions]);
+
+  useEffect(() => {
+    setSelectedOffices((prev) => {
+      if (!prev.length) return prev;
+      const available = new Set(officeOptions.map((option) => option.key));
+      const filtered = prev.filter((key) => available.has(key));
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [officeOptions]);
+
+  useEffect(() => {
     if (perDay === null) {
       setSelectedOffices([]);
+      setSelectedScheduleTypes([]);
       setExportFilteredOnly(false);
     }
   }, [perDay]);
@@ -1191,6 +1385,26 @@ export default function BioLogUploader() {
     }
   }, [exportFilteredOnly, selectedOffices.length]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const payload: InsightsSettings = {
+      selectedOffices,
+      selectedScheduleTypes,
+      showUnmatched,
+      metricMode,
+      visibleCharts,
+      collapsed: insightsCollapsed,
+    };
+    window.localStorage.setItem(INSIGHTS_SETTINGS_KEY, JSON.stringify(payload));
+  }, [
+    selectedOffices,
+    selectedScheduleTypes,
+    showUnmatched,
+    metricMode,
+    visibleCharts,
+    insightsCollapsed,
+  ]);
+
   const handleOfficeToggle = useCallback((key: string, nextChecked: boolean) => {
     setSelectedOffices((prev) => {
       if (nextChecked) {
@@ -1200,6 +1414,97 @@ export default function BioLogUploader() {
       return prev.filter((value) => value !== key);
     });
   }, []);
+
+  const handleScheduleToggle = useCallback((type: string, nextChecked: boolean) => {
+    setSelectedScheduleTypes((prev) => {
+      if (nextChecked) {
+        if (prev.includes(type)) return prev;
+        return [...prev, type];
+      }
+      return prev.filter((value) => value !== type);
+    });
+  }, []);
+
+  const handleResolveMapping = useCallback(
+    async (token: string, employeeId: string, employeeName: string) => {
+      setResolveBusy(true);
+      try {
+        const response = await timeout(
+          fetch("/api/biometrics/resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, employeeId }),
+          }),
+          15_000
+        );
+
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || "Unable to save biometrics mapping.");
+        }
+
+        const identityResponse = await timeout(
+          fetch("/api/biometrics/resolve-identities", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tokens: [token] }),
+          }),
+          15_000
+        );
+
+        if (!identityResponse.ok) {
+          const message = await identityResponse.text();
+          throw new Error(message || "Unable to refresh identity details.");
+        }
+
+        const payload = (await identityResponse.json()) as {
+          results?: Record<string, IdentityRecord>;
+        };
+        const normalized = normalizeIdentityRecord(payload.results?.[token]);
+        identityCacheRef.current.set(token, normalized);
+        identitySetCacheRef.current.clear();
+
+        let nextMap: Map<string, IdentityRecord> | null = null;
+        setIdentityMap((prev) => {
+          const next = new Map(prev);
+          next.set(token, normalized);
+          nextMap = next;
+          return next;
+        });
+
+        if (nextMap) {
+          const unmatched = countUnmatchedIdentities(nextMap);
+          setIdentityState((prev) => ({ ...prev, unmatched }));
+        }
+
+        setResolveTarget(null);
+        toast({
+          title: "Identity resolved",
+          description: `${employeeName} is now linked to ${token}.`,
+        });
+      } catch (error) {
+        console.error("Failed to resolve biometrics token", error);
+        const message =
+          error instanceof Error ? error.message : "Unable to resolve biometrics token.";
+        toast({
+          title: "Resolve failed",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        setResolveBusy(false);
+      }
+    },
+    [toast]
+  );
+
+  const handleResolveSubmit = useCallback(
+    async (result: ResolveSearchResult) => {
+      if (!resolveTarget?.token) return;
+      await handleResolveMapping(resolveTarget.token, result.id, result.name);
+    },
+    [handleResolveMapping, resolveTarget]
+  );
 
   const getOfficeLabel = useCallback(
     (key: string) => {
@@ -1474,10 +1779,11 @@ export default function BioLogUploader() {
   const progress = totalFiles ? Math.round((processedFiles / totalFiles) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Biometrics Logs</h2>
-        <p className="text-sm text-muted-foreground">
+    <TooltipProvider>
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold">Biometrics Logs</h2>
+          <p className="text-sm text-muted-foreground">
           Upload one or more biometrics logs (.xls or .xlsx). We will normalize legacy files, merge punches across files, and compute lateness/undertime per employee.
         </p>
       </div>
@@ -1869,16 +2175,36 @@ export default function BioLogUploader() {
               ) : null}
             </div>
           )}
+          <InsightsPanel
+            collapsed={insightsCollapsed}
+            onCollapsedChange={setInsightsCollapsed}
+            officeOptions={officeOptions}
+            selectedOffices={selectedOffices}
+            onOfficeToggle={handleOfficeToggle}
+            onClearOffices={() => setSelectedOffices([])}
+            scheduleTypeOptions={scheduleTypeOptions}
+            selectedScheduleTypes={selectedScheduleTypes}
+            onScheduleToggle={handleScheduleToggle}
+            onClearScheduleTypes={() => setSelectedScheduleTypes([])}
+            showUnmatched={showUnmatched}
+            onShowUnmatchedChange={setShowUnmatched}
+            metricMode={metricMode}
+            onMetricModeChange={setMetricMode}
+            employeeSearch={employeeSearch}
+            onEmployeeSearchChange={setEmployeeSearch}
+            visibleCharts={visibleCharts}
+            onVisibleChartsChange={updateVisibleCharts}
+            perEmployee={perEmployee ?? []}
+            perDay={perDay ?? []}
+            filteredPerEmployee={searchedPerEmployee}
+            filteredPerDay={filteredPerDayPreview}
+            getOfficeLabel={getOfficeLabel}
+            exportFilteredOnly={exportFilteredOnly}
+            onExportFilteredOnlyChange={setExportFilteredOnly}
+          />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Input
-                value={employeeSearch}
-                onChange={(event) => setEmployeeSearch(event.target.value)}
-                placeholder="Search employee"
-                aria-label="Search employee"
-                className="h-9 w-full max-w-xs sm:w-60"
-              />
               <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingParses}>
                 Upload more
               </Button>
@@ -1897,81 +2223,6 @@ export default function BioLogUploader() {
               </Button>
             </div>
           </div>
-          {officeOptions.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/40 p-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Office
-                </span>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      {selectedOffices.length ? `Filter (${selectedOffices.length})` : "Filter"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64" align="start">
-                    <div className="space-y-2">
-                      {officeOptions.map((option) => (
-                        <label
-                          key={option.key}
-                          className="flex items-center justify-between gap-2 text-sm"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              checked={selectedOffices.includes(option.key)}
-                              onCheckedChange={(checked) =>
-                                handleOfficeToggle(option.key, Boolean(checked))
-                              }
-                            />
-                            <span>{option.label}</span>
-                          </div>
-                          <span className="text-xs text-muted-foreground">{option.count}</span>
-                        </label>
-                      ))}
-                      {selectedOffices.length > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => setSelectedOffices([])}
-                        >
-                          Clear selection
-                        </Button>
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              {selectedOffices.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  {selectedOffices.map((key) => (
-                    <Badge key={key} variant="secondary" className="flex items-center gap-1">
-                      {getOfficeLabel(key)}
-                      <button
-                        type="button"
-                        className="rounded-full p-0.5 hover:bg-muted"
-                        onClick={() => handleOfficeToggle(key, false)}
-                        aria-label={`Remove ${getOfficeLabel(key)} filter`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              <div className="flex items-center gap-2 text-xs md:ml-auto">
-                <Switch
-                  id="export-filtered-only"
-                  checked={exportFilteredOnly}
-                  disabled={selectedOffices.length === 0}
-                  onCheckedChange={(checked) => setExportFilteredOnly(Boolean(checked))}
-                />
-                <label htmlFor="export-filtered-only" className="text-xs text-muted-foreground">
-                  Export filtered only
-                </label>
-              </div>
-            </div>
-          )}
           <div className="overflow-x-auto rounded-xl border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
@@ -2025,23 +2276,92 @@ export default function BioLogUploader() {
                       />
                     </button>
                   </th>
-                  <th className="p-2 text-center">Late %</th>
-                  <th className="p-2 text-center">UT %</th>
+                  <th className="p-2 text-center">
+                    <span className="inline-flex items-center justify-center gap-1">
+                      Late %
+                      <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                        {metricMode === "minutes" ? "Minutes" : "Days"}
+                      </Badge>
+                    </span>
+                  </th>
+                  <th className="p-2 text-center">
+                    <span className="inline-flex items-center justify-center gap-1">
+                      UT %
+                      <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                        {metricMode === "minutes" ? "Minutes" : "Days"}
+                      </Badge>
+                    </span>
+                  </th>
+                  <th className="p-2 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedPerEmployee.map((row) => {
-                  const key = `${row.employeeId}||${row.employeeName}`;
+                  const key = `${row.employeeToken || row.employeeId || row.employeeName}||${row.employeeName}`;
                   const types = row.scheduleTypes ?? [];
-                  const sourceLabel = formatScheduleSource(row.scheduleSource);
+                  const sourceLabel =
+                    row.identityStatus === "unmatched"
+                      ? "No mapping"
+                      : formatScheduleSource(row.scheduleSource);
+                  const displayEmployeeId =
+                    row.employeeId?.trim().length
+                      ? row.employeeId
+                      : row.identityStatus === "unmatched"
+                      ? row.employeeToken || "—"
+                      : "—";
+                  const displayEmployeeName =
+                    row.employeeName?.trim().length ? row.employeeName : UNMATCHED_LABEL;
+                  const displayOffice = row.officeName?.trim().length
+                    ? row.officeName
+                    : row.identityStatus === "unmatched"
+                    ? UNKNOWN_OFFICE_LABEL
+                    : row.resolvedEmployeeId
+                    ? UNASSIGNED_OFFICE_LABEL
+                    : UNKNOWN_OFFICE_LABEL;
+                  const latePercentValue =
+                    metricMode === "minutes"
+                      ? computeLatePercentMinutes(row)
+                      : typeof row.lateRate === "number"
+                      ? row.lateRate
+                      : null;
+                  const undertimePercentValue =
+                    metricMode === "minutes"
+                      ? computeUndertimePercentMinutes(row)
+                      : typeof row.undertimeRate === "number"
+                      ? row.undertimeRate
+                      : null;
+                  const lateTooltip = metricMode === "minutes"
+                    ? latePercentValue == null
+                      ? null
+                      : `${row.totalLateMinutes.toLocaleString()} late minute${row.totalLateMinutes === 1 ? "" : "s"} • ${formatPercentLabel(latePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`
+                    : `${row.lateDays} late day${row.lateDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`;
+                  const undertimeTooltip = metricMode === "minutes"
+                    ? undertimePercentValue == null
+                      ? null
+                      : `${row.totalUndertimeMinutes.toLocaleString()} undertime minute${row.totalUndertimeMinutes === 1 ? "" : "s"} • ${formatPercentLabel(undertimePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`
+                    : `${row.undertimeDays} undertime day${row.undertimeDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`;
+                  const canResolve = row.identityStatus === "unmatched" && Boolean(row.employeeToken);
                   return (
                     <tr key={key} className="odd:bg-muted/20">
-                      <td className="p-2">{row.employeeId || "—"}</td>
-                      <td className="p-2">{row.employeeName || "—"}</td>
+                      <td className="p-2">{displayEmployeeId}</td>
                       <td className="p-2">
-                        {row.officeName ||
-                          (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)}
+                        <div className="flex items-center gap-2">
+                          <span>{displayEmployeeName}</span>
+                          {row.identityStatus === "unmatched" ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge className="border-amber-500/70 bg-amber-500/20 text-amber-700">
+                                  Unmatched
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-sm">
+                                No DB record; using name from uploaded log. You can resolve this below.
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : null}
+                        </div>
                       </td>
+                      <td className="p-2">{displayOffice}</td>
                       <td className="p-2">
                         {types.length ? (
                           <div className="flex flex-wrap gap-1">
@@ -2061,8 +2381,61 @@ export default function BioLogUploader() {
                       <td className="p-2 text-center">{row.daysWithLogs}</td>
                       <td className="p-2 text-center">{row.lateDays}</td>
                       <td className="p-2 text-center">{row.undertimeDays}</td>
-                      <td className="p-2 text-center">{row.lateRate}%</td>
-                      <td className="p-2 text-center">{row.undertimeRate}%</td>
+                      <td className="p-2 text-center">
+                        {lateTooltip ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help font-medium">
+                                {formatPercentLabel(latePercentValue)}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs text-sm">
+                              {lateTooltip}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {formatPercentLabel(latePercentValue)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 text-center">
+                        {undertimeTooltip ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help font-medium">
+                                {formatPercentLabel(undertimePercentValue)}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs text-sm">
+                              {undertimeTooltip}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {formatPercentLabel(undertimePercentValue)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2">
+                        {canResolve ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setResolveTarget({
+                                token: row.employeeToken!,
+                                name: row.employeeName ?? null,
+                              })
+                            }
+                            disabled={resolveBusy}
+                          >
+                            Resolve…
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -2149,6 +2522,15 @@ export default function BioLogUploader() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+      <ResolveIdentityDialog
+        open={Boolean(resolveTarget)}
+        token={resolveTarget?.token ?? null}
+        name={resolveTarget?.name ?? null}
+        busy={resolveBusy}
+        onClose={() => setResolveTarget(null)}
+        onResolve={handleResolveSubmit}
+      />
+    </TooltipProvider>
   );
 }
