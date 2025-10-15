@@ -5,7 +5,6 @@ export type WarningLevel = "info" | "warning";
 export type UnmatchedIdentityWarningDetail = {
   token: string;
   employeeIds: string[];
-  sources: string[];
 };
 
 export type ParseWarning = {

@@ -139,7 +139,6 @@ const UNKNOWN_OFFICE_LABEL = "(Unknown)";
 const UNASSIGNED_OFFICE_LABEL = "(Unassigned)";
 const UNKNOWN_OFFICE_KEY_PREFIX = "__unknown__::";
 const MAX_WARNING_SAMPLE_COUNT = 10;
-const MAX_UNMATCHED_TOKEN_SAMPLES = 5;
 
 const sortPunchesChronologically = (punches: DayPunch[]): DayPunch[] =>
   [...punches].sort((a, b) => a.minuteOfDay - b.minuteOfDay || a.time.localeCompare(b.time));
@@ -294,13 +293,7 @@ const computeIdentityWarnings = (
   if (!rows.length) return [];
   if (status === "resolving") return [];
 
-  const unmatchedSamples = new Map<
-    string,
-    {
-      employeeIds: Set<string>;
-      samples: Set<string>;
-    }
-  >();
+  const unmatchedSamples = new Map<string, Set<string>>();
   const unmatchedDetails: UnmatchedIdentityWarningDetail[] = [];
   const ambiguous = new Map<string, string[]>();
   const missingOffice = new Map<string, string>();
@@ -314,20 +307,12 @@ const computeIdentityWarnings = (
     if (identity.status === "unmatched") {
       let entry = unmatchedSamples.get(token);
       if (!entry) {
-        entry = {
-          employeeIds: new Set<string>(),
-          samples: new Set<string>(),
-        };
+        entry = new Set<string>();
         unmatchedSamples.set(token, entry);
       }
 
       if (row.employeeId) {
-        entry.employeeIds.add(row.employeeId);
-      }
-
-      if (entry.samples.size < MAX_UNMATCHED_TOKEN_SAMPLES) {
-        const source = row.sourceFiles?.[0] ?? "Unknown file";
-        entry.samples.add(`${source} • ${row.dateISO}`);
+        entry.add(row.employeeId);
       }
 
       continue;
@@ -349,13 +334,11 @@ const computeIdentityWarnings = (
   const warnings: ParseWarning[] = [];
 
   if (unmatchedSamples.size) {
-    for (const [token, entry] of unmatchedSamples.entries()) {
-      const employeeIds = Array.from(entry.employeeIds).filter(Boolean);
-      const sampleSnippets = Array.from(entry.samples).slice(0, 3);
+    for (const [token, employeeIdsSet] of unmatchedSamples.entries()) {
+      const employeeIds = Array.from(employeeIdsSet).filter(Boolean);
       unmatchedDetails.push({
         token,
         employeeIds,
-        sources: sampleSnippets,
       });
       if (unmatchedDetails.length >= MAX_WARNING_SAMPLE_COUNT) break;
     }
@@ -453,11 +436,6 @@ const aggregateWarnings = (sources: ParseWarning[][]): ParseWarning[] => {
                 detail.employeeIds,
                 MAX_WARNING_SAMPLE_COUNT
               );
-              existingDetail.sources = mergeLimitedUnique(
-                existingDetail.sources,
-                detail.sources,
-                MAX_UNMATCHED_TOKEN_SAMPLES
-              );
             } else if (currentDetails.length < MAX_WARNING_SAMPLE_COUNT) {
               const clone = {
                 token: detail.token,
@@ -465,7 +443,6 @@ const aggregateWarnings = (sources: ParseWarning[][]): ParseWarning[] => {
                   0,
                   MAX_WARNING_SAMPLE_COUNT
                 ),
-                sources: detail.sources.slice(0, MAX_UNMATCHED_TOKEN_SAMPLES),
               };
               currentDetails.push(clone);
               byToken.set(detail.token, clone);
@@ -491,7 +468,6 @@ const aggregateWarnings = (sources: ParseWarning[][]): ParseWarning[] => {
                   0,
                   MAX_WARNING_SAMPLE_COUNT
                 ),
-                sources: detail.sources.slice(0, MAX_UNMATCHED_TOKEN_SAMPLES),
               }))
             : undefined,
         });
@@ -1715,18 +1691,6 @@ export default function BioLogUploader() {
                                 : "Employee ID: n/a"}
                             </span>
                           </div>
-                          {detail.sources.length ? (
-                            <div className="mt-2 text-muted-foreground">
-                              <p className="font-medium text-foreground">Samples</p>
-                              <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                                {detail.sources.map((source, sampleIndex) => (
-                                  <li key={`${detail.token}-source-${sampleIndex}`}>
-                                    {source}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null}
                         </li>
                       ))}
                     </ul>
