@@ -18,6 +18,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { saveAs } from "file-saver";
+import * as XLSX from "xlsx";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
   exportResultsToXlsx,
+  detectWorkbookParsers,
   mergeParsedWorkbooks,
   parseBioAttendance,
   sortPerDayRows,
@@ -48,6 +50,7 @@ import {
   type ParsedWorkbook,
   type PerDayRow,
   type PerEmployeeRow,
+  type WorkbookParserType,
   type UnmatchedIdentityWarningDetail,
 } from "@/utils/parseBioAttendance";
 
@@ -200,6 +203,10 @@ type FileState = {
   status: FileStatus;
   parsed?: ParsedWorkbook;
   error?: string;
+  parserType?: WorkbookParserType;
+  parserTypes?: WorkbookParserType[];
+  parserLabel?: string | null;
+  parseSummary?: { employees: number; punches: number };
 };
 
 type IdentityRecord = {
@@ -755,11 +762,47 @@ export default function BioLogUploader() {
     const parse = async () => {
       try {
         const buffer = await next.file.arrayBuffer();
-        const parsed = parseBioAttendance(buffer, { fileName: next.name });
+        const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+        const parserTypes = detectWorkbookParsers(workbook);
+        const parserType: WorkbookParserType = parserTypes.includes("grid-report")
+          ? "grid-report"
+          : "legacy";
+        const parserLabel =
+          parserType === "grid-report" ? "Attendance Record Report (grid)" : "Biometrics log";
+
         setFiles((prev) =>
           prev.map((file) =>
             file.id === next.id
-              ? { ...file, status: "parsed", parsed, error: undefined }
+              ? {
+                  ...file,
+                  status: "parsing",
+                  parserType,
+                  parserTypes,
+                  parserLabel,
+                }
+              : file
+          )
+        );
+
+        const parsed = parseBioAttendance(workbook, { fileName: next.name });
+        const parseSummary = {
+          employees: parsed.employeeCount,
+          punches: parsed.totalPunches,
+        };
+
+        setFiles((prev) =>
+          prev.map((file) =>
+            file.id === next.id
+              ? {
+                  ...file,
+                  status: "parsed",
+                  parsed,
+                  error: undefined,
+                  parserType,
+                  parserTypes,
+                  parserLabel,
+                  parseSummary,
+                }
               : file
           )
         );
@@ -1583,6 +1626,16 @@ export default function BioLogUploader() {
                       <p className="text-xs text-muted-foreground">
                         {formatBytes(file.size)} · {file.type || "unknown"}
                       </p>
+                      {file.status === "parsing" && file.parserLabel ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Parsing “{file.parserLabel}”…
+                        </p>
+                      ) : null}
+                      {file.status === "parsed" && file.parseSummary ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Parsed: {file.parseSummary.employees} employees, {file.parseSummary.punches} punches.
+                        </p>
+                      ) : null}
                       {file.parsed?.monthHints?.length ? (
                         <p className="mt-1 text-xs text-muted-foreground">
                           Detected month: {file.parsed.monthHints.join(", ")}
