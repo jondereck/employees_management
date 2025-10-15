@@ -139,6 +139,7 @@ const UNKNOWN_OFFICE_LABEL = "(Unknown)";
 const UNASSIGNED_OFFICE_LABEL = "(Unassigned)";
 const UNKNOWN_OFFICE_KEY_PREFIX = "__unknown__::";
 const MAX_WARNING_SAMPLE_COUNT = 10;
+const UNMATCHED_WARNING_DISPLAY_LIMIT = 3;
 
 const sortPunchesChronologically = (punches: DayPunch[]): DayPunch[] =>
   [...punches].sort((a, b) => a.minuteOfDay - b.minuteOfDay || a.time.localeCompare(b.time));
@@ -514,6 +515,7 @@ export default function BioLogUploader() {
   const [identityMap, setIdentityMap] = useState<Map<string, IdentityRecord>>(() => new Map());
   const [selectedOffices, setSelectedOffices] = useState<string[]>([]);
   const [exportFilteredOnly, setExportFilteredOnly] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState("");
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const parseInProgress = useRef(false);
@@ -1090,6 +1092,17 @@ export default function BioLogUploader() {
     );
   }, [perEmployee, selectedOffices]);
 
+  const searchedPerEmployee = useMemo(() => {
+    if (!filteredPerEmployee.length) return filteredPerEmployee;
+    const query = employeeSearch.trim().toLowerCase();
+    if (!query) return filteredPerEmployee;
+    return filteredPerEmployee.filter((row) => {
+      const name = row.employeeName?.toLowerCase() ?? "";
+      const id = row.employeeId?.toLowerCase() ?? "";
+      return name.includes(query) || id.includes(query);
+    });
+  }, [employeeSearch, filteredPerEmployee]);
+
   const filteredPerDayPreview = useMemo(() => {
     if (!perDay) return [] as PerDayRow[];
     if (!selectedOffices.length) return perDay;
@@ -1167,8 +1180,8 @@ export default function BioLogUploader() {
   }, [identityState.completed, identityState.status, identityState.total, identityState.unmatched, identityTokens.length]);
 
   const sortedPerEmployee = useMemo(() => {
-    if (!filteredPerEmployee.length) return [];
-    const rows = [...filteredPerEmployee];
+    if (!searchedPerEmployee.length) return [];
+    const rows = [...searchedPerEmployee];
     const multiplier = sortDirection === "asc" ? 1 : -1;
     rows.sort((a, b) => {
       const diff = (a[sortKey] as number) - (b[sortKey] as number);
@@ -1178,7 +1191,7 @@ export default function BioLogUploader() {
       return a.employeeName.localeCompare(b.employeeName);
     });
     return rows;
-  }, [filteredPerEmployee, sortDirection, sortKey]);
+  }, [searchedPerEmployee, sortDirection, sortKey]);
 
   const pagedPerDay = useMemo(() => {
     if (!filteredPerDayPreview.length) return [];
@@ -1675,24 +1688,30 @@ export default function BioLogUploader() {
                 <div key={`${warning.type}-${warning.message}`} className="text-sm">
                   <p>{warning.message}</p>
                   {warning.unmatchedIdentities?.length ? (
-                    <ul className="mt-2 space-y-2 text-xs">
-                      {warning.unmatchedIdentities.map((detail) => (
-                        <li
-                          key={`${warning.message}-${detail.token}`}
-                          className="list-none rounded-md border border-border bg-background px-3 py-2"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="font-semibold text-foreground">
-                              {detail.token}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {detail.employeeIds.length
-                                ? `${detail.employeeIds.length > 1 ? "Employee IDs" : "Employee ID"}: ${detail.employeeIds.join(", ")}`
-                                : "Employee ID: n/a"}
-                            </span>
-                          </div>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                      {warning.unmatchedIdentities
+                        .slice(0, UNMATCHED_WARNING_DISPLAY_LIMIT)
+                        .map((detail) => {
+                          const employeeLabel = detail.employeeIds.length
+                            ? detail.employeeIds.join(", ")
+                            : null;
+                          const showEmployeeLabel =
+                            employeeLabel &&
+                            (detail.employeeIds.length > 1 || employeeLabel !== detail.token);
+                          return (
+                            <li key={`${warning.message}-${detail.token}`} className="text-foreground">
+                              <span className="font-semibold">{detail.token}</span>
+                              {showEmployeeLabel ? (
+                                <span className="text-muted-foreground"> — {employeeLabel}</span>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      {warning.unmatchedIdentities.length > UNMATCHED_WARNING_DISPLAY_LIMIT ? (
+                        <li className="text-muted-foreground">
+                          …and {warning.unmatchedIdentities.length - UNMATCHED_WARNING_DISPLAY_LIMIT} more
                         </li>
-                      ))}
+                      ) : null}
                     </ul>
                   ) : warning.samples?.length ? (
                     <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
@@ -1755,7 +1774,14 @@ export default function BioLogUploader() {
           )}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Input
+                value={employeeSearch}
+                onChange={(event) => setEmployeeSearch(event.target.value)}
+                placeholder="Search employee"
+                aria-label="Search employee"
+                className="h-9 w-full max-w-xs sm:w-60"
+              />
               <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingParses}>
                 Upload more
               </Button>
