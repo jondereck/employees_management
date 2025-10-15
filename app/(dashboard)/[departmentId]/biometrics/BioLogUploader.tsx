@@ -516,6 +516,7 @@ export default function BioLogUploader() {
   const [selectedOffices, setSelectedOffices] = useState<string[]>([]);
   const [exportFilteredOnly, setExportFilteredOnly] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [expandedWarnings, setExpandedWarnings] = useState<Record<string, boolean>>({});
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const parseInProgress = useRef(false);
@@ -527,6 +528,13 @@ export default function BioLogUploader() {
     () => files.filter((file) => file.status === "parsed" && file.parsed),
     [files]
   );
+
+  const toggleWarningExpansion = useCallback((key: string) => {
+    setExpandedWarnings((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }, []);
 
   const mergeResult = useMemo(() => {
     if (!parsedFiles.length) return null;
@@ -915,6 +923,12 @@ export default function BioLogUploader() {
     if (!sources.length) return [];
     return aggregateWarnings(sources);
   }, [identityWarnings, mergeResult, parsedFiles]);
+
+  useEffect(() => {
+    if (aggregatedWarnings.length === 0) {
+      setExpandedWarnings((prev) => (Object.keys(prev).length ? {} : prev));
+    }
+  }, [aggregatedWarnings]);
 
   const aggregatedWarningLevel = aggregatedWarnings.some(
     (warning) => warning.level === "warning"
@@ -1684,14 +1698,32 @@ export default function BioLogUploader() {
           </AlertTitle>
           <AlertDescription>
             <div className="space-y-2">
-              {aggregatedWarnings.map((warning) => (
-                <div key={`${warning.type}-${warning.message}`} className="text-sm">
-                  <p>{warning.message}</p>
-                  {warning.unmatchedIdentities?.length ? (
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-                      {warning.unmatchedIdentities
-                        .slice(0, UNMATCHED_WARNING_DISPLAY_LIMIT)
-                        .map((detail) => {
+              {aggregatedWarnings.map((warning) => {
+                const warningKey = `${warning.type}-${warning.message}`;
+                const unmatchedDetails = warning.unmatchedIdentities;
+                const hasUnmatchedDetails = Boolean(unmatchedDetails?.length);
+                const isExpanded = hasUnmatchedDetails
+                  ? Boolean(expandedWarnings[warningKey])
+                  : false;
+                const hasOverflow = Boolean(
+                  hasUnmatchedDetails &&
+                    unmatchedDetails.length > UNMATCHED_WARNING_DISPLAY_LIMIT
+                );
+                const visibleUnmatchedDetails = hasUnmatchedDetails
+                  ? isExpanded
+                    ? unmatchedDetails
+                    : unmatchedDetails.slice(0, UNMATCHED_WARNING_DISPLAY_LIMIT)
+                  : null;
+                const overflowCount = hasOverflow && unmatchedDetails
+                  ? unmatchedDetails.length - UNMATCHED_WARNING_DISPLAY_LIMIT
+                  : 0;
+
+                return (
+                  <div key={warningKey} className="text-sm">
+                    <p>{warning.message}</p>
+                    {hasUnmatchedDetails ? (
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                        {visibleUnmatchedDetails?.map((detail) => {
                           const employeeLabel = detail.employeeIds.length
                             ? detail.employeeIds.join(", ")
                             : null;
@@ -1699,7 +1731,10 @@ export default function BioLogUploader() {
                             employeeLabel &&
                             (detail.employeeIds.length > 1 || employeeLabel !== detail.token);
                           return (
-                            <li key={`${warning.message}-${detail.token}`} className="text-foreground">
+                            <li
+                              key={`${warning.message}-${detail.token}`}
+                              className="text-foreground"
+                            >
                               <span className="font-semibold">{detail.token}</span>
                               {showEmployeeLabel ? (
                                 <span className="text-muted-foreground"> — {employeeLabel}</span>
@@ -1707,21 +1742,31 @@ export default function BioLogUploader() {
                             </li>
                           );
                         })}
-                      {warning.unmatchedIdentities.length > UNMATCHED_WARNING_DISPLAY_LIMIT ? (
-                        <li className="text-muted-foreground">
-                          …and {warning.unmatchedIdentities.length - UNMATCHED_WARNING_DISPLAY_LIMIT} more
-                        </li>
-                      ) : null}
-                    </ul>
-                  ) : warning.samples?.length ? (
-                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
-                      {warning.samples.map((sample, index) => (
-                        <li key={`${warning.message}-${index}`}>{sample}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              ))}
+                        {hasOverflow ? (
+                          <li className="text-muted-foreground">
+                            <button
+                              type="button"
+                              onClick={() => toggleWarningExpansion(warningKey)}
+                              aria-expanded={isExpanded}
+                              className="text-left text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                            >
+                              {isExpanded
+                                ? "Show less"
+                                : `…and ${overflowCount} more`}
+                            </button>
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : warning.samples?.length ? (
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
+                        {warning.samples.map((sample, index) => (
+                          <li key={`${warning.message}-${index}`}>{sample}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </AlertDescription>
         </Alert>
