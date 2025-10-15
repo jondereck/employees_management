@@ -68,12 +68,21 @@ export type PerDayRow = ParsedPerDayRow & {
   isLate: boolean;
   isUndertime: boolean;
   workedHHMM?: string | null;
+  workedMinutes?: number | null;
   scheduleType?: string;
   scheduleSource?: string;
+  lateMinutes?: number | null;
+  undertimeMinutes?: number | null;
+  requiredMinutes?: number | null;
+  scheduleStart?: string | null;
+  scheduleEnd?: string | null;
+  scheduleGraceMinutes?: number | null;
+  identityStatus?: "matched" | "unmatched" | "ambiguous";
 };
 
 export type PerEmployeeRow = {
   employeeId: string;
+  employeeToken: string;
   employeeName: string;
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
@@ -85,6 +94,10 @@ export type PerEmployeeRow = {
   undertimeRate: number;
   scheduleTypes?: string[];
   scheduleSource?: string;
+  totalLateMinutes: number;
+  totalUndertimeMinutes: number;
+  totalRequiredMinutes: number;
+  identityStatus: "matched" | "unmatched" | "ambiguous";
 };
 
 export type ParsedWorkbook = {
@@ -1006,6 +1019,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
   const s1 = XLSX.utils.json_to_sheet(
     sortedPerEmployee.map((r) => ({
       EmployeeID: r.employeeId,
+      EmployeeToken: r.employeeToken,
       EmployeeName: r.employeeName,
       Office: r.officeName ?? "",
       DaysWithLogs: r.daysWithLogs,
@@ -1015,6 +1029,10 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
       UndertimeRatePercent: r.undertimeRate,
       ScheduleTypes: (r.scheduleTypes ?? []).join(", "),
       ScheduleSource: r.scheduleSource ?? "",
+      IdentityStatus: r.identityStatus,
+      LateMinutesTotal: r.totalLateMinutes,
+      UndertimeMinutesTotal: r.totalUndertimeMinutes,
+      RequiredMinutesTotal: r.totalRequiredMinutes,
     }))
   );
   XLSX.utils.book_append_sheet(wb, s1, "PerEmployee");
@@ -1023,6 +1041,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
   const s2 = XLSX.utils.json_to_sheet(
     sortedPerDay.map((r) => ({
       EmployeeID: r.employeeId,
+      EmployeeToken: r.employeeToken,
       EmployeeName: r.employeeName,
       Office: r.officeName ?? "",
       Date: r.dateISO,
@@ -1030,12 +1049,17 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
       Earliest: r.earliest ?? "",
       Latest: r.latest ?? "",
       Worked: r.workedHHMM ?? "",
+      WorkedMinutes: r.workedMinutes ?? "",
       ScheduleType: r.scheduleType ?? "",
       IsLate: r.isLate ? "Yes" : "No",
       IsUndertime: r.isUndertime ? "Yes" : "No",
+      LateMinutes: resolveLateMinutes(r) ?? "",
+      UndertimeMinutes: resolveUndertimeMinutes(r) ?? "",
+      RequiredMinutes: r.requiredMinutes ?? "",
       Sources: r.sourceFiles.join(", "),
       Punches: r.allTimes.join(", "),
       ScheduleSource: r.scheduleSource ?? "",
+      IdentityStatus: r.identityStatus ?? "",
     }))
   );
   XLSX.utils.book_append_sheet(wb, s2, "PerDay");
@@ -1045,15 +1069,18 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
 
 type AggregateRow = {
   employeeId: string;
+  employeeToken: string;
   employeeName: string;
+  identityStatus: "matched" | "unmatched" | "ambiguous";
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
   daysWithLogs: number;
   lateDays: number;
   undertimeDays: number;
-  lateRate: number;
-  undertimeRate: number;
+  totalLateMinutes: number;
+  totalUndertimeMinutes: number;
+  totalRequiredMinutes: number;
   scheduleTypes: Set<string>;
   scheduleSourceSet: Set<string>;
 };
@@ -1069,6 +1096,44 @@ const pickSource = (sources: string[]) => {
   if (!sources.length) return "DEFAULT";
   return sources.sort((a, b) => sourceRank(a) - sourceRank(b))[0] ?? "DEFAULT";
 };
+
+const statusPriority = {
+  unmatched: 0,
+  ambiguous: 1,
+  matched: 2,
+} as const;
+
+const toMinute = (value: string | null | undefined): number | null => {
+  if (!value) return null;
+  const [hours, minutes] = value.split(":").map((part) => Number(part));
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+};
+
+function resolveLateMinutes(
+  row: Pick<
+    PerDayRow,
+    "lateMinutes" | "earliest" | "scheduleStart" | "scheduleGraceMinutes"
+  >
+): number | null {
+  if (typeof row.lateMinutes === "number") return row.lateMinutes;
+  const earliest = toMinute(row.earliest ?? null);
+  const start = toMinute(row.scheduleStart ?? null);
+  if (earliest == null || start == null) return null;
+  const grace = row.scheduleGraceMinutes ?? 0;
+  return Math.max(0, earliest - (start + grace));
+}
+
+function resolveUndertimeMinutes(
+  row: Pick<PerDayRow, "undertimeMinutes" | "requiredMinutes" | "workedMinutes">
+): number | null {
+  if (typeof row.undertimeMinutes === "number") return row.undertimeMinutes;
+  if (row.requiredMinutes == null) return null;
+  if (typeof row.workedMinutes === "number") {
+    return Math.max(0, row.requiredMinutes - row.workedMinutes);
+  }
+  return row.requiredMinutes;
+}
 
 const getToken = (row: { employeeId: string; employeeToken?: string | null }): string =>
   (row.employeeToken || row.employeeId || "").trim();
@@ -1129,6 +1194,7 @@ export function summarizePerEmployee(
     Pick<
       PerDayRow,
       | "employeeId"
+      | "employeeToken"
       | "employeeName"
       | "resolvedEmployeeId"
       | "officeId"
@@ -1140,24 +1206,36 @@ export function summarizePerEmployee(
       | "isUndertime"
       | "scheduleType"
       | "scheduleSource"
+      | "identityStatus"
+      | "lateMinutes"
+      | "undertimeMinutes"
+      | "requiredMinutes"
+      | "scheduleStart"
+      | "scheduleGraceMinutes"
+      | "workedMinutes"
     >
   >
 ): PerEmployeeRow[] {
   const map = new Map<string, AggregateRow>();
   for (const row of perDay) {
-    const key = `${row.employeeId}||${row.employeeName}`;
+    const token = row.employeeToken || row.employeeId || row.employeeName;
+    const key = `${token}||${row.employeeName}`;
+    const identityStatus = row.identityStatus ?? (row.resolvedEmployeeId ? "matched" : "unmatched");
     if (!map.has(key)) {
       map.set(key, {
         employeeId: row.employeeId,
+        employeeToken: token,
         employeeName: row.employeeName,
+        identityStatus,
         resolvedEmployeeId: row.resolvedEmployeeId ?? null,
         officeId: row.officeId ?? null,
         officeName: row.officeName ?? null,
         daysWithLogs: 0,
         lateDays: 0,
         undertimeDays: 0,
-        lateRate: 0,
-        undertimeRate: 0,
+        totalLateMinutes: 0,
+        totalUndertimeMinutes: 0,
+        totalRequiredMinutes: 0,
         scheduleTypes: new Set<string>(),
         scheduleSourceSet: new Set<string>(),
       });
@@ -1168,11 +1246,19 @@ export function summarizePerEmployee(
     if (!agg.resolvedEmployeeId && row.resolvedEmployeeId) {
       agg.resolvedEmployeeId = row.resolvedEmployeeId;
     }
+    if (statusPriority[identityStatus] > statusPriority[agg.identityStatus]) {
+      agg.identityStatus = identityStatus;
+    }
     const hasLogs = Boolean(row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0);
     if (hasLogs) {
       agg.daysWithLogs += 1;
       if (row.isLate) agg.lateDays += 1;
       if (row.isUndertime) agg.undertimeDays += 1;
+      const lateMinutes = resolveLateMinutes(row);
+      if (lateMinutes != null) agg.totalLateMinutes += lateMinutes;
+      const undertimeMinutes = resolveUndertimeMinutes(row);
+      if (undertimeMinutes != null) agg.totalUndertimeMinutes += undertimeMinutes;
+      if (row.requiredMinutes != null) agg.totalRequiredMinutes += row.requiredMinutes;
     }
     if (row.scheduleType) agg.scheduleTypes.add(row.scheduleType);
     if (row.scheduleSource) agg.scheduleSourceSet.add(row.scheduleSource);
@@ -1180,6 +1266,7 @@ export function summarizePerEmployee(
 
   return Array.from(map.values()).map((entry) => ({
     employeeId: entry.employeeId,
+    employeeToken: entry.employeeToken,
     employeeName: entry.employeeName,
     resolvedEmployeeId: entry.resolvedEmployeeId ?? null,
     officeId: entry.officeId ?? null,
@@ -1191,5 +1278,9 @@ export function summarizePerEmployee(
     undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
     scheduleTypes: Array.from(entry.scheduleTypes).sort(),
     scheduleSource: pickSource(Array.from(entry.scheduleSourceSet)),
+    totalLateMinutes: Math.round(entry.totalLateMinutes),
+    totalUndertimeMinutes: Math.round(entry.totalUndertimeMinutes),
+    totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
+    identityStatus: entry.identityStatus,
   }));
 }

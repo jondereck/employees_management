@@ -52,7 +52,18 @@ async function evaluate(payload: Payload): Promise<EvaluationResult> {
     const dateISO = `${year}-${month}-${padDay(entry.day)}`;
     const scheduleRecord = await getScheduleFor(entry.employeeId, dateISO);
     const schedule = normalizeSchedule(scheduleRecord);
-    const { isLate, isUndertime, workedHHMM } = evaluateDay({
+    const {
+      isLate,
+      isUndertime,
+      workedHHMM,
+      workedMinutes,
+      lateMinutes,
+      undertimeMinutes,
+      requiredMinutes,
+      scheduleStart,
+      scheduleEnd,
+      scheduleGraceMinutes,
+    } = evaluateDay({
       dateISO,
       earliest: (entry.earliest ?? undefined) as HHMM | undefined,
       latest: (entry.latest ?? undefined) as HHMM | undefined,
@@ -65,8 +76,15 @@ async function evaluate(payload: Payload): Promise<EvaluationResult> {
       isLate,
       isUndertime,
       workedHHMM,
+      workedMinutes,
       scheduleType: schedule.type,
       scheduleSource: (schedule as NormalizedSchedule).source,
+      lateMinutes,
+      undertimeMinutes,
+      requiredMinutes,
+      scheduleStart: scheduleStart ?? null,
+      scheduleEnd: scheduleEnd ?? null,
+      scheduleGraceMinutes: scheduleGraceMinutes ?? null,
     });
   }
 

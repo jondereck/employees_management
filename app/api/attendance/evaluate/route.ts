@@ -26,6 +26,7 @@ type EvaluatedDay = {
   isLate: boolean;
   isUndertime: boolean;
   workedHHMM: string;
+  workedMinutes: number;
   scheduleType: string;
   scheduleSource: ScheduleSource;
   punches?: Array<{
@@ -36,6 +37,13 @@ type EvaluatedDay = {
   }>;
   sourceFiles?: string[];
   employeeToken?: string;
+  lateMinutes?: number | null;
+  undertimeMinutes?: number | null;
+  requiredMinutes?: number | null;
+  scheduleStart?: string | null;
+  scheduleEnd?: string | null;
+  scheduleGraceMinutes?: number | null;
+  identityStatus?: "matched" | "unmatched" | "ambiguous";
 };
 
 const hhmmRegex = /^\d{1,2}:\d{2}$/;
@@ -142,11 +150,19 @@ export async function POST(req: Request) {
         isLate: evaluation.isLate,
         isUndertime: evaluation.isUndertime,
         workedHHMM: evaluation.workedHHMM,
+        workedMinutes: evaluation.workedMinutes,
         scheduleType: normalized.type,
         scheduleSource: scheduleRecord.source,
         punches: row.punches,
         sourceFiles: row.sourceFiles,
         employeeToken: row.employeeToken,
+        lateMinutes: evaluation.lateMinutes ?? null,
+        undertimeMinutes: evaluation.undertimeMinutes ?? null,
+        requiredMinutes: evaluation.requiredMinutes ?? null,
+        scheduleStart: evaluation.scheduleStart ?? null,
+        scheduleEnd: evaluation.scheduleEnd ?? null,
+        scheduleGraceMinutes: evaluation.scheduleGraceMinutes ?? null,
+        identityStatus: internalEmployeeId ? "matched" : "unmatched",
       };
     });
 

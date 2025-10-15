@@ -52,22 +52,36 @@ export function evaluateDay(input: DayEvalInput) {
       ? input.schedule.breakMinutes
       : 60;
 
-  let worked = 0;                  // <- was const; now mutable
+  let worked = 0;
   let isLate = false;
   let isUndertime = false;
+  let lateMinutes: number | null = null;
+  let undertimeMinutes: number | null = null;
+  let requiredMinutes: number | null = null;
+  let scheduleStart: HHMM | null = null;
+  let scheduleEnd: HHMM | null = null;
+  let scheduleGraceMinutes: number | null = null;
 
   switch (input.schedule.type) {
     case "FIXED": {
       const start = toMin(input.schedule.startTime);
       const end = toMin(input.schedule.endTime);
       const grace = input.schedule.graceMinutes ?? 0;
+      scheduleStart = input.schedule.startTime;
+      scheduleEnd = input.schedule.endTime;
+      scheduleGraceMinutes = grace;
 
       const span = e != null && l != null && l >= e ? l - e : 0;
       worked = Math.max(0, span - breakMin);
 
       if (e != null) isLate = e > start + grace;
-      const required = end - start - breakMin;
+      const required = Math.max(0, end - start - breakMin);
+      requiredMinutes = required;
       isUndertime = worked < required;
+      if (e != null) {
+        lateMinutes = Math.max(0, e - (start + grace));
+      }
+      undertimeMinutes = Math.max(0, required - worked);
       break;
     }
 
@@ -77,12 +91,17 @@ export function evaluateDay(input: DayEvalInput) {
       const bandS = toMin(input.schedule.bandwidthStart);
       const bandE = toMin(input.schedule.bandwidthEnd);
       const req   = input.schedule.requiredDailyMinutes;
+      scheduleStart = input.schedule.coreStart;
+      scheduleEnd = input.schedule.coreEnd;
+      requiredMinutes = req;
 
       // No punches -> late & undertime
       if (e == null || l == null) {
         worked = 0;
         isLate = true;
         isUndertime = true;
+        lateMinutes = coreE - coreS;
+        undertimeMinutes = req;
         break;
       }
 
@@ -95,6 +114,8 @@ export function evaluateDay(input: DayEvalInput) {
         worked = 0;
         isLate = true;
         isUndertime = true;
+        lateMinutes = coreE - coreS;
+        undertimeMinutes = req;
         break;
       }
 
@@ -112,6 +133,20 @@ export function evaluateDay(input: DayEvalInput) {
 
       // Undertime by required minutes
       isUndertime = worked < req;
+      undertimeMinutes = Math.max(0, req - worked);
+
+      if (isLate) {
+        let late = 0;
+        if (effectiveStart > coreS) {
+          late += effectiveStart - coreS;
+        }
+        if (!presentInCore) {
+          late = Math.max(late, coreE - coreS);
+        }
+        lateMinutes = late;
+      } else {
+        lateMinutes = 0;
+      }
       break;
     }
 
@@ -119,6 +154,9 @@ export function evaluateDay(input: DayEvalInput) {
       let shiftStart = toMin(input.schedule.shiftStart);
       let shiftEnd   = toMin(input.schedule.shiftEnd);
       const grace = input.schedule.graceMinutes ?? 0;
+      scheduleStart = input.schedule.shiftStart;
+      scheduleEnd = input.schedule.shiftEnd;
+      scheduleGraceMinutes = grace;
 
       if (shiftEnd <= shiftStart) shiftEnd += 24 * 60; // overnight
 
@@ -126,9 +164,13 @@ export function evaluateDay(input: DayEvalInput) {
       worked = Math.max(0, span - breakMin);
 
       if (e != null) isLate = e > shiftStart + grace;
-
-      const planned = shiftEnd - shiftStart - breakMin;
+      const planned = Math.max(0, shiftEnd - shiftStart - breakMin);
+      requiredMinutes = planned;
       isUndertime = worked < planned;
+      if (e != null) {
+        lateMinutes = Math.max(0, e - (shiftStart + grace));
+      }
+      undertimeMinutes = Math.max(0, planned - worked);
       break;
     }
   }
@@ -138,5 +180,11 @@ export function evaluateDay(input: DayEvalInput) {
     workedHHMM: minToHHMM(worked),
     isLate,
     isUndertime,
+    lateMinutes,
+    undertimeMinutes,
+    requiredMinutes,
+    scheduleStart,
+    scheduleEnd,
+    scheduleGraceMinutes,
   };
 }
