@@ -43,7 +43,7 @@ model Offices {
   name                String
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
-  bioIndexCode String?    @db.VarChar(16)
+  bioIndexCode        String?    @db.VarChar(16)
   designatedEmployees Employee[] @relation("OfficesToDesignation")
   employee            Employee[] @relation("OfficesToEmployee")
   billboard           Billboard  @relation(fields: [billboardId], references: [id], onUpdate: NoAction, map: "offices_billboardid_fkey")
@@ -51,7 +51,7 @@ model Offices {
 
   @@index([departmentId])
   @@index([billboardId])
-   @@index([bioIndexCode])
+  @@index([bioIndexCode])
 }
 
 model EmployeeType {
@@ -80,10 +80,10 @@ model Eligibility {
 }
 
 model Employee {
-  id                     String            @id @default(uuid())
+  id                     String                  @id @default(uuid())
   departmentId           String
   officeId               String
-  prefix                 String            @default("")
+  prefix                 String                  @default("")
   lastName               String
   firstName              String
   middleName             String
@@ -93,51 +93,52 @@ model Employee {
   position               String
   education              String
   birthday               DateTime
-  age                    String            @default("")
-  region                 String            @default("")
-  province               String            @default("")
-  city                   String            @default("")
-  barangay               String            @default("")
-  houseNo                String            @default("")
-  street                 String            @default("")
+  age                    String                  @default("")
+  region                 String                  @default("")
+  province               String                  @default("")
+  city                   String                  @default("")
+  barangay               String                  @default("")
+  houseNo                String                  @default("")
+  street                 String                  @default("")
   gsisNo                 String
   tinNo                  String
   philHealthNo           String
   pagIbigNo              String
   salary                 Float
   dateHired              DateTime
-  latestAppointment      String            @default("")
-  terminateDate          String            @default("")
-  memberPolicyNo         String            @default("")
+  latestAppointment      String                  @default("")
+  terminateDate          String                  @default("")
+  memberPolicyNo         String                  @default("")
   employeeTypeId         String
   eligibilityId          String
-  isFeatured             Boolean           @default(false)
-  isArchived             Boolean           @default(false)
-  isHead                 Boolean           @default(false)
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
-  emergencyContactName   String            @default("")
-  emergencyContactNumber String            @default("")
-  isAwardee              Boolean           @default(false)
-  nickname               String            @default("")
-  employeeNo             String            @default("")
-  employeeLink           String            @default("")
-  salaryStep             Int?              @default(0)
-  salaryGrade            Int?              @default(0)
+  isFeatured             Boolean                 @default(false)
+  isArchived             Boolean                 @default(false)
+  isHead                 Boolean                 @default(false)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  emergencyContactName   String                  @default("")
+  emergencyContactNumber String                  @default("")
+  isAwardee              Boolean                 @default(false)
+  nickname               String                  @default("")
+  employeeNo             String                  @default("")
+  employeeLink           String                  @default("")
+  salaryStep             Int?                    @default(0)
+  salaryGrade            Int?                    @default(0)
   designationId          String?
   note                   String?
-  publicId               String            @unique @default(dbgenerated("gen_random_uuid()"))
-  publicEnabled          Boolean           @default(false)
-  publicVersion          Int               @default(1)
+  publicId               String                  @unique @default(dbgenerated("gen_random_uuid()"))
+  publicEnabled          Boolean                 @default(false)
+  publicVersion          Int                     @default(1)
   awards                 Award[]
-  changeRequests         ChangeRequest[]   @relation("EmployeeToChangeRequests")
+  changeRequests         ChangeRequest[]         @relation("EmployeeToChangeRequests")
   workSchedules          WorkSchedule[]
   scheduleExceptions     ScheduleException[]
-  department             Department        @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onUpdate: NoAction, map: "employee_departmentid_fkey")
-  designation            Offices?          @relation("OfficesToDesignation", fields: [designationId], references: [id], onUpdate: NoAction, map: "employee_designationid_fkey")
-  eligibility            Eligibility       @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
-  employeeType           EmployeeType      @relation(fields: [employeeTypeId], references: [id], onUpdate: NoAction, map: "employee_employeetypeid_fkey")
-  offices                Offices           @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
+  biometricsIdentityMaps BiometricsIdentityMap[] @relation("EmployeeToBiometricsIdentityMaps")
+  department             Department              @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onUpdate: NoAction, map: "employee_departmentid_fkey")
+  designation            Offices?                @relation("OfficesToDesignation", fields: [designationId], references: [id], onUpdate: NoAction, map: "employee_designationid_fkey")
+  eligibility            Eligibility             @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
+  employeeType           EmployeeType            @relation(fields: [employeeTypeId], references: [id], onUpdate: NoAction, map: "employee_employeetypeid_fkey")
+  offices                Offices                 @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
   employmentEvents       EmploymentEvent[]
   images                 Image[]
 
@@ -206,7 +207,7 @@ model BiometricsIdentityMap {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation("EmployeeToBiometricsIdentityMaps", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
 }
@@ -283,7 +284,7 @@ enum ScheduleType {
 }
 
 model WorkSchedule {
-  id                   String        @id @default(cuid())
+  id                   String       @id @default(cuid())
   employeeId           String
   type                 ScheduleType
   startTime            String?
@@ -296,17 +297,17 @@ model WorkSchedule {
   requiredDailyMinutes Int?
   shiftStart           String?
   shiftEnd             String?
-  breakMinutes         Int           @default(60)
-  timezone             String        @default("Asia/Manila")
+  breakMinutes         Int          @default(60)
+  timezone             String       @default("Asia/Manila")
   effectiveFrom        DateTime
   effectiveTo          DateTime?
-  employee             Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "workschedule_employeeid_fkey")
+  employee             Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "workschedule_employeeid_fkey")
 
   @@index([employeeId, effectiveFrom, effectiveTo])
 }
 
 model ScheduleException {
-  id                   String        @id @default(cuid())
+  id                   String       @id @default(cuid())
   employeeId           String
   date                 DateTime
   type                 ScheduleType
@@ -321,7 +322,7 @@ model ScheduleException {
   shiftStart           String?
   shiftEnd             String?
   breakMinutes         Int?
-  employee             Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "scheduleexception_employeeid_fkey")
+  employee             Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "scheduleexception_employeeid_fkey")
 
   @@index([employeeId, date])
 }
