@@ -1700,21 +1700,20 @@ export default function BioLogUploader() {
             <div className="space-y-2">
               {aggregatedWarnings.map((warning) => {
                 const warningKey = `${warning.type}-${warning.message}`;
-                const unmatchedDetails = warning.unmatchedIdentities;
-                const hasUnmatchedDetails = Boolean(unmatchedDetails?.length);
+                const unmatchedDetails = warning.unmatchedIdentities ?? [];
+                const hasUnmatchedDetails = unmatchedDetails.length > 0;
                 const isExpanded = hasUnmatchedDetails
                   ? Boolean(expandedWarnings[warningKey])
                   : false;
-                const hasOverflow = Boolean(
+                const hasOverflow =
                   hasUnmatchedDetails &&
-                    unmatchedDetails.length > UNMATCHED_WARNING_DISPLAY_LIMIT
-                );
+                  unmatchedDetails.length > UNMATCHED_WARNING_DISPLAY_LIMIT;
                 const visibleUnmatchedDetails = hasUnmatchedDetails
                   ? isExpanded
                     ? unmatchedDetails
                     : unmatchedDetails.slice(0, UNMATCHED_WARNING_DISPLAY_LIMIT)
-                  : null;
-                const overflowCount = hasOverflow && unmatchedDetails
+                  : [];
+                const overflowCount = hasOverflow
                   ? unmatchedDetails.length - UNMATCHED_WARNING_DISPLAY_LIMIT
                   : 0;
 
