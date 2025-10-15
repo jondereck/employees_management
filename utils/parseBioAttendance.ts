@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import type { WorkBook } from "xlsx";
 
 export type WarningLevel = "info" | "warning";
 
@@ -23,10 +24,13 @@ export type DayPunch = {
   files: string[];
 };
 
+export type WorkbookParserType = "legacy" | "grid-report";
+
 export type ParsedDayRecord = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  employeeDept?: string | null;
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
@@ -36,12 +40,15 @@ export type ParsedDayRecord = {
   sourceFiles: string[];
   sheetName: string;
   composedFromDayOnly: boolean;
+  parserType: WorkbookParserType;
+  parserTypes: WorkbookParserType[];
 };
 
 export type ParsedPerDayRow = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  employeeDept?: string | null;
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
@@ -53,6 +60,8 @@ export type ParsedPerDayRow = {
   punches: DayPunch[];
   sourceFiles: string[];
   composedFromDayOnly: boolean;
+  parserType?: WorkbookParserType;
+  parserTypes?: WorkbookParserType[];
 };
 
 export type PerDayRow = ParsedPerDayRow & {
@@ -86,6 +95,7 @@ export type ParsedWorkbook = {
   employeeCount: number;
   totalPunches: number;
   normalizedXlsx?: ArrayBuffer;
+  parserTypes: WorkbookParserType[];
 };
 
 export type MergeResult = {
@@ -115,12 +125,14 @@ type MutableDay = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  employeeDept?: string | null;
   dateISO: string;
   day: number;
   punches: Map<number, MutablePunch>;
   sourceFiles: Set<string>;
   sheetName: string;
   composedFromDayOnly: boolean;
+  parserTypes: Set<WorkbookParserType>;
 };
 
 const MONTH_NAMES = new Map<string, number>([
@@ -170,6 +182,127 @@ const isHeaderRow = (row: unknown[]): boolean => {
   const c2 = String(row?.[2] ?? "").trim();
   const c3 = String(row?.[3] ?? "").trim();
   return c1 === "1" && c2 === "2" && c3 === "3";
+};
+
+const GRID_SHEET_NAME_PATTERN = /(att\.?\s*log report|attendance record report)/i;
+const GRID_HEADER_SCAN_LIMIT = 20;
+const GRID_MIN_DAY_RUN = 20;
+
+const normalizeCellText = (raw: unknown): string => {
+  if (raw == null) return "";
+  if (typeof raw === "number" && !Number.isFinite(raw)) return "";
+  const text = String(raw ?? "").trim();
+  if (!text) return "";
+  if (text.toLowerCase() === "nan") return "";
+  return text;
+};
+
+const isGridSheetName = (sheetName: string): boolean => GRID_SHEET_NAME_PATTERN.test(sheetName ?? "");
+
+const isWorkbookInput = (value: unknown): value is WorkBook =>
+  Boolean(value && typeof value === "object" && Array.isArray((value as WorkBook).SheetNames));
+
+export type GridHeaderDetection = {
+  headerRowIndex: number;
+  dayColumns: Array<{ day: number; columnIndex: number }>;
+};
+
+export const detectGridHeaderRow = (rows: unknown[][]): GridHeaderDetection | null => {
+  const limit = Math.min(rows.length, GRID_HEADER_SCAN_LIMIT);
+  for (let r = 0; r < limit; r++) {
+    const row = rows[r] ?? [];
+    for (let c = 0; c < row.length; c++) {
+      const cell = normalizeCellText(row[c]);
+      if (!cell) continue;
+      const day = Number(cell.replace(/^0+/, "")) || Number(cell);
+      if (!Number.isInteger(day) || day !== 1) continue;
+
+      const dayColumns: Array<{ day: number; columnIndex: number }> = [];
+      let expected = 1;
+      let column = c;
+      while (column < row.length) {
+        const value = normalizeCellText(row[column]);
+        if (!value) break;
+        const current = Number(value.replace(/^0+/, "")) || Number(value);
+        if (!Number.isInteger(current) || current !== expected) break;
+        dayColumns.push({ day: current, columnIndex: column });
+        expected += 1;
+        column += 1;
+      }
+
+      if (dayColumns.length >= GRID_MIN_DAY_RUN) {
+        return { headerRowIndex: r, dayColumns };
+      }
+    }
+  }
+  return null;
+};
+
+export type GridEmployeeBlock = {
+  startRow: number;
+  endRow: number;
+  idColumn: number;
+};
+
+export const detectGridEmployeeBlocks = (
+  rows: unknown[][],
+  headerRowIdx: number
+): GridEmployeeBlock[] => {
+  const blocks: GridEmployeeBlock[] = [];
+  for (let r = headerRowIdx + 1; r < rows.length; r++) {
+    const row = rows[r] ?? [];
+    for (let c = 0; c < row.length; c++) {
+      const cell = normalizeCellText(row[c]).toUpperCase();
+      if (cell === "ID:") {
+        blocks.push({ startRow: r, endRow: rows.length - 1, idColumn: c });
+        break;
+      }
+    }
+  }
+
+  for (let i = 0; i < blocks.length; i++) {
+    const next = blocks[i + 1];
+    if (next) {
+      blocks[i] = { ...blocks[i], endRow: Math.max(blocks[i].startRow, next.startRow - 1) };
+    }
+  }
+
+  return blocks;
+};
+
+const GRID_VALUE_WINDOW_ROWS = 6;
+const GRID_VALUE_WINDOW_COLS = 3;
+
+const matchAnyLabel = (value: string, labels: string[]) =>
+  labels.includes(value.toLowerCase());
+
+const findValueNearLabel = (
+  rows: unknown[][],
+  block: GridEmployeeBlock,
+  labels: string[],
+  validator: (value: string) => boolean
+): string => {
+  for (let r = block.startRow; r <= block.endRow; r++) {
+    const row = rows[r] ?? [];
+    for (let c = 0; c < row.length; c++) {
+      const cell = normalizeCellText(row[c]);
+      if (!cell) continue;
+      if (!matchAnyLabel(cell.toLowerCase(), labels)) continue;
+
+      const maxRow = Math.min(block.endRow, r + GRID_VALUE_WINDOW_ROWS);
+      for (let rr = r; rr <= maxRow; rr++) {
+        const windowRow = rows[rr] ?? [];
+        const maxCol = Math.min(windowRow.length - 1, c + GRID_VALUE_WINDOW_COLS);
+        for (let cc = c + 1; cc <= maxCol; cc++) {
+          const candidate = normalizeCellText(windowRow[cc]);
+          if (!candidate) continue;
+          if (matchAnyLabel(candidate.toLowerCase(), labels)) continue;
+          if (validator(candidate)) return normalizeWhitespace(candidate);
+        }
+      }
+    }
+  }
+  return "";
 };
 
 const nearestMeta = (rows: unknown[][], headerRowIdx: number) => {
@@ -317,6 +450,44 @@ const normalizeTime = (hours: number, minutes: number) => {
   return `${pad2(safeHours)}:${pad2(safeMinutes)}`;
 };
 
+export const extractGridTimes = (raw: unknown): string[] => {
+  const results = new Map<number, string>();
+
+  if (raw == null) return [];
+
+  if (raw instanceof Date) {
+    const time = normalizeTime(raw.getHours(), raw.getMinutes());
+    results.set(toMinuteOfDay(time), time);
+  } else if (typeof raw === "number" && Number.isFinite(raw)) {
+    const parsed = XLSX.SSF.parse_date_code(raw);
+    if (parsed) {
+      const hours = (parsed.H ?? 0) + (parsed.d ?? 0) * 24;
+      const minutes = parsed.M ?? 0;
+      const time = normalizeTime(hours, minutes);
+      results.set(toMinuteOfDay(time), time);
+    }
+  } else {
+    const text = normalizeCellText(raw);
+    if (!text) return [];
+    const pattern = /(\d{1,2}):(\d{2})(?:\s*([AaPp][Mm]))?/g;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text))) {
+      let hours = Number(match[1]);
+      const minutes = Number(match[2]);
+      if (!Number.isFinite(hours) || !Number.isFinite(minutes)) continue;
+      const suffix = match[3]?.toLowerCase();
+      if (suffix === "pm" && hours < 12) hours += 12;
+      if (suffix === "am" && hours === 12) hours = 0;
+      const time = normalizeTime(hours, minutes);
+      results.set(toMinuteOfDay(time), time);
+    }
+  }
+
+  return Array.from(results.entries())
+    .sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]))
+    .map(([, time]) => time);
+};
+
 const extractTimesFromCell = (raw: unknown): string[] => {
   if (raw == null) return [];
 
@@ -380,31 +551,162 @@ const finalizeDay = (day: MutableDay): ParsedDayRecord => {
       files: Array.from(entry.files.values()).sort(),
     }));
 
+  const parserTypes = Array.from(day.parserTypes.values()).sort();
+  const primaryParserType = parserTypes.includes("grid-report")
+    ? "grid-report"
+    : parserTypes[0] ?? "legacy";
+
   return {
     employeeId: day.employeeId,
     employeeToken: day.employeeToken,
     employeeName: day.employeeName,
+    employeeDept: day.employeeDept ?? null,
     dateISO: day.dateISO,
     day: day.day,
     punches,
     sourceFiles: Array.from(day.sourceFiles.values()).sort(),
     sheetName: day.sheetName,
     composedFromDayOnly: day.composedFromDayOnly,
+    parserType: primaryParserType,
+    parserTypes,
   };
 };
 
-export function parseBioAttendance(arrayBuffer: ArrayBuffer, options: { fileName?: string } = {}): ParsedWorkbook {
-  const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+
+
+export function parseBioAttendance(
+  input: ArrayBuffer | WorkBook,
+  options: { fileName?: string } = {}
+): ParsedWorkbook {
+  const workbook = isWorkbookInput(input)
+    ? input
+    : XLSX.read(input as ArrayBuffer, { type: "array", cellDates: true });
 
   const parsedDays: ParsedDayRecord[] = [];
   const monthHints = new Set<string>();
   const invalidDateContext = { samples: [] as string[], count: 0 };
   const employeeTokens = new Set<string>();
+  const parseWarnings: ParseWarning[] = [];
+  const parserTypes = new Set<WorkbookParserType>();
+  const sourceFile = options.fileName ?? "Unknown file";
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) continue;
     const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+
+    const gridDetection = isGridSheetName(sheetName) ? detectGridHeaderRow(rows) : null;
+    if (gridDetection) {
+      parserTypes.add("grid-report");
+      const { year, month, hints } = detectMonthContext(rows, gridDetection.headerRowIndex);
+      hints.forEach((hint) => monthHints.add(hint));
+
+      const blocks = detectGridEmployeeBlocks(rows, gridDetection.headerRowIndex);
+      let emptyBlocks = 0;
+      const emptySamples: string[] = [];
+
+      for (const block of blocks) {
+        const employeeNoRaw = findValueNearLabel(rows, block, ["id:"], (value) => {
+          const digits = value.replace(/\D+/g, "");
+          return digits.length >= 5;
+        });
+        const nameRaw = findValueNearLabel(rows, block, ["name:"], (value) => Boolean(value.trim()));
+        const deptRaw = findValueNearLabel(rows, block, ["dept:", "dept."], (value) => Boolean(value.trim()));
+
+        const employeeId = normalizeWhitespace(employeeNoRaw || nameRaw || "");
+        const employeeName = normalizeWhitespace(nameRaw || employeeNoRaw || "");
+        const employeeDept = deptRaw ? normalizeWhitespace(deptRaw) : null;
+        const tokenSource = employeeId || employeeName;
+        const employeeToken = firstEmployeeToken(tokenSource || "");
+
+        if (!employeeToken) {
+          continue;
+        }
+
+        const dayMap = new Map<number, MutableDay>();
+        for (const { day, columnIndex } of gridDetection.dayColumns) {
+          const dateISO = ensureValidDate(
+            year,
+            month,
+            day,
+            invalidDateContext,
+            `${employeeId || employeeName || "Unknown"} • ${sheetName} • Day ${day}`
+          );
+          if (!dateISO) continue;
+
+          const record: MutableDay = {
+            employeeId: employeeId || employeeName || employeeToken,
+            employeeToken,
+            employeeName: employeeName || employeeId || employeeToken,
+            employeeDept,
+            dateISO,
+            day,
+            punches: new Map<number, MutablePunch>(),
+            sourceFiles: new Set<string>([sourceFile]),
+            sheetName,
+            composedFromDayOnly: true,
+            parserTypes: new Set<WorkbookParserType>(["grid-report"]),
+          };
+          dayMap.set(day, record);
+        }
+
+        if (!dayMap.size) {
+          continue;
+        }
+
+        let blockPunchCount = 0;
+
+        for (let r = block.startRow; r <= block.endRow; r++) {
+          const row = rows[r] ?? [];
+          for (const { day, columnIndex } of gridDetection.dayColumns) {
+            const record = dayMap.get(day);
+            if (!record) continue;
+            const cell = row[columnIndex];
+            const times = extractGridTimes(cell);
+            for (const time of times) {
+              const minute = toMinuteOfDay(time);
+              const existing = record.punches.get(minute);
+              if (existing) {
+                existing.source = "merged";
+                existing.files.add(sourceFile);
+              } else {
+                record.punches.set(minute, {
+                  time,
+                  minuteOfDay: minute,
+                  source: "original",
+                  files: new Set<string>([sourceFile]),
+                });
+                blockPunchCount += 1;
+              }
+            }
+          }
+        }
+
+        for (const record of dayMap.values()) {
+          parsedDays.push(finalizeDay(record));
+          employeeTokens.add(record.employeeToken);
+        }
+
+        if (blockPunchCount === 0) {
+          emptyBlocks += 1;
+          if (emptySamples.length < 10) {
+            emptySamples.push(`${employeeName || employeeId || employeeToken || "Unknown"} (${sheetName})`);
+          }
+        }
+      }
+
+      if (emptyBlocks > 0) {
+        parseWarnings.push({
+          type: "GENERAL",
+          level: "warning",
+          message: `Empty attendance sections (${emptyBlocks})`,
+          count: emptyBlocks,
+          samples: emptySamples,
+        });
+      }
+
+      continue;
+    }
 
     for (let r = 0; r < rows.length; r++) {
       const header = rows[r] ?? [];
@@ -422,6 +724,8 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer, options: { fileName
 
       if (runLength === 0) continue;
 
+      parserTypes.add("legacy");
+
       const { employeeId, employeeName } = nearestMeta(rows, r);
       const employeeToken = firstEmployeeToken(employeeId || employeeName || "");
       const { year, month, hints } = detectMonthContext(rows, r);
@@ -429,18 +733,26 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer, options: { fileName
 
       const dayMap = new Map<number, MutableDay>();
       for (let d = 1; d <= runLength; d++) {
-        const dateISO = ensureValidDate(year, month, d, invalidDateContext, `${employeeId || employeeName || "Unknown"} • ${sheetName} • Day ${d}`);
+        const dateISO = ensureValidDate(
+          year,
+          month,
+          d,
+          invalidDateContext,
+          `${employeeId || employeeName || "Unknown"} • ${sheetName} • Day ${d}`
+        );
         if (!dateISO) continue;
         const record: MutableDay = {
           employeeId,
           employeeToken,
           employeeName,
+          employeeDept: null,
           dateISO,
           day: d,
           punches: new Map<number, MutablePunch>(),
-          sourceFiles: new Set<string>([options.fileName ?? "Unknown file"]),
+          sourceFiles: new Set<string>([sourceFile]),
           sheetName,
           composedFromDayOnly: true,
+          parserTypes: new Set<WorkbookParserType>(["legacy"]),
         };
         dayMap.set(d, record);
       }
@@ -456,16 +768,17 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer, options: { fileName
           if (!record) continue;
           const times = extractTimesFromCell(row[d]);
           for (const time of times) {
-            const minuteOfDay = toMinuteOfDay(time);
-            const existing = record.punches.get(minuteOfDay);
+            const minute = toMinuteOfDay(time);
+            const existing = record.punches.get(minute);
             if (existing) {
               existing.source = "merged";
+              existing.files.add(sourceFile);
             } else {
-              record.punches.set(minuteOfDay, {
+              record.punches.set(minute, {
                 time,
-                minuteOfDay,
+                minuteOfDay: minute,
                 source: "original",
-                files: new Set<string>([options.fileName ?? "Unknown file"]),
+                files: new Set<string>([sourceFile]),
               });
             }
           }
@@ -499,7 +812,7 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer, options: { fileName
     totalPunches += day.punches.length;
   }
 
-  const warnings: ParseWarning[] = [];
+  const warnings: ParseWarning[] = [...parseWarnings];
   if (invalidDateContext.count > 0) {
     warnings.push({
       type: "DATE_PARSE",
@@ -522,7 +835,35 @@ export function parseBioAttendance(arrayBuffer: ArrayBuffer, options: { fileName
     employeeCount: employeeTokens.size,
     totalPunches,
     normalizedXlsx,
+    parserTypes: Array.from(parserTypes.values()).sort(),
   };
+}
+
+export function detectWorkbookParsers(input: ArrayBuffer | WorkBook): WorkbookParserType[] {
+  const workbook = isWorkbookInput(input)
+    ? input
+    : XLSX.read(input as ArrayBuffer, { type: "array", cellDates: true });
+  const parserTypes = new Set<WorkbookParserType>();
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+
+    if (isGridSheetName(sheetName) && detectGridHeaderRow(rows)) {
+      parserTypes.add("grid-report");
+    }
+
+    if (rows.some((row) => isHeaderRow(row))) {
+      parserTypes.add("legacy");
+    }
+  }
+
+  if (!parserTypes.size) {
+    parserTypes.add("legacy");
+  }
+
+  return Array.from(parserTypes.values()).sort();
 }
 
 export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
@@ -549,12 +890,20 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
           employeeId: day.employeeId,
           employeeToken: day.employeeToken,
           employeeName: day.employeeName,
+          employeeDept: day.employeeDept ?? null,
           dateISO: day.dateISO,
           day: day.day,
           punches: new Map<number, MutablePunch>(),
           sourceFiles: new Set<string>(day.sourceFiles),
           sheetName: day.sheetName,
           composedFromDayOnly: day.composedFromDayOnly,
+          parserTypes: new Set<WorkbookParserType>(
+            day.parserTypes?.length
+              ? day.parserTypes
+              : day.parserType
+              ? [day.parserType]
+              : ["legacy"]
+          ),
         };
         for (const punch of day.punches) {
           mutable.punches.set(punch.minuteOfDay, {
@@ -569,8 +918,19 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
         if (!base.employeeName && day.employeeName) {
           base.employeeName = day.employeeName;
         }
+        if (!base.employeeDept && day.employeeDept) {
+          base.employeeDept = day.employeeDept;
+        }
         base.composedFromDayOnly = base.composedFromDayOnly || day.composedFromDayOnly;
         base.sourceFiles = new Set<string>([...base.sourceFiles, ...day.sourceFiles]);
+        const incomingParsers = day.parserTypes?.length
+          ? day.parserTypes
+          : day.parserType
+          ? [day.parserType]
+          : ["legacy"];
+        for (const parserType of incomingParsers) {
+          base.parserTypes.add(parserType as WorkbookParserType);
+        }
         for (const punch of day.punches) {
           const existing = base.punches.get(punch.minuteOfDay);
           if (existing) {
@@ -598,6 +958,7 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
         employeeId: record.employeeId,
         employeeToken: record.employeeToken,
         employeeName: record.employeeName,
+        employeeDept: record.employeeDept ?? null,
         dateISO: record.dateISO,
         day: Number(record.dateISO.slice(-2)),
         earliest: allTimes[0] ?? null,
@@ -606,6 +967,8 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
         punches: record.punches,
         sourceFiles: record.sourceFiles,
         composedFromDayOnly: record.composedFromDayOnly,
+        parserType: record.parserType,
+        parserTypes: record.parserTypes,
       };
     })
     .sort(comparePerDayRows);
