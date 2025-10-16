@@ -4,6 +4,10 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
+import {
+  normalizeWeeklyPatternInput,
+  weeklyPatternInputSchema,
+} from "@/lib/weeklyPatternInput";
 
 const createScheduleSchema = z.object({
   employeeId: z.string().min(1),
@@ -21,11 +25,14 @@ const createScheduleSchema = z.object({
   breakMinutes: z.coerce.number().int().min(0).max(720).optional(),
   effectiveFrom: z.string().min(1),
   effectiveTo: z.string().optional().nullable(),
+  weeklyPattern: weeklyPatternInputSchema,
 });
 
 export async function POST(request: Request) {
   try {
     const payload = createScheduleSchema.parse(await request.json());
+
+    const weeklyPattern = normalizeWeeklyPatternInput(payload.weeklyPattern);
 
     const schedule = await prisma.workSchedule.create({
       data: {
@@ -44,6 +51,7 @@ export async function POST(request: Request) {
         breakMinutes: payload.breakMinutes ?? 60,
         effectiveFrom: new Date(payload.effectiveFrom),
         effectiveTo: payload.effectiveTo ? new Date(payload.effectiveTo) : null,
+        ...(weeklyPattern !== null ? { weeklyPattern } : {}),
       },
     });
 

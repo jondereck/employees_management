@@ -1,4 +1,15 @@
-export type HHMM = `${number}${number}:${number}${number}`;
+import {
+  expandWindows,
+  minutesToHHMM,
+  normalizeTimelineSegments,
+  type WeekdayKey,
+  type WeeklyPattern,
+  type WeeklyPatternDay,
+  type WeeklyPatternWindow,
+} from "@/utils/weeklyPattern";
+import type { HHMM } from "@/types/time";
+
+export type { HHMM };
 
 export type ScheduleFixed = {
   type: "FIXED";
@@ -15,6 +26,8 @@ export type ScheduleFlex = {
   bandwidthEnd: HHMM;
   requiredDailyMinutes: number;
   breakMinutes?: number;
+  graceMinutes?: number;
+  weeklyPattern?: WeeklyPattern | null;
 };
 export type ScheduleShift = {
   type: "SHIFT";
@@ -39,9 +52,74 @@ const toMin = (t: string) => {
   return h * 60 + m;
 };
 
-const minToHHMM = (n: number) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
+const minToHHMM = (n: number): HHMM => minutesToHHMM(n);
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
+const MINUTES_IN_DAY = 24 * 60;
+
+type MinuteInterval = { start: number; end: number };
+
+const WEEKDAY_TABLE: WeekdayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+const toWeekdayKey = (iso: string): WeekdayKey => {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const index = date.getUTCDay();
+  return WEEKDAY_TABLE[index] ?? "mon";
+};
+
+const sumIntervals = (segments: MinuteInterval[]) =>
+  segments.reduce((total, segment) => total + Math.max(0, segment.end - segment.start), 0);
+
+const derivePresenceSegments = (
+  times: HHMM[] | undefined,
+  earliest: number | null,
+  latest: number | null
+): MinuteInterval[] => {
+  const rawSegments: MinuteInterval[] = [];
+  if (times && times.length >= 2) {
+    for (let i = 0; i < times.length - 1; i += 2) {
+      const start = toMin(times[i]);
+      const end = toMin(times[i + 1]);
+      if (end > start) {
+        rawSegments.push({ start, end });
+      } else if (end < start) {
+        rawSegments.push({ start, end: MINUTES_IN_DAY });
+        rawSegments.push({ start: 0, end });
+      }
+    }
+  }
+  if (!rawSegments.length && earliest != null && latest != null) {
+    if (latest > earliest) {
+      rawSegments.push({ start: earliest, end: latest });
+    } else if (latest < earliest) {
+      rawSegments.push({ start: earliest, end: MINUTES_IN_DAY });
+      rawSegments.push({ start: 0, end: latest });
+    }
+  }
+  return normalizeTimelineSegments(rawSegments);
+};
+
+const clampToWindows = (presence: MinuteInterval[], windows: MinuteInterval[]): MinuteInterval[] => {
+  const clamped: MinuteInterval[] = [];
+  const sortedWindows = [...windows].sort((a, b) => a.start - b.start || a.end - b.end);
+  for (const segment of presence) {
+    for (const window of sortedWindows) {
+      if (window.end <= segment.start) continue;
+      if (window.start >= segment.end) break;
+      const start = Math.max(segment.start, window.start);
+      const end = Math.min(segment.end, window.end);
+      if (end > start) {
+        clamped.push({ start, end });
+      }
+    }
+  }
+  return clamped;
+};
+
+const toHHMMSegments = (segments: MinuteInterval[]): { start: HHMM; end: HHMM }[] =>
+  segments.map((segment) => ({ start: minToHHMM(segment.start), end: minToHHMM(segment.end) }));
 
 export function evaluateDay(input: DayEvalInput) {
   const e = input.earliest ? toMin(input.earliest) : null;
@@ -61,6 +139,9 @@ export function evaluateDay(input: DayEvalInput) {
   let scheduleStart: HHMM | null = null;
   let scheduleEnd: HHMM | null = null;
   let scheduleGraceMinutes: number | null = null;
+  let weeklyPatternApplied = false;
+  let weeklyPatternWindows: WeeklyPatternWindow[] | null = null;
+  let weeklyPatternPresence: { start: HHMM; end: HHMM }[] = [];
 
   switch (input.schedule.type) {
     case "FIXED": {
@@ -90,50 +171,113 @@ export function evaluateDay(input: DayEvalInput) {
       const coreE = toMin(input.schedule.coreEnd);
       const bandS = toMin(input.schedule.bandwidthStart);
       const bandE = toMin(input.schedule.bandwidthEnd);
-      const req   = input.schedule.requiredDailyMinutes;
+      const defaultRequired = input.schedule.requiredDailyMinutes;
+      const grace = input.schedule.graceMinutes ?? 0;
       scheduleStart = input.schedule.coreStart;
       scheduleEnd = input.schedule.coreEnd;
-      requiredMinutes = req;
+      requiredMinutes = defaultRequired;
+      scheduleGraceMinutes = grace;
 
-      // No punches -> late & undertime
+      const dayKey = toWeekdayKey(input.dateISO);
+      const weeklyDay: WeeklyPatternDay | undefined = input.schedule.weeklyPattern
+        ? input.schedule.weeklyPattern[dayKey]
+        : undefined;
+
+      const hasWeeklyPattern = Boolean(weeklyDay && weeklyDay.windows.length);
+
+      if (hasWeeklyPattern && weeklyDay) {
+        const required = Math.max(0, weeklyDay.requiredMinutes ?? 0);
+        requiredMinutes = required;
+        weeklyPatternApplied = true;
+        weeklyPatternWindows = weeklyDay.windows;
+
+        const presenceSegments = derivePresenceSegments(input.allTimes, e, l);
+        const windowSegments = expandWindows(weeklyDay.windows);
+        const clampedSegments = clampToWindows(presenceSegments, windowSegments);
+        weeklyPatternPresence = toHHMMSegments(clampedSegments);
+
+        worked = sumIntervals(clampedSegments);
+        isUndertime = worked < required;
+        undertimeMinutes = Math.max(0, required - worked);
+
+        const hasCore = coreE > coreS;
+        if (hasCore) {
+          const earliestWindowStart = Math.min(
+            ...weeklyDay.windows.map((window) => toMin(window.start))
+          );
+          scheduleStart = minToHHMM(earliestWindowStart);
+
+          const rawCandidates: number[] = [];
+          if (Array.isArray(input.allTimes) && input.allTimes.length) {
+            for (const time of input.allTimes) {
+              if (time) rawCandidates.push(toMin(time));
+            }
+          }
+          if (e != null) rawCandidates.push(e);
+          const firstPunchRaw = rawCandidates.length ? Math.min(...rawCandidates) : null;
+          if (firstPunchRaw != null) {
+            const earliestWindow = weeklyDay.windows.find(
+              (window) => toMin(window.start) === earliestWindowStart
+            );
+            const earliestWindowEnd = earliestWindow ? toMin(earliestWindow.end) : null;
+            let adjustedFirstPunch = firstPunchRaw;
+            if (
+              earliestWindowEnd != null &&
+              earliestWindowEnd < earliestWindowStart &&
+              adjustedFirstPunch <= earliestWindowEnd
+            ) {
+              adjustedFirstPunch += MINUTES_IN_DAY;
+            }
+            const threshold = earliestWindowStart + grace;
+            isLate = adjustedFirstPunch > threshold;
+            lateMinutes = isLate ? Math.max(0, adjustedFirstPunch - threshold) : 0;
+          } else {
+            isLate = false;
+            lateMinutes = 0;
+          }
+        } else {
+          isLate = false;
+          lateMinutes = 0;
+        }
+        break;
+      }
+
+      // Fallback to bandwidth-based evaluation when no weekly pattern is set
       if (e == null || l == null) {
         worked = 0;
-        isLate = true;
+        const hasCore = coreE > coreS;
+        isLate = hasCore;
         isUndertime = true;
-        lateMinutes = coreE - coreS;
-        undertimeMinutes = req;
+        lateMinutes = hasCore ? coreE - coreS : 0;
+        undertimeMinutes = defaultRequired;
         break;
       }
 
-      // Allow early-in: clamp presence to the bandwidth window
       const effectiveStart = Math.max(e, bandS);
-      const effectiveEnd   = Math.min(l, bandE);
+      const effectiveEnd = Math.min(l, bandE);
 
-      // No time within the allowed band
       if (effectiveEnd <= effectiveStart) {
         worked = 0;
-        isLate = true;
+        const hasCore = coreE > coreS;
+        isLate = hasCore;
         isUndertime = true;
-        lateMinutes = coreE - coreS;
-        undertimeMinutes = req;
+        lateMinutes = hasCore ? coreE - coreS : 0;
+        undertimeMinutes = defaultRequired;
         break;
       }
 
-      // Work only counts inside the band
       const workedRaw = effectiveEnd - effectiveStart;
       worked = Math.max(0, workedRaw - breakMin);
 
-      // Present during core? (overlap between clamped presence and core)
       const overlapStart = Math.max(effectiveStart, coreS);
-      const overlapEnd   = Math.min(effectiveEnd, coreE);
+      const overlapEnd = Math.min(effectiveEnd, coreE);
       const presentInCore = overlapEnd > overlapStart;
 
-      // Late only if arrived after core start OR missed core entirely
-      isLate = (effectiveStart > coreS) || !presentInCore;
+      const hasCore = coreE > coreS;
+      isLate = hasCore ? effectiveStart > coreS || !presentInCore : false;
 
-      // Undertime by required minutes
-      isUndertime = worked < req;
-      undertimeMinutes = Math.max(0, req - worked);
+      isUndertime = worked < defaultRequired;
+      undertimeMinutes = Math.max(0, defaultRequired - worked);
 
       if (isLate) {
         let late = 0;
@@ -186,5 +330,8 @@ export function evaluateDay(input: DayEvalInput) {
     scheduleStart,
     scheduleEnd,
     scheduleGraceMinutes,
+    weeklyPatternApplied,
+    weeklyPatternWindows,
+    weeklyPatternPresence,
   };
 }

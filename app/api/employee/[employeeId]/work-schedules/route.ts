@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
-import { ScheduleType } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { Prisma, ScheduleType } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
+import {
+  normalizeWeeklyPatternInput,
+  weeklyPatternInputSchema,
+} from "@/lib/weeklyPatternInput";
 
 const scheduleSchema = z.object({
   type: z.nativeEnum(ScheduleType),
@@ -22,6 +25,7 @@ const scheduleSchema = z.object({
   timezone: z.string().optional(),
   effectiveFrom: z.string().min(1, "Effective from date is required"),
   effectiveTo: z.string().optional().nullable(),
+  weeklyPattern: weeklyPatternInputSchema,
 }).superRefine((data, ctx) => {
   if (data.type === ScheduleType.FIXED) {
     if (!data.startTime || !data.endTime) {
@@ -49,6 +53,8 @@ export async function POST(request: Request, { params }: { params: { employeeId:
   try {
     const json = await request.json();
     const payload = scheduleSchema.parse(json) as ScheduleInput;
+    const normalizedWeeklyPattern = normalizeWeeklyPatternInput(payload.weeklyPattern);
+
     const data: Prisma.WorkScheduleUncheckedCreateInput = {
       employeeId: params.employeeId,
       type: payload.type,
@@ -66,6 +72,10 @@ export async function POST(request: Request, { params }: { params: { employeeId:
       timezone: payload.timezone ?? "Asia/Manila",
       effectiveFrom: new Date(payload.effectiveFrom),
       effectiveTo: payload.effectiveTo ? new Date(payload.effectiveTo) : null,
+      weeklyPattern:
+        normalizedWeeklyPattern === null
+          ? Prisma.DbNull
+          : (normalizedWeeklyPattern as Prisma.InputJsonValue),
     };
     const schedule = await prisma.workSchedule.create({ data });
 

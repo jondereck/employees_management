@@ -10,6 +10,8 @@ import {
 } from "@/lib/schedules";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import { evaluateDay, type HHMM } from "@/utils/evaluateDay";
+import { summarizePerEmployee } from "@/utils/parseBioAttendance";
+import type { WeeklyPatternWindow } from "@/utils/weeklyPattern";
 
 type EvaluatedDay = {
   employeeId: string;
@@ -18,9 +20,9 @@ type EvaluatedDay = {
   officeId?: string | null;
   officeName?: string | null;
   day: number;
-  earliest: string | null | undefined;
-  latest: string | null | undefined;
-  allTimes?: string[];
+  earliest: string | null;
+  latest: string | null;
+  allTimes: string[];
   dateISO: string;
   internalEmployeeId: string | null;
   isLate: boolean;
@@ -36,13 +38,16 @@ type EvaluatedDay = {
     files: string[];
   }>;
   sourceFiles?: string[];
-  employeeToken?: string;
+  employeeToken: string;
   lateMinutes?: number | null;
   undertimeMinutes?: number | null;
   requiredMinutes?: number | null;
   scheduleStart?: string | null;
   scheduleEnd?: string | null;
   scheduleGraceMinutes?: number | null;
+  weeklyPatternApplied?: boolean;
+  weeklyPatternWindows?: WeeklyPatternWindow[] | null;
+  weeklyPatternPresence: { start: string; end: string }[];
   identityStatus?: "matched" | "unmatched" | "ambiguous";
 };
 
@@ -162,6 +167,9 @@ export async function POST(req: Request) {
         scheduleStart: evaluation.scheduleStart ?? null,
         scheduleEnd: evaluation.scheduleEnd ?? null,
         scheduleGraceMinutes: evaluation.scheduleGraceMinutes ?? null,
+        weeklyPatternApplied: evaluation.weeklyPatternApplied ?? false,
+        weeklyPatternWindows: evaluation.weeklyPatternWindows ?? null,
+        weeklyPatternPresence: evaluation.weeklyPatternPresence ?? [],
         identityStatus: internalEmployeeId ? "matched" : "unmatched",
       };
     });
@@ -179,79 +187,3 @@ export async function POST(req: Request) {
   }
 }
 
-type Aggregate = {
-  employeeId: string;
-  employeeName: string;
-  resolvedEmployeeId?: string | null;
-  officeId?: string | null;
-  officeName?: string | null;
-  daysWithLogs: number;
-  lateDays: number;
-  undertimeDays: number;
-  scheduleTypes: Set<string>;
-  scheduleSourceSet: Set<ScheduleSource>;
-};
-
-function summarizePerEmployee(rows: EvaluatedDay[]) {
-  const map = new Map<string, Aggregate>();
-
-  for (const row of rows) {
-    const key = `${row.employeeId}||${row.employeeName}`;
-    if (!map.has(key)) {
-      map.set(key, {
-        employeeId: row.employeeId,
-        employeeName: row.employeeName,
-        resolvedEmployeeId: row.resolvedEmployeeId ?? null,
-        officeId: row.officeId ?? null,
-        officeName: row.officeName ?? null,
-        daysWithLogs: 0,
-        lateDays: 0,
-        undertimeDays: 0,
-        scheduleTypes: new Set(),
-        scheduleSourceSet: new Set(),
-      });
-    }
-
-    const agg = map.get(key)!;
-    if (!agg.officeId && row.officeId) agg.officeId = row.officeId;
-    if (!agg.officeName && row.officeName) agg.officeName = row.officeName;
-    if (!agg.resolvedEmployeeId && row.resolvedEmployeeId) {
-      agg.resolvedEmployeeId = row.resolvedEmployeeId;
-    }
-    const hasLogs = Boolean(row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0);
-    if (hasLogs) {
-      agg.daysWithLogs += 1;
-      if (row.isLate) agg.lateDays += 1;
-      if (row.isUndertime) agg.undertimeDays += 1;
-    }
-
-    if (row.scheduleType) {
-      agg.scheduleTypes.add(row.scheduleType);
-    }
-    if (row.scheduleSource) {
-      agg.scheduleSourceSet.add(row.scheduleSource);
-    }
-  }
-
-  return Array.from(map.values()).map((entry) => ({
-    employeeId: entry.employeeId,
-    employeeName: entry.employeeName,
-    resolvedEmployeeId: entry.resolvedEmployeeId ?? null,
-    officeId: entry.officeId ?? null,
-    officeName: entry.officeName ?? null,
-    daysWithLogs: entry.daysWithLogs,
-    lateDays: entry.lateDays,
-    undertimeDays: entry.undertimeDays,
-    lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
-    undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
-    scheduleTypes: Array.from(entry.scheduleTypes).sort(),
-    scheduleSource: pickSource(Array.from(entry.scheduleSourceSet)),
-  }));
-}
-
-const SOURCE_PRIORITY: ScheduleSource[] = ["EXCEPTION", "WORKSCHEDULE", "DEFAULT", "NOMAPPING"];
-
-function pickSource(sources: ScheduleSource[]) {
-  if (!sources.length) return "DEFAULT" as ScheduleSource;
-  return sources.sort((a, b) => SOURCE_PRIORITY.indexOf(a) - SOURCE_PRIORITY.indexOf(b))[0] ?? "DEFAULT";
-}

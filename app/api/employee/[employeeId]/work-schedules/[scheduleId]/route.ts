@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
-import { ScheduleType } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { Prisma, ScheduleType } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
+import {
+  normalizeWeeklyPatternInput,
+  weeklyPatternInputSchema,
+} from "@/lib/weeklyPatternInput";
 
 const scheduleSchema = z.object({
   type: z.nativeEnum(ScheduleType).optional(),
@@ -22,6 +25,7 @@ const scheduleSchema = z.object({
   timezone: z.string().optional(),
   effectiveFrom: z.string().optional(),
   effectiveTo: z.string().optional().nullable(),
+  weeklyPattern: weeklyPatternInputSchema,
 }).superRefine((data, ctx) => {
   if (data.type === ScheduleType.FIXED) {
     if (!data.startTime || !data.endTime) {
@@ -72,6 +76,13 @@ export async function PATCH(request: Request, { params }: { params: { employeeId
     if (payload.effectiveFrom !== undefined) data.effectiveFrom = new Date(payload.effectiveFrom);
     if (payload.effectiveTo !== undefined) {
       data.effectiveTo = payload.effectiveTo ? new Date(payload.effectiveTo) : null;
+    }
+    if (payload.weeklyPattern !== undefined) {
+      const normalizedWeeklyPattern = normalizeWeeklyPatternInput(payload.weeklyPattern);
+      data.weeklyPattern =
+        normalizedWeeklyPattern === null
+          ? Prisma.DbNull
+          : (normalizedWeeklyPattern as Prisma.InputJsonValue);
     }
 
     const schedule = await prisma.workSchedule.update({

@@ -63,6 +63,9 @@ async function evaluate(payload: Payload): Promise<EvaluationResult> {
       scheduleStart,
       scheduleEnd,
       scheduleGraceMinutes,
+      weeklyPatternApplied,
+      weeklyPatternWindows,
+      weeklyPatternPresence,
     } = evaluateDay({
       dateISO,
       earliest: (entry.earliest ?? undefined) as HHMM | undefined,
@@ -85,6 +88,9 @@ async function evaluate(payload: Payload): Promise<EvaluationResult> {
       scheduleStart: scheduleStart ?? null,
       scheduleEnd: scheduleEnd ?? null,
       scheduleGraceMinutes: scheduleGraceMinutes ?? null,
+      weeklyPatternApplied: weeklyPatternApplied ?? false,
+      weeklyPatternWindows: weeklyPatternWindows ?? null,
+      weeklyPatternPresence: weeklyPatternPresence ?? [],
     });
   }
 
