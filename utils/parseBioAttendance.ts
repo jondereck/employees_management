@@ -1,6 +1,8 @@
 import * as XLSX from "xlsx";
 import type { WorkBook } from "xlsx";
 
+import type { WeeklyPatternWindow } from "./weeklyPattern";
+
 export type WarningLevel = "info" | "warning";
 
 export type UnmatchedIdentityWarningDetail = {
@@ -78,6 +80,9 @@ export type PerDayRow = ParsedPerDayRow & {
   scheduleEnd?: string | null;
   scheduleGraceMinutes?: number | null;
   identityStatus?: "matched" | "unmatched" | "ambiguous";
+  weeklyPatternApplied?: boolean;
+  weeklyPatternWindows?: WeeklyPatternWindow[] | null;
+  weeklyPatternPresence?: { start: string; end: string }[];
 };
 
 export type PerEmployeeRow = {
@@ -98,6 +103,7 @@ export type PerEmployeeRow = {
   totalUndertimeMinutes: number;
   totalRequiredMinutes: number;
   identityStatus: "matched" | "unmatched" | "ambiguous";
+  weeklyPatternDayCount: number;
 };
 
 export type ParsedWorkbook = {
@@ -1083,6 +1089,7 @@ type AggregateRow = {
   totalRequiredMinutes: number;
   scheduleTypes: Set<string>;
   scheduleSourceSet: Set<string>;
+  weeklyPatternDays: number;
 };
 
 const SOURCE_PRIORITY = ["EXCEPTION", "WORKSCHEDULE", "DEFAULT", "NOMAPPING"] as const;
@@ -1238,6 +1245,7 @@ export function summarizePerEmployee(
         totalRequiredMinutes: 0,
         scheduleTypes: new Set<string>(),
         scheduleSourceSet: new Set<string>(),
+        weeklyPatternDays: 0,
       });
     }
     const agg = map.get(key)!;
@@ -1259,6 +1267,9 @@ export function summarizePerEmployee(
       const undertimeMinutes = resolveUndertimeMinutes(row);
       if (undertimeMinutes != null) agg.totalUndertimeMinutes += undertimeMinutes;
       if (row.requiredMinutes != null) agg.totalRequiredMinutes += row.requiredMinutes;
+      if (row.weeklyPatternApplied) {
+        agg.weeklyPatternDays += 1;
+      }
     }
     if (row.scheduleType) agg.scheduleTypes.add(row.scheduleType);
     if (row.scheduleSource) agg.scheduleSourceSet.add(row.scheduleSource);
@@ -1282,5 +1293,6 @@ export function summarizePerEmployee(
     totalUndertimeMinutes: Math.round(entry.totalUndertimeMinutes),
     totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
     identityStatus: entry.identityStatus,
+    weeklyPatternDayCount: entry.weeklyPatternDays,
   }));
 }

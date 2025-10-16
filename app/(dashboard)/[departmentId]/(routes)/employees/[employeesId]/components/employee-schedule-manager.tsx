@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -32,6 +32,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  WEEKDAY_KEYS,
+  WEEKDAY_LABELS,
+  WEEKLY_PATTERN_HINT,
+  hasWeeklyPattern,
+  validateWeeklyPatternDay,
+} from "@/utils/weeklyPattern";
+import type { WeekdayKey, WeeklyPattern, WeeklyPatternDay } from "@/utils/weeklyPattern";
 
 const ScheduleType = {
   FIXED: "FIXED",
@@ -40,6 +48,56 @@ const ScheduleType = {
 } as const;
 
 type ScheduleTypeEnum = (typeof ScheduleType)[keyof typeof ScheduleType];
+
+type WeeklyPatternWindowForm = { id: string; start: string; end: string };
+type WeeklyPatternDayForm = { windows: WeeklyPatternWindowForm[]; requiredMinutes: number };
+type WeeklyPatternFormState = Record<WeekdayKey, WeeklyPatternDayForm>;
+type WeeklyPatternErrorState = Record<WeekdayKey, string | null>;
+
+const randomId = () => Math.random().toString(36).slice(2, 10);
+
+const createEmptyWeeklyPatternState = (): WeeklyPatternFormState => {
+  const state = {} as WeeklyPatternFormState;
+  for (const key of WEEKDAY_KEYS) {
+    state[key] = { windows: [], requiredMinutes: 0 };
+  }
+  return state;
+};
+
+const createEmptyWeeklyPatternErrors = (): WeeklyPatternErrorState => {
+  const errors = {} as WeeklyPatternErrorState;
+  for (const key of WEEKDAY_KEYS) {
+    errors[key] = null;
+  }
+  return errors;
+};
+
+const toFormStateFromPattern = (pattern: WeeklyPattern | null | undefined): WeeklyPatternFormState => {
+  const state = createEmptyWeeklyPatternState();
+  if (!pattern) return state;
+  for (const key of WEEKDAY_KEYS) {
+    const day = pattern[key];
+    if (!day) continue;
+    state[key] = {
+      windows: day.windows.map((window) => ({
+        id: randomId(),
+        start: window.start,
+        end: window.end,
+      })),
+      requiredMinutes: day.requiredMinutes,
+    };
+  }
+  return state;
+};
+
+const describeWeeklyPatternDay = (day: WeeklyPatternDayForm): string => {
+  if (!day.windows.length) return "—";
+  const segments = day.windows
+    .filter((window) => window.start.trim() && window.end.trim())
+    .map((window) => `${window.start.trim()}–${window.end.trim()}`);
+  if (!segments.length) return "Incomplete";
+  return `${segments.join(", ")} • Req ${day.requiredMinutes || 0}`;
+};
 
 const scheduleFormSchema = z
   .object({
@@ -212,7 +270,12 @@ const toDateInput = (value: string | null | undefined) =>
 const describeSchedule = (schedule: WorkScheduleDTO) => {
   switch (schedule.type) {
     case ScheduleType.FLEX:
-      return `Core ${schedule.coreStart ?? "—"}–${schedule.coreEnd ?? "—"}, Band ${schedule.bandwidthStart ?? "—"}–${schedule.bandwidthEnd ?? "—"}, Required ${schedule.requiredDailyMinutes ?? 0}m`;
+      {
+        const base = `Core ${schedule.coreStart ?? "—"}–${schedule.coreEnd ?? "—"}, Band ${schedule.bandwidthStart ?? "—"}–${schedule.bandwidthEnd ?? "—"}, Required ${schedule.requiredDailyMinutes ?? 0}m`;
+        return hasWeeklyPattern(schedule.weeklyPattern)
+          ? `${base} • Weekly pattern`
+          : base;
+      }
     case ScheduleType.SHIFT:
       return `Shift ${schedule.shiftStart ?? "—"}–${schedule.shiftEnd ?? "—"} (grace ${schedule.graceMinutes ?? 0}m)`;
     case ScheduleType.FIXED:
@@ -289,6 +352,128 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingException, setSavingException] = useState(false);
   const [deletingScheduleId, setDeletingScheduleId] = useState<string | null>(null);
+  const [weeklyPattern, setWeeklyPattern] = useState<WeeklyPatternFormState>(() => createEmptyWeeklyPatternState());
+  const [weeklyPatternErrors, setWeeklyPatternErrors] = useState<WeeklyPatternErrorState>(() =>
+    createEmptyWeeklyPatternErrors()
+  );
+  const [weeklyPatternOpen, setWeeklyPatternOpen] = useState(false);
+  const [weeklyPatternAutoOpenDisabled, setWeeklyPatternAutoOpenDisabled] = useState(false);
+
+  const handleAddWeeklyWindow = useCallback((day: WeekdayKey) => {
+    setWeeklyPattern((prev) => {
+      const current = prev[day];
+      if (current.windows.length >= 3) return prev;
+      const nextDay: WeeklyPatternDayForm = {
+        ...current,
+        windows: [...current.windows, { id: randomId(), start: "", end: "" }],
+      };
+      return { ...prev, [day]: nextDay };
+    });
+    setWeeklyPatternErrors((prev) => ({ ...prev, [day]: null }));
+  }, []);
+
+  const handleRemoveWeeklyWindow = useCallback((day: WeekdayKey, windowId: string) => {
+    setWeeklyPattern((prev) => {
+      const current = prev[day];
+      const nextDay: WeeklyPatternDayForm = {
+        ...current,
+        windows: current.windows.filter((window) => window.id !== windowId),
+      };
+      return { ...prev, [day]: nextDay };
+    });
+    setWeeklyPatternErrors((prev) => ({ ...prev, [day]: null }));
+  }, []);
+
+  const handleWeeklyWindowChange = useCallback(
+    (day: WeekdayKey, windowId: string, field: "start" | "end", value: string) => {
+      setWeeklyPattern((prev) => {
+        const current = prev[day];
+        const nextDay: WeeklyPatternDayForm = {
+          ...current,
+          windows: current.windows.map((window) =>
+            window.id === windowId ? { ...window, [field]: value } : window
+          ),
+        };
+        return { ...prev, [day]: nextDay };
+      });
+      setWeeklyPatternErrors((prev) => ({ ...prev, [day]: null }));
+    },
+    []
+  );
+
+  const handleClearWeeklyDay = useCallback((day: WeekdayKey) => {
+    setWeeklyPattern((prev) => ({
+      ...prev,
+      [day]: { windows: [], requiredMinutes: 0 },
+    }));
+    setWeeklyPatternErrors((prev) => ({ ...prev, [day]: null }));
+  }, []);
+
+  const handleWeeklyRequiredChange = useCallback((day: WeekdayKey, value: string) => {
+    const parsed = Number(value);
+    setWeeklyPattern((prev) => {
+      const current = prev[day];
+      const nextDay: WeeklyPatternDayForm = {
+        ...current,
+        requiredMinutes: Number.isFinite(parsed) ? Math.min(1440, Math.max(0, Math.round(parsed))) : 0,
+      };
+      return { ...prev, [day]: nextDay };
+    });
+    setWeeklyPatternErrors((prev) => ({ ...prev, [day]: null }));
+  }, []);
+
+  const handleToggleWeeklyPattern = useCallback(() => {
+    setWeeklyPatternAutoOpenDisabled(true);
+    setWeeklyPatternOpen((prev) => !prev);
+  }, []);
+
+  const buildWeeklyPatternSubmission = useCallback(() => {
+    const errors = createEmptyWeeklyPatternErrors();
+    const pattern: WeeklyPattern = {};
+    let hasError = false;
+
+    for (const key of WEEKDAY_KEYS) {
+      const dayState = weeklyPattern[key];
+      const trimmedWindows = dayState.windows.map((window) => ({
+        start: window.start.trim(),
+        end: window.end.trim(),
+      }));
+      const requiredMinutes = Number.isFinite(dayState.requiredMinutes)
+        ? Math.min(1440, Math.max(0, Math.round(dayState.requiredMinutes)))
+        : 0;
+
+      if (!trimmedWindows.length && requiredMinutes <= 0) {
+        errors[key] = null;
+        continue;
+      }
+
+      const dayValue: WeeklyPatternDay = {
+        windows: trimmedWindows as WeeklyPatternDay["windows"],
+        requiredMinutes,
+      };
+
+      const error = validateWeeklyPatternDay(dayValue);
+      if (error) {
+        errors[key] = error;
+        hasError = true;
+        continue;
+      }
+
+      const validWindows = trimmedWindows.filter((window) => window.start && window.end);
+      if (!validWindows.length) {
+        errors[key] = null;
+        continue;
+      }
+
+      errors[key] = null;
+      pattern[key] = {
+        windows: validWindows as WeeklyPatternDay["windows"],
+        requiredMinutes,
+      };
+    }
+
+    return { pattern: Object.keys(pattern).length ? pattern : null, errors, hasError };
+  }, [weeklyPattern]);
 
   const scheduleForm = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleFormSchema),
@@ -303,9 +488,41 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   const scheduleType = scheduleForm.watch("type");
   const exceptionType = exceptionForm.watch("type");
 
+  const hasWeeklyPatternConfigured = useMemo(() => {
+    return WEEKDAY_KEYS.some((key) => {
+      const day = weeklyPattern[key];
+      if (!day) return false;
+      if (day.windows.some((window) => window.start.trim() || window.end.trim())) {
+        return true;
+      }
+      return day.requiredMinutes > 0;
+    });
+  }, [weeklyPattern]);
+
+  useEffect(() => {
+    if (
+      scheduleType === ScheduleType.FLEX &&
+      !weeklyPatternOpen &&
+      !hasWeeklyPatternConfigured &&
+      !weeklyPatternAutoOpenDisabled
+    ) {
+      setWeeklyPatternOpen(true);
+      setWeeklyPatternAutoOpenDisabled(true);
+    }
+  }, [
+    scheduleType,
+    weeklyPatternOpen,
+    hasWeeklyPatternConfigured,
+    weeklyPatternAutoOpenDisabled,
+  ]);
+
   const resetScheduleForm = useCallback(() => {
     setEditingSchedule(null);
     scheduleForm.reset(scheduleDefaults);
+    setWeeklyPattern(createEmptyWeeklyPatternState());
+    setWeeklyPatternErrors(createEmptyWeeklyPatternErrors());
+    setWeeklyPatternOpen(false);
+    setWeeklyPatternAutoOpenDisabled(false);
   }, [scheduleForm]);
 
   const resetExceptionForm = useCallback(() => {
@@ -314,11 +531,24 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   }, [exceptionForm]);
 
   const onSubmitSchedule = scheduleForm.handleSubmit(async (values) => {
+    const usingWeeklyPattern = values.type === ScheduleType.FLEX;
+    const submission = usingWeeklyPattern
+      ? buildWeeklyPatternSubmission()
+      : { pattern: null, errors: createEmptyWeeklyPatternErrors(), hasError: false };
+
+    setWeeklyPatternErrors(submission.errors);
+    if (usingWeeklyPattern && submission.hasError) {
+      setWeeklyPatternOpen(true);
+      toast.error("Resolve weekly pattern errors before saving.");
+      return;
+    }
+
     try {
       setSavingSchedule(true);
       const payload = {
         ...values,
         effectiveTo: values.effectiveTo ? values.effectiveTo : null,
+        weeklyPattern: usingWeeklyPattern ? submission.pattern : null,
       };
       const endpoint = editingSchedule
         ? `/api/employee/${employeeId}/work-schedules/${editingSchedule.id}`
@@ -419,6 +649,10 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
         effectiveFrom: toDateInput(schedule.effectiveFrom),
         effectiveTo: toDateInput(schedule.effectiveTo),
       });
+      setWeeklyPattern(toFormStateFromPattern(schedule.weeklyPattern ?? null));
+      setWeeklyPatternErrors(createEmptyWeeklyPatternErrors());
+      setWeeklyPatternOpen(hasWeeklyPattern(schedule.weeklyPattern));
+      setWeeklyPatternAutoOpenDisabled(hasWeeklyPattern(schedule.weeklyPattern));
     },
     [scheduleForm]
   );
@@ -613,84 +847,198 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
             )}
 
             {scheduleType === ScheduleType.FLEX && (
-              <div className="grid gap-4 md:grid-cols-3">
-                <FormField
-                  control={scheduleForm.control}
-                  name="coreStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Core Hours Start (optional)" tooltip={CORE_START_HELP} />
-                      <FormControl>
-                        <Input placeholder="10:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{CORE_START_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
+              <>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <FormField
+                    control={scheduleForm.control}
+                    name="coreStart"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Core Hours Start (optional)" tooltip={CORE_START_HELP} />
+                        <FormControl>
+                          <Input placeholder="10:00" {...field} />
+                        </FormControl>
+                        <FormDescription>{CORE_START_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="coreEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Core Hours End (optional)" tooltip={CORE_END_HELP} />
+                        <FormControl>
+                          <Input placeholder="15:00" {...field} />
+                        </FormControl>
+                        <FormDescription>{CORE_END_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="requiredDailyMinutes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Required Work Minutes" tooltip={REQUIRED_MINUTES_HELP} />
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={1440}
+                            value={field.value ?? 480}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                          />
+                        </FormControl>
+                        <FormDescription>{REQUIRED_MINUTES_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="bandwidthStart"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Work Window Start (Bandwidth)" tooltip={BANDWIDTH_START_HELP} />
+                        <FormControl>
+                          <Input placeholder="06:00" {...field} />
+                        </FormControl>
+                        <FormDescription>{BANDWIDTH_START_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="bandwidthEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Work Window End (Bandwidth)" tooltip={BANDWIDTH_END_HELP} />
+                        <FormControl>
+                          <Input placeholder="20:00" {...field} />
+                        </FormControl>
+                        <FormDescription>{BANDWIDTH_END_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-4 rounded-lg border border-muted p-4">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold">Weekly pattern (optional)</h4>
+                      <p className="text-xs text-muted-foreground">{WEEKLY_PATTERN_HINT}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleToggleWeeklyPattern}
+                    >
+                      {weeklyPatternOpen ? "Hide pattern" : "Edit pattern"}
+                    </Button>
+                  </div>
+                  {!weeklyPatternOpen && (
+                    <div className="flex flex-wrap gap-2">
+                      {WEEKDAY_KEYS.map((key) => (
+                        <Badge key={key} variant="outline" className="font-normal">
+                          {WEEKDAY_LABELS[key]}: {describeWeeklyPatternDay(weeklyPattern[key])}
+                        </Badge>
+                      ))}
+                    </div>
                   )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="coreEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Core Hours End (optional)" tooltip={CORE_END_HELP} />
-                      <FormControl>
-                        <Input placeholder="15:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{CORE_END_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
+                  {weeklyPatternOpen && (
+                    <div className="space-y-4">
+                      {WEEKDAY_KEYS.map((key) => {
+                        const dayState = weeklyPattern[key];
+                        const error = weeklyPatternErrors[key];
+                        return (
+                          <div key={key} className="rounded-md border p-3">
+                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{WEEKDAY_LABELS[key]}</span>
+                                  <Badge variant="secondary" className="font-normal">
+                                    {describeWeeklyPatternDay(dayState)}
+                                  </Badge>
+                                </div>
+                                {error ? (
+                                  <p className="mt-1 text-xs text-destructive">{error}</p>
+                                ) : null}
+                              </div>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => handleClearWeeklyDay(key)}>
+                                Clear day
+                              </Button>
+                            </div>
+                            <div className="mt-3 space-y-3">
+                              {dayState.windows.map((window) => (
+                                <div key={window.id} className="grid gap-2 md:grid-cols-[1fr,1fr,auto] md:items-end">
+                                  <div>
+                                    <FormLabel>Start</FormLabel>
+                                    <Input
+                                      placeholder="08:00"
+                                      value={window.start}
+                                      onChange={(event) =>
+                                        handleWeeklyWindowChange(key, window.id, "start", event.target.value)
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <FormLabel>End</FormLabel>
+                                    <Input
+                                      placeholder="12:00"
+                                      value={window.end}
+                                      onChange={(event) =>
+                                        handleWeeklyWindowChange(key, window.id, "end", event.target.value)
+                                      }
+                                    />
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveWeeklyWindow(key, window.id)}
+                                  >
+                                    Remove
+                                  </Button>
+                                </div>
+                              ))}
+                              {dayState.windows.length < 3 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleAddWeeklyWindow(key)}
+                                >
+                                  Add window
+                                </Button>
+                              )}
+                            </div>
+                            <div className="mt-3 grid gap-2 md:grid-cols-[max-content,1fr] md:items-center">
+                              <FormLabel>Required minutes</FormLabel>
+                              <div>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={1440}
+                                  placeholder="480"
+                                  value={dayState.requiredMinutes ?? ""}
+                                  onChange={(event) => handleWeeklyRequiredChange(key, event.target.value)}
+                                />
+                                <p className="mt-1 text-xs text-muted-foreground">480 = 8h, 720 = 12h</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="requiredDailyMinutes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Required Work Minutes" tooltip={REQUIRED_MINUTES_HELP} />
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={1440}
-                          value={field.value ?? 480}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
-                      <FormDescription>{REQUIRED_MINUTES_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="bandwidthStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Work Window Start (Bandwidth)" tooltip={BANDWIDTH_START_HELP} />
-                      <FormControl>
-                        <Input placeholder="06:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{BANDWIDTH_START_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="bandwidthEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Work Window End (Bandwidth)" tooltip={BANDWIDTH_END_HELP} />
-                      <FormControl>
-                        <Input placeholder="20:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{BANDWIDTH_END_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                </div>
+              </>
             )}
 
             {scheduleType === ScheduleType.SHIFT && (

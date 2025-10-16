@@ -295,6 +295,7 @@ model WorkSchedule {
   bandwidthStart       String?
   bandwidthEnd         String?
   requiredDailyMinutes Int?
+  weeklyPattern        Json?
   shiftStart           String?
   shiftEnd             String?
   breakMinutes         Int          @default(60)
