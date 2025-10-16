@@ -10,6 +10,7 @@ import {
 } from "@/lib/schedules";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import { evaluateDay, type HHMM } from "@/utils/evaluateDay";
+import { summarizePerEmployee } from "@/utils/parseBioAttendance";
 import type { WeeklyPatternWindow } from "@/utils/weeklyPattern";
 
 type EvaluatedDay = {
