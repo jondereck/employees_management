@@ -12,6 +12,7 @@ import {
   ArrowUpDown,
   CheckCircle2,
   FileDown,
+  Info,
   Loader2,
   UploadCloud,
   X,
@@ -79,6 +80,8 @@ import {
 const PAGE_SIZE = 25;
 
 const MINUTES_IN_DAY = 24 * 60;
+
+const SUMMARY_METRIC_MODE_KEY = "hrps-bio-summary-metric-mode";
 
 const formatTimelineLabel = (segments: { start: string; end: string }[]) => {
   if (!segments.length) return "none";
@@ -195,6 +198,27 @@ const formatPercentLabel = (value: number | null | undefined) => {
   return `${value.toFixed(1)}%`;
 };
 
+const getSortValue = (row: PerEmployeeRow, key: SortKey): number => {
+  switch (key) {
+    case "daysWithLogs":
+      return row.daysWithLogs ?? 0;
+    case "lateDays":
+      return row.lateDays ?? 0;
+    case "undertimeDays":
+      return row.undertimeDays ?? 0;
+    case "totalLateMinutes":
+      return row.totalLateMinutes ?? 0;
+    case "totalUndertimeMinutes":
+      return row.totalUndertimeMinutes ?? 0;
+    case "latePercent":
+      return computeLatePercentMinutes(row) ?? Number.NEGATIVE_INFINITY;
+    case "undertimePercent":
+      return computeUndertimePercentMinutes(row) ?? Number.NEGATIVE_INFINITY;
+    default:
+      return 0;
+  }
+};
+
 const timeout = <T,>(promise: Promise<T>, ms = 15_000) =>
   new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -290,7 +314,14 @@ type OutOfPeriodRow = {
   reason: "outside-period" | "invalid-day";
 };
 
-type SortKey = "daysWithLogs" | "lateDays" | "undertimeDays";
+type SortKey =
+  | "daysWithLogs"
+  | "lateDays"
+  | "undertimeDays"
+  | "totalLateMinutes"
+  | "totalUndertimeMinutes"
+  | "latePercent"
+  | "undertimePercent";
 type SortDirection = "asc" | "desc";
 
 type FileStatus = "queued" | "parsing" | "parsed" | "failed";
@@ -677,9 +708,15 @@ export default function BioLogUploader() {
   const [showUnmatched, setShowUnmatched] = useState<boolean>(
     () => settingsRef.current?.showUnmatched ?? true
   );
-  const [metricMode, setMetricMode] = useState<MetricMode>(
-    () => settingsRef.current?.metricMode ?? "days"
-  );
+  const [metricMode, setMetricMode] = useState<MetricMode>(() => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem(SUMMARY_METRIC_MODE_KEY);
+      if (stored === "minutes" || stored === "days") {
+        return stored;
+      }
+    }
+    return settingsRef.current?.metricMode ?? "days";
+  });
   const [visibleCharts, setVisibleChartsState] = useState<ChartId[]>(() => {
     const stored = settingsRef.current?.visibleCharts;
     if (stored?.length) {
@@ -699,6 +736,22 @@ export default function BioLogUploader() {
     name: string | null;
   } | null>(null);
   const [resolveBusy, setResolveBusy] = useState(false);
+
+  useEffect(() => {
+    if (metricMode === "minutes") {
+      if (sortKey === "latePercent") {
+        setSortKey("totalLateMinutes");
+      } else if (sortKey === "undertimePercent") {
+        setSortKey("totalUndertimeMinutes");
+      }
+    } else {
+      if (sortKey === "totalLateMinutes") {
+        setSortKey("latePercent");
+      } else if (sortKey === "totalUndertimeMinutes") {
+        setSortKey("undertimePercent");
+      }
+    }
+  }, [metricMode, sortKey]);
 
   const updateVisibleCharts = useCallback(
     (updater: ChartId[] | ((prev: ChartId[]) => ChartId[])) => {
@@ -1462,6 +1515,7 @@ export default function BioLogUploader() {
       collapsed: insightsCollapsed,
     };
     window.localStorage.setItem(INSIGHTS_SETTINGS_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(SUMMARY_METRIC_MODE_KEY, metricMode);
   }, [
     selectedOffices,
     selectedScheduleTypes,
@@ -1612,7 +1666,7 @@ export default function BioLogUploader() {
     const rows = [...searchedPerEmployee];
     const multiplier = sortDirection === "asc" ? 1 : -1;
     rows.sort((a, b) => {
-      const diff = (a[sortKey] as number) - (b[sortKey] as number);
+      const diff = getSortValue(a, sortKey) - getSortValue(b, sortKey);
       if (diff !== 0) {
         return diff * multiplier;
       }
@@ -2271,6 +2325,31 @@ export default function BioLogUploader() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
             <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-medium">View:</span>
+                <div className="inline-flex overflow-hidden rounded-md border">
+                  <Button
+                    type="button"
+                    variant={metricMode === "days" ? "default" : "ghost"}
+                    size="sm"
+                    className="rounded-none"
+                    aria-pressed={metricMode === "days"}
+                    onClick={() => setMetricMode("days")}
+                  >
+                    Days %
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={metricMode === "minutes" ? "default" : "ghost"}
+                    size="sm"
+                    className="rounded-none"
+                    aria-pressed={metricMode === "minutes"}
+                    onClick={() => setMetricMode("minutes")}
+                  >
+                    Minutes
+                  </Button>
+                </div>
+              </div>
               <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingParses}>
                 Upload more
               </Button>
@@ -2302,6 +2381,7 @@ export default function BioLogUploader() {
                       type="button"
                       onClick={() => handleSort("daysWithLogs")}
                       className="inline-flex items-center gap-1 font-semibold"
+                      aria-label="Sort by evaluated days"
                     >
                       Days
                       <ArrowUpDown
@@ -2317,6 +2397,7 @@ export default function BioLogUploader() {
                       type="button"
                       onClick={() => handleSort("lateDays")}
                       className="inline-flex items-center gap-1 font-semibold"
+                      aria-label="Sort by late days"
                     >
                       Late
                       <ArrowUpDown
@@ -2332,6 +2413,7 @@ export default function BioLogUploader() {
                       type="button"
                       onClick={() => handleSort("undertimeDays")}
                       className="inline-flex items-center gap-1 font-semibold"
+                      aria-label="Sort by undertime days"
                     >
                       Undertime
                       <ArrowUpDown
@@ -2342,21 +2424,121 @@ export default function BioLogUploader() {
                       />
                     </button>
                   </th>
-                  <th className="p-2 text-center">
-                    <span className="inline-flex items-center justify-center gap-1">
-                      Late %
-                      <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                        {metricMode === "minutes" ? "Minutes" : "Days"}
-                      </Badge>
-                    </span>
+                  <th
+                    className="p-2 text-center"
+                    aria-label={
+                      metricMode === "minutes"
+                        ? "Late (min): Sum of daily late minutes across the selected period."
+                        : undefined
+                    }
+                  >
+                    <div className="inline-flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleSort(
+                            metricMode === "minutes" ? "totalLateMinutes" : "latePercent"
+                          )
+                        }
+                        className="inline-flex items-center gap-1 font-semibold"
+                        aria-label={
+                          metricMode === "minutes"
+                            ? "Sort by total late minutes"
+                            : "Sort by late percentage"
+                        }
+                      >
+                        {metricMode === "minutes" ? "Late (min)" : "Late %"}
+                        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                          {metricMode === "minutes" ? "Minutes" : "Days"}
+                        </Badge>
+                        <ArrowUpDown
+                          className={cn(
+                            "h-3.5 w-3.5",
+                            sortKey ===
+                              (metricMode === "minutes"
+                                ? "totalLateMinutes"
+                                : "latePercent")
+                              ? "opacity-100"
+                              : "opacity-40"
+                          )}
+                        />
+                      </button>
+                      {metricMode === "minutes" ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              aria-label="Sum of daily late minutes across the selected period."
+                            >
+                              <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs text-sm" sideOffset={6}>
+                            Sum of daily late minutes across the selected period.
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : null}
+                    </div>
                   </th>
-                  <th className="p-2 text-center">
-                    <span className="inline-flex items-center justify-center gap-1">
-                      UT %
-                      <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                        {metricMode === "minutes" ? "Minutes" : "Days"}
-                      </Badge>
-                    </span>
+                  <th
+                    className="p-2 text-center"
+                    aria-label={
+                      metricMode === "minutes"
+                        ? "UT (min): Sum of daily undertime minutes across the selected period."
+                        : undefined
+                    }
+                  >
+                    <div className="inline-flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleSort(
+                            metricMode === "minutes"
+                              ? "totalUndertimeMinutes"
+                              : "undertimePercent"
+                          )
+                        }
+                        className="inline-flex items-center gap-1 font-semibold"
+                        aria-label={
+                          metricMode === "minutes"
+                            ? "Sort by total undertime minutes"
+                            : "Sort by undertime percentage"
+                        }
+                      >
+                        {metricMode === "minutes" ? "UT (min)" : "UT %"}
+                        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                          {metricMode === "minutes" ? "Minutes" : "Days"}
+                        </Badge>
+                        <ArrowUpDown
+                          className={cn(
+                            "h-3.5 w-3.5",
+                            sortKey ===
+                              (metricMode === "minutes"
+                                ? "totalUndertimeMinutes"
+                                : "undertimePercent")
+                              ? "opacity-100"
+                              : "opacity-40"
+                          )}
+                        />
+                      </button>
+                      {metricMode === "minutes" ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              aria-label="Sum of daily undertime minutes across the selected period."
+                            >
+                              <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs text-sm" sideOffset={6}>
+                            Sum of daily undertime minutes across the selected period.
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : null}
+                    </div>
                   </th>
                   <th className="p-2 text-left">Actions</th>
                 </tr>
@@ -2384,6 +2566,14 @@ export default function BioLogUploader() {
                     : row.resolvedEmployeeId
                     ? UNASSIGNED_OFFICE_LABEL
                     : UNKNOWN_OFFICE_LABEL;
+                  const totalLateMinutes = Math.max(0, Math.round(row.totalLateMinutes ?? 0));
+                  const totalUndertimeMinutes = Math.max(0, Math.round(row.totalUndertimeMinutes ?? 0));
+                  const lateMinutesLabel = Number.isFinite(totalLateMinutes)
+                    ? totalLateMinutes.toLocaleString()
+                    : "0";
+                  const undertimeMinutesLabel = Number.isFinite(totalUndertimeMinutes)
+                    ? totalUndertimeMinutes.toLocaleString()
+                    : "0";
                   const latePercentValue =
                     metricMode === "minutes"
                       ? computeLatePercentMinutes(row)
@@ -2397,19 +2587,23 @@ export default function BioLogUploader() {
                       ? row.undertimeRate
                       : null;
                   const lateTooltipLines = metricMode === "minutes"
-                    ? latePercentValue == null
+                    ? totalLateMinutes <= 0 && latePercentValue == null
                       ? []
                       : [
-                          `${row.totalLateMinutes.toLocaleString()} late minute${row.totalLateMinutes === 1 ? "" : "s"} • ${formatPercentLabel(latePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`,
+                          latePercentValue == null
+                            ? `${lateMinutesLabel} late minute${totalLateMinutes === 1 ? "" : "s"}`
+                            : `${lateMinutesLabel} late minute${totalLateMinutes === 1 ? "" : "s"} • ${formatPercentLabel(latePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`,
                         ]
                     : [
                         `${row.lateDays} late day${row.lateDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`,
                       ];
                   const undertimeTooltipLines = metricMode === "minutes"
-                    ? undertimePercentValue == null
+                    ? totalUndertimeMinutes <= 0 && undertimePercentValue == null
                       ? []
                       : [
-                          `${row.totalUndertimeMinutes.toLocaleString()} undertime minute${row.totalUndertimeMinutes === 1 ? "" : "s"} • ${formatPercentLabel(undertimePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`,
+                          undertimePercentValue == null
+                            ? `${undertimeMinutesLabel} undertime minute${totalUndertimeMinutes === 1 ? "" : "s"}`
+                            : `${undertimeMinutesLabel} undertime minute${totalUndertimeMinutes === 1 ? "" : "s"} • ${formatPercentLabel(undertimePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`,
                         ]
                     : [
                         `${row.undertimeDays} undertime day${row.undertimeDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`,
@@ -2420,13 +2614,19 @@ export default function BioLogUploader() {
                   if (undertimeTooltipLines.length && row.weeklyPatternDayCount > 0) {
                     undertimeTooltipLines.push("Evaluated with Weekly Pattern windows for this day.");
                   }
+                  const lateMetricLabel =
+                    metricMode === "minutes" ? lateMinutesLabel : formatPercentLabel(latePercentValue);
+                  const undertimeMetricLabel =
+                    metricMode === "minutes" ? undertimeMinutesLabel : formatPercentLabel(undertimePercentValue);
                   const canResolve = row.identityStatus === "unmatched" && Boolean(row.employeeToken);
                   return (
                     <tr key={key} className="odd:bg-muted/20">
                       <td className="p-2">{displayEmployeeId}</td>
-                      <td className="p-2">
-                        <div className="flex items-center gap-2">
-                          <span>{displayEmployeeName}</span>
+                      <td className="p-2 max-w-[16rem]">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="truncate" title={displayEmployeeName}>
+                            {displayEmployeeName}
+                          </span>
                           {row.identityStatus === "unmatched" ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -2441,7 +2641,11 @@ export default function BioLogUploader() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="p-2">{displayOffice}</td>
+                      <td className="p-2 max-w-[14rem]">
+                        <span className="block truncate" title={displayOffice}>
+                          {displayOffice}
+                        </span>
+                      </td>
                       <td className="p-2">
                         {types.length ? (
                           <div className="flex flex-wrap gap-1">
@@ -2465,9 +2669,7 @@ export default function BioLogUploader() {
                         {lateTooltipLines.length ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="cursor-help font-medium">
-                                {formatPercentLabel(latePercentValue)}
-                              </span>
+                              <span className="cursor-help font-medium">{lateMetricLabel}</span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs space-y-1 text-sm">
                               {lateTooltipLines.map((line, index) => (
@@ -2476,18 +2678,14 @@ export default function BioLogUploader() {
                             </TooltipContent>
                           </Tooltip>
                         ) : (
-                          <span className="text-muted-foreground">
-                            {formatPercentLabel(latePercentValue)}
-                          </span>
+                          <span className="text-muted-foreground">{lateMetricLabel}</span>
                         )}
                       </td>
                       <td className="p-2 text-center">
                         {undertimeTooltipLines.length ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="cursor-help font-medium">
-                                {formatPercentLabel(undertimePercentValue)}
-                              </span>
+                              <span className="cursor-help font-medium">{undertimeMetricLabel}</span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs space-y-1 text-sm">
                               {undertimeTooltipLines.map((line, index) => (
@@ -2496,9 +2694,7 @@ export default function BioLogUploader() {
                             </TooltipContent>
                           </Tooltip>
                         ) : (
-                          <span className="text-muted-foreground">
-                            {formatPercentLabel(undertimePercentValue)}
-                          </span>
+                          <span className="text-muted-foreground">{undertimeMetricLabel}</span>
                         )}
                       </td>
                       <td className="p-2">

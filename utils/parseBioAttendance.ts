@@ -1039,6 +1039,8 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
       LateMinutesTotal: r.totalLateMinutes,
       UndertimeMinutesTotal: r.totalUndertimeMinutes,
       RequiredMinutesTotal: r.totalRequiredMinutes,
+      late_minutes_total: r.totalLateMinutes,
+      ut_minutes_total: r.totalUndertimeMinutes,
     }))
   );
   XLSX.utils.book_append_sheet(wb, s1, "PerEmployee");
