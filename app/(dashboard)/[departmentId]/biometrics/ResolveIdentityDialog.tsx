@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -170,55 +170,54 @@ export default function ResolveIdentityDialog({
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium">Search employees</label>
-            <Command className="rounded-lg border">
-              <div className="flex items-center gap-2 border-b px-3 py-2">
-                <Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <CommandInput
-                  value={searchTerm}
-                  onValueChange={setSearchTerm}
-                  placeholder={placeholder}
-                  disabled={busy}
-                  aria-label="Search employees"
-                />
-              </div>
+            <Command shouldFilter={false} className="rounded-lg border">
+              <CommandInput
+                value={searchTerm}
+                onValueChange={setSearchTerm}
+                placeholder={placeholder}
+                disabled={busy}
+                aria-label="Search employees"
+              />
               <CommandList>
-                {isSearching ? (
+                {results.length === 0 ? (
                   <CommandEmpty>
-                    <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Searching…
-                    </div>
-                  </CommandEmpty>
-                ) : searchError ? (
-                  <CommandEmpty>
-                    <div className="py-3 text-sm text-destructive">{searchError}</div>
-                  </CommandEmpty>
-                ) : (
-                  <CommandEmpty>
-                    <div className="py-3 text-sm text-muted-foreground">
-                      Start typing to search employees.
-                    </div>
-                  </CommandEmpty>
-                )}
-                <CommandGroup>
-                  {results.map((result) => (
-                    <CommandItem
-                      key={result.id}
-                      value={result.id}
-                      onSelect={() => void handleResolve(result)}
-                      disabled={busy}
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium">
-                          {highlight(result.name, debouncedSearch.trim())}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {result.employeeNo ? `#${result.employeeNo} · ` : ""}
-                          {officeLabel(result)}
-                        </span>
+                    {isSearching ? (
+                      <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Searching…
                       </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
+                    ) : searchError ? (
+                      <div className="py-3 text-sm text-destructive">{searchError}</div>
+                    ) : debouncedSearch.trim() ? (
+                      <div className="py-3 text-sm text-muted-foreground">No employees found.</div>
+                    ) : (
+                      <div className="py-3 text-sm text-muted-foreground">
+                        Start typing to search employees.
+                      </div>
+                    )}
+                  </CommandEmpty>
+                ) : null}
+                {results.length > 0 ? (
+                  <CommandGroup>
+                    {results.map((result) => (
+                      <CommandItem
+                        key={result.id}
+                        value={result.id}
+                        onSelect={() => void handleResolve(result)}
+                        disabled={busy}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">
+                            {highlight(result.name, debouncedSearch.trim())}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {result.employeeNo ? `#${result.employeeNo} · ` : ""}
+                            {officeLabel(result)}
+                          </span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                ) : null}
               </CommandList>
             </Command>
           </div>
