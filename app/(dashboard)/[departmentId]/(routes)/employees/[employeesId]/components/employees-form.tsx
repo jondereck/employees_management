@@ -652,7 +652,7 @@ export const EmployeesForm = ({
           <Tabs defaultValue="details" className="mt-8">
             <TabsList
               className="
-    sticky top-0 z-20 
+    sticky top-0 z-30
     w-full 
     flex justify-start gap-2
     rounded-none border-b 

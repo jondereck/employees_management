@@ -1445,7 +1445,7 @@ export default function DownloadStyledExcel() {
               {/* ADVANCED (single box; sticky header + conditional mount for content) */}
               <div className="mb-4 rounded-lg border bg-white shadow-sm">
             {/* Sticky header so the toggle stays visible */}
-            <div className="sticky top-0 z-10 border-b bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="sticky top-0 z-30 border-b bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
@@ -1465,7 +1465,7 @@ export default function DownloadStyledExcel() {
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
                     <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full min-w-0">
-                      <div className="sticky top-[48px] z-20 bg-background border-b flex flex-wrap items-center gap-2 px-2 py-2">
+                      <div className="sticky top-[48px] z-30 bg-background border-b flex flex-wrap items-center gap-2 px-2 py-2">
                         {EXPORT_TABS.map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTabKey === tab.key;
