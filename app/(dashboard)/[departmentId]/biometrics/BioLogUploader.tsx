@@ -2623,7 +2623,8 @@ export default function BioLogUploader() {
                     metricMode === "minutes" ? lateMinutesLabel : formatPercentLabel(latePercentValue);
                   const undertimeMetricLabel =
                     metricMode === "minutes" ? undertimeMinutesLabel : formatPercentLabel(undertimePercentValue);
-                  const canResolve = isUnmatched && Boolean(row.employeeToken);
+                  const canResolve = Boolean(row.employeeToken) && (isUnmatched || isSolved);
+                  const resolveActionLabel = isSolved ? "Re-resolve…" : "Resolve…";
                   return (
                     <tr key={key} className="odd:bg-muted/20">
                       <td className="p-2">{displayEmployeeId}</td>
@@ -2726,7 +2727,7 @@ export default function BioLogUploader() {
                             }
                             disabled={resolveBusy}
                           >
-                            Resolve…
+                            {resolveActionLabel}
                           </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
