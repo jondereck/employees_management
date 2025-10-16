@@ -92,7 +92,7 @@ type WeeklyPatternTimelineProps = {
 };
 
 const WeeklyPatternTimeline = ({ applied, windows, presence }: WeeklyPatternTimelineProps) => {
-  if (!applied || !(windows?.length ?? 0)) {
+  if (!applied || !windows || windows.length === 0) {
     return <span className="text-muted-foreground">—</span>;
   }
 

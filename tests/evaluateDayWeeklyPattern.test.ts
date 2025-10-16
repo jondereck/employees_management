@@ -11,6 +11,7 @@ const createFlexSchedule = (overrides: Partial<ScheduleFlex> = {}): ScheduleFlex
   bandwidthEnd: "20:00",
   requiredDailyMinutes: 480,
   breakMinutes: 60,
+  graceMinutes: 0,
   weeklyPattern: null,
   ...overrides,
 });
@@ -114,6 +115,8 @@ test("weekly pattern handles overnight windows spanning midnight", () => {
   assert.equal(result.weeklyPatternApplied, true);
   assert.equal(result.workedMinutes, 480);
   assert.equal(result.isUndertime, false);
+  assert.equal(result.isLate, false);
+  assert.equal(result.lateMinutes, 0);
   assert.deepEqual(result.weeklyPatternPresence, [
     { start: "00:00", end: "06:00" },
     { start: "22:00", end: "00:00" },
@@ -135,4 +138,117 @@ test("flex schedules without weekly pattern keep legacy evaluation", () => {
   assert.equal(result.isUndertime, false);
   assert.equal(result.weeklyPatternWindows, null);
   assert.deepEqual(result.weeklyPatternPresence, []);
+});
+
+test("weekly pattern late evaluation uses raw earliest punch", () => {
+  const schedule = createFlexSchedule({
+    graceMinutes: 0,
+    weeklyPattern: {
+      tue: {
+        windows: [{ start: "15:00", end: "19:00" }],
+        requiredMinutes: 240,
+      },
+    },
+  });
+
+  const result = evaluateDay({
+    dateISO: "2024-07-09",
+    allTimes: ["14:54", "19:37"],
+    schedule,
+  });
+
+  assert.equal(result.isLate, false);
+  assert.equal(result.lateMinutes, 0);
+});
+
+test("weekly pattern respects grace when computing lateness", () => {
+  const schedule = createFlexSchedule({
+    graceMinutes: 5,
+    weeklyPattern: {
+      tue: {
+        windows: [{ start: "15:00", end: "19:00" }],
+        requiredMinutes: 240,
+      },
+    },
+  });
+
+  const lateResult = evaluateDay({
+    dateISO: "2024-07-09",
+    allTimes: ["15:06", "19:00"],
+    schedule,
+  });
+
+  assert.equal(lateResult.isLate, true);
+  assert.equal(lateResult.lateMinutes, 1);
+
+  const onTimeResult = evaluateDay({
+    dateISO: "2024-07-09",
+    allTimes: ["15:05", "18:30"],
+    schedule,
+  });
+
+  assert.equal(onTimeResult.isLate, false);
+  assert.equal(onTimeResult.lateMinutes, 0);
+});
+
+test("weekly pattern flags arrivals after core as late", () => {
+  const schedule = createFlexSchedule({
+    graceMinutes: 0,
+    weeklyPattern: {
+      wed: {
+        windows: [{ start: "15:00", end: "19:00" }],
+        requiredMinutes: 240,
+      },
+    },
+  });
+
+  const result = evaluateDay({
+    dateISO: "2024-07-10",
+    allTimes: ["15:12", "18:45"],
+    schedule,
+  });
+
+  assert.equal(result.isLate, true);
+  assert.equal(result.lateMinutes, 12);
+});
+
+test("weekly pattern treats days without punches as on time", () => {
+  const schedule = createFlexSchedule({
+    graceMinutes: 0,
+    weeklyPattern: {
+      thu: {
+        windows: [{ start: "15:00", end: "19:00" }],
+        requiredMinutes: 240,
+      },
+    },
+  });
+
+  const result = evaluateDay({
+    dateISO: "2024-07-11",
+    schedule,
+  });
+
+  assert.equal(result.isLate, false);
+  assert.equal(result.lateMinutes, 0);
+});
+
+test("weekly pattern marks missed start on overnight windows as late", () => {
+  const schedule = createFlexSchedule({
+    graceMinutes: 0,
+    weeklyPattern: {
+      fri: {
+        windows: [{ start: "22:00", end: "06:00" }],
+        requiredMinutes: 240,
+      },
+    },
+  });
+
+  const result = evaluateDay({
+    dateISO: "2024-07-12",
+    allTimes: ["02:00", "06:00"],
+    schedule,
+  });
+
+  assert.equal(result.isLate, true);
+  assert.equal(result.lateMinutes, 240);
 });

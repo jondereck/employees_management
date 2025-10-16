@@ -26,6 +26,7 @@ export type ScheduleFlex = {
   bandwidthEnd: HHMM;
   requiredDailyMinutes: number;
   breakMinutes?: number;
+  graceMinutes?: number;
   weeklyPattern?: WeeklyPattern | null;
 };
 export type ScheduleShift = {
@@ -171,9 +172,11 @@ export function evaluateDay(input: DayEvalInput) {
       const bandS = toMin(input.schedule.bandwidthStart);
       const bandE = toMin(input.schedule.bandwidthEnd);
       const defaultRequired = input.schedule.requiredDailyMinutes;
+      const grace = input.schedule.graceMinutes ?? 0;
       scheduleStart = input.schedule.coreStart;
       scheduleEnd = input.schedule.coreEnd;
       requiredMinutes = defaultRequired;
+      scheduleGraceMinutes = grace;
 
       const dayKey = toWeekdayKey(input.dateISO);
       const weeklyDay: WeeklyPatternDay | undefined = input.schedule.weeklyPattern
@@ -198,32 +201,38 @@ export function evaluateDay(input: DayEvalInput) {
         undertimeMinutes = Math.max(0, required - worked);
 
         const hasCore = coreE > coreS;
-        if (!clampedSegments.length) {
-          if (hasCore) {
-            isLate = true;
-            lateMinutes = Math.max(0, coreE - coreS);
+        if (hasCore) {
+          const earliestWindowStart = Math.min(
+            ...weeklyDay.windows.map((window) => toMin(window.start))
+          );
+          scheduleStart = minToHHMM(earliestWindowStart);
+
+          const rawCandidates: number[] = [];
+          if (Array.isArray(input.allTimes) && input.allTimes.length) {
+            for (const time of input.allTimes) {
+              if (time) rawCandidates.push(toMin(time));
+            }
+          }
+          if (e != null) rawCandidates.push(e);
+          const firstPunchRaw = rawCandidates.length ? Math.min(...rawCandidates) : null;
+          if (firstPunchRaw != null) {
+            const earliestWindow = weeklyDay.windows.find(
+              (window) => toMin(window.start) === earliestWindowStart
+            );
+            const earliestWindowEnd = earliestWindow ? toMin(earliestWindow.end) : null;
+            let adjustedFirstPunch = firstPunchRaw;
+            if (
+              earliestWindowEnd != null &&
+              earliestWindowEnd < earliestWindowStart &&
+              adjustedFirstPunch <= earliestWindowEnd
+            ) {
+              adjustedFirstPunch += MINUTES_IN_DAY;
+            }
+            const threshold = earliestWindowStart + grace;
+            isLate = adjustedFirstPunch > threshold;
+            lateMinutes = isLate ? Math.max(0, adjustedFirstPunch - threshold) : 0;
           } else {
             isLate = false;
-            lateMinutes = 0;
-          }
-        } else if (hasCore) {
-          const firstStart = clampedSegments[0].start;
-          const presentInCore = clampedSegments.some((segment) => {
-            const overlapStart = Math.max(segment.start, coreS);
-            const overlapEnd = Math.min(segment.end, coreE);
-            return overlapEnd > overlapStart;
-          });
-          isLate = firstStart > coreS || !presentInCore;
-          if (isLate) {
-            let late = 0;
-            if (firstStart > coreS) {
-              late += firstStart - coreS;
-            }
-            if (!presentInCore) {
-              late = Math.max(late, coreE - coreS);
-            }
-            lateMinutes = late;
-          } else {
             lateMinutes = 0;
           }
         } else {

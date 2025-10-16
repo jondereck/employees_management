@@ -298,7 +298,8 @@ const describeException = (exception: ScheduleExceptionDTO) => {
 
 const BANDWIDTH_START_HELP = "Earliest time counted as presence in a flexible day.";
 const BANDWIDTH_END_HELP = "Latest time counted as presence in a flexible day.";
-const CORE_START_HELP = "If set, arriving after this is late. Leave empty for floating day.";
+const CORE_START_HELP =
+  "Late if earliest punch > Core Start + Grace. Arrivals before core are on time.";
 const CORE_END_HELP = "If set, you must stay at least until this time.";
 const REQUIRED_MINUTES_HELP = "Minimum total minutes to avoid undertime (e.g., 720 = 12h).";
 const SHIFT_TIMING_HELP = "Late if first punch > Start (+grace). Undertime if last punch < End.";
