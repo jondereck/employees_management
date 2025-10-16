@@ -45,15 +45,16 @@ import { cn } from "@/lib/utils";
 
 import type { PerDayRow, PerEmployeeRow } from "@/utils/parseBioAttendance";
 import {
+  UNASSIGNED_OFFICE_LABEL,
+  UNKNOWN_OFFICE_LABEL,
+  UNMATCHED_LABEL,
+} from "@/utils/biometricsShared";
+import {
   ALL_CHART_IDS,
   DEFAULT_VISIBLE_CHARTS,
   type ChartId,
   type MetricMode,
 } from "./insights-types";
-
-const UNASSIGNED_OFFICE_LABEL = "(Unassigned)";
-const UNKNOWN_OFFICE_LABEL = "(Unknown)";
-const UNMATCHED_LABEL = "(Unmatched)";
 
 const MAX_LEADERBOARD_ITEMS = 20;
 const MAX_ARRIVAL_GROUPS = 12;
