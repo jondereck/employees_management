@@ -1,5 +1,19 @@
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import type { WorkBook } from "xlsx";
+
+import {
+  DEFAULT_SUMMARY_SELECTED_COLUMNS,
+  SUMMARY_COLUMN_DEFINITION_MAP,
+  type SummaryColumnDefinition,
+  type SummaryColumnKey,
+  type SummaryColumnWidth,
+} from "./biometricsExportConfig";
+import {
+  formatScheduleSource,
+  UNASSIGNED_OFFICE_LABEL,
+  UNKNOWN_OFFICE_LABEL,
+  UNMATCHED_LABEL,
+} from "./biometricsShared";
 
 import type { DayEvaluationStatus } from "./evaluateDay";
 import type { WeeklyPatternWindow } from "./weeklyPattern";
@@ -1018,75 +1032,6 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
   };
 }
 
-export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDayRow[]) {
-  const wb = XLSX.utils.book_new();
-  const sortedPerEmployee = [...perEmployee].sort((a, b) => {
-    const nameDiff = (a.employeeName || "").localeCompare(b.employeeName || "");
-    if (nameDiff !== 0) return nameDiff;
-    return (a.employeeId || "").localeCompare(b.employeeId || "");
-  });
-  const s1 = XLSX.utils.json_to_sheet(
-    sortedPerEmployee.map((r) => ({
-      EmployeeID: r.employeeId,
-      EmployeeToken: r.employeeToken,
-      EmployeeName: r.employeeName,
-      Office: r.officeName ?? "",
-      DaysWithLogs: r.daysWithLogs,
-      NoPunchDays: r.noPunchDays,
-      LateDays: r.lateDays,
-      UndertimeDays: r.undertimeDays,
-      LateRatePercent: r.lateRate,
-      UndertimeRatePercent: r.undertimeRate,
-      ScheduleTypes: (r.scheduleTypes ?? []).join(", "),
-      ScheduleSource: r.scheduleSource ?? "",
-      IdentityStatus: r.identityStatus,
-      LateMinutesTotal: r.totalLateMinutes,
-      UndertimeMinutesTotal: r.totalUndertimeMinutes,
-      RequiredMinutesTotal: r.totalRequiredMinutes,
-      late_minutes_total: r.totalLateMinutes,
-      ut_minutes_total: r.totalUndertimeMinutes,
-      no_punch_days: r.noPunchDays,
-      match_status: resolveMatchStatus(r.identityStatus, r.resolvedEmployeeId),
-      resolved_employee_id: r.resolvedEmployeeId ?? null,
-      resolved_at: null,
-    }))
-  );
-  XLSX.utils.book_append_sheet(wb, s1, "PerEmployee");
-
-  const sortedPerDay = sortPerDayRows([...perDay]);
-  const s2 = XLSX.utils.json_to_sheet(
-    sortedPerDay.map((r) => ({
-      EmployeeID: r.employeeId,
-      EmployeeToken: r.employeeToken,
-      EmployeeName: r.employeeName,
-      Office: r.officeName ?? "",
-      Date: r.dateISO,
-      Day: r.day,
-      Earliest: r.earliest ?? "",
-      Latest: r.latest ?? "",
-      Worked: r.workedHHMM ?? "",
-      WorkedMinutes: r.workedMinutes ?? "",
-      ScheduleType: r.scheduleType ?? "",
-      Status: r.status ?? "",
-      IsLate: r.isLate ? "Yes" : "No",
-      IsUndertime: r.isUndertime ? "Yes" : "No",
-      LateMinutes: resolveLateMinutes(r) ?? "",
-      UndertimeMinutes: resolveUndertimeMinutes(r) ?? "",
-      RequiredMinutes: r.requiredMinutes ?? "",
-      Sources: r.sourceFiles.join(", "),
-      Punches: r.allTimes.join(", "),
-      ScheduleSource: r.scheduleSource ?? "",
-      IdentityStatus: r.identityStatus ?? "",
-      match_status: resolveMatchStatus(r.identityStatus, r.resolvedEmployeeId),
-      resolved_employee_id: r.resolvedEmployeeId ?? null,
-      resolved_at: null,
-    }))
-  );
-  XLSX.utils.book_append_sheet(wb, s2, "PerDay");
-
-  XLSX.writeFile(wb, "biometrics_results.xlsx");
-}
-
 type AggregateRow = {
   employeeId: string;
   employeeToken: string;
@@ -1330,4 +1275,653 @@ export function summarizePerEmployee(
     identityStatus: entry.identityStatus,
     weeklyPatternDayCount: entry.weeklyPatternDays,
   }));
+}
+
+type SummaryCellValue = string | number | Date | null;
+
+type SummaryRowValues = Record<SummaryColumnKey, SummaryCellValue>;
+
+type SummaryTotals = Partial<Record<SummaryColumnKey, number | null>>;
+
+type SummaryColumnContext = {
+  definition: SummaryColumnDefinition | null;
+  width: SummaryColumnWidth | undefined;
+  type: SummaryColumnDefinition["type"] | undefined;
+};
+
+const HEADER_FILL_COLOR = "F3F4F6";
+const HEADER_FONT_COLOR = "1F2937";
+const ROW_BAND_COLOR = "F9FAFB";
+const BORDER_COLOR = "D1D5DB";
+
+const SUMMARY_SHEET_NAME = "Summary";
+const PER_DAY_SHEET_NAME = "PerDay";
+const METADATA_SHEET_NAME = "Metadata";
+
+const WIDTH_LIMITS: Record<string, { min: number; max: number } | number> = {
+  id: { min: 14, max: 22 },
+  office: { min: 14, max: 22 },
+  schedule: { min: 14, max: 22 },
+  name: { min: 26, max: 40 },
+  numeric: { min: 10, max: 12 },
+  date: 14,
+  time: { min: 22, max: 36 },
+  punches: { min: 22, max: 36 },
+};
+
+type BiometricsExportFilters = {
+  offices: string[];
+  labels: string[];
+  viewLabels: string[];
+  applied: boolean;
+  applyToDownload: boolean;
+  exportFilteredOnly: boolean;
+};
+
+type BiometricsExportMetadata = {
+  exportTime: Date;
+  period: string;
+  columnLabels: string[];
+  appVersion?: string;
+};
+
+export type BiometricsExportOptions = {
+  columns: SummaryColumnKey[];
+  filters: BiometricsExportFilters;
+  metadata: BiometricsExportMetadata;
+  fileName?: string;
+};
+
+type PerDayColumnKey =
+  | "employeeId"
+  | "employeeName"
+  | "office"
+  | "scheduleType"
+  | "scheduleSource"
+  | "date"
+  | "earliest"
+  | "latest"
+  | "workedMinutes"
+  | "lateFlag"
+  | "lateMinutes"
+  | "undertimeFlag"
+  | "undertimeMinutes"
+  | "requiredMinutes"
+  | "status"
+  | "weeklyPattern"
+  | "punches"
+  | "sourceFiles";
+
+type ColumnType =
+  | "text"
+  | "number"
+  | "percent"
+  | "minutes"
+  | "date"
+  | "time"
+  | "punches";
+
+type PerDayColumnDefinition = {
+  key: PerDayColumnKey;
+  label: string;
+  type: ColumnType;
+  width: SummaryColumnWidth | "date" | "time" | "punches";
+};
+
+const PER_DAY_COLUMNS: PerDayColumnDefinition[] = [
+  { key: "employeeId", label: "Employee ID", type: "text", width: "id" },
+  { key: "employeeName", label: "Name", type: "text", width: "name" },
+  { key: "office", label: "Office", type: "text", width: "office" },
+  { key: "scheduleType", label: "Schedule", type: "text", width: "schedule" },
+  { key: "scheduleSource", label: "Schedule Source", type: "text", width: "schedule" },
+  { key: "date", label: "Date", type: "date", width: "date" },
+  { key: "earliest", label: "Earliest", type: "time", width: "time" },
+  { key: "latest", label: "Latest", type: "time", width: "time" },
+  { key: "workedMinutes", label: "Worked (min)", type: "minutes", width: "numeric" },
+  { key: "lateFlag", label: "Late?", type: "text", width: "numeric" },
+  { key: "lateMinutes", label: "Late (min)", type: "minutes", width: "numeric" },
+  { key: "undertimeFlag", label: "Undertime?", type: "text", width: "numeric" },
+  { key: "undertimeMinutes", label: "UT (min)", type: "minutes", width: "numeric" },
+  { key: "requiredMinutes", label: "Required (min)", type: "minutes", width: "numeric" },
+  { key: "status", label: "Status", type: "text", width: "schedule" },
+  { key: "weeklyPattern", label: "Weekly Pattern", type: "text", width: "schedule" },
+  { key: "punches", label: "Punches", type: "punches", width: "punches" },
+  { key: "sourceFiles", label: "Source Files", type: "punches", width: "punches" },
+];
+
+const isTotalsSupported = (type: ColumnType | SummaryColumnDefinition["type"] | undefined): type is
+  | "number"
+  | "minutes"
+  | "percent" => type === "number" || type === "minutes" || type === "percent";
+
+const toEmployeeKey = (token: string | null | undefined, name: string | null | undefined) =>
+  `${token || ""}||${name || ""}`;
+
+const toDisplayEmployeeId = (row: Pick<PerEmployeeRow, "employeeId" | "employeeToken" | "identityStatus" | "resolvedEmployeeId">) => {
+  const trimmedId = row.employeeId?.trim();
+  if (trimmedId) return trimmedId;
+  if (row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
+    return row.employeeToken?.trim() || "";
+  }
+  return "";
+};
+
+const toDisplayOffice = (
+  row: Pick<PerEmployeeRow | PerDayRow, "officeName" | "resolvedEmployeeId" | "identityStatus">,
+  fallbackUnmatched = false
+) => {
+  const label = row.officeName?.trim();
+  if (label) return label;
+  if (fallbackUnmatched && row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
+    return UNKNOWN_OFFICE_LABEL;
+  }
+  if (row.resolvedEmployeeId) {
+    return UNASSIGNED_OFFICE_LABEL;
+  }
+  return UNKNOWN_OFFICE_LABEL;
+};
+
+const toScheduleLabel = (types: string[] | undefined | null) => {
+  if (!types?.length) return "";
+  return types
+    .map((type) => type.charAt(0) + type.slice(1).toLowerCase())
+    .join(", ");
+};
+
+const toMatchStatusLabel = (row: Pick<PerEmployeeRow, "identityStatus" | "resolvedEmployeeId">) => {
+  const status = resolveMatchStatus(row.identityStatus, row.resolvedEmployeeId);
+  switch (status) {
+    case "matched":
+      return "Matched";
+    case "solved":
+      return "Solved";
+    default:
+      return "Unmatched";
+  }
+};
+
+const toLocalISO = (value: Date) => {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, "0");
+  const day = `${value.getDate()}`.padStart(2, "0");
+  const hours = `${value.getHours()}`.padStart(2, "0");
+  const minutes = `${value.getMinutes()}`.padStart(2, "0");
+  const seconds = `${value.getSeconds()}`.padStart(2, "0");
+  const offsetMinutes = value.getTimezoneOffset();
+  const offsetSign = offsetMinutes > 0 ? "-" : "+";
+  const absMinutes = Math.abs(offsetMinutes);
+  const offsetHoursPart = `${Math.floor(absMinutes / 60)}`.padStart(2, "0");
+  const offsetMinutesPart = `${absMinutes % 60}`.padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetSign}${offsetHoursPart}:${offsetMinutesPart}`;
+};
+
+const EXCEL_DATE_EPOCH = Date.UTC(1899, 11, 30);
+
+const toExcelDateNumber = (iso: string | null | undefined) => {
+  if (!iso) return null;
+  const [yearStr, monthStr, dayStr] = iso.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  const utc = Date.UTC(year, month - 1, day);
+  return (utc - EXCEL_DATE_EPOCH) / 86_400_000;
+};
+
+const toExcelTimeNumber = (value: string | null | undefined) => {
+  if (!value) return null;
+  const [hoursStr, minutesStr] = value.split(":");
+  const hours = Number(hoursStr);
+  const minutes = Number(minutesStr);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return (hours * 60 + minutes) / 1440;
+};
+
+const ensureArray = <T,>(values: T[] | null | undefined): T[] => (Array.isArray(values) ? values : []);
+
+const computeSummaryRow = (
+  row: PerEmployeeRow,
+  sourceFileCounts: Map<string, number>
+): SummaryRowValues => {
+  const key = toEmployeeKey(row.employeeToken, row.employeeName);
+  const isUnmatched = row.identityStatus === "unmatched" && !row.resolvedEmployeeId;
+  const sourceLabel = isUnmatched ? "No mapping" : formatScheduleSource(row.scheduleSource) ?? "";
+  return {
+    employeeId: toDisplayEmployeeId(row) || null,
+    employeeName: row.employeeName?.trim() ? row.employeeName : UNMATCHED_LABEL,
+    office: toDisplayOffice(row, true),
+    schedule: toScheduleLabel(row.scheduleTypes),
+    matchStatus: toMatchStatusLabel(row),
+    source: sourceLabel,
+    days: row.daysWithLogs ?? 0,
+    lateDays: row.lateDays ?? 0,
+    undertimeDays: row.undertimeDays ?? 0,
+    latePercent: typeof row.lateRate === "number" ? row.lateRate / 100 : null,
+    undertimePercent: typeof row.undertimeRate === "number" ? row.undertimeRate / 100 : null,
+    lateMinutes: row.totalLateMinutes ?? 0,
+    undertimeMinutes: row.totalUndertimeMinutes ?? 0,
+    resolvedEmployeeId: row.resolvedEmployeeId?.trim() || null,
+    resolvedAt: null,
+    sourceFilesCount: sourceFileCounts.get(key) ?? null,
+  } as SummaryRowValues;
+};
+
+const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
+  const totals: SummaryTotals = {};
+  let totalDays = 0;
+  let totalLateDays = 0;
+  let totalUndertimeDays = 0;
+  let totalLateMinutes = 0;
+  let totalUndertimeMinutes = 0;
+  let totalSourceFiles = 0;
+
+  for (const row of rows) {
+    totalDays += Number(row.days ?? 0);
+    totalLateDays += Number(row.lateDays ?? 0);
+    totalUndertimeDays += Number(row.undertimeDays ?? 0);
+    totalLateMinutes += Number(row.lateMinutes ?? 0);
+    totalUndertimeMinutes += Number(row.undertimeMinutes ?? 0);
+    totalSourceFiles += Number(row.sourceFilesCount ?? 0);
+  }
+
+  totals.days = totalDays;
+  totals.lateDays = totalLateDays;
+  totals.undertimeDays = totalUndertimeDays;
+  totals.lateMinutes = totalLateMinutes;
+  totals.undertimeMinutes = totalUndertimeMinutes;
+  totals.sourceFilesCount = totalSourceFiles;
+  totals.latePercent = totalDays > 0 ? totalLateDays / totalDays : null;
+  totals.undertimePercent = totalDays > 0 ? totalUndertimeDays / totalDays : null;
+
+  return totals;
+};
+
+const getWidthLimit = (category: SummaryColumnWidth | "date" | "time" | "punches" | undefined) => {
+  if (!category) return { min: 10, max: 18 };
+  const limits = WIDTH_LIMITS[category];
+  if (typeof limits === "number") {
+    return { min: limits, max: limits };
+  }
+  return limits;
+};
+
+const computeDisplayLength = (
+  value: SummaryCellValue,
+  type: ColumnType | SummaryColumnDefinition["type"] | undefined
+): number => {
+  if (value == null) return 0;
+  if (type === "percent") {
+    return `${((value as number) * 100).toFixed(1)}%`.length;
+  }
+  if (type === "minutes") {
+    return `${value} min`.length;
+  }
+  if (type === "number") {
+    return `${value}`.length;
+  }
+  if (type === "date") {
+    return "Sep 30, 2024".length; // matches "mmm d, yyyy"
+  }
+  if (type === "time") {
+    return "00:00".length;
+  }
+  if (type === "punches") {
+    return String(value).length;
+  }
+  return String(value).length;
+};
+
+const applyHeaderStyles = (sheet: XLSX.WorkSheet, headerLength: number) => {
+  for (let columnIndex = 0; columnIndex < headerLength; columnIndex += 1) {
+    const address = XLSX.utils.encode_cell({ r: 0, c: columnIndex });
+    const cell = sheet[address] as XLSX.CellObject & { s?: any };
+    if (!cell) continue;
+    cell.s = {
+      font: { bold: true, sz: 12, color: { rgb: HEADER_FONT_COLOR } },
+      alignment: { horizontal: "left", vertical: "center", wrapText: true },
+      fill: { patternType: "solid", fgColor: { rgb: HEADER_FILL_COLOR } },
+      border: {
+        top: { style: "thin", color: { rgb: BORDER_COLOR } },
+        bottom: { style: "thin", color: { rgb: BORDER_COLOR } },
+        left: { style: "thin", color: { rgb: BORDER_COLOR } },
+        right: { style: "thin", color: { rgb: BORDER_COLOR } },
+      },
+    };
+  }
+};
+
+type StyleColumnContext = {
+  type: ColumnType | SummaryColumnDefinition["type"] | undefined;
+  width?: SummaryColumnWidth | "date" | "time" | "punches";
+};
+
+const applyDataStyles = (
+  sheet: XLSX.WorkSheet,
+  columns: StyleColumnContext[],
+  dataRowStart: number,
+  totalsRowIndex: number | null,
+  zebraStart = 1
+) => {
+  if (!sheet["!ref"]) return;
+  const range = XLSX.utils.decode_range(sheet["!ref"] as string);
+  for (let rowIndex = dataRowStart; rowIndex <= range.e.r; rowIndex += 1) {
+    const isTotalsRow = totalsRowIndex != null && rowIndex === totalsRowIndex;
+    const zebra = (rowIndex - zebraStart) % 2 === 0;
+    for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+      const cell = sheet[address] as XLSX.CellObject & { s?: any };
+      if (!cell) continue;
+      const columnInfo = columns[columnIndex] ?? {};
+      const columnType = columnInfo.type;
+      const isNumeric = columnType === "number" || columnType === "minutes" || columnType === "percent";
+      const isTime = columnType === "time";
+      const isDate = columnType === "date";
+      const style: any = cell.s || {};
+      const shouldWrap =
+        columnType === "punches" ||
+        columnInfo.width === "schedule" ||
+        columnInfo.width === "punches";
+      style.alignment = {
+        ...(style.alignment || {}),
+        horizontal: isNumeric || isTime || isDate ? "right" : "left",
+        vertical: "center",
+        wrapText: shouldWrap,
+      };
+      if (typeof cell.v === "string") {
+        style.alignment = { ...(style.alignment || {}), horizontal: "left" };
+      }
+      if (isNumeric) {
+        if (columnType === "minutes") {
+          style.numFmt = '0" min"';
+        } else if (columnType === "percent") {
+          style.numFmt = "0.0%";
+        }
+      }
+      if (isTime) {
+        style.numFmt = "hh:mm";
+      }
+      if (isDate) {
+        style.numFmt = "mmm d, yyyy";
+      }
+      if (!isTotalsRow && zebra) {
+        style.fill = { patternType: "solid", fgColor: { rgb: ROW_BAND_COLOR } };
+      }
+      if (isTotalsRow) {
+        style.font = { ...(style.font || {}), bold: true };
+        style.border = {
+          top: { style: "thin", color: { rgb: BORDER_COLOR } },
+          bottom: { style: "thin", color: { rgb: BORDER_COLOR } },
+          left: { style: "thin", color: { rgb: BORDER_COLOR } },
+          right: { style: "thin", color: { rgb: BORDER_COLOR } },
+        };
+      }
+      cell.s = style;
+    }
+  }
+};
+
+const clampWidth = (category: SummaryColumnWidth | "date" | "time" | "punches" | undefined, length: number) => {
+  const limits = getWidthLimit(category);
+  const maxLength = Math.max(limits.min, length + 2);
+  return Math.min(Math.max(maxLength, limits.min), limits.max);
+};
+
+const buildSummarySheet = (
+  rows: SummaryRowValues[],
+  columns: SummaryColumnKey[],
+  definitions: Map<SummaryColumnKey, SummaryColumnContext>,
+  totals: SummaryTotals
+) => {
+  const headerLabels = columns.map(
+    (key) => definitions.get(key)?.definition?.label ?? SUMMARY_COLUMN_DEFINITION_MAP[key]?.label ?? key
+  );
+  const worksheet = XLSX.utils.aoa_to_sheet([headerLabels]);
+  const dataRows = rows.map((row) => columns.map((key) => row[key] ?? null));
+  if (dataRows.length) {
+    XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: "A2" });
+  }
+
+  const totalsRow: SummaryCellValue[] = columns.map((key, index) => {
+    const context = definitions.get(key);
+    if (index === 0) return "Totals";
+    if (!context || !isTotalsSupported(context.type)) return null;
+    return totals[key] ?? null;
+  });
+
+  const totalsRowIndex = dataRows.length + 1;
+  XLSX.utils.sheet_add_aoa(worksheet, [totalsRow], { origin: { r: totalsRowIndex, c: 0 } });
+
+  const columnContexts: StyleColumnContext[] = columns.map((key) => ({
+    type: definitions.get(key)?.type,
+    width: definitions.get(key)?.width,
+  }));
+
+  const columnWidths = columns.map((key, index) => {
+    const context = definitions.get(key);
+    const type = context?.type as ColumnType | undefined;
+    const headerLength = computeDisplayLength(headerLabels[index] ?? "", "text");
+    const lengths: number[] = rows.map((row) => computeDisplayLength(row[key] ?? null, type));
+    const totalsLength = computeDisplayLength(totals[key] ?? null, type);
+    if (totalsLength > 0) lengths.push(totalsLength);
+    const dataLength = lengths.length ? Math.max(...lengths) : 0;
+    const length = Math.max(headerLength, dataLength);
+    return { wch: clampWidth(context?.width, length) };
+  });
+
+  (worksheet as any)["!cols"] = columnWidths;
+  (worksheet as any)["!freeze"] = {
+    ySplit: 1,
+    xSplit: 0,
+    topLeftCell: "A2",
+    activePane: "bottomLeft",
+    state: "frozen",
+  };
+
+  if (worksheet["!ref"]) {
+    (worksheet as any)["!autofilter"] = { ref: worksheet["!ref"] };
+  }
+
+  applyHeaderStyles(worksheet, columns.length);
+  applyDataStyles(worksheet, columnContexts, 1, totalsRowIndex, 1);
+
+  return worksheet;
+};
+
+const buildPerDaySheet = (rows: PerDayRow[]) => {
+  const header = PER_DAY_COLUMNS.map((column) => column.label);
+  const worksheet = XLSX.utils.aoa_to_sheet([header]);
+
+  const dataRows = rows.map((row) =>
+    PER_DAY_COLUMNS.map((column) => {
+      switch (column.key) {
+        case "employeeId": {
+          const trimmed = row.employeeId?.trim();
+          if (trimmed) return trimmed;
+          if (row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
+            return row.employeeToken || "";
+          }
+          return "";
+        }
+        case "employeeName":
+          return row.employeeName?.trim() ? row.employeeName : UNMATCHED_LABEL;
+        case "office":
+          return toDisplayOffice(row, true);
+        case "scheduleType":
+          return row.scheduleType ? row.scheduleType.charAt(0) + row.scheduleType.slice(1).toLowerCase() : "";
+        case "scheduleSource":
+          return formatScheduleSource(row.scheduleSource) ?? "";
+        case "date":
+          return toExcelDateNumber(row.dateISO);
+        case "earliest":
+          return toExcelTimeNumber(row.earliest ?? null);
+        case "latest":
+          return toExcelTimeNumber(row.latest ?? null);
+        case "workedMinutes":
+          return row.workedMinutes ?? null;
+        case "lateFlag": {
+          if (row.status === "no_punch") return "No punches";
+          return row.isLate ? "Yes" : "No";
+        }
+        case "lateMinutes":
+          return resolveLateMinutes(row) ?? null;
+        case "undertimeFlag": {
+          if (row.status === "no_punch") return "No punches";
+          return row.isUndertime ? "Yes" : "No";
+        }
+        case "undertimeMinutes":
+          return resolveUndertimeMinutes(row) ?? null;
+        case "requiredMinutes":
+          return row.requiredMinutes ?? null;
+        case "status":
+          return row.status ? row.status.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "";
+        case "weeklyPattern":
+          return row.weeklyPatternApplied ? "Applied" : "—";
+        case "punches":
+          return row.allTimes?.length ? row.allTimes.join(", ") : row.status === "no_punch" ? "No punches" : "";
+        case "sourceFiles":
+          return row.sourceFiles?.length ? row.sourceFiles.join(", ") : "";
+        default:
+          return "";
+      }
+    })
+  );
+
+  if (dataRows.length) {
+    XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: "A2" });
+  }
+
+  const columnWidths = PER_DAY_COLUMNS.map((column, columnIndex) => {
+    const type = column.type;
+    const headerLength = computeDisplayLength(header[columnIndex], "text");
+    const lengths = dataRows.map((row) => computeDisplayLength(row[columnIndex] ?? null, type));
+    const dataLength = lengths.length ? Math.max(...lengths) : 0;
+    const length = Math.max(headerLength, dataLength);
+    return { wch: clampWidth(column.width, length) };
+  });
+
+  (worksheet as any)["!cols"] = columnWidths;
+  (worksheet as any)["!freeze"] = {
+    ySplit: 1,
+    xSplit: 0,
+    topLeftCell: "A2",
+    activePane: "bottomLeft",
+    state: "frozen",
+  };
+
+  if (worksheet["!ref"]) {
+    (worksheet as any)["!autofilter"] = { ref: worksheet["!ref"] };
+  }
+
+  const columnContexts: StyleColumnContext[] = PER_DAY_COLUMNS.map((column) => ({
+    width: column.width,
+    type: column.type,
+  }));
+  applyHeaderStyles(worksheet, PER_DAY_COLUMNS.length);
+  applyDataStyles(worksheet, columnContexts, 1, null, 1);
+
+  return worksheet;
+};
+
+const buildMetadataSheet = (options: BiometricsExportOptions) => {
+  const { metadata, filters } = options;
+  const rows: Array<[string, string]> = [
+    ["Exported At", toLocalISO(metadata.exportTime)],
+    ["Period", metadata.period || "—"],
+    [
+      "Office filters (view)",
+      filters.applied && filters.viewLabels.length ? filters.viewLabels.join(", ") : "All offices",
+    ],
+    [
+      "Office filters (export)",
+      filters.applyToDownload && filters.labels.length ? filters.labels.join(", ") : "All offices",
+    ],
+    ["Export filtered only", filters.exportFilteredOnly ? "Yes" : "No"],
+    ["Column selection", metadata.columnLabels.length ? metadata.columnLabels.join(", ") : "Default"],
+    ["App version", metadata.appVersion || "—"],
+  ];
+
+  const worksheet = XLSX.utils.aoa_to_sheet([["Field", "Value"], ...rows]);
+  applyHeaderStyles(worksheet, 2);
+  applyDataStyles(
+    worksheet,
+    [
+      { width: "schedule", type: "text" },
+      { width: "punches", type: "text" },
+    ],
+    1,
+    null,
+    1
+  );
+
+  (worksheet as any)["!cols"] = [{ wch: 26 }, { wch: 60 }];
+
+  return worksheet;
+};
+
+const buildSourceFileCounts = (perDay: PerDayRow[]) => {
+  const map = new Map<string, Set<string>>();
+  for (const row of perDay) {
+    const key = toEmployeeKey(row.employeeToken || row.employeeId || row.employeeName, row.employeeName);
+    if (!map.has(key)) {
+      map.set(key, new Set());
+    }
+    const set = map.get(key)!;
+    for (const file of ensureArray(row.sourceFiles)) {
+      set.add(file);
+    }
+  }
+  const counts = new Map<string, number>();
+  for (const [key, set] of map.entries()) {
+    counts.set(key, set.size);
+  }
+  return counts;
+};
+
+const makeSummaryColumnDefinitions = (columns: SummaryColumnKey[]) => {
+  const map = new Map<SummaryColumnKey, SummaryColumnContext>();
+  for (const key of columns) {
+    const definition = SUMMARY_COLUMN_DEFINITION_MAP[key] ?? null;
+    map.set(key, {
+      definition,
+      width: definition?.width,
+      type: definition?.type,
+    });
+  }
+  return map;
+};
+
+const buildFilename = (timestamp: Date) => {
+  const year = timestamp.getFullYear();
+  const month = `${timestamp.getMonth() + 1}`.padStart(2, "0");
+  const day = `${timestamp.getDate()}`.padStart(2, "0");
+  const hours = `${timestamp.getHours()}`.padStart(2, "0");
+  const minutes = `${timestamp.getMinutes()}`.padStart(2, "0");
+  return `Biometrics_Summary_${year}${month}${day}_${hours}${minutes}.xlsx`;
+};
+
+export function exportResultsToXlsx(
+  perEmployee: PerEmployeeRow[],
+  perDay: PerDayRow[],
+  options: BiometricsExportOptions
+) {
+  const selectedColumns = options.columns?.length
+    ? options.columns.filter((key): key is SummaryColumnKey => key in SUMMARY_COLUMN_DEFINITION_MAP)
+    : DEFAULT_SUMMARY_SELECTED_COLUMNS;
+
+  const columnDefinitions = makeSummaryColumnDefinitions(selectedColumns);
+  const sourceFileCounts = buildSourceFileCounts(perDay);
+  const summaryRows = perEmployee.map((row) => computeSummaryRow(row, sourceFileCounts));
+  const totals = summarizeTotals(summaryRows);
+
+  const summarySheet = buildSummarySheet(summaryRows, selectedColumns, columnDefinitions, totals);
+  const perDaySheet = buildPerDaySheet(sortPerDayRows([...perDay]));
+  const metadataSheet = buildMetadataSheet(options);
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, summarySheet, SUMMARY_SHEET_NAME);
+  XLSX.utils.book_append_sheet(workbook, perDaySheet, PER_DAY_SHEET_NAME);
+  XLSX.utils.book_append_sheet(workbook, metadataSheet, METADATA_SHEET_NAME);
+
+  const filename = options.fileName ?? buildFilename(options.metadata.exportTime);
+  XLSX.writeFile(workbook, filename, { compression: true });
 }

@@ -17,6 +17,7 @@ import {
   UploadCloud,
   X,
   XCircle,
+  Columns3,
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
@@ -61,6 +62,24 @@ import {
   type UnmatchedIdentityWarningDetail,
 } from "@/utils/parseBioAttendance";
 import {
+  EXPORT_COLUMNS_STORAGE_KEY,
+  formatScheduleSource,
+  OFFICE_FILTER_STORAGE_KEY,
+  UNASSIGNED_OFFICE_LABEL,
+  UNKNOWN_OFFICE_KEY_PREFIX,
+  UNKNOWN_OFFICE_LABEL,
+  UNMATCHED_LABEL,
+} from "@/utils/biometricsShared";
+import {
+  ALL_SUMMARY_COLUMN_KEYS,
+  DEFAULT_SUMMARY_COLUMN_ORDER,
+  DEFAULT_SUMMARY_SELECTED_COLUMNS,
+  SUMMARY_COLUMN_DEFINITION_MAP,
+  SUMMARY_COLUMN_DEFINITIONS,
+  SUMMARY_COLUMN_GROUP_LABEL,
+  type SummaryColumnKey,
+} from "@/utils/biometricsExportConfig";
+import {
   expandWindows,
   normalizeTimelineSegments,
   toMinutes,
@@ -68,6 +87,8 @@ import {
 } from "@/utils/weeklyPattern";
 import InsightsPanel from "./InsightsPanel";
 import ResolveIdentityDialog, { ResolveSearchResult } from "./ResolveIdentityDialog";
+import OfficeFilterControl from "./OfficeFilterControl";
+import SummaryColumnSelector from "./SummaryColumnSelector";
 import {
   ALL_CHART_IDS,
   DEFAULT_VISIBLE_CHARTS,
@@ -82,6 +103,11 @@ const PAGE_SIZE = 25;
 const MINUTES_IN_DAY = 24 * 60;
 
 const SUMMARY_METRIC_MODE_KEY = "hrps-bio-summary-metric-mode";
+
+const APP_VERSION =
+  process.env.NEXT_PUBLIC_APP_VERSION ??
+  process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ??
+  "dev";
 
 const formatTimelineLabel = (segments: { start: string; end: string }[]) => {
   if (!segments.length) return "none";
@@ -158,25 +184,6 @@ const toDate = (iso: string) => new Date(`${iso}T00:00:00+08:00`);
 const formatScheduleType = (value?: string | null) => {
   if (!value) return null;
   return value.charAt(0) + value.slice(1).toLowerCase();
-};
-
-const formatScheduleSource = (value?: string | null) => {
-  switch (value) {
-    case "WORKSCHEDULE":
-      return "Work schedule";
-    case "EXCEPTION":
-      return "Exception";
-    case "DEFAULT":
-      return "Default";
-    case "NOMAPPING":
-      return "No mapping";
-    case "":
-    case undefined:
-    case null:
-      return null;
-    default:
-      return value.charAt(0) + value.slice(1).toLowerCase();
-  }
 };
 
 const isUnmatchedIdentity = (
@@ -267,10 +274,6 @@ const manualPeriodFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 const IDENTITY_REQUEST_LIMIT = 2000;
-const UNMATCHED_LABEL = "(Unmatched)";
-const UNKNOWN_OFFICE_LABEL = "(Unknown)";
-const UNASSIGNED_OFFICE_LABEL = "(Unassigned)";
-const UNKNOWN_OFFICE_KEY_PREFIX = "__unknown__::";
 const MAX_WARNING_SAMPLE_COUNT = 10;
 const UNMATCHED_WARNING_DISPLAY_LIMIT = 3;
 
@@ -383,6 +386,87 @@ const getOfficeLabelFromKey = (key: string): string | null => {
   return null;
 };
 
+const getEmployeeOfficeKey = (
+  row: Pick<PerEmployeeRow, "officeId" | "officeName" | "resolvedEmployeeId">
+): string => {
+  const label = row.officeName && row.officeName.trim().length
+    ? row.officeName.trim()
+    : row.resolvedEmployeeId
+    ? UNASSIGNED_OFFICE_LABEL
+    : UNKNOWN_OFFICE_LABEL;
+  return makeOfficeKey(row.officeId ?? null, label);
+};
+
+const getDayOfficeKey = (
+  row: Pick<PerDayRow, "officeId" | "officeName" | "resolvedEmployeeId">
+): string => {
+  const label = row.officeName && row.officeName.trim().length
+    ? row.officeName.trim()
+    : row.resolvedEmployeeId
+    ? UNASSIGNED_OFFICE_LABEL
+    : UNKNOWN_OFFICE_LABEL;
+  return makeOfficeKey(row.officeId ?? null, label);
+};
+
+const readStoredOfficeFilter = (): string[] | undefined => {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(OFFICE_FILTER_STORAGE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const filtered = parsed.filter((value): value is string => typeof value === "string");
+    return filtered.length ? filtered : undefined;
+  } catch (error) {
+    console.warn("Failed to read office filter", error);
+    return undefined;
+  }
+};
+
+type StoredColumnSettings = {
+  order: SummaryColumnKey[];
+  selected: SummaryColumnKey[];
+};
+
+const isSummaryColumnKey = (value: unknown): value is SummaryColumnKey =>
+  typeof value === "string" && (ALL_SUMMARY_COLUMN_KEYS as string[]).includes(value as SummaryColumnKey);
+
+const sanitizeColumnSettings = (settings?: StoredColumnSettings | null): StoredColumnSettings => {
+  const providedOrder = (settings?.order ?? []).filter(isSummaryColumnKey);
+  const providedSelected = (settings?.selected ?? []).filter(isSummaryColumnKey);
+
+  const order = [...providedOrder];
+  for (const key of ALL_SUMMARY_COLUMN_KEYS) {
+    if (!order.includes(key)) order.push(key);
+  }
+
+  const selectedSet = new Set(
+    providedSelected.length ? providedSelected : DEFAULT_SUMMARY_SELECTED_COLUMNS
+  );
+  const selected = order.filter((key) => selectedSet.has(key));
+  if (!selected.length) {
+    for (const key of DEFAULT_SUMMARY_SELECTED_COLUMNS) {
+      if (order.includes(key)) selected.push(key);
+    }
+  }
+
+  return { order, selected };
+};
+
+const readStoredColumns = (): StoredColumnSettings | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(EXPORT_COLUMNS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredColumnSettings> | null;
+    if (!parsed || typeof parsed !== "object") return null;
+    return sanitizeColumnSettings(parsed as StoredColumnSettings);
+  } catch (error) {
+    console.warn("Failed to read export column settings", error);
+    return null;
+  }
+};
+
 const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord => {
   if (!record) {
     return {
@@ -441,7 +525,10 @@ const readInsightsSettings = (): InsightsSettings => {
     const parsed = JSON.parse(raw) as InsightsSettings;
     if (!parsed || typeof parsed !== "object") return {};
 
-    const selectedOffices = Array.isArray(parsed.selectedOffices)
+    const storedOffices = readStoredOfficeFilter();
+    const selectedOffices = storedOffices
+      ? storedOffices
+      : Array.isArray(parsed.selectedOffices)
       ? parsed.selectedOffices.filter((value): value is string => typeof value === "string")
       : undefined;
     const selectedScheduleTypes = Array.isArray(parsed.selectedScheduleTypes)
@@ -681,6 +768,11 @@ export default function BioLogUploader() {
   if (settingsRef.current === null && typeof window !== "undefined") {
     settingsRef.current = readInsightsSettings();
   }
+  const columnSettingsRef = useRef<StoredColumnSettings | null>(null);
+  if (columnSettingsRef.current === null && typeof window !== "undefined") {
+    columnSettingsRef.current = readStoredColumns();
+  }
+  const initialColumnSettings = sanitizeColumnSettings(columnSettingsRef.current);
 
   const [files, setFiles] = useState<FileState[]>([]);
   const [perEmployee, setPerEmployee] = useState<PerEmployeeRow[] | null>(null);
@@ -719,6 +811,12 @@ export default function BioLogUploader() {
   const [showNoPunchColumn, setShowNoPunchColumn] = useState<boolean>(
     () => settingsRef.current?.showNoPunchColumn ?? false
   );
+  const [applyOfficeFilterToExport, setApplyOfficeFilterToExport] = useState(true);
+  const [columnOrder, setColumnOrder] = useState<SummaryColumnKey[]>(initialColumnSettings.order);
+  const [selectedColumnKeys, setSelectedColumnKeys] = useState<SummaryColumnKey[]>(
+    initialColumnSettings.selected
+  );
+  const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
   const [metricMode, setMetricMode] = useState<MetricMode>(() => {
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem(SUMMARY_METRIC_MODE_KEY);
@@ -1520,6 +1618,12 @@ export default function BioLogUploader() {
   }, [exportFilteredOnly, selectedOffices.length]);
 
   useEffect(() => {
+    if (!selectedOffices.length) {
+      setApplyOfficeFilterToExport(true);
+    }
+  }, [selectedOffices.length]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const payload: InsightsSettings = {
       selectedOffices,
@@ -1531,6 +1635,7 @@ export default function BioLogUploader() {
       showNoPunchColumn,
     };
     window.localStorage.setItem(INSIGHTS_SETTINGS_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(OFFICE_FILTER_STORAGE_KEY, JSON.stringify(selectedOffices));
     window.localStorage.setItem(SUMMARY_METRIC_MODE_KEY, metricMode);
   }, [
     selectedOffices,
@@ -1541,6 +1646,15 @@ export default function BioLogUploader() {
     insightsCollapsed,
     showNoPunchColumn,
   ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const payload: StoredColumnSettings = {
+      order: columnOrder,
+      selected: selectedColumnKeys,
+    };
+    window.localStorage.setItem(EXPORT_COLUMNS_STORAGE_KEY, JSON.stringify(payload));
+  }, [columnOrder, selectedColumnKeys]);
 
   const handleOfficeToggle = useCallback((key: string, nextChecked: boolean) => {
     setSelectedOffices((prev) => {
@@ -1560,6 +1674,45 @@ export default function BioLogUploader() {
       }
       return prev.filter((value) => value !== type);
     });
+  }, []);
+
+  const handleToggleExportColumn = useCallback(
+    (key: SummaryColumnKey, nextChecked: boolean) => {
+      setSelectedColumnKeys((prev) => {
+        const set = new Set(prev);
+        if (nextChecked) {
+          set.add(key);
+        } else {
+          if (set.size <= 1 && set.has(key)) {
+            toast({
+              title: "Keep at least one column",
+              description: "Select at least one column to include in the export.",
+              variant: "destructive",
+            });
+            return prev;
+          }
+          set.delete(key);
+        }
+        const next = columnOrder.filter((orderKey) => set.has(orderKey));
+        return next.length ? next : prev;
+      });
+    },
+    [columnOrder, toast]
+  );
+
+  const handleReorderExportColumns = useCallback((order: SummaryColumnKey[]) => {
+    setColumnOrder(order);
+    setSelectedColumnKeys((prev) => order.filter((key) => prev.includes(key)));
+  }, []);
+
+  const handleSelectAllExportColumns = useCallback(() => {
+    setSelectedColumnKeys([...columnOrder]);
+  }, [columnOrder]);
+
+  const handleResetExportColumns = useCallback(() => {
+    const defaults = sanitizeColumnSettings(null);
+    setColumnOrder(defaults.order);
+    setSelectedColumnKeys(defaults.selected);
   }, []);
 
   const handleResolveMapping = useCallback(
@@ -1703,6 +1856,12 @@ export default function BioLogUploader() {
     return Math.max(1, Math.ceil(filteredPerDayPreview.length / PAGE_SIZE));
   }, [filteredPerDayPreview]);
 
+  const selectedColumnSet = useMemo(() => new Set(selectedColumnKeys), [selectedColumnKeys]);
+  const exportColumnKeys = useMemo(
+    () => columnOrder.filter((key) => selectedColumnSet.has(key)),
+    [columnOrder, selectedColumnSet]
+  );
+
   const handleSort = useCallback(
     (key: SortKey) => {
       setSortDirection((prev) => (sortKey === key ? (prev === "asc" ? "desc" : "asc") : "desc"));
@@ -1797,8 +1956,19 @@ export default function BioLogUploader() {
     if (!perEmployee?.length || !perDay?.length) return;
     if (useManualPeriod && !manualSelectionValid) return;
 
-    const employees = exportFilteredOnly ? filteredPerEmployee : perEmployee;
-    const days = exportFilteredOnly ? filteredPerDayPreview : perDay;
+    const baseEmployees = exportFilteredOnly ? filteredPerEmployee : perEmployee;
+    const baseDays = exportFilteredOnly ? filteredPerDayPreview : perDay;
+
+    const shouldApplyOfficeFilter =
+      selectedOffices.length > 0 && (exportFilteredOnly || applyOfficeFilterToExport);
+    const officeSet = shouldApplyOfficeFilter ? new Set(selectedOffices) : null;
+
+    const employees = shouldApplyOfficeFilter
+      ? baseEmployees.filter((row) => officeSet!.has(getEmployeeOfficeKey(row)))
+      : baseEmployees;
+    const days = shouldApplyOfficeFilter
+      ? baseDays.filter((row) => officeSet!.has(getDayOfficeKey(row)))
+      : baseDays;
 
     if (!employees.length || !days.length) {
       toast({
@@ -1808,8 +1978,39 @@ export default function BioLogUploader() {
       return;
     }
 
+    const viewOfficeLabels = selectedOffices.map((key) => getOfficeLabel(key) ?? key);
+    const officeIdentifiers = shouldApplyOfficeFilter
+      ? selectedOffices.map((key) =>
+          key.startsWith(UNKNOWN_OFFICE_KEY_PREFIX) ? "__unknown__" : key
+        )
+      : [];
+    const officeLabels = shouldApplyOfficeFilter ? viewOfficeLabels : [];
+
+    const columnsForExport = exportColumnKeys.length
+      ? exportColumnKeys
+      : DEFAULT_SUMMARY_SELECTED_COLUMNS;
+    const columnLabels = columnsForExport.map(
+      (key) => SUMMARY_COLUMN_DEFINITION_MAP[key]?.label ?? key
+    );
+
     try {
-      exportResultsToXlsx(employees, days);
+      exportResultsToXlsx(employees, days, {
+        columns: columnsForExport,
+        filters: {
+          offices: officeIdentifiers,
+          labels: officeLabels,
+          viewLabels: viewOfficeLabels,
+          applied: shouldApplyOfficeFilter,
+          applyToDownload: applyOfficeFilterToExport,
+          exportFilteredOnly,
+        },
+        metadata: {
+          exportTime: new Date(),
+          period: exportPeriodLabel,
+          columnLabels,
+          appVersion: APP_VERSION,
+        },
+      });
       toast({
         title: "Download started",
         description: "Exporting biometrics summary to Excel.",
@@ -1823,12 +2024,17 @@ export default function BioLogUploader() {
       });
     }
   }, [
+    applyOfficeFilterToExport,
+    APP_VERSION,
+    exportColumnKeys,
     exportFilteredOnly,
     filteredPerDayPreview,
     filteredPerEmployee,
     manualSelectionValid,
     perDay,
     perEmployee,
+    exportPeriodLabel,
+    selectedOffices,
     toast,
     useManualPeriod,
   ]);
@@ -1910,6 +2116,8 @@ export default function BioLogUploader() {
     parsedFiles.length,
     useManualPeriod,
   ]);
+
+  const exportPeriodLabel = summary?.dateRange ?? "—";
 
   const totalFiles = files.length;
   const processedFiles = files.filter((file) => file.status === "parsed" || file.status === "failed").length;
@@ -2342,7 +2550,34 @@ export default function BioLogUploader() {
             onExportFilteredOnlyChange={setExportFilteredOnly}
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
+              {selectedOffices.length ? (
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="font-semibold uppercase tracking-wide">Office:</span>
+                  {selectedOffices.map((key) => (
+                    <span
+                      key={key}
+                      className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground"
+                    >
+                      {getOfficeLabel(key)}
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOffices([])}
+                    className="font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    Clear
+                  </button>
+                  {!applyOfficeFilterToExport ? (
+                    <span className="text-amber-600 dark:text-amber-500">
+                      Download includes all offices
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="font-medium">View:</span>
@@ -2369,8 +2604,25 @@ export default function BioLogUploader() {
                   </Button>
                 </div>
               </div>
+              <OfficeFilterControl
+                options={officeOptions}
+                selected={selectedOffices}
+                onToggle={handleOfficeToggle}
+                onClear={() => setSelectedOffices([])}
+                applyToExport={applyOfficeFilterToExport}
+                onApplyToExportChange={setApplyOfficeFilterToExport}
+              />
               <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingParses}>
                 Upload more
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="inline-flex items-center gap-2"
+                onClick={() => setColumnSelectorOpen(true)}
+              >
+                <Columns3 className="h-4 w-4" aria-hidden="true" />
+                Columns
               </Button>
               <Button
                 onClick={handleDownloadResults}
@@ -2893,6 +3145,17 @@ export default function BioLogUploader() {
         </div>
       )}
       </div>
+      <SummaryColumnSelector
+        open={columnSelectorOpen}
+        onOpenChange={setColumnSelectorOpen}
+        columnOrder={columnOrder}
+        selectedColumns={selectedColumnKeys}
+        onToggleColumn={handleToggleExportColumn}
+        onReorderColumns={handleReorderExportColumns}
+        onSelectAll={handleSelectAllExportColumns}
+        onResetDefault={handleResetExportColumns}
+        minSelected={1}
+      />
       <ResolveIdentityDialog
         open={Boolean(resolveTarget)}
         token={resolveTarget?.token ?? null}
