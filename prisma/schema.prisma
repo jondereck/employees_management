@@ -298,6 +298,7 @@ model WorkSchedule {
   shiftStart           String?
   shiftEnd             String?
   breakMinutes         Int          @default(60)
+  weeklyPattern        Json?
   timezone             String       @default("Asia/Manila")
   effectiveFrom        DateTime
   effectiveTo          DateTime?

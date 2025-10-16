@@ -9,7 +9,8 @@ import {
   type ScheduleSource,
 } from "@/lib/schedules";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
-import { evaluateDay, type HHMM } from "@/utils/evaluateDay";
+import { evaluateDay } from "@/utils/evaluateDay";
+import type { HHMM } from "@/types/time";
 
 type EvaluatedDay = {
   employeeId: string;
@@ -43,6 +44,10 @@ type EvaluatedDay = {
   scheduleStart?: string | null;
   scheduleEnd?: string | null;
   scheduleGraceMinutes?: number | null;
+  weeklyPatternApplied?: boolean;
+  weeklyPatternWindows?: Array<{ start: string; end: string }>;
+  weeklyPatternWorked?: Array<{ start: string; end: string }>;
+  weeklyPatternRequiredMinutes?: number | null;
   identityStatus?: "matched" | "unmatched" | "ambiguous";
 };
 
@@ -162,6 +167,12 @@ export async function POST(req: Request) {
         scheduleStart: evaluation.scheduleStart ?? null,
         scheduleEnd: evaluation.scheduleEnd ?? null,
         scheduleGraceMinutes: evaluation.scheduleGraceMinutes ?? null,
+        weeklyPatternApplied: Boolean(evaluation.weeklyPattern),
+        weeklyPatternWindows: evaluation.weeklyPattern?.windows ?? undefined,
+        weeklyPatternWorked: evaluation.weeklyPattern?.workedSegments ?? undefined,
+        weeklyPatternRequiredMinutes: evaluation.weeklyPattern
+          ? evaluation.requiredMinutes ?? null
+          : null,
         identityStatus: internalEmployeeId ? "matched" : "unmatched",
       };
     });
@@ -190,6 +201,12 @@ type Aggregate = {
   undertimeDays: number;
   scheduleTypes: Set<string>;
   scheduleSourceSet: Set<ScheduleSource>;
+  totalLateMinutes: number;
+  totalUndertimeMinutes: number;
+  totalRequiredMinutes: number;
+  identityStatus: "matched" | "unmatched" | "ambiguous";
+  usesWeeklyPattern: boolean;
+  weeklyPatternDays: number;
 };
 
 function summarizePerEmployee(rows: EvaluatedDay[]) {
@@ -209,6 +226,12 @@ function summarizePerEmployee(rows: EvaluatedDay[]) {
         undertimeDays: 0,
         scheduleTypes: new Set(),
         scheduleSourceSet: new Set(),
+        totalLateMinutes: 0,
+        totalUndertimeMinutes: 0,
+        totalRequiredMinutes: 0,
+        identityStatus: row.identityStatus ?? (row.resolvedEmployeeId ? "matched" : "unmatched"),
+        usesWeeklyPattern: false,
+        weeklyPatternDays: 0,
       });
     }
 
@@ -218,11 +241,17 @@ function summarizePerEmployee(rows: EvaluatedDay[]) {
     if (!agg.resolvedEmployeeId && row.resolvedEmployeeId) {
       agg.resolvedEmployeeId = row.resolvedEmployeeId;
     }
+    if (row.identityStatus && identityPriority(row.identityStatus) > identityPriority(agg.identityStatus)) {
+      agg.identityStatus = row.identityStatus;
+    }
     const hasLogs = Boolean(row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0);
     if (hasLogs) {
       agg.daysWithLogs += 1;
       if (row.isLate) agg.lateDays += 1;
       if (row.isUndertime) agg.undertimeDays += 1;
+      if (row.lateMinutes != null) agg.totalLateMinutes += row.lateMinutes;
+      if (row.undertimeMinutes != null) agg.totalUndertimeMinutes += row.undertimeMinutes;
+      if (row.requiredMinutes != null) agg.totalRequiredMinutes += row.requiredMinutes;
     }
 
     if (row.scheduleType) {
@@ -230,6 +259,10 @@ function summarizePerEmployee(rows: EvaluatedDay[]) {
     }
     if (row.scheduleSource) {
       agg.scheduleSourceSet.add(row.scheduleSource);
+    }
+    if (row.weeklyPatternApplied) {
+      agg.usesWeeklyPattern = true;
+      agg.weeklyPatternDays += 1;
     }
   }
 
@@ -246,6 +279,12 @@ function summarizePerEmployee(rows: EvaluatedDay[]) {
     undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
     scheduleTypes: Array.from(entry.scheduleTypes).sort(),
     scheduleSource: pickSource(Array.from(entry.scheduleSourceSet)),
+    totalLateMinutes: Math.round(entry.totalLateMinutes),
+    totalUndertimeMinutes: Math.round(entry.totalUndertimeMinutes),
+    totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
+    identityStatus: entry.identityStatus,
+    usesWeeklyPattern: entry.usesWeeklyPattern,
+    weeklyPatternDays: entry.weeklyPatternDays,
   }));
 }
 
@@ -254,4 +293,16 @@ const SOURCE_PRIORITY: ScheduleSource[] = ["EXCEPTION", "WORKSCHEDULE", "DEFAULT
 function pickSource(sources: ScheduleSource[]) {
   if (!sources.length) return "DEFAULT" as ScheduleSource;
   return sources.sort((a, b) => SOURCE_PRIORITY.indexOf(a) - SOURCE_PRIORITY.indexOf(b))[0] ?? "DEFAULT";
+}
+
+function identityPriority(value: "matched" | "unmatched" | "ambiguous") {
+  switch (value) {
+    case "matched":
+      return 3;
+    case "ambiguous":
+      return 2;
+    case "unmatched":
+    default:
+      return 1;
+  }
 }

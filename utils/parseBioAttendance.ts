@@ -77,6 +77,10 @@ export type PerDayRow = ParsedPerDayRow & {
   scheduleStart?: string | null;
   scheduleEnd?: string | null;
   scheduleGraceMinutes?: number | null;
+  weeklyPatternApplied?: boolean;
+  weeklyPatternWindows?: Array<{ start: string; end: string }>;
+  weeklyPatternWorked?: Array<{ start: string; end: string }>;
+  weeklyPatternRequiredMinutes?: number | null;
   identityStatus?: "matched" | "unmatched" | "ambiguous";
 };
 
@@ -98,6 +102,8 @@ export type PerEmployeeRow = {
   totalUndertimeMinutes: number;
   totalRequiredMinutes: number;
   identityStatus: "matched" | "unmatched" | "ambiguous";
+  usesWeeklyPattern?: boolean;
+  weeklyPatternDays?: number;
 };
 
 export type ParsedWorkbook = {
@@ -1083,6 +1089,8 @@ type AggregateRow = {
   totalRequiredMinutes: number;
   scheduleTypes: Set<string>;
   scheduleSourceSet: Set<string>;
+  usesWeeklyPattern: boolean;
+  weeklyPatternDays: number;
 };
 
 const SOURCE_PRIORITY = ["EXCEPTION", "WORKSCHEDULE", "DEFAULT", "NOMAPPING"] as const;
@@ -1238,6 +1246,8 @@ export function summarizePerEmployee(
         totalRequiredMinutes: 0,
         scheduleTypes: new Set<string>(),
         scheduleSourceSet: new Set<string>(),
+        usesWeeklyPattern: false,
+        weeklyPatternDays: 0,
       });
     }
     const agg = map.get(key)!;
@@ -1262,6 +1272,10 @@ export function summarizePerEmployee(
     }
     if (row.scheduleType) agg.scheduleTypes.add(row.scheduleType);
     if (row.scheduleSource) agg.scheduleSourceSet.add(row.scheduleSource);
+    if (row.weeklyPatternApplied) {
+      agg.usesWeeklyPattern = true;
+      agg.weeklyPatternDays += 1;
+    }
   }
 
   return Array.from(map.values()).map((entry) => ({
@@ -1282,5 +1296,7 @@ export function summarizePerEmployee(
     totalUndertimeMinutes: Math.round(entry.totalUndertimeMinutes),
     totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
     identityStatus: entry.identityStatus,
+    usesWeeklyPattern: entry.usesWeeklyPattern,
+    weeklyPatternDays: entry.weeklyPatternDays,
   }));
 }

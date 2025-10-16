@@ -182,6 +182,82 @@ const UNMATCHED_WARNING_DISPLAY_LIMIT = 3;
 const sortPunchesChronologically = (punches: DayPunch[]): DayPunch[] =>
   [...punches].sort((a, b) => a.minuteOfDay - b.minuteOfDay || a.time.localeCompare(b.time));
 
+const MINUTES_IN_DAY = 24 * 60;
+
+const hhmmToMinutes = (value: string | null | undefined): number | null => {
+  if (!value) return null;
+  const [hours, minutes] = value.split(":").map((part) => Number(part));
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+};
+
+const expandSegments = (segments: Array<{ start: string; end: string }>) => {
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const segment of segments) {
+    const start = hhmmToMinutes(segment.start);
+    const end = hhmmToMinutes(segment.end);
+    if (start == null || end == null || start === end) continue;
+    if (end > start) {
+      ranges.push({ start, end });
+    } else {
+      ranges.push({ start, end: MINUTES_IN_DAY });
+      ranges.push({ start: 0, end });
+    }
+  }
+  return ranges;
+};
+
+const WeeklyPatternTimeline = ({
+  windows,
+  worked,
+  requiredMinutes,
+}: {
+  windows: Array<{ start: string; end: string }>;
+  worked: Array<{ start: string; end: string }>;
+  requiredMinutes: number | null;
+}) => {
+  const windowSegments = expandSegments(windows);
+  const workedSegments = expandSegments(worked);
+  return (
+    <div className="space-y-1">
+      <div className="relative h-4 rounded bg-muted">
+        {windowSegments.map((segment, index) => {
+          const width = Math.max(0, segment.end - segment.start);
+          if (width <= 0) return null;
+          return (
+            <div
+              key={`window-${index}`}
+              className="absolute inset-y-0 rounded bg-primary/20"
+              style={{
+                left: `${(segment.start / MINUTES_IN_DAY) * 100}%`,
+                width: `${(width / MINUTES_IN_DAY) * 100}%`,
+              }}
+            />
+          );
+        })}
+        {workedSegments.map((segment, index) => {
+          const width = Math.max(0, segment.end - segment.start);
+          if (width <= 0) return null;
+          return (
+            <div
+              key={`worked-${index}`}
+              className="absolute inset-y-1 rounded bg-primary/70"
+              style={{
+                left: `${(segment.start / MINUTES_IN_DAY) * 100}%`,
+                width: `${(width / MINUTES_IN_DAY) * 100}%`,
+              }}
+            />
+          );
+        })}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {windows.length ? windows.map((window) => `${window.start}–${window.end}`).join(", ") : "—"}
+        {typeof requiredMinutes === "number" ? ` • Req ${requiredMinutes}` : ""}
+      </div>
+    </div>
+  );
+};
+
 const toChronologicalRow = <T extends {
   punches: DayPunch[];
   allTimes: string[];
@@ -2330,16 +2406,21 @@ export default function BioLogUploader() {
                       : typeof row.undertimeRate === "number"
                       ? row.undertimeRate
                       : null;
-                  const lateTooltip = metricMode === "minutes"
+                  const weeklyPatternNote = row.usesWeeklyPattern
+                    ? " Evaluated with Weekly Pattern windows for this day."
+                    : "";
+                  const baseLateTooltip = metricMode === "minutes"
                     ? latePercentValue == null
                       ? null
                       : `${row.totalLateMinutes.toLocaleString()} late minute${row.totalLateMinutes === 1 ? "" : "s"} • ${formatPercentLabel(latePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`
                     : `${row.lateDays} late day${row.lateDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`;
-                  const undertimeTooltip = metricMode === "minutes"
+                  const baseUndertimeTooltip = metricMode === "minutes"
                     ? undertimePercentValue == null
                       ? null
                       : `${row.totalUndertimeMinutes.toLocaleString()} undertime minute${row.totalUndertimeMinutes === 1 ? "" : "s"} • ${formatPercentLabel(undertimePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`
                     : `${row.undertimeDays} undertime day${row.undertimeDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`;
+                  const lateTooltip = baseLateTooltip ? `${baseLateTooltip}${weeklyPatternNote}` : null;
+                  const undertimeTooltip = baseUndertimeTooltip ? `${baseUndertimeTooltip}${weeklyPatternNote}` : null;
                   const canResolve = row.identityStatus === "unmatched" && Boolean(row.employeeToken);
                   return (
                     <tr key={key} className="odd:bg-muted/20">
@@ -2477,6 +2558,7 @@ export default function BioLogUploader() {
                   <th className="p-2 text-left">Name</th>
                   <th className="p-2 text-left">Office</th>
                   <th className="p-2 text-left">Date</th>
+                  <th className="p-2 text-left">Weekly Pattern</th>
                   <th className="p-2 text-center">Earliest</th>
                   <th className="p-2 text-center">Latest</th>
                   <th className="p-2 text-center">Worked</th>
@@ -2497,6 +2579,17 @@ export default function BioLogUploader() {
                         (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)}
                     </td>
                     <td className="p-2">{dateFormatter.format(toDate(row.dateISO))}</td>
+                    <td className="p-2">
+                      {row.weeklyPatternApplied ? (
+                        <WeeklyPatternTimeline
+                          windows={row.weeklyPatternWindows ?? []}
+                          worked={row.weeklyPatternWorked ?? []}
+                          requiredMinutes={row.weeklyPatternRequiredMinutes ?? null}
+                        />
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="p-2 text-center">{row.earliest ?? ""}</td>
                     <td className="p-2 text-center">{row.latest ?? ""}</td>
                     <td className="p-2 text-center">{row.workedHHMM ?? ""}</td>
