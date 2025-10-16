@@ -177,6 +177,8 @@ type InsightsPanelProps = {
   onClearScheduleTypes: () => void;
   showUnmatched: boolean;
   onShowUnmatchedChange: (next: boolean) => void;
+  showNoPunchColumn: boolean;
+  onShowNoPunchColumnChange: (next: boolean) => void;
   metricMode: MetricMode;
   onMetricModeChange: (mode: MetricMode) => void;
   employeeSearch: string;
@@ -370,6 +372,8 @@ export default function InsightsPanel({
   onClearScheduleTypes,
   showUnmatched,
   onShowUnmatchedChange,
+  showNoPunchColumn,
+  onShowNoPunchColumnChange,
   metricMode,
   onMetricModeChange,
   employeeSearch,
@@ -1382,6 +1386,16 @@ export default function InsightsPanel({
               />
               <Label htmlFor="insights-show-unmatched" className="text-sm text-muted-foreground">
                 Show unmatched
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="insights-show-no-punch"
+                checked={showNoPunchColumn}
+                onCheckedChange={(checked) => onShowNoPunchColumnChange(Boolean(checked))}
+              />
+              <Label htmlFor="insights-show-no-punch" className="text-sm text-muted-foreground">
+                Show no-punch column
               </Label>
             </div>
             <Tooltip>

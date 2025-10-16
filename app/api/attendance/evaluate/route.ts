@@ -9,7 +9,12 @@ import {
   type ScheduleSource,
 } from "@/lib/schedules";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
-import { evaluateDay, type HHMM } from "@/utils/evaluateDay";
+import {
+  evaluateDay,
+  normalizePunchTimes,
+  type DayEvaluationStatus,
+  type HHMM,
+} from "@/utils/evaluateDay";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
 import type { WeeklyPatternWindow } from "@/utils/weeklyPattern";
 
@@ -25,6 +30,7 @@ type EvaluatedDay = {
   allTimes: string[];
   dateISO: string;
   internalEmployeeId: string | null;
+  status: DayEvaluationStatus;
   isLate: boolean;
   isUndertime: boolean;
   workedHHMM: string;
@@ -130,13 +136,13 @@ export async function POST(req: Request) {
       const normalized = normalizeSchedule(scheduleRecord);
       const earliest = (row.earliest ?? null) as HHMM | null;
       const latest = (row.latest ?? null) as HHMM | null;
-      const allTimes = (row.allTimes ?? []) as HHMM[];
+      const normalizedAllTimes = normalizePunchTimes(row.allTimes);
 
       const evaluation = evaluateDay({
         dateISO: row.dateISO,
         earliest,
         latest,
-        allTimes,
+        allTimes: normalizedAllTimes,
         schedule: normalized,
       });
 
@@ -149,9 +155,10 @@ export async function POST(req: Request) {
         day: row.day,
         earliest: row.earliest ?? null,
         latest: row.latest ?? null,
-        allTimes: row.allTimes ?? [],
+        allTimes: normalizedAllTimes,
         dateISO: row.dateISO,
         internalEmployeeId,
+        status: evaluation.status,
         isLate: evaluation.isLate,
         isUndertime: evaluation.isUndertime,
         workedHHMM: evaluation.workedHHMM,

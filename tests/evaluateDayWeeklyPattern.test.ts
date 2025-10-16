@@ -33,6 +33,7 @@ test("weekly pattern clamps early punches for single window days", () => {
     schedule,
   });
 
+  assert.equal(result.status, "evaluated");
   assert.equal(result.weeklyPatternApplied, true);
   assert.equal(result.workedMinutes, 180);
   assert.equal(result.isUndertime, true);
@@ -59,6 +60,7 @@ test("weekly pattern supports split windows and ignores long breaks", () => {
     schedule,
   });
 
+  assert.equal(result.status, "evaluated");
   assert.equal(result.weeklyPatternApplied, true);
   assert.equal(result.workedMinutes, 480);
   assert.equal(result.isUndertime, false);
@@ -84,6 +86,7 @@ test("weekly pattern aggregates scattered weekend punches", () => {
     schedule,
   });
 
+  assert.equal(result.status, "evaluated");
   assert.equal(result.weeklyPatternApplied, true);
   assert.equal(result.workedMinutes, 630);
   assert.equal(result.isUndertime, true);
@@ -112,6 +115,7 @@ test("weekly pattern handles overnight windows spanning midnight", () => {
     schedule,
   });
 
+  assert.equal(result.status, "evaluated");
   assert.equal(result.weeklyPatternApplied, true);
   assert.equal(result.workedMinutes, 480);
   assert.equal(result.isUndertime, false);
@@ -133,6 +137,7 @@ test("flex schedules without weekly pattern keep legacy evaluation", () => {
     schedule,
   });
 
+  assert.equal(result.status, "evaluated");
   assert.equal(result.weeklyPatternApplied, false);
   assert.equal(result.workedMinutes, 480);
   assert.equal(result.isUndertime, false);
@@ -157,6 +162,7 @@ test("weekly pattern late evaluation uses raw earliest punch", () => {
     schedule,
   });
 
+  assert.equal(result.status, "evaluated");
   assert.equal(result.isLate, false);
   assert.equal(result.lateMinutes, 0);
 });
@@ -228,7 +234,9 @@ test("weekly pattern treats days without punches as on time", () => {
     schedule,
   });
 
+  assert.equal(result.status, "no_punch");
   assert.equal(result.isLate, false);
+  assert.equal(result.isUndertime, false);
   assert.equal(result.lateMinutes, 0);
 });
 
@@ -251,4 +259,44 @@ test("weekly pattern marks missed start on overnight windows as late", () => {
 
   assert.equal(result.isLate, true);
   assert.equal(result.lateMinutes, 240);
+});
+
+test("fixed schedule with no punches is marked as no_punch", () => {
+  const result = evaluateDay({
+    dateISO: "2024-09-07",
+    schedule: {
+      type: "FIXED",
+      startTime: "08:00",
+      endTime: "17:00",
+      breakMinutes: 60,
+      graceMinutes: 15,
+    },
+  });
+
+  assert.equal(result.status, "no_punch");
+  assert.equal(result.isLate, false);
+  assert.equal(result.isUndertime, false);
+  assert.equal(result.workedMinutes, 0);
+  assert.equal(result.workedHHMM, "00:00");
+  assert.equal(result.lateMinutes, 0);
+  assert.equal(result.undertimeMinutes, 0);
+  assert.equal(result.requiredMinutes, null);
+});
+
+test("flex schedule treats invalid punches as no_punch", () => {
+  const schedule = createFlexSchedule({ weeklyPattern: null });
+
+  const result = evaluateDay({
+    dateISO: "2024-09-08",
+    allTimes: ["-", ""],
+    earliest: null,
+    latest: null,
+    schedule,
+  });
+
+  assert.equal(result.status, "no_punch");
+  assert.equal(result.isLate, false);
+  assert.equal(result.isUndertime, false);
+  assert.equal(result.workedMinutes, 0);
+  assert.equal(result.workedHHMM, "00:00");
 });
