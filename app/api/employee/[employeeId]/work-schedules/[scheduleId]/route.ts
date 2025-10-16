@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { ScheduleType } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { Prisma, ScheduleType } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { ensureWeeklyPatternColumn } from "@/lib/ensureWeeklyPatternColumn";
 import { toWorkScheduleDto } from "@/lib/schedules";
 import {
   normalizeWeeklyPatternInput,
@@ -54,6 +54,8 @@ export async function PATCH(request: Request, { params }: { params: { employeeId
   try {
     const json = await request.json();
     const payload = scheduleSchema.parse(json) as ScheduleUpdateInput;
+    await ensureWeeklyPatternColumn(prisma);
+
     const existing = await prisma.workSchedule.findUnique({ where: { id: params.scheduleId } });
     if (!existing || existing.employeeId !== params.employeeId) {
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
@@ -79,7 +81,8 @@ export async function PATCH(request: Request, { params }: { params: { employeeId
       data.effectiveTo = payload.effectiveTo ? new Date(payload.effectiveTo) : null;
     }
     if (payload.weeklyPattern !== undefined) {
-      data.weeklyPattern = normalizeWeeklyPatternInput(payload.weeklyPattern);
+      const normalized = normalizeWeeklyPatternInput(payload.weeklyPattern);
+      data.weeklyPattern = normalized ?? Prisma.DbNull;
     }
 
     const schedule = await prisma.workSchedule.update({

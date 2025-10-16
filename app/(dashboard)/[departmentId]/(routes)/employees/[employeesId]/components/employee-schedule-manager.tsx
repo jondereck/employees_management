@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -357,6 +357,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
     createEmptyWeeklyPatternErrors()
   );
   const [weeklyPatternOpen, setWeeklyPatternOpen] = useState(false);
+  const autoOpenedWeeklyPattern = useRef(false);
 
   const handleAddWeeklyWindow = useCallback((day: WeekdayKey) => {
     setWeeklyPattern((prev) => {
@@ -494,7 +495,13 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   }, [weeklyPattern]);
 
   useEffect(() => {
-    if (scheduleType === ScheduleType.FLEX && !weeklyPatternOpen && !hasWeeklyPatternConfigured) {
+    if (scheduleType !== ScheduleType.FLEX) {
+      autoOpenedWeeklyPattern.current = false;
+      return;
+    }
+
+    if (!hasWeeklyPatternConfigured && !weeklyPatternOpen && !autoOpenedWeeklyPattern.current) {
+      autoOpenedWeeklyPattern.current = true;
       setWeeklyPatternOpen(true);
     }
   }, [scheduleType, weeklyPatternOpen, hasWeeklyPatternConfigured]);
@@ -505,6 +512,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
     setWeeklyPattern(createEmptyWeeklyPatternState());
     setWeeklyPatternErrors(createEmptyWeeklyPatternErrors());
     setWeeklyPatternOpen(false);
+    autoOpenedWeeklyPattern.current = false;
   }, [scheduleForm]);
 
   const resetExceptionForm = useCallback(() => {
@@ -631,9 +639,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
         effectiveFrom: toDateInput(schedule.effectiveFrom),
         effectiveTo: toDateInput(schedule.effectiveTo),
       });
+      const hasPattern = hasWeeklyPattern(schedule.weeklyPattern);
       setWeeklyPattern(toFormStateFromPattern(schedule.weeklyPattern ?? null));
       setWeeklyPatternErrors(createEmptyWeeklyPatternErrors());
-      setWeeklyPatternOpen(hasWeeklyPattern(schedule.weeklyPattern));
+      setWeeklyPatternOpen(hasPattern);
+      autoOpenedWeeklyPattern.current = hasPattern;
     },
     [scheduleForm]
   );
