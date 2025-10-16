@@ -179,6 +179,11 @@ const formatScheduleSource = (value?: string | null) => {
   }
 };
 
+const isUnmatchedIdentity = (
+  status: PerEmployeeRow["identityStatus"] | undefined,
+  resolvedEmployeeId?: string | null
+) => status === "unmatched" && !resolvedEmployeeId;
+
 const computeLatePercentMinutes = (row: PerEmployeeRow): number | null => {
   if (!row.totalRequiredMinutes || row.totalRequiredMinutes <= 0) return null;
   const total = row.totalLateMinutes ?? 0;
@@ -1417,7 +1422,9 @@ export default function BioLogUploader() {
         const hasType = row.scheduleTypes?.some((type) => scheduleKeys.has(type)) ?? false;
         if (!hasType) return false;
       }
-      if (!showUnmatched && row.identityStatus === "unmatched") return false;
+      if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
+        return false;
+      }
       return true;
     });
   }, [perEmployee, selectedOffices, selectedScheduleTypes, showUnmatched]);
@@ -1453,7 +1460,9 @@ export default function BioLogUploader() {
       } else if (scheduleKeys && !row.scheduleType) {
         return false;
       }
-      if (!showUnmatched && row.identityStatus === "unmatched") return false;
+      if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
+        return false;
+      }
       if (!hasQuery) return true;
       const name = row.employeeName?.toLowerCase() ?? "";
       const id = row.employeeId?.toLowerCase() ?? "";
@@ -2448,9 +2457,6 @@ export default function BioLogUploader() {
                         }
                       >
                         {metricMode === "minutes" ? "Late (min)" : "Late %"}
-                        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                          {metricMode === "minutes" ? "Minutes" : "Days"}
-                        </Badge>
                         <ArrowUpDown
                           className={cn(
                             "h-3.5 w-3.5",
@@ -2507,9 +2513,6 @@ export default function BioLogUploader() {
                         }
                       >
                         {metricMode === "minutes" ? "UT (min)" : "UT %"}
-                        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                          {metricMode === "minutes" ? "Minutes" : "Days"}
-                        </Badge>
                         <ArrowUpDown
                           className={cn(
                             "h-3.5 w-3.5",
@@ -2547,21 +2550,23 @@ export default function BioLogUploader() {
                 {sortedPerEmployee.map((row) => {
                   const key = `${row.employeeToken || row.employeeId || row.employeeName}||${row.employeeName}`;
                   const types = row.scheduleTypes ?? [];
-                  const sourceLabel =
-                    row.identityStatus === "unmatched"
-                      ? "No mapping"
-                      : formatScheduleSource(row.scheduleSource);
+                  const hasResolverMapping = Boolean(row.resolvedEmployeeId);
+                  const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
+                  const isSolved = hasResolverMapping && row.identityStatus !== "matched";
+                  const sourceLabel = isUnmatched
+                    ? "No mapping"
+                    : formatScheduleSource(row.scheduleSource);
                   const displayEmployeeId =
                     row.employeeId?.trim().length
                       ? row.employeeId
-                      : row.identityStatus === "unmatched"
+                      : isUnmatched
                       ? row.employeeToken || "—"
                       : "—";
                   const displayEmployeeName =
                     row.employeeName?.trim().length ? row.employeeName : UNMATCHED_LABEL;
                   const displayOffice = row.officeName?.trim().length
                     ? row.officeName
-                    : row.identityStatus === "unmatched"
+                    : isUnmatched
                     ? UNKNOWN_OFFICE_LABEL
                     : row.resolvedEmployeeId
                     ? UNASSIGNED_OFFICE_LABEL
@@ -2618,7 +2623,8 @@ export default function BioLogUploader() {
                     metricMode === "minutes" ? lateMinutesLabel : formatPercentLabel(latePercentValue);
                   const undertimeMetricLabel =
                     metricMode === "minutes" ? undertimeMinutesLabel : formatPercentLabel(undertimePercentValue);
-                  const canResolve = row.identityStatus === "unmatched" && Boolean(row.employeeToken);
+                  const canResolve = Boolean(row.employeeToken) && (isUnmatched || isSolved);
+                  const resolveActionLabel = isSolved ? "Re-resolve…" : "Resolve…";
                   return (
                     <tr key={key} className="odd:bg-muted/20">
                       <td className="p-2">{displayEmployeeId}</td>
@@ -2627,7 +2633,7 @@ export default function BioLogUploader() {
                           <span className="truncate" title={displayEmployeeName}>
                             {displayEmployeeName}
                           </span>
-                          {row.identityStatus === "unmatched" ? (
+                          {isUnmatched ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Badge className="border-amber-500/70 bg-amber-500/20 text-amber-700">
@@ -2636,6 +2642,17 @@ export default function BioLogUploader() {
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs text-sm">
                                 No DB record; using name from uploaded log. You can resolve this below.
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : isSolved ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge className="border-emerald-500/70 bg-emerald-500/20 text-emerald-700">
+                                  Solved
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-sm">
+                                Token resolved via manual mapping. Using mapped employee details.
                               </TooltipContent>
                             </Tooltip>
                           ) : null}
@@ -2710,7 +2727,7 @@ export default function BioLogUploader() {
                             }
                             disabled={resolveBusy}
                           >
-                            Resolve…
+                            {resolveActionLabel}
                           </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
