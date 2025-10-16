@@ -1220,6 +1220,7 @@ export function summarizePerEmployee(
       | "scheduleStart"
       | "scheduleGraceMinutes"
       | "workedMinutes"
+      | "weeklyPatternApplied"
     >
   >
 ): PerEmployeeRow[] {

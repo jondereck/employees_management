@@ -92,11 +92,13 @@ type WeeklyPatternTimelineProps = {
 };
 
 const WeeklyPatternTimeline = ({ applied, windows, presence }: WeeklyPatternTimelineProps) => {
-  if (!applied || !windows || windows.length === 0) {
+  const activeWindows = windows && windows.length > 0 ? windows : null;
+
+  if (!applied || !activeWindows) {
     return <span className="text-muted-foreground">—</span>;
   }
 
-  const windowSegments = normalizeTimelineSegments(expandWindows(windows));
+  const windowSegments = normalizeTimelineSegments(expandWindows(activeWindows));
   const presenceSegments = normalizeTimelineSegments(
     (presence ?? []).map((segment) => ({
       start: toMinutes(segment.start),
@@ -105,7 +107,7 @@ const WeeklyPatternTimeline = ({ applied, windows, presence }: WeeklyPatternTime
   );
 
   const presenceLabel = formatTimelineLabel(presence ?? []);
-  const windowsLabel = formatTimelineLabel(windows);
+  const windowsLabel = formatTimelineLabel(activeWindows);
 
   return (
     <div className="relative h-8 w-full rounded border border-border bg-muted/20">

@@ -20,9 +20,9 @@ type EvaluatedDay = {
   officeId?: string | null;
   officeName?: string | null;
   day: number;
-  earliest: string | null | undefined;
-  latest: string | null | undefined;
-  allTimes?: string[];
+  earliest: string | null;
+  latest: string | null;
+  allTimes: string[];
   dateISO: string;
   internalEmployeeId: string | null;
   isLate: boolean;
@@ -38,7 +38,7 @@ type EvaluatedDay = {
     files: string[];
   }>;
   sourceFiles?: string[];
-  employeeToken?: string;
+  employeeToken: string;
   lateMinutes?: number | null;
   undertimeMinutes?: number | null;
   requiredMinutes?: number | null;
@@ -47,7 +47,7 @@ type EvaluatedDay = {
   scheduleGraceMinutes?: number | null;
   weeklyPatternApplied?: boolean;
   weeklyPatternWindows?: WeeklyPatternWindow[] | null;
-  weeklyPatternPresence?: { start: string; end: string }[];
+  weeklyPatternPresence: { start: string; end: string }[];
   identityStatus?: "matched" | "unmatched" | "ambiguous";
 };
 

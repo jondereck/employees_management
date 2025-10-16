@@ -1,7 +1,13 @@
 import { z } from "zod";
 
-import { HHMM_REGEX, sanitizeWeeklyPattern, validateWeeklyPatternDay } from "@/utils/weeklyPattern";
-import type { WeeklyPattern } from "@/utils/weeklyPattern";
+import {
+  HHMM_REGEX,
+  sanitizeWeeklyPattern,
+  validateWeeklyPatternDay,
+  type WeeklyPattern,
+  type WeeklyPatternDay,
+  type WeeklyPatternWindow,
+} from "@/utils/weeklyPattern";
 
 const weeklyPatternWindowSchema = z.object({
   start: z.string().regex(HHMM_REGEX, "Start must be HH:MM"),
@@ -14,10 +20,15 @@ const weeklyPatternDaySchemaBase = z.object({
 });
 
 export const weeklyPatternDaySchema = weeklyPatternDaySchemaBase.superRefine((value, ctx) => {
-  const error = validateWeeklyPatternDay({
-    windows: value.windows,
+  const candidate: WeeklyPatternDay = {
+    windows: value.windows.map((window) => ({
+      start: window.start as WeeklyPatternWindow["start"],
+      end: window.end as WeeklyPatternWindow["end"],
+    })),
     requiredMinutes: value.requiredMinutes,
-  });
+  };
+
+  const error = validateWeeklyPatternDay(candidate);
   if (error) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
   }
