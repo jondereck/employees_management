@@ -5,6 +5,8 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
+import { weeklyPatternSchema } from "@/app/api/schedules/weekly-pattern-schema";
+import { normalizeWeeklyPattern } from "@/utils/weeklyPattern";
 
 const scheduleSchema = z.object({
   type: z.nativeEnum(ScheduleType).optional(),
@@ -22,6 +24,7 @@ const scheduleSchema = z.object({
   timezone: z.string().optional(),
   effectiveFrom: z.string().optional(),
   effectiveTo: z.string().optional().nullable(),
+  weeklyPattern: weeklyPatternSchema.optional().nullable(),
 }).superRefine((data, ctx) => {
   if (data.type === ScheduleType.FIXED) {
     if (!data.startTime || !data.endTime) {
@@ -72,6 +75,23 @@ export async function PATCH(request: Request, { params }: { params: { employeeId
     if (payload.effectiveFrom !== undefined) data.effectiveFrom = new Date(payload.effectiveFrom);
     if (payload.effectiveTo !== undefined) {
       data.effectiveTo = payload.effectiveTo ? new Date(payload.effectiveTo) : null;
+    }
+    if (payload.weeklyPattern !== undefined) {
+      if (payload.weeklyPattern === null) {
+        data.weeklyPattern = null;
+      } else {
+        const normalized = normalizeWeeklyPattern(payload.weeklyPattern);
+        if (!normalized) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              message: "Invalid weekly pattern.",
+              path: ["weeklyPattern"],
+            },
+          ]);
+        }
+        data.weeklyPattern = normalized;
+      }
     }
 
     const schedule = await prisma.workSchedule.update({

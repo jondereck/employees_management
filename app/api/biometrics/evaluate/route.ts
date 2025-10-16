@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { getScheduleFor, normalizeSchedule, type NormalizedSchedule } from "@/lib/schedules";
 import { evaluateDay } from "@/utils/evaluateDay";
-import type { HHMM } from "@/utils/evaluateDay";
+import type { HHMM } from "@/types/time";
 import type { ParsedPerDayRow, PerDayRow, PerEmployeeRow } from "@/utils/parseBioAttendance";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
 

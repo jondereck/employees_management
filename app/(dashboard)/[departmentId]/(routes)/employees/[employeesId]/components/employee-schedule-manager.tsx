@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Form,
   FormControl,
@@ -26,12 +27,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
+import { weeklyPatternSchema, type WeeklyPatternInput } from "@/app/api/schedules/weekly-pattern-schema";
+import { normalizeWeeklyPattern, WEEKDAY_LABELS, WEEKDAY_ORDER } from "@/utils/weeklyPattern";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { WeeklyPatternEditor } from "./weekly-pattern-editor";
 
 const ScheduleType = {
   FIXED: "FIXED",
@@ -55,6 +59,7 @@ const scheduleFormSchema = z
     shiftStart: z.string().optional(),
     shiftEnd: z.string().optional(),
     breakMinutes: z.coerce.number().int().min(0).max(720).default(60),
+    weeklyPattern: weeklyPatternSchema.optional().default({}),
     effectiveFrom: z.string().min(1, "Effective from date is required"),
     effectiveTo: z.string().optional(),
   })
@@ -181,6 +186,7 @@ const scheduleDefaults: ScheduleFormValues = {
   shiftStart: "22:00",
   shiftEnd: "06:00",
   breakMinutes: 60,
+  weeklyPattern: {},
   effectiveFrom: "",
   effectiveTo: "",
 };
@@ -212,7 +218,20 @@ const toDateInput = (value: string | null | undefined) =>
 const describeSchedule = (schedule: WorkScheduleDTO) => {
   switch (schedule.type) {
     case ScheduleType.FLEX:
-      return `Core ${schedule.coreStart ?? "—"}–${schedule.coreEnd ?? "—"}, Band ${schedule.bandwidthStart ?? "—"}–${schedule.bandwidthEnd ?? "—"}, Required ${schedule.requiredDailyMinutes ?? 0}m`;
+      {
+        const base = `Core ${schedule.coreStart ?? "—"}–${schedule.coreEnd ?? "—"}, Band ${schedule.bandwidthStart ?? "—"}–${schedule.bandwidthEnd ?? "—"}, Required ${schedule.requiredDailyMinutes ?? 0}m`;
+        const pattern = schedule.weeklyPattern as WeeklyPatternInput | null;
+        if (pattern) {
+          const active = WEEKDAY_ORDER.filter((day) => pattern?.[day])
+            .map((day) => WEEKDAY_LABELS[day])
+            .join(", ");
+          if (active) {
+            return `${base} • Weekly pattern (${active})`;
+          }
+          return `${base} • Weekly pattern`;
+        }
+        return base;
+      }
     case ScheduleType.SHIFT:
       return `Shift ${schedule.shiftStart ?? "—"}–${schedule.shiftEnd ?? "—"} (grace ${schedule.graceMinutes ?? 0}m)`;
     case ScheduleType.FIXED:
@@ -316,10 +335,22 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   const onSubmitSchedule = scheduleForm.handleSubmit(async (values) => {
     try {
       setSavingSchedule(true);
-      const payload = {
-        ...values,
+      const { weeklyPattern, ...restValues } = values;
+      const normalizedPattern =
+        values.type === ScheduleType.FLEX ? normalizeWeeklyPattern(weeklyPattern) : null;
+      const payload: Record<string, unknown> = {
+        ...restValues,
         effectiveTo: values.effectiveTo ? values.effectiveTo : null,
       };
+      if (values.type === ScheduleType.FLEX) {
+        if (normalizedPattern) {
+          payload.weeklyPattern = normalizedPattern;
+        } else if (editingSchedule?.weeklyPattern) {
+          payload.weeklyPattern = null;
+        }
+      } else if (editingSchedule?.weeklyPattern) {
+        payload.weeklyPattern = null;
+      }
       const endpoint = editingSchedule
         ? `/api/employee/${employeeId}/work-schedules/${editingSchedule.id}`
         : `/api/schedules`;
@@ -416,6 +447,7 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
         shiftStart: schedule.shiftStart ?? "",
         shiftEnd: schedule.shiftEnd ?? "",
         breakMinutes: schedule.breakMinutes ?? 60,
+        weeklyPattern: (schedule.weeklyPattern as WeeklyPatternInput | null) ?? {},
         effectiveFrom: toDateInput(schedule.effectiveFrom),
         effectiveTo: toDateInput(schedule.effectiveTo),
       });
@@ -613,83 +645,93 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
             )}
 
             {scheduleType === ScheduleType.FLEX && (
-              <div className="grid gap-4 md:grid-cols-3">
-                <FormField
-                  control={scheduleForm.control}
-                  name="coreStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Core Hours Start (optional)" tooltip={CORE_START_HELP} />
-                      <FormControl>
-                        <Input placeholder="10:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{CORE_START_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="coreEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Core Hours End (optional)" tooltip={CORE_END_HELP} />
-                      <FormControl>
-                        <Input placeholder="15:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{CORE_END_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="requiredDailyMinutes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Required Work Minutes" tooltip={REQUIRED_MINUTES_HELP} />
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={1440}
-                          value={field.value ?? 480}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
-                      <FormDescription>{REQUIRED_MINUTES_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="bandwidthStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Work Window Start (Bandwidth)" tooltip={BANDWIDTH_START_HELP} />
-                      <FormControl>
-                        <Input placeholder="06:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{BANDWIDTH_START_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="bandwidthEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Work Window End (Bandwidth)" tooltip={BANDWIDTH_END_HELP} />
-                      <FormControl>
-                        <Input placeholder="20:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{BANDWIDTH_END_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <FormField
+                    control={scheduleForm.control}
+                    name="coreStart"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Core Hours Start (optional)" tooltip={CORE_START_HELP} />
+                        <FormControl>
+                          <Input placeholder="10:00" {...field} />
+                        </FormControl>
+                        <FormDescription>{CORE_START_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="coreEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Core Hours End (optional)" tooltip={CORE_END_HELP} />
+                        <FormControl>
+                          <Input placeholder="15:00" {...field} />
+                        </FormControl>
+                        <FormDescription>{CORE_END_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="requiredDailyMinutes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Required Work Minutes" tooltip={REQUIRED_MINUTES_HELP} />
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={1440}
+                            value={field.value ?? 480}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                          />
+                        </FormControl>
+                        <FormDescription>{REQUIRED_MINUTES_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="bandwidthStart"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Work Window Start (Bandwidth)" tooltip={BANDWIDTH_START_HELP} />
+                        <FormControl>
+                          <Input placeholder="06:00" {...field} />
+                        </FormControl>
+                        <FormDescription>{BANDWIDTH_START_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={scheduleForm.control}
+                    name="bandwidthEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <InfoLabel label="Work Window End (Bandwidth)" tooltip={BANDWIDTH_END_HELP} />
+                        <FormControl>
+                          <Input placeholder="20:00" {...field} />
+                        </FormControl>
+                        <FormDescription>{BANDWIDTH_END_HELP}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="weekly-pattern">
+                    <AccordionTrigger>Weekly pattern (optional)</AccordionTrigger>
+                    <AccordionContent>
+                      <WeeklyPatternEditor disabled={savingSchedule} />
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </div>
             )}
 
