@@ -11,13 +11,13 @@ import {
   AlertCircle,
   ArrowUpDown,
   CheckCircle2,
+  Columns,
   FileDown,
   Info,
   Loader2,
   UploadCloud,
   X,
   XCircle,
-  Columns3,
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
@@ -1952,6 +1952,51 @@ export default function BioLogUploader() {
     setFiles((prev) => prev.filter((file) => file.id !== id));
   }, []);
 
+  const summary = useMemo(() => {
+    if (!mergeResult) return null;
+    const rows = manualSelectionValid ? filteredPerDayRows : [];
+    const employeeTokens = new Set<string>();
+    let totalPunches = 0;
+
+    for (const row of rows) {
+      const token = row.employeeToken || row.employeeId || row.employeeName;
+      if (token) employeeTokens.add(token);
+      totalPunches += row.allTimes.length;
+    }
+
+    let dateRangeLabel = "—";
+    if (manualPeriodSelection) {
+      dateRangeLabel = manualPeriodFormatter.format(
+        new Date(Date.UTC(manualPeriodSelection.year, manualPeriodSelection.month - 1, 1))
+      );
+    } else if (rows.length) {
+      const start = rows[0]?.dateISO ?? "";
+      const end = rows[rows.length - 1]?.dateISO ?? start;
+      if (start && end) {
+        dateRangeLabel = formatDateRange({ start, end });
+      }
+    } else if (!useManualPeriod && mergeResult.dateRange) {
+      dateRangeLabel = formatDateRange(mergeResult.dateRange);
+    }
+
+    return {
+      fileCount: parsedFiles.length,
+      rowsParsed: rows.length,
+      totalPunches,
+      employees: employeeTokens.size,
+      dateRange: dateRangeLabel,
+    };
+  }, [
+    filteredPerDayRows,
+    manualPeriodSelection,
+    manualSelectionValid,
+    mergeResult,
+    parsedFiles.length,
+    useManualPeriod,
+  ]);
+
+  const exportPeriodLabel = summary?.dateRange ?? "—";
+
   const handleDownloadResults = useCallback(() => {
     if (!perEmployee?.length || !perDay?.length) return;
     if (useManualPeriod && !manualSelectionValid) return;
@@ -2073,51 +2118,6 @@ export default function BioLogUploader() {
   const handleUploadMore = useCallback(() => {
     inputRef.current?.click();
   }, []);
-
-  const summary = useMemo(() => {
-    if (!mergeResult) return null;
-    const rows = manualSelectionValid ? filteredPerDayRows : [];
-    const employeeTokens = new Set<string>();
-    let totalPunches = 0;
-
-    for (const row of rows) {
-      const token = row.employeeToken || row.employeeId || row.employeeName;
-      if (token) employeeTokens.add(token);
-      totalPunches += row.allTimes.length;
-    }
-
-    let dateRangeLabel = "—";
-    if (manualPeriodSelection) {
-      dateRangeLabel = manualPeriodFormatter.format(
-        new Date(Date.UTC(manualPeriodSelection.year, manualPeriodSelection.month - 1, 1))
-      );
-    } else if (rows.length) {
-      const start = rows[0]?.dateISO ?? "";
-      const end = rows[rows.length - 1]?.dateISO ?? start;
-      if (start && end) {
-        dateRangeLabel = formatDateRange({ start, end });
-      }
-    } else if (!useManualPeriod && mergeResult.dateRange) {
-      dateRangeLabel = formatDateRange(mergeResult.dateRange);
-    }
-
-    return {
-      fileCount: parsedFiles.length,
-      rowsParsed: rows.length,
-      totalPunches,
-      employees: employeeTokens.size,
-      dateRange: dateRangeLabel,
-    };
-  }, [
-    filteredPerDayRows,
-    manualPeriodSelection,
-    manualSelectionValid,
-    mergeResult,
-    parsedFiles.length,
-    useManualPeriod,
-  ]);
-
-  const exportPeriodLabel = summary?.dateRange ?? "—";
 
   const totalFiles = files.length;
   const processedFiles = files.filter((file) => file.status === "parsed" || file.status === "failed").length;
@@ -2621,7 +2621,7 @@ export default function BioLogUploader() {
                 className="inline-flex items-center gap-2"
                 onClick={() => setColumnSelectorOpen(true)}
               >
-                <Columns3 className="h-4 w-4" aria-hidden="true" />
+                <Columns className="h-4 w-4" aria-hidden="true" />
                 Columns
               </Button>
               <Button
