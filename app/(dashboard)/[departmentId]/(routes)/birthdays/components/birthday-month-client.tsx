@@ -403,7 +403,7 @@ export default function BirthdayMonthClient({
       {/* Sticky Controls */}
       <div
         className={cn(
-          "z-20 sticky top-0 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          "z-30 sticky top-0 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           "border-b px-3 py-2 sm:px-4"
         )}
       >

@@ -2555,7 +2555,7 @@ export default function BioLogUploader() {
           </div>
           <div className="max-h-[420px] overflow-x-auto rounded-xl border">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-muted/50">
+              <thead className="sticky top-0 z-30 bg-muted/50">
                 <tr>
                   <th className="p-2 text-left">Employee ID</th>
                   <th className="p-2 text-left">Name</th>
