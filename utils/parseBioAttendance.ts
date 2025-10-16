@@ -1018,75 +1018,6 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
   };
 }
 
-export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDayRow[]) {
-  const wb = XLSX.utils.book_new();
-  const sortedPerEmployee = [...perEmployee].sort((a, b) => {
-    const nameDiff = (a.employeeName || "").localeCompare(b.employeeName || "");
-    if (nameDiff !== 0) return nameDiff;
-    return (a.employeeId || "").localeCompare(b.employeeId || "");
-  });
-  const s1 = XLSX.utils.json_to_sheet(
-    sortedPerEmployee.map((r) => ({
-      EmployeeID: r.employeeId,
-      EmployeeToken: r.employeeToken,
-      EmployeeName: r.employeeName,
-      Office: r.officeName ?? "",
-      DaysWithLogs: r.daysWithLogs,
-      NoPunchDays: r.noPunchDays,
-      LateDays: r.lateDays,
-      UndertimeDays: r.undertimeDays,
-      LateRatePercent: r.lateRate,
-      UndertimeRatePercent: r.undertimeRate,
-      ScheduleTypes: (r.scheduleTypes ?? []).join(", "),
-      ScheduleSource: r.scheduleSource ?? "",
-      IdentityStatus: r.identityStatus,
-      LateMinutesTotal: r.totalLateMinutes,
-      UndertimeMinutesTotal: r.totalUndertimeMinutes,
-      RequiredMinutesTotal: r.totalRequiredMinutes,
-      late_minutes_total: r.totalLateMinutes,
-      ut_minutes_total: r.totalUndertimeMinutes,
-      no_punch_days: r.noPunchDays,
-      match_status: resolveMatchStatus(r.identityStatus, r.resolvedEmployeeId),
-      resolved_employee_id: r.resolvedEmployeeId ?? null,
-      resolved_at: null,
-    }))
-  );
-  XLSX.utils.book_append_sheet(wb, s1, "PerEmployee");
-
-  const sortedPerDay = sortPerDayRows([...perDay]);
-  const s2 = XLSX.utils.json_to_sheet(
-    sortedPerDay.map((r) => ({
-      EmployeeID: r.employeeId,
-      EmployeeToken: r.employeeToken,
-      EmployeeName: r.employeeName,
-      Office: r.officeName ?? "",
-      Date: r.dateISO,
-      Day: r.day,
-      Earliest: r.earliest ?? "",
-      Latest: r.latest ?? "",
-      Worked: r.workedHHMM ?? "",
-      WorkedMinutes: r.workedMinutes ?? "",
-      ScheduleType: r.scheduleType ?? "",
-      Status: r.status ?? "",
-      IsLate: r.isLate ? "Yes" : "No",
-      IsUndertime: r.isUndertime ? "Yes" : "No",
-      LateMinutes: resolveLateMinutes(r) ?? "",
-      UndertimeMinutes: resolveUndertimeMinutes(r) ?? "",
-      RequiredMinutes: r.requiredMinutes ?? "",
-      Sources: r.sourceFiles.join(", "),
-      Punches: r.allTimes.join(", "),
-      ScheduleSource: r.scheduleSource ?? "",
-      IdentityStatus: r.identityStatus ?? "",
-      match_status: resolveMatchStatus(r.identityStatus, r.resolvedEmployeeId),
-      resolved_employee_id: r.resolvedEmployeeId ?? null,
-      resolved_at: null,
-    }))
-  );
-  XLSX.utils.book_append_sheet(wb, s2, "PerDay");
-
-  XLSX.writeFile(wb, "biometrics_results.xlsx");
-}
-
 type AggregateRow = {
   employeeId: string;
   employeeToken: string;
@@ -1125,7 +1056,7 @@ const statusPriority = {
   matched: 2,
 } as const;
 
-const resolveMatchStatus = (
+export const resolveMatchStatus = (
   status?: "matched" | "unmatched" | "ambiguous",
   resolvedEmployeeId?: string | null
 ): "matched" | "unmatched" | "solved" => {
@@ -1141,7 +1072,7 @@ const toMinute = (value: string | null | undefined): number | null => {
   return hours * 60 + minutes;
 };
 
-function resolveLateMinutes(
+export function resolveLateMinutes(
   row: Pick<
     PerDayRow,
     "lateMinutes" | "earliest" | "scheduleStart" | "scheduleGraceMinutes"
@@ -1155,7 +1086,7 @@ function resolveLateMinutes(
   return Math.max(0, earliest - (start + grace));
 }
 
-function resolveUndertimeMinutes(
+export function resolveUndertimeMinutes(
   row: Pick<PerDayRow, "undertimeMinutes" | "requiredMinutes" | "workedMinutes">
 ): number | null {
   if (typeof row.undertimeMinutes === "number") return row.undertimeMinutes;

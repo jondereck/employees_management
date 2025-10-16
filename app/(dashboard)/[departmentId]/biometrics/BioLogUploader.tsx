@@ -10,8 +10,11 @@ import React, {
 import {
   AlertCircle,
   ArrowUpDown,
+  Building2,
   CheckCircle2,
+  Columns3,
   FileDown,
+  GripVertical,
   Info,
   Loader2,
   UploadCloud,
@@ -19,12 +22,20 @@ import {
   XCircle,
 } from "lucide-react";
 import { saveAs } from "file-saver";
-import * as XLSX from "xlsx";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
@@ -45,7 +57,6 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
-  exportResultsToXlsx,
   detectWorkbookParsers,
   mergeParsedWorkbooks,
   parseBioAttendance,
@@ -60,6 +71,14 @@ import {
   type WorkbookParserType,
   type UnmatchedIdentityWarningDetail,
 } from "@/utils/parseBioAttendance";
+import {
+  DEFAULT_SUMMARY_COLUMNS,
+  SUMMARY_COLUMN_DEFINITIONS,
+  SUMMARY_COLUMN_GROUPS,
+  SUMMARY_COLUMN_LIST,
+  exportResultsToXlsx,
+  type SummaryColumnKey,
+} from "@/utils/biometricsExport";
 import {
   expandWindows,
   normalizeTimelineSegments,
@@ -82,6 +101,8 @@ const PAGE_SIZE = 25;
 const MINUTES_IN_DAY = 24 * 60;
 
 const SUMMARY_METRIC_MODE_KEY = "hrps-bio-summary-metric-mode";
+const OFFICE_FILTER_STORAGE_KEY = "hrps-bio-office-filter";
+const EXPORT_COLUMNS_STORAGE_KEY = "hrps-bio-export-columns";
 
 const formatTimelineLabel = (segments: { start: string; end: string }[]) => {
   if (!segments.length) return "none";
@@ -368,6 +389,404 @@ type OfficeOption = {
   key: string;
   label: string;
   count: number;
+};
+
+type StoredOfficeFilterPayload = {
+  selected?: unknown;
+  applyToDownload?: unknown;
+};
+
+type StoredColumnSelectionPayload = {
+  summary?: unknown;
+};
+
+const readStoredOfficeFilter = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(OFFICE_FILTER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredOfficeFilterPayload;
+    if (!parsed || typeof parsed !== "object") return null;
+    const selected = Array.isArray(parsed.selected)
+      ? parsed.selected.filter((value): value is string => typeof value === "string")
+      : [];
+    const applyToDownload = typeof parsed.applyToDownload === "boolean" ? parsed.applyToDownload : true;
+    return { selected, applyToDownload } as const;
+  } catch (error) {
+    console.warn("Failed to read office filter storage", error);
+    return null;
+  }
+};
+
+const writeStoredOfficeFilter = (payload: { selected: string[]; applyToDownload: boolean }) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(OFFICE_FILTER_STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn("Failed to persist office filter", error);
+  }
+};
+
+const isSummaryColumnKey = (value: unknown): value is SummaryColumnKey => {
+  return typeof value === "string" && value in SUMMARY_COLUMN_DEFINITIONS;
+};
+
+const readStoredColumns = (): SummaryColumnKey[] | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(EXPORT_COLUMNS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredColumnSelectionPayload;
+    if (!parsed || typeof parsed !== "object") return null;
+    const summary = Array.isArray(parsed.summary)
+      ? parsed.summary.filter(isSummaryColumnKey)
+      : [];
+    return summary.length ? summary : null;
+  } catch (error) {
+    console.warn("Failed to read export column selection", error);
+    return null;
+  }
+};
+
+const writeStoredColumns = (columns: SummaryColumnKey[]) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      EXPORT_COLUMNS_STORAGE_KEY,
+      JSON.stringify({ summary: columns })
+    );
+  } catch (error) {
+    console.warn("Failed to persist export column selection", error);
+  }
+};
+
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const query = window.matchMedia("(max-width: 640px)");
+    const update = () => setIsMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  return isMobile;
+};
+
+type OfficeFilterControlProps = {
+  options: OfficeOption[];
+  selected: string[];
+  onToggle: (key: string, checked: boolean) => void;
+  onClear: () => void;
+  applyToDownload: boolean;
+  onApplyToDownloadChange: (next: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  isMobile: boolean;
+};
+
+const OfficeFilterControl = ({
+  options,
+  selected,
+  onToggle,
+  onClear,
+  applyToDownload,
+  onApplyToDownloadChange,
+  open,
+  onOpenChange,
+  isMobile,
+}: OfficeFilterControlProps) => {
+  const [query, setQuery] = useState("");
+
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+  const filteredOptions = useMemo(() => {
+    if (!query.trim()) return options;
+    const lower = query.trim().toLowerCase();
+    return options.filter((option) => option.label.toLowerCase().includes(lower));
+  }, [options, query]);
+
+  const emptyMessage = options.length
+    ? "No offices match your search."
+    : "No offices detected yet.";
+
+  const handleClear = () => {
+    onClear();
+    setQuery("");
+  };
+
+  const renderList = () => (
+    <div className="flex h-full flex-col gap-3">
+      <div className="space-y-2">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search offices"
+          aria-label="Search offices"
+          autoFocus={!isMobile}
+        />
+        <ScrollArea className="h-64 pr-3">
+          <div className="space-y-1">
+            {filteredOptions.length ? (
+              filteredOptions.map((option) => {
+                const checked = selectedSet.has(option.key);
+                return (
+                  <label
+                    key={option.key}
+                    className={cn(
+                      "flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted",
+                      checked && "bg-primary/5"
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(next) => onToggle(option.key, Boolean(next))}
+                        aria-label={`Filter by ${option.label}`}
+                      />
+                      <span>{option.label}</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">{option.count.toLocaleString()}</span>
+                  </label>
+                );
+              })
+            ) : (
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+      <div className="space-y-3 border-t pt-3">
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <Checkbox
+              checked={applyToDownload && selected.length > 0}
+              disabled={selected.length === 0}
+              onCheckedChange={(next) => onApplyToDownloadChange(Boolean(next))}
+              aria-label="Apply office filter to download"
+            />
+            <span>Apply to download</span>
+          </label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs"
+            onClick={handleClear}
+            disabled={selected.length === 0}
+          >
+            Clear
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Filtering applies immediately. Downloading respects your choice above.
+        </p>
+      </div>
+    </div>
+  );
+
+  const triggerLabel = selected.length
+    ? `Office (${selected.length})`
+    : "Office";
+
+  const trigger = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="flex items-center gap-2"
+    >
+      <Building2 className="h-4 w-4" />
+      {triggerLabel}
+    </Button>
+  );
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setQuery("");
+    }
+    onOpenChange(next);
+  };
+
+  if (isMobile) {
+    return (
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Filter by office</DialogTitle>
+            <DialogDescription>
+              Choose one or more offices to filter the summary and export.
+            </DialogDescription>
+          </DialogHeader>
+          {renderList()}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent className="w-80 p-4" align="end">
+        <h3 className="mb-2 text-sm font-semibold">Filter by office</h3>
+        {renderList()}
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+type ColumnSelectorDialogProps = {
+  selected: SummaryColumnKey[];
+  onToggle: (key: SummaryColumnKey, checked: boolean) => void;
+  onReorder: (dragKey: SummaryColumnKey, targetKey: SummaryColumnKey) => void;
+  onSelectAll: () => void;
+  onReset: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+  const ColumnSelectorDialog = ({
+    selected,
+    onToggle,
+    onReorder,
+    onSelectAll,
+    onReset,
+    open,
+    onOpenChange,
+  }: ColumnSelectorDialogProps) => {
+    const [dragKey, setDragKey] = useState<SummaryColumnKey | null>(null);
+
+    const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+    useEffect(() => {
+      if (!open) {
+        setDragKey(null);
+      }
+    }, [open]);
+
+  const groupedColumns = useMemo(() => {
+    const groups: Record<SummaryColumnGroup, SummaryColumnKey[]> = {
+      identity: [],
+      attendance: [],
+      audit: [],
+    };
+
+    for (const key of selected) {
+      const column = SUMMARY_COLUMN_DEFINITIONS[key];
+      if (column) groups[column.group].push(key);
+    }
+
+    for (const { key, group } of SUMMARY_COLUMN_LIST) {
+      if (!selectedSet.has(key)) {
+        groups[group].push(key);
+      }
+    }
+
+    return groups;
+  }, [selected, selectedSet]);
+
+  const handleDragStart = (key: SummaryColumnKey) => (event: React.DragEvent<HTMLDivElement>) => {
+    event.dataTransfer.effectAllowed = "move";
+    setDragKey(key);
+  };
+
+  const handleDragEnd = () => {
+    setDragKey(null);
+  };
+
+  const handleDragEnter = (targetKey: SummaryColumnKey) => (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!dragKey || dragKey === targetKey) return;
+    if (!selectedSet.has(dragKey) || !selectedSet.has(targetKey)) return;
+    onReorder(dragKey, targetKey);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Choose export columns</DialogTitle>
+          <DialogDescription>
+            Select which columns appear in the Excel download and drag to change their order.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={onSelectAll}>
+              Select all
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={onReset}>
+              Reset to default
+            </Button>
+            <Button type="button" size="sm" variant="ghost" disabled>
+              Save preset…
+            </Button>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {(Object.keys(SUMMARY_COLUMN_GROUPS) as SummaryColumnGroup[]).map((groupKey) => {
+              const columns = groupedColumns[groupKey];
+              return (
+                <div key={groupKey} className="space-y-2">
+                  <p className="text-sm font-semibold">{SUMMARY_COLUMN_GROUPS[groupKey].label}</p>
+                  <div className="space-y-1">
+                    {columns.map((columnKey) => {
+                      const definition = SUMMARY_COLUMN_DEFINITIONS[columnKey];
+                      const checked = selectedSet.has(columnKey);
+                      return (
+                        <div
+                          key={columnKey}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-sm",
+                            checked ? "bg-primary/5" : "hover:bg-muted"
+                          )}
+                          draggable={checked}
+                          onDragStart={handleDragStart(columnKey)}
+                          onDragEnd={handleDragEnd}
+                          onDragEnter={handleDragEnter(columnKey)}
+                        >
+                          <div
+                            className={cn(
+                              "flex h-6 w-6 items-center justify-center rounded-md border bg-background text-muted-foreground",
+                              checked ? "cursor-grab" : "cursor-not-allowed opacity-50"
+                            )}
+                            aria-hidden
+                          >
+                            <GripVertical className="h-3.5 w-3.5" />
+                          </div>
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(next) => onToggle(columnKey, Boolean(next))}
+                            aria-label={`Include ${definition.label} in export`}
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{definition.label}</p>
+                            {definition.description ? (
+                              <p className="truncate text-xs text-muted-foreground">{definition.description}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <DialogFooter className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            {selected.length} column{selected.length === 1 ? "" : "s"} will be exported in the shown order.
+          </p>
+          <Button type="button" onClick={() => onOpenChange(false)}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 };
 
 const makeOfficeKey = (officeId: string | null | undefined, officeName: string | null | undefined) => {
@@ -682,6 +1101,17 @@ export default function BioLogUploader() {
     settingsRef.current = readInsightsSettings();
   }
 
+  const officeFilterStorageRef = useRef<{ selected: string[]; applyToDownload: boolean } | null>(null);
+  if (officeFilterStorageRef.current === null && typeof window !== "undefined") {
+    officeFilterStorageRef.current =
+      readStoredOfficeFilter() ?? ({ selected: [], applyToDownload: true } as const);
+  }
+
+  const columnStorageRef = useRef<SummaryColumnKey[] | null>(null);
+  if (columnStorageRef.current === null && typeof window !== "undefined") {
+    columnStorageRef.current = readStoredColumns();
+  }
+
   const [files, setFiles] = useState<FileState[]>([]);
   const [perEmployee, setPerEmployee] = useState<PerEmployeeRow[] | null>(null);
   const [perDay, setPerDay] = useState<PerDayRow[] | null>(null);
@@ -707,9 +1137,27 @@ export default function BioLogUploader() {
     unmatched: 0,
   });
   const [identityMap, setIdentityMap] = useState<Map<string, IdentityRecord>>(() => new Map());
-  const [selectedOffices, setSelectedOffices] = useState<string[]>(
-    () => settingsRef.current?.selectedOffices ?? []
+  const [selectedOffices, setSelectedOffices] = useState<string[]>(() => {
+    const stored = officeFilterStorageRef.current?.selected ?? [];
+    if (stored.length) return stored;
+    return settingsRef.current?.selectedOffices ?? [];
+  });
+  const [officeFilterApplyToDownload, setOfficeFilterApplyToDownload] = useState<boolean>(
+    () => officeFilterStorageRef.current?.applyToDownload ?? true
   );
+  const [officePickerOpen, setOfficePickerOpen] = useState(false);
+  const [summaryColumns, setSummaryColumns] = useState<SummaryColumnKey[]>(() => {
+    const stored = columnStorageRef.current ?? [];
+    const valid = stored.filter((key): key is SummaryColumnKey => Boolean(SUMMARY_COLUMN_DEFINITIONS[key]));
+    const deduped = Array.from(new Set(valid));
+    if (!deduped.length) {
+      return [...DEFAULT_SUMMARY_COLUMNS];
+    }
+    const missingDefaults = DEFAULT_SUMMARY_COLUMNS.filter((key) => !deduped.includes(key));
+    return [...deduped, ...missingDefaults];
+  });
+  const [columnDialogOpen, setColumnDialogOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [selectedScheduleTypes, setSelectedScheduleTypes] = useState<string[]>(
     () => settingsRef.current?.selectedScheduleTypes ?? []
   );
@@ -1520,6 +1968,12 @@ export default function BioLogUploader() {
   }, [exportFilteredOnly, selectedOffices.length]);
 
   useEffect(() => {
+    if (selectedOffices.length === 0 && !officeFilterApplyToDownload) {
+      setOfficeFilterApplyToDownload(true);
+    }
+  }, [officeFilterApplyToDownload, selectedOffices.length]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const payload: InsightsSettings = {
       selectedOffices,
@@ -1532,6 +1986,14 @@ export default function BioLogUploader() {
     };
     window.localStorage.setItem(INSIGHTS_SETTINGS_KEY, JSON.stringify(payload));
     window.localStorage.setItem(SUMMARY_METRIC_MODE_KEY, metricMode);
+    writeStoredOfficeFilter({
+      selected: selectedOffices,
+      applyToDownload: officeFilterApplyToDownload,
+    });
+    officeFilterStorageRef.current = {
+      selected: [...selectedOffices],
+      applyToDownload: officeFilterApplyToDownload,
+    };
   }, [
     selectedOffices,
     selectedScheduleTypes,
@@ -1540,7 +2002,13 @@ export default function BioLogUploader() {
     visibleCharts,
     insightsCollapsed,
     showNoPunchColumn,
+    officeFilterApplyToDownload,
   ]);
+
+  useEffect(() => {
+    writeStoredColumns(summaryColumns);
+    columnStorageRef.current = [...summaryColumns];
+  }, [summaryColumns]);
 
   const handleOfficeToggle = useCallback((key: string, nextChecked: boolean) => {
     setSelectedOffices((prev) => {
@@ -1651,6 +2119,62 @@ export default function BioLogUploader() {
     },
     [officeOptionMap]
   );
+
+  const selectedOfficeLabels = useMemo(() => {
+    return selectedOffices.map((key) => getOfficeLabel(key));
+  }, [getOfficeLabel, selectedOffices]);
+
+  const handleClearOffices = useCallback(() => {
+    setSelectedOffices([]);
+    setOfficeFilterApplyToDownload(true);
+  }, []);
+
+  const handleSummaryColumnToggle = useCallback(
+    (key: SummaryColumnKey, nextChecked: boolean) => {
+      setSummaryColumns((prev) => {
+        const exists = prev.includes(key);
+        if (nextChecked) {
+          if (exists) return prev;
+          return [...prev, key];
+        }
+        if (!exists) return prev;
+        if (prev.length === 1) {
+          toast({
+            title: "Keep at least one column",
+            description: "Select at least one column for the export.",
+            variant: "destructive",
+          });
+          return prev;
+        }
+        return prev.filter((value) => value !== key);
+      });
+    },
+    [toast]
+  );
+
+  const handleSummaryColumnReorder = useCallback(
+    (dragKey: SummaryColumnKey, targetKey: SummaryColumnKey) => {
+      setSummaryColumns((prev) => {
+        if (dragKey === targetKey) return prev;
+        const dragIndex = prev.indexOf(dragKey);
+        const targetIndex = prev.indexOf(targetKey);
+        if (dragIndex === -1 || targetIndex === -1) return prev;
+        const next = [...prev];
+        next.splice(dragIndex, 1);
+        next.splice(targetIndex, 0, dragKey);
+        return next;
+      });
+    },
+    []
+  );
+
+  const handleSelectAllColumns = useCallback(() => {
+    setSummaryColumns(SUMMARY_COLUMN_LIST.map((column) => column.key));
+  }, []);
+
+  const handleResetColumns = useCallback(() => {
+    setSummaryColumns([...DEFAULT_SUMMARY_COLUMNS]);
+  }, []);
 
   const identityStatusBadge = useMemo(() => {
     if (!identityTokens.length) return null;
@@ -1793,12 +2317,80 @@ export default function BioLogUploader() {
     setFiles((prev) => prev.filter((file) => file.id !== id));
   }, []);
 
+  const exportPeriodLabel = useMemo(() => {
+    if (useManualPeriod) {
+      if (manualPeriodSelection && manualSelectionValid) {
+        return manualPeriodFormatter.format(
+          new Date(Date.UTC(manualPeriodSelection.year, manualPeriodSelection.month - 1, 1))
+        );
+      }
+      return manualPeriodLabel;
+    }
+
+    if (filteredPerDayRows.length) {
+      const start = filteredPerDayRows[0]?.dateISO ?? null;
+      const end = filteredPerDayRows[filteredPerDayRows.length - 1]?.dateISO ?? start;
+      if (start && end) {
+        return formatDateRange({ start, end });
+      }
+    }
+
+    if (mergeResult?.dateRange) {
+      return formatDateRange(mergeResult.dateRange);
+    }
+
+    return "—";
+  }, [
+    filteredPerDayRows,
+    manualPeriodLabel,
+    manualPeriodSelection,
+    manualSelectionValid,
+    mergeResult,
+    useManualPeriod,
+  ]);
+
   const handleDownloadResults = useCallback(() => {
     if (!perEmployee?.length || !perDay?.length) return;
     if (useManualPeriod && !manualSelectionValid) return;
 
-    const employees = exportFilteredOnly ? filteredPerEmployee : perEmployee;
-    const days = exportFilteredOnly ? filteredPerDayPreview : perDay;
+    if (!summaryColumns.length) {
+      toast({
+        title: "Choose at least one column",
+        description: "Select at least one summary column to include in the export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const shouldApplyOfficeFilter =
+      (exportFilteredOnly && selectedOffices.length > 0) ||
+      (!exportFilteredOnly && officeFilterApplyToDownload && selectedOffices.length > 0);
+
+    const officeKeySet = shouldApplyOfficeFilter ? new Set(selectedOffices) : null;
+
+    const employees = exportFilteredOnly
+      ? filteredPerEmployee
+      : shouldApplyOfficeFilter
+      ? perEmployee.filter((row) => {
+          const key = makeOfficeKey(
+            row.officeId ?? null,
+            row.officeName ?? (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)
+          );
+          return officeKeySet?.has(key);
+        })
+      : perEmployee;
+
+    const days = exportFilteredOnly
+      ? filteredPerDayPreview
+      : shouldApplyOfficeFilter
+      ? perDay.filter((row) => {
+          const key = makeOfficeKey(
+            row.officeId ?? null,
+            row.officeName ?? (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)
+          );
+          return officeKeySet?.has(key);
+        })
+      : perDay;
 
     if (!employees.length || !days.length) {
       toast({
@@ -1808,8 +2400,29 @@ export default function BioLogUploader() {
       return;
     }
 
+    const appliedOfficeKeys = shouldApplyOfficeFilter ? selectedOffices : [];
+    const appliedOfficeLabels = appliedOfficeKeys.map((key) => getOfficeLabel(key));
+    const exportOfficeKeys = appliedOfficeKeys.map((key) =>
+      key.startsWith(UNKNOWN_OFFICE_KEY_PREFIX) ? "__unknown__" : key
+    );
+
     try {
-      exportResultsToXlsx(employees, days);
+      exportResultsToXlsx({
+        perEmployee: employees,
+        perDay: days,
+        filters: {
+          offices: exportOfficeKeys,
+          selectedOffices,
+          officeLabels: appliedOfficeLabels,
+          selectedOfficeLabels,
+          applyOfficeFilter: shouldApplyOfficeFilter,
+        },
+        columns: summaryColumns,
+        metadata: {
+          period: exportPeriodLabel,
+          appVersion,
+        },
+      });
       toast({
         title: "Download started",
         description: "Exporting biometrics summary to Excel.",
@@ -1823,12 +2436,19 @@ export default function BioLogUploader() {
       });
     }
   }, [
+    appVersion,
     exportFilteredOnly,
+    exportPeriodLabel,
     filteredPerDayPreview,
     filteredPerEmployee,
+    getOfficeLabel,
     manualSelectionValid,
+    officeFilterApplyToDownload,
     perDay,
     perEmployee,
+    selectedOfficeLabels,
+    selectedOffices,
+    summaryColumns,
     toast,
     useManualPeriod,
   ]);
@@ -2318,7 +2938,7 @@ export default function BioLogUploader() {
             officeOptions={officeOptions}
             selectedOffices={selectedOffices}
             onOfficeToggle={handleOfficeToggle}
-            onClearOffices={() => setSelectedOffices([])}
+            onClearOffices={handleClearOffices}
             scheduleTypeOptions={scheduleTypeOptions}
             selectedScheduleTypes={selectedScheduleTypes}
             onScheduleToggle={handleScheduleToggle}
@@ -2341,8 +2961,34 @@ export default function BioLogUploader() {
             exportFilteredOnly={exportFilteredOnly}
             onExportFilteredOnlyChange={setExportFilteredOnly}
           />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
+              {selectedOffices.length ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-semibold uppercase tracking-wide text-muted-foreground">Office:</span>
+                  <div className="flex flex-wrap items-center gap-1 text-foreground">
+                    {selectedOffices.map((key) => (
+                      <span
+                        key={key}
+                        className="rounded-full bg-muted px-2 py-0.5"
+                      >
+                        {getOfficeLabel(key)}
+                      </span>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={handleClearOffices}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              ) : null}
+            </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="font-medium">View:</span>
@@ -2369,7 +3015,30 @@ export default function BioLogUploader() {
                   </Button>
                 </div>
               </div>
-              <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingParses}>
+              <OfficeFilterControl
+                options={officeOptions}
+                selected={selectedOffices}
+                onToggle={handleOfficeToggle}
+                onClear={handleClearOffices}
+                applyToDownload={officeFilterApplyToDownload}
+                onApplyToDownloadChange={setOfficeFilterApplyToDownload}
+                open={officePickerOpen}
+                onOpenChange={setOfficePickerOpen}
+                isMobile={isMobile}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setColumnDialogOpen(true)}
+              >
+                <Columns3 className="mr-2 h-4 w-4" /> Columns
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleUploadMore}
+                disabled={evaluating || hasPendingParses}
+              >
                 Upload more
               </Button>
               <Button
@@ -2379,6 +3048,7 @@ export default function BioLogUploader() {
                   hasPendingParses ||
                   !perEmployee.length ||
                   !perDay.length ||
+                  summaryColumns.length === 0 ||
                   (useManualPeriod && !manualSelectionValid) ||
                   (exportFilteredOnly && (!filteredPerEmployee.length || !filteredPerDayPreview.length))
                 }
@@ -2387,6 +3057,15 @@ export default function BioLogUploader() {
               </Button>
             </div>
           </div>
+          <ColumnSelectorDialog
+            selected={summaryColumns}
+            onToggle={handleSummaryColumnToggle}
+            onReorder={handleSummaryColumnReorder}
+            onSelectAll={handleSelectAllColumns}
+            onReset={handleResetColumns}
+            open={columnDialogOpen}
+            onOpenChange={setColumnDialogOpen}
+          />
           <div className="overflow-x-auto rounded-xl border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
