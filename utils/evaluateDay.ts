@@ -39,6 +39,8 @@ export type ScheduleShift = {
 
 export type Schedule = ScheduleFixed | ScheduleFlex | ScheduleShift;
 
+export type DayEvaluationStatus = "evaluated" | "no_punch";
+
 export type DayEvalInput = {
   dateISO: string;
   earliest?: HHMM | null;
@@ -121,9 +123,23 @@ const clampToWindows = (presence: MinuteInterval[], windows: MinuteInterval[]): 
 const toHHMMSegments = (segments: MinuteInterval[]): { start: HHMM; end: HHMM }[] =>
   segments.map((segment) => ({ start: minToHHMM(segment.start), end: minToHHMM(segment.end) }));
 
+const isValidTime = (value: unknown): value is HHMM =>
+  typeof value === "string" && /^\d{1,2}:\d{2}$/.test(value.trim());
+
+export const normalizePunchTimes = (
+  times?: Array<HHMM | string | null | undefined>
+): HHMM[] => {
+  if (!Array.isArray(times)) return [];
+  return times
+    .map((time) => (typeof time === "string" ? time.trim() : ""))
+    .filter((time): time is HHMM => isValidTime(time));
+};
+
 export function evaluateDay(input: DayEvalInput) {
-  const e = input.earliest ? toMin(input.earliest) : null;
-  const l = input.latest ? toMin(input.latest) : null;
+  const normalizedTimes = normalizePunchTimes(input.allTimes);
+
+  const e = input.earliest && isValidTime(input.earliest) ? toMin(input.earliest) : null;
+  const l = input.latest && isValidTime(input.latest) ? toMin(input.latest) : null;
 
   const breakMin =
     "breakMinutes" in input.schedule && input.schedule.breakMinutes
@@ -142,6 +158,26 @@ export function evaluateDay(input: DayEvalInput) {
   let weeklyPatternApplied = false;
   let weeklyPatternWindows: WeeklyPatternWindow[] | null = null;
   let weeklyPatternPresence: { start: HHMM; end: HHMM }[] = [];
+  let status: DayEvaluationStatus = "evaluated";
+
+  if (!normalizedTimes.length && e == null && l == null) {
+    return {
+      status: "no_punch" as DayEvaluationStatus,
+      workedMinutes: 0,
+      workedHHMM: minToHHMM(0),
+      isLate: false,
+      isUndertime: false,
+      lateMinutes: 0,
+      undertimeMinutes: 0,
+      requiredMinutes: null,
+      scheduleStart: null,
+      scheduleEnd: null,
+      scheduleGraceMinutes: null,
+      weeklyPatternApplied: false,
+      weeklyPatternWindows: null,
+      weeklyPatternPresence: [],
+    };
+  }
 
   switch (input.schedule.type) {
     case "FIXED": {
@@ -191,7 +227,7 @@ export function evaluateDay(input: DayEvalInput) {
         weeklyPatternApplied = true;
         weeklyPatternWindows = weeklyDay.windows;
 
-        const presenceSegments = derivePresenceSegments(input.allTimes, e, l);
+        const presenceSegments = derivePresenceSegments(normalizedTimes, e, l);
         const windowSegments = expandWindows(weeklyDay.windows);
         const clampedSegments = clampToWindows(presenceSegments, windowSegments);
         weeklyPatternPresence = toHHMMSegments(clampedSegments);
@@ -208,8 +244,8 @@ export function evaluateDay(input: DayEvalInput) {
           scheduleStart = minToHHMM(earliestWindowStart);
 
           const rawCandidates: number[] = [];
-          if (Array.isArray(input.allTimes) && input.allTimes.length) {
-            for (const time of input.allTimes) {
+          if (normalizedTimes.length) {
+            for (const time of normalizedTimes) {
               if (time) rawCandidates.push(toMin(time));
             }
           }
@@ -320,6 +356,7 @@ export function evaluateDay(input: DayEvalInput) {
   }
 
   return {
+    status,
     workedMinutes: worked,
     workedHHMM: minToHHMM(worked),
     isLate,

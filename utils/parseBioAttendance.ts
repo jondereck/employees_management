@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import type { WorkBook } from "xlsx";
 
+import type { DayEvaluationStatus } from "./evaluateDay";
 import type { WeeklyPatternWindow } from "./weeklyPattern";
 
 export type WarningLevel = "info" | "warning";
@@ -67,6 +68,7 @@ export type ParsedPerDayRow = {
 };
 
 export type PerDayRow = ParsedPerDayRow & {
+  status?: DayEvaluationStatus;
   isLate: boolean;
   isUndertime: boolean;
   workedHHMM?: string | null;
@@ -93,6 +95,7 @@ export type PerEmployeeRow = {
   officeId?: string | null;
   officeName?: string | null;
   daysWithLogs: number;
+  noPunchDays: number;
   lateDays: number;
   undertimeDays: number;
   lateRate: number;
@@ -1029,6 +1032,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
       EmployeeName: r.employeeName,
       Office: r.officeName ?? "",
       DaysWithLogs: r.daysWithLogs,
+      NoPunchDays: r.noPunchDays,
       LateDays: r.lateDays,
       UndertimeDays: r.undertimeDays,
       LateRatePercent: r.lateRate,
@@ -1041,6 +1045,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
       RequiredMinutesTotal: r.totalRequiredMinutes,
       late_minutes_total: r.totalLateMinutes,
       ut_minutes_total: r.totalUndertimeMinutes,
+      no_punch_days: r.noPunchDays,
       match_status: resolveMatchStatus(r.identityStatus, r.resolvedEmployeeId),
       resolved_employee_id: r.resolvedEmployeeId ?? null,
       resolved_at: null,
@@ -1062,6 +1067,7 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
       Worked: r.workedHHMM ?? "",
       WorkedMinutes: r.workedMinutes ?? "",
       ScheduleType: r.scheduleType ?? "",
+      Status: r.status ?? "",
       IsLate: r.isLate ? "Yes" : "No",
       IsUndertime: r.isUndertime ? "Yes" : "No",
       LateMinutes: resolveLateMinutes(r) ?? "",
@@ -1090,6 +1096,7 @@ type AggregateRow = {
   officeId?: string | null;
   officeName?: string | null;
   daysWithLogs: number;
+  noPunchDays: number;
   lateDays: number;
   undertimeDays: number;
   totalLateMinutes: number;
@@ -1223,6 +1230,7 @@ export function summarizePerEmployee(
       | "resolvedEmployeeId"
       | "officeId"
       | "officeName"
+      | "status"
       | "earliest"
       | "latest"
       | "allTimes"
@@ -1256,6 +1264,7 @@ export function summarizePerEmployee(
         officeId: row.officeId ?? null,
         officeName: row.officeName ?? null,
         daysWithLogs: 0,
+        noPunchDays: 0,
         lateDays: 0,
         undertimeDays: 0,
         totalLateMinutes: 0,
@@ -1275,8 +1284,15 @@ export function summarizePerEmployee(
     if (statusPriority[identityStatus] > statusPriority[agg.identityStatus]) {
       agg.identityStatus = identityStatus;
     }
-    const hasLogs = Boolean(row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0);
-    if (hasLogs) {
+    const status: DayEvaluationStatus = row.status
+      ? row.status
+      : row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0
+      ? "evaluated"
+      : "no_punch";
+
+    if (status === "no_punch") {
+      agg.noPunchDays += 1;
+    } else {
       agg.daysWithLogs += 1;
       if (row.isLate) agg.lateDays += 1;
       if (row.isUndertime) agg.undertimeDays += 1;
@@ -1301,6 +1317,7 @@ export function summarizePerEmployee(
     officeId: entry.officeId ?? null,
     officeName: entry.officeName ?? null,
     daysWithLogs: entry.daysWithLogs,
+    noPunchDays: entry.noPunchDays,
     lateDays: entry.lateDays,
     undertimeDays: entry.undertimeDays,
     lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,

@@ -457,6 +457,8 @@ const readInsightsSettings = (): InsightsSettings => {
       ? (parsed.visibleCharts.filter(isChartId) as ChartId[])
       : undefined;
     const collapsed = typeof parsed.collapsed === "boolean" ? parsed.collapsed : undefined;
+    const showNoPunchColumn =
+      typeof parsed.showNoPunchColumn === "boolean" ? parsed.showNoPunchColumn : undefined;
 
     return {
       selectedOffices,
@@ -465,6 +467,7 @@ const readInsightsSettings = (): InsightsSettings => {
       metricMode,
       visibleCharts,
       collapsed,
+      showNoPunchColumn,
     } satisfies InsightsSettings;
   } catch (error) {
     console.warn("Failed to read insights settings", error);
@@ -712,6 +715,9 @@ export default function BioLogUploader() {
   );
   const [showUnmatched, setShowUnmatched] = useState<boolean>(
     () => settingsRef.current?.showUnmatched ?? true
+  );
+  const [showNoPunchColumn, setShowNoPunchColumn] = useState<boolean>(
+    () => settingsRef.current?.showNoPunchColumn ?? false
   );
   const [metricMode, setMetricMode] = useState<MetricMode>(() => {
     if (typeof window !== "undefined") {
@@ -1522,6 +1528,7 @@ export default function BioLogUploader() {
       metricMode,
       visibleCharts,
       collapsed: insightsCollapsed,
+      showNoPunchColumn,
     };
     window.localStorage.setItem(INSIGHTS_SETTINGS_KEY, JSON.stringify(payload));
     window.localStorage.setItem(SUMMARY_METRIC_MODE_KEY, metricMode);
@@ -1532,6 +1539,7 @@ export default function BioLogUploader() {
     metricMode,
     visibleCharts,
     insightsCollapsed,
+    showNoPunchColumn,
   ]);
 
   const handleOfficeToggle = useCallback((key: string, nextChecked: boolean) => {
@@ -2317,6 +2325,8 @@ export default function BioLogUploader() {
             onClearScheduleTypes={() => setSelectedScheduleTypes([])}
             showUnmatched={showUnmatched}
             onShowUnmatchedChange={setShowUnmatched}
+            showNoPunchColumn={showNoPunchColumn}
+            onShowNoPunchColumnChange={setShowNoPunchColumn}
             metricMode={metricMode}
             onMetricModeChange={setMetricMode}
             employeeSearch={employeeSearch}
@@ -2401,6 +2411,7 @@ export default function BioLogUploader() {
                       />
                     </button>
                   </th>
+                  {showNoPunchColumn ? <th className="p-2 text-center">No-punch</th> : null}
                   <th className="p-2 text-center">
                     <button
                       type="button"
@@ -2679,8 +2690,11 @@ export default function BioLogUploader() {
                           <p className="mt-1 text-xs text-muted-foreground">Source: {sourceLabel}</p>
                         ) : null}
                       </td>
-                      <td className="p-2 text-center">{row.daysWithLogs}</td>
-                      <td className="p-2 text-center">{row.lateDays}</td>
+                  <td className="p-2 text-center">{row.daysWithLogs}</td>
+                  {showNoPunchColumn ? (
+                    <td className="p-2 text-center">{row.noPunchDays}</td>
+                  ) : null}
+                  <td className="p-2 text-center">{row.lateDays}</td>
                       <td className="p-2 text-center">{row.undertimeDays}</td>
                       <td className="p-2 text-center">
                         {lateTooltipLines.length ? (
@@ -2789,6 +2803,7 @@ export default function BioLogUploader() {
                 {pagedPerDay.map((row, index) => {
                   const weeklyWindowsLabel = formatTimelineLabel(row.weeklyPatternWindows ?? []);
                   const weeklyPresenceLabel = formatTimelineLabel(row.weeklyPatternPresence ?? []);
+                  const isNoPunch = row.status === "no_punch";
                   return (
                     <tr
                       key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`}
@@ -2816,9 +2831,9 @@ export default function BioLogUploader() {
                       </td>
                       <td className="p-2">
                         <WeeklyPatternTimeline
-                          applied={row.weeklyPatternApplied}
+                          applied={row.weeklyPatternApplied && !isNoPunch}
                           windows={row.weeklyPatternWindows ?? null}
-                          presence={row.weeklyPatternPresence ?? null}
+                          presence={isNoPunch ? null : row.weeklyPatternPresence ?? null}
                         />
                       </td>
                       <td className="p-2 text-left text-xs text-muted-foreground">
@@ -2826,7 +2841,13 @@ export default function BioLogUploader() {
                       </td>
                       <td className="p-2 text-left text-xs text-muted-foreground">
                         <div className="space-y-1">
-                          <p>{row.allTimes.join(", ")}</p>
+                          {isNoPunch ? (
+                            <Badge variant="outline" className="bg-muted/60 text-muted-foreground">
+                              No punches
+                            </Badge>
+                          ) : row.allTimes.length ? (
+                            <p>{row.allTimes.join(", ")}</p>
+                          ) : null}
                           {row.weeklyPatternApplied ? (
                             <div className="space-y-0.5">
                               <p>Windows: {weeklyWindowsLabel}</p>
@@ -2835,8 +2856,34 @@ export default function BioLogUploader() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="p-2 text-center">{row.isLate ? "Yes" : "No"}</td>
-                      <td className="p-2 text-center">{row.isUndertime ? "Yes" : "No"}</td>
+                      <td className="p-2 text-center">
+                        {isNoPunch ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help">No</span>
+                            </TooltipTrigger>
+                            <TooltipContent>No punches — day excluded from Late/UT.</TooltipContent>
+                          </Tooltip>
+                        ) : row.isLate ? (
+                          "Yes"
+                        ) : (
+                          "No"
+                        )}
+                      </td>
+                      <td className="p-2 text-center">
+                        {isNoPunch ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help">No</span>
+                            </TooltipTrigger>
+                            <TooltipContent>No punches — day excluded from Late/UT.</TooltipContent>
+                          </Tooltip>
+                        ) : row.isUndertime ? (
+                          "Yes"
+                        ) : (
+                          "No"
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

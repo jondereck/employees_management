@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getScheduleFor, normalizeSchedule, type NormalizedSchedule } from "@/lib/schedules";
-import { evaluateDay } from "@/utils/evaluateDay";
+import { evaluateDay, normalizePunchTimes } from "@/utils/evaluateDay";
 import type { HHMM } from "@/utils/evaluateDay";
 import type { ParsedPerDayRow, PerDayRow, PerEmployeeRow } from "@/utils/parseBioAttendance";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
@@ -52,7 +52,10 @@ async function evaluate(payload: Payload): Promise<EvaluationResult> {
     const dateISO = `${year}-${month}-${padDay(entry.day)}`;
     const scheduleRecord = await getScheduleFor(entry.employeeId, dateISO);
     const schedule = normalizeSchedule(scheduleRecord);
+    const normalizedAllTimes = normalizePunchTimes(entry.allTimes);
+
     const {
+      status,
       isLate,
       isUndertime,
       workedHHMM,
@@ -70,12 +73,14 @@ async function evaluate(payload: Payload): Promise<EvaluationResult> {
       dateISO,
       earliest: (entry.earliest ?? undefined) as HHMM | undefined,
       latest: (entry.latest ?? undefined) as HHMM | undefined,
-      allTimes: entry.allTimes as any,
+      allTimes: normalizedAllTimes,
       schedule,
     });
 
     evaluated.push({
       ...entry,
+      status,
+      allTimes: normalizedAllTimes,
       isLate,
       isUndertime,
       workedHHMM,

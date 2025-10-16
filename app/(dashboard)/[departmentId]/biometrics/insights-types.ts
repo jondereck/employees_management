@@ -20,6 +20,7 @@ export type InsightsSettings = {
   metricMode?: MetricMode;
   visibleCharts?: ChartId[];
   collapsed?: boolean;
+  showNoPunchColumn?: boolean;
 };
 
 export const INSIGHTS_SETTINGS_KEY = "biometrics-insights-settings-v1";
