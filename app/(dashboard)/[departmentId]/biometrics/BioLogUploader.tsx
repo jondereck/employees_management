@@ -59,6 +59,12 @@ import {
   type WorkbookParserType,
   type UnmatchedIdentityWarningDetail,
 } from "@/utils/parseBioAttendance";
+import {
+  expandWindows,
+  normalizeTimelineSegments,
+  toMinutes,
+  type WeeklyPatternWindow,
+} from "@/utils/weeklyPattern";
 import InsightsPanel from "./InsightsPanel";
 import ResolveIdentityDialog, { ResolveSearchResult } from "./ResolveIdentityDialog";
 import {
@@ -71,6 +77,64 @@ import {
 } from "./insights-types";
 
 const PAGE_SIZE = 25;
+
+const MINUTES_IN_DAY = 24 * 60;
+
+const formatTimelineLabel = (segments: { start: string; end: string }[]) => {
+  if (!segments.length) return "none";
+  return segments.map((segment) => `${segment.start}–${segment.end}`).join(", ");
+};
+
+type WeeklyPatternTimelineProps = {
+  applied?: boolean;
+  windows?: WeeklyPatternWindow[] | null;
+  presence?: { start: string; end: string }[] | null;
+};
+
+const WeeklyPatternTimeline = ({ applied, windows, presence }: WeeklyPatternTimelineProps) => {
+  if (!applied || !(windows?.length ?? 0)) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  const windowSegments = normalizeTimelineSegments(expandWindows(windows));
+  const presenceSegments = normalizeTimelineSegments(
+    (presence ?? []).map((segment) => ({
+      start: toMinutes(segment.start),
+      end: toMinutes(segment.end),
+    }))
+  );
+
+  const presenceLabel = formatTimelineLabel(presence ?? []);
+  const windowsLabel = formatTimelineLabel(windows);
+
+  return (
+    <div className="relative h-8 w-full rounded border border-border bg-muted/20">
+      {windowSegments.map((segment, index) => (
+        <div
+          key={`window-${index}`}
+          className="absolute inset-y-0 bg-primary/20"
+          style={{
+            left: `${(segment.start / MINUTES_IN_DAY) * 100}%`,
+            width: `${((segment.end - segment.start) / MINUTES_IN_DAY) * 100}%`,
+          }}
+        />
+      ))}
+      {presenceSegments.map((segment, index) => (
+        <div
+          key={`presence-${index}`}
+          className="absolute top-1/4 h-1/2 rounded-full bg-primary"
+          style={{
+            left: `${(segment.start / MINUTES_IN_DAY) * 100}%`,
+            width: `${Math.max(1, ((segment.end - segment.start) / MINUTES_IN_DAY) * 100)}%`,
+          }}
+        />
+      ))}
+      <span className="sr-only">
+        Weekly pattern windows: {windowsLabel}. Presence within windows: {presenceLabel}.
+      </span>
+    </div>
+  );
+};
 
 const formatBytes = (value: number) => {
   if (value < 1024) return `${value} B`;
@@ -2330,16 +2394,30 @@ export default function BioLogUploader() {
                       : typeof row.undertimeRate === "number"
                       ? row.undertimeRate
                       : null;
-                  const lateTooltip = metricMode === "minutes"
+                  const lateTooltipLines = metricMode === "minutes"
                     ? latePercentValue == null
-                      ? null
-                      : `${row.totalLateMinutes.toLocaleString()} late minute${row.totalLateMinutes === 1 ? "" : "s"} • ${formatPercentLabel(latePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`
-                    : `${row.lateDays} late day${row.lateDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`;
-                  const undertimeTooltip = metricMode === "minutes"
+                      ? []
+                      : [
+                          `${row.totalLateMinutes.toLocaleString()} late minute${row.totalLateMinutes === 1 ? "" : "s"} • ${formatPercentLabel(latePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`,
+                        ]
+                    : [
+                        `${row.lateDays} late day${row.lateDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`,
+                      ];
+                  const undertimeTooltipLines = metricMode === "minutes"
                     ? undertimePercentValue == null
-                      ? null
-                      : `${row.totalUndertimeMinutes.toLocaleString()} undertime minute${row.totalUndertimeMinutes === 1 ? "" : "s"} • ${formatPercentLabel(undertimePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`
-                    : `${row.undertimeDays} undertime day${row.undertimeDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`;
+                      ? []
+                      : [
+                          `${row.totalUndertimeMinutes.toLocaleString()} undertime minute${row.totalUndertimeMinutes === 1 ? "" : "s"} • ${formatPercentLabel(undertimePercentValue)} of ${row.totalRequiredMinutes.toLocaleString()} required`,
+                        ]
+                    : [
+                        `${row.undertimeDays} undertime day${row.undertimeDays === 1 ? "" : "s"} out of ${row.daysWithLogs} evaluated day${row.daysWithLogs === 1 ? "" : "s"}`,
+                      ];
+                  if (lateTooltipLines.length && row.weeklyPatternDayCount > 0) {
+                    lateTooltipLines.push("Evaluated with Weekly Pattern windows for this day.");
+                  }
+                  if (undertimeTooltipLines.length && row.weeklyPatternDayCount > 0) {
+                    undertimeTooltipLines.push("Evaluated with Weekly Pattern windows for this day.");
+                  }
                   const canResolve = row.identityStatus === "unmatched" && Boolean(row.employeeToken);
                   return (
                     <tr key={key} className="odd:bg-muted/20">
@@ -2382,15 +2460,17 @@ export default function BioLogUploader() {
                       <td className="p-2 text-center">{row.lateDays}</td>
                       <td className="p-2 text-center">{row.undertimeDays}</td>
                       <td className="p-2 text-center">
-                        {lateTooltip ? (
+                        {lateTooltipLines.length ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="cursor-help font-medium">
                                 {formatPercentLabel(latePercentValue)}
                               </span>
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-xs text-sm">
-                              {lateTooltip}
+                            <TooltipContent className="max-w-xs space-y-1 text-sm">
+                              {lateTooltipLines.map((line, index) => (
+                                <p key={index}>{line}</p>
+                              ))}
                             </TooltipContent>
                           </Tooltip>
                         ) : (
@@ -2400,15 +2480,17 @@ export default function BioLogUploader() {
                         )}
                       </td>
                       <td className="p-2 text-center">
-                        {undertimeTooltip ? (
+                        {undertimeTooltipLines.length ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="cursor-help font-medium">
                                 {formatPercentLabel(undertimePercentValue)}
                               </span>
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-xs text-sm">
-                              {undertimeTooltip}
+                            <TooltipContent className="max-w-xs space-y-1 text-sm">
+                              {undertimeTooltipLines.map((line, index) => (
+                                <p key={index}>{line}</p>
+                              ))}
                             </TooltipContent>
                           </Tooltip>
                         ) : (
@@ -2481,6 +2563,7 @@ export default function BioLogUploader() {
                   <th className="p-2 text-center">Latest</th>
                   <th className="p-2 text-center">Worked</th>
                   <th className="p-2 text-left">Schedule</th>
+                  <th className="p-2 text-left">Timeline</th>
                   <th className="p-2 text-left">Source files</th>
                   <th className="p-2 text-left">Punches</th>
                   <th className="p-2 text-center">Late</th>
@@ -2488,35 +2571,60 @@ export default function BioLogUploader() {
                 </tr>
               </thead>
               <tbody>
-                {pagedPerDay.map((row, index) => (
-                  <tr key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`} className="odd:bg-muted/20">
-                    <td className="p-2">{row.employeeId || "—"}</td>
-                    <td className="p-2">{row.employeeName || "—"}</td>
-                    <td className="p-2">
-                      {row.officeName ||
-                        (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)}
-                    </td>
-                    <td className="p-2">{dateFormatter.format(toDate(row.dateISO))}</td>
-                    <td className="p-2 text-center">{row.earliest ?? ""}</td>
-                    <td className="p-2 text-center">{row.latest ?? ""}</td>
-                    <td className="p-2 text-center">{row.workedHHMM ?? ""}</td>
-                    <td className="p-2">
-                      {row.scheduleType ? (
-                        <Badge variant="outline">{formatScheduleType(row.scheduleType)}</Badge>
-                      ) : (
-                        ""
-                      )}
-                    </td>
-                    <td className="p-2 text-left text-xs text-muted-foreground">
-                      {row.sourceFiles.join(", ")}
-                    </td>
-                    <td className="p-2 text-left text-xs text-muted-foreground">
-                      {row.allTimes.join(", ")}
-                    </td>
-                    <td className="p-2 text-center">{row.isLate ? "Yes" : "No"}</td>
-                    <td className="p-2 text-center">{row.isUndertime ? "Yes" : "No"}</td>
-                  </tr>
-                ))}
+                {pagedPerDay.map((row, index) => {
+                  const weeklyWindowsLabel = formatTimelineLabel(row.weeklyPatternWindows ?? []);
+                  const weeklyPresenceLabel = formatTimelineLabel(row.weeklyPatternPresence ?? []);
+                  return (
+                    <tr
+                      key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`}
+                      className="odd:bg-muted/20"
+                    >
+                      <td className="p-2">{row.employeeId || "—"}</td>
+                      <td className="p-2">{row.employeeName || "—"}</td>
+                      <td className="p-2">
+                        {row.officeName ||
+                          (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)}
+                      </td>
+                      <td className="p-2">{dateFormatter.format(toDate(row.dateISO))}</td>
+                      <td className="p-2 text-center">{row.earliest ?? ""}</td>
+                      <td className="p-2 text-center">{row.latest ?? ""}</td>
+                      <td className="p-2 text-center">{row.workedHHMM ?? ""}</td>
+                      <td className="p-2">
+                        {row.scheduleType ? (
+                          <Badge variant="outline">{formatScheduleType(row.scheduleType)}</Badge>
+                        ) : (
+                          ""
+                        )}
+                        {row.weeklyPatternApplied ? (
+                          <p className="mt-1 text-xs text-muted-foreground">Weekly pattern applied</p>
+                        ) : null}
+                      </td>
+                      <td className="p-2">
+                        <WeeklyPatternTimeline
+                          applied={row.weeklyPatternApplied}
+                          windows={row.weeklyPatternWindows ?? null}
+                          presence={row.weeklyPatternPresence ?? null}
+                        />
+                      </td>
+                      <td className="p-2 text-left text-xs text-muted-foreground">
+                        {row.sourceFiles.join(", ")}
+                      </td>
+                      <td className="p-2 text-left text-xs text-muted-foreground">
+                        <div className="space-y-1">
+                          <p>{row.allTimes.join(", ")}</p>
+                          {row.weeklyPatternApplied ? (
+                            <div className="space-y-0.5">
+                              <p>Windows: {weeklyWindowsLabel}</p>
+                              <p>Counted: {weeklyPresenceLabel}</p>
+                            </div>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="p-2 text-center">{row.isLate ? "Yes" : "No"}</td>
+                      <td className="p-2 text-center">{row.isUndertime ? "Yes" : "No"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -3,6 +3,7 @@ import { ScheduleException, WorkSchedule } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import type { Schedule, ScheduleFlex, ScheduleFixed, ScheduleShift } from "@/utils/evaluateDay";
+import { sanitizeWeeklyPattern } from "@/utils/weeklyPattern";
 
 export type ScheduleSource = "EXCEPTION" | "WORKSCHEDULE" | "DEFAULT" | "NOMAPPING";
 
@@ -189,6 +190,10 @@ export function normalizeSchedule(record: ScheduleLookupResult): NormalizedSched
         breakMinutes,
         source: (record.source ?? "DEFAULT") as ScheduleSource,
       };
+      const weeklyPattern = sanitizeWeeklyPattern(raw.weeklyPattern);
+      if (weeklyPattern) {
+        schedule.weeklyPattern = weeklyPattern;
+      }
       return schedule;
     }
     case "SHIFT": {
@@ -229,6 +234,7 @@ export const toWorkScheduleDto = (schedule: WorkSchedule) => ({
   bandwidthStart: schedule.bandwidthStart,
   bandwidthEnd: schedule.bandwidthEnd,
   requiredDailyMinutes: schedule.requiredDailyMinutes,
+  weeklyPattern: sanitizeWeeklyPattern(schedule.weeklyPattern),
   shiftStart: schedule.shiftStart,
   shiftEnd: schedule.shiftEnd,
   breakMinutes: schedule.breakMinutes,
