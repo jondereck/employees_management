@@ -1041,6 +1041,9 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
       RequiredMinutesTotal: r.totalRequiredMinutes,
       late_minutes_total: r.totalLateMinutes,
       ut_minutes_total: r.totalUndertimeMinutes,
+      match_status: resolveMatchStatus(r.identityStatus, r.resolvedEmployeeId),
+      resolved_employee_id: r.resolvedEmployeeId ?? null,
+      resolved_at: null,
     }))
   );
   XLSX.utils.book_append_sheet(wb, s1, "PerEmployee");
@@ -1068,6 +1071,9 @@ export function exportResultsToXlsx(perEmployee: PerEmployeeRow[], perDay: PerDa
       Punches: r.allTimes.join(", "),
       ScheduleSource: r.scheduleSource ?? "",
       IdentityStatus: r.identityStatus ?? "",
+      match_status: resolveMatchStatus(r.identityStatus, r.resolvedEmployeeId),
+      resolved_employee_id: r.resolvedEmployeeId ?? null,
+      resolved_at: null,
     }))
   );
   XLSX.utils.book_append_sheet(wb, s2, "PerDay");
@@ -1111,6 +1117,15 @@ const statusPriority = {
   ambiguous: 1,
   matched: 2,
 } as const;
+
+const resolveMatchStatus = (
+  status?: "matched" | "unmatched" | "ambiguous",
+  resolvedEmployeeId?: string | null
+): "matched" | "unmatched" | "solved" => {
+  if (resolvedEmployeeId && status !== "matched") return "solved";
+  if (status === "matched") return "matched";
+  return "unmatched";
+};
 
 const toMinute = (value: string | null | undefined): number | null => {
   if (!value) return null;
