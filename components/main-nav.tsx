@@ -1,13 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { Building2, LayoutDashboard, Monitor, Settings } from "lucide-react";
+import {
+  Building2,
+  Copy,
+  FileSpreadsheet,
+  Fingerprint,
+  Image as ImageIcon,
+  LayoutDashboard,
+  Monitor,
+  Settings,
+} from "lucide-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 
 import Loading from "@/app/loading";
 import { cn } from "@/lib/utils";
+import { extractToolAccess, type ToolKey } from "@/lib/tool-access";
 
 import { EmployeesMenu, EmployeesMenuLink } from "./employees-menu";
+import { ToolsMenu, ToolsMenuLink } from "./tools-menu";
 
 type Route = {
   href: string;
@@ -21,6 +33,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   const params = useParams();
   const router = useRouter();
   const [loading, setLoading] = React.useState(false);
+  const { user } = useUser();
 
   const departmentParam = params.departmentId;
   const departmentId = Array.isArray(departmentParam)
@@ -53,9 +66,9 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       icon: <LayoutDashboard className="mr-1 h-5 w-5" aria-hidden="true" />,
     },
     {
-      href: `/${departmentId}/billboards`,
+      href: `/${departmentId}/tools/covers`,
       label: "Covers",
-      active: pathname === `/${departmentId}/billboards`,
+      active: pathname.startsWith(`/${departmentId}/tools/covers`),
       icon: <Monitor className="mr-1 h-5 w-5" aria-hidden="true" />,
     },
     {
@@ -74,16 +87,16 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       active: pathname === `/${departmentId}/employees`,
     },
     {
-      href: `/${departmentId}/biometrics`,
-      label: "Biometrics Uploader",
-      description: "Upload monthly biometric logs and export attendance reports.",
-      active: pathname === `/${departmentId}/biometrics`,
+      href: `/${departmentId}/approvals`,
+      label: "Approvals",
+      description: "Review pending change requests awaiting action.",
+      active: pathname === `/${departmentId}/approvals`,
     },
     {
-      href: `/${departmentId}/eligibility`,
-      label: "Eligibility",
-      description: "View and update eligibility criteria for employees.",
-      active: pathname === `/${departmentId}/eligibility`,
+      href: `/${departmentId}/birthdays`,
+      label: "Birthdays",
+      description: "See upcoming celebrants and special milestones.",
+      active: pathname === `/${departmentId}/birthdays`,
     },
     {
       href: `/${departmentId}/view`,
@@ -97,11 +110,62 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       description: "Manage employee appointment details.",
       active: pathname === `/${departmentId}/employee_type`,
     },
+    {
+      href: `/${departmentId}/eligibility`,
+      label: "Eligibility",
+      description: "View and update eligibility criteria for employees.",
+      active: pathname === `/${departmentId}/eligibility`,
+    },
   ];
 
   const manageRoute = employeesLinks[0];
   const quickLinks = employeesLinks.slice(1);
   const activeEmployeesRoute = employeesLinks.find((route) => route.active);
+
+  const metadata = (user?.publicMetadata ?? {}) as Record<string, unknown>;
+  const role = typeof (metadata as any).role === "string" ? String((metadata as any).role) : undefined;
+  const allowedTools = extractToolAccess({ metadata, role });
+
+  const toolItems: Array<Omit<ToolsMenuLink, "active"> & { key: ToolKey }> = [
+    {
+      key: "biometrics",
+      href: `/${departmentId}/tools/biometrics`,
+      label: "Biometrics Uploader",
+      description: "Upload monthly biometric logs and export attendance reports.",
+      icon: <Fingerprint className="h-5 w-5" aria-hidden="true" />,
+    },
+    {
+      key: "covers",
+      href: `/${departmentId}/tools/covers`,
+      label: "Covers",
+      description: "Design and publish lobby covers across offices.",
+      icon: <ImageIcon className="h-5 w-5" aria-hidden="true" />,
+    },
+    {
+      key: "attendance-import",
+      href: `/${departmentId}/tools/attendance-import`,
+      label: "CSV Attendance Import",
+      description: "Normalize CSV attendance exports and generate summaries.",
+      icon: <FileSpreadsheet className="h-5 w-5" aria-hidden="true" />,
+    },
+    {
+      key: "copy-options",
+      href: `/${departmentId}/tools/copy-options`,
+      label: "Copy Options",
+      description: "Configure default formatting for copying employee data.",
+      icon: <Copy className="h-5 w-5" aria-hidden="true" />,
+    },
+  ];
+
+  const toolsLinks: ToolsMenuLink[] = toolItems
+    .filter((item) => allowedTools.has(item.key))
+    .map((item) => ({
+      ...item,
+      active: pathname.startsWith(item.href),
+    }));
+
+  const activeToolRoute = toolsLinks.find((link) => link.active);
+  const toolsSectionActive = pathname.startsWith(`/${departmentId}/tools`);
 
   return (
     <>
@@ -140,6 +204,18 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
           quickLinks={quickLinks}
           activeRoute={activeEmployeesRoute}
           onNavigate={handleNavClick}
+        />
+
+        <ToolsMenu
+          links={toolsLinks}
+          activeRoute={activeToolRoute}
+          onNavigate={handleNavClick}
+          isActive={toolsSectionActive}
+          homeLink={{
+            href: `/${departmentId}/tools`,
+            label: "All tools",
+            description: "Open the tools hub to browse every utility.",
+          }}
         />
 
         <button
