@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { evaluateAttendanceEntries, type EvaluationEntry } from "@/lib/attendance/evaluateEntries";
+import {
+  evaluateAttendanceEntries,
+  type EvaluationEntry,
+} from "@/lib/attendance/evaluateEntries";
 
 const hhmmRegex = /^\d{1,2}:\d{2}$/;
 
@@ -56,11 +59,11 @@ export async function POST(req: Request) {
     const result = await evaluateAttendanceEntries(payloadEntries);
     return NextResponse.json(result);
   } catch (error) {
-    console.error("Failed to evaluate attendance", error);
+    console.error("Failed to re-enrich biometrics entries", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.flatten() }, { status: 400 });
     }
-    const message = error instanceof Error ? error.message : "Failed to evaluate attendance";
+    const message = error instanceof Error ? error.message : "Unable to re-enrich biometrics entries.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

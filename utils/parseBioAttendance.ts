@@ -13,6 +13,7 @@ import {
   UNASSIGNED_OFFICE_LABEL,
   UNKNOWN_OFFICE_LABEL,
   UNMATCHED_LABEL,
+  normalizeBiometricToken,
 } from "./biometricsShared";
 
 import type { DayEvaluationStatus } from "./evaluateDay";
@@ -1070,6 +1071,43 @@ const pickSource = (sources: string[]) => {
   return sources.sort((a, b) => sourceRank(a) - sourceRank(b))[0] ?? "DEFAULT";
 };
 
+type ScheduleSummaryOptions = {
+  mappingByToken?: Map<string, string>;
+  schedulePresenceByEmployee?: Map<string, boolean>;
+};
+
+const resolveScheduleSourceForAggregate = (
+  entry: AggregateRow,
+  options?: ScheduleSummaryOptions
+): string => {
+  const normalizedToken = normalizeBiometricToken(entry.employeeToken);
+  const hasMappingFromOptions = options?.mappingByToken
+    ? options.mappingByToken.has(normalizedToken)
+    : null;
+  const hasMapping = hasMappingFromOptions ?? Boolean(entry.resolvedEmployeeId);
+
+  if (!hasMapping) {
+    return "NOMAPPING";
+  }
+
+  if (options?.schedulePresenceByEmployee && entry.resolvedEmployeeId) {
+    const hasSchedule = options.schedulePresenceByEmployee.get(entry.resolvedEmployeeId) ?? false;
+    if (hasSchedule || entry.weeklyPatternDays > 0) {
+      return "WORKSCHEDULE";
+    }
+    return "DEFAULT";
+  }
+
+  const fallback = pickSource(Array.from(entry.scheduleSourceSet));
+  if (entry.weeklyPatternDays > 0 && fallback !== "NOMAPPING") {
+    return "WORKSCHEDULE";
+  }
+  if (fallback === "NOMAPPING") {
+    return entry.weeklyPatternDays > 0 ? "WORKSCHEDULE" : "DEFAULT";
+  }
+  return fallback;
+};
+
 const statusPriority = {
   unmatched: 0,
   ambiguous: 1,
@@ -1078,10 +1116,12 @@ const statusPriority = {
 
 const resolveMatchStatus = (
   status?: "matched" | "unmatched" | "ambiguous",
-  resolvedEmployeeId?: string | null
+  resolvedEmployeeId?: string | null,
+  manualSolved?: boolean
 ): "matched" | "unmatched" | "solved" => {
-  if (resolvedEmployeeId && status !== "matched") return "solved";
+  if (manualSolved) return "solved";
   if (status === "matched") return "matched";
+  if (resolvedEmployeeId) return "matched";
   return "unmatched";
 };
 
@@ -1198,7 +1238,8 @@ export function summarizePerEmployee(
       | "workedMinutes"
       | "weeklyPatternApplied"
     >
-  >
+  >,
+  options?: ScheduleSummaryOptions
 ): PerEmployeeRow[] {
   const map = new Map<string, AggregateRow>();
   for (const row of perDay) {
@@ -1278,7 +1319,7 @@ export function summarizePerEmployee(
     lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
     undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
     scheduleTypes: Array.from(entry.scheduleTypes).sort(),
-    scheduleSource: pickSource(Array.from(entry.scheduleSourceSet)),
+    scheduleSource: resolveScheduleSourceForAggregate(entry, options),
     totalLateMinutes: Math.round(entry.totalLateMinutes),
     totalUndertimeMinutes: Math.round(entry.totalUndertimeMinutes),
     totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
@@ -1340,6 +1381,7 @@ export type BiometricsExportOptions = {
   filters: BiometricsExportFilters;
   metadata: BiometricsExportMetadata;
   fileName?: string;
+  manualResolvedTokens?: string[];
 };
 
 type PerDayColumnKey =
@@ -1438,8 +1480,11 @@ const toScheduleLabel = (types: string[] | undefined | null) => {
     .join(", ");
 };
 
-const toMatchStatusLabel = (row: Pick<PerEmployeeRow, "identityStatus" | "resolvedEmployeeId">) => {
-  const status = resolveMatchStatus(row.identityStatus, row.resolvedEmployeeId);
+const toMatchStatusLabel = (
+  row: Pick<PerEmployeeRow, "identityStatus" | "resolvedEmployeeId">,
+  manualSolved: boolean
+) => {
+  const status = resolveMatchStatus(row.identityStatus, row.resolvedEmployeeId, manualSolved);
   switch (status) {
     case "matched":
       return "Matched";
@@ -1491,17 +1536,21 @@ const ensureArray = <T,>(values: T[] | null | undefined): T[] => (Array.isArray(
 
 const computeSummaryRow = (
   row: PerEmployeeRow,
-  sourceFileCounts: Map<string, number>
+  sourceFileCounts: Map<string, number>,
+  manualResolvedTokens?: Set<string>
 ): SummaryRowValues => {
   const key = toEmployeeKey(row.employeeToken, row.employeeName);
-  const isUnmatched = row.identityStatus === "unmatched" && !row.resolvedEmployeeId;
-  const sourceLabel = isUnmatched ? "No mapping" : formatScheduleSource(row.scheduleSource) ?? "";
+  const normalizedToken = normalizeBiometricToken(row.employeeToken ?? row.employeeId ?? "");
+  const manualSolved = normalizedToken
+    ? manualResolvedTokens?.has(normalizedToken) ?? false
+    : false;
+  const sourceLabel = formatScheduleSource(row.scheduleSource) ?? "";
   return {
     employeeId: toDisplayEmployeeId(row) || null,
     employeeName: row.employeeName?.trim() ? row.employeeName : UNMATCHED_LABEL,
     office: toDisplayOffice(row, true),
     schedule: toScheduleLabel(row.scheduleTypes),
-    matchStatus: toMatchStatusLabel(row),
+    matchStatus: toMatchStatusLabel(row, manualSolved),
     source: sourceLabel,
     days: row.daysWithLogs ?? 0,
     excusedDays: row.excusedDays ?? 0,
@@ -1930,7 +1979,14 @@ export function exportResultsToXlsx(
 
   const columnDefinitions = makeSummaryColumnDefinitions(selectedColumns);
   const sourceFileCounts = buildSourceFileCounts(perDay);
-  const summaryRows = perEmployee.map((row) => computeSummaryRow(row, sourceFileCounts));
+  const manualResolvedSet = new Set(
+    (options.manualResolvedTokens ?? [])
+      .map((token) => normalizeBiometricToken(token))
+      .filter((token) => token.length > 0)
+  );
+  const summaryRows = perEmployee.map((row) =>
+    computeSummaryRow(row, sourceFileCounts, manualResolvedSet)
+  );
   const totals = summarizeTotals(summaryRows);
 
   const summarySheet = buildSummarySheet(summaryRows, selectedColumns, columnDefinitions, totals);
