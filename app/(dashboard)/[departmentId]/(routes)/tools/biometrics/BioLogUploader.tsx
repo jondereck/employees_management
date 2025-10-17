@@ -64,6 +64,8 @@ import {
 import {
   EXPORT_COLUMNS_STORAGE_KEY,
   formatScheduleSource,
+  normalizeBiometricToken,
+  resolveMatchStatus,
   OFFICE_FILTER_STORAGE_KEY,
   UNASSIGNED_OFFICE_LABEL,
   UNKNOWN_OFFICE_KEY_PREFIX,
@@ -186,10 +188,17 @@ const formatScheduleType = (value?: string | null) => {
   return value.charAt(0) + value.slice(1).toLowerCase();
 };
 
-const isUnmatchedIdentity = (
-  status: PerEmployeeRow["identityStatus"] | undefined,
+const resolveRowMatchStatus = (
+  matchStatus: PerEmployeeRow["matchStatus"] | PerDayRow["matchStatus"] | null | undefined,
+  identityStatus: PerEmployeeRow["identityStatus"] | PerDayRow["identityStatus"] | undefined,
   resolvedEmployeeId?: string | null
-) => status === "unmatched" && !resolvedEmployeeId;
+) => resolveMatchStatus(matchStatus ?? null, identityStatus, resolvedEmployeeId);
+
+const isUnmatchedIdentity = (
+  matchStatus: PerEmployeeRow["matchStatus"] | PerDayRow["matchStatus"] | null | undefined,
+  identityStatus: PerEmployeeRow["identityStatus"] | PerDayRow["identityStatus"] | undefined,
+  resolvedEmployeeId?: string | null
+) => resolveRowMatchStatus(matchStatus, identityStatus, resolvedEmployeeId) === "unmatched";
 
 const computeLatePercentMinutes = (row: PerEmployeeRow): number | null => {
   if (!row.totalRequiredMinutes || row.totalRequiredMinutes <= 0) return null;
@@ -1526,7 +1535,7 @@ export default function BioLogUploader() {
         const hasType = row.scheduleTypes?.some((type) => scheduleKeys.has(type)) ?? false;
         if (!hasType) return false;
       }
-      if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
+      if (!showUnmatched && isUnmatchedIdentity(row.matchStatus, row.identityStatus, row.resolvedEmployeeId)) {
         return false;
       }
       return true;
@@ -1564,7 +1573,7 @@ export default function BioLogUploader() {
       } else if (scheduleKeys && !row.scheduleType) {
         return false;
       }
-      if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
+      if (!showUnmatched && isUnmatchedIdentity(row.matchStatus, row.identityStatus, row.resolvedEmployeeId)) {
         return false;
       }
       if (!hasQuery) return true;
@@ -1767,10 +1776,170 @@ export default function BioLogUploader() {
           setIdentityState((prev) => ({ ...prev, unmatched }));
         }
 
+        let reEnriched = false;
+        const normalizedTokenKey = normalizeBiometricToken(token);
+        if (normalizedTokenKey) {
+          setPerDay((prev) => {
+            if (!prev) return prev;
+            let updated = false;
+            const next = prev.map((row) => {
+              const source = row.employeeToken || row.employeeId || row.employeeName || "";
+              const rowToken = source ? normalizeBiometricToken(source) : "";
+              if (!rowToken || rowToken !== normalizedTokenKey) return row;
+              updated = true;
+              return {
+                ...row,
+                resolvedEmployeeId: employeeId,
+                matchStatus: "solved",
+              };
+            });
+            return updated ? next : prev;
+          });
+          setPerEmployee((prev) => {
+            if (!prev) return prev;
+            let updated = false;
+            const next = prev.map((row) => {
+              const source = row.employeeToken || row.employeeId || row.employeeName || "";
+              const rowToken = source ? normalizeBiometricToken(source) : "";
+              if (!rowToken || rowToken !== normalizedTokenKey) return row;
+              updated = true;
+              return {
+                ...row,
+                resolvedEmployeeId: employeeId,
+                matchStatus: "solved",
+              };
+            });
+            return updated ? next : prev;
+          });
+          const relevantRows = filteredPerDayRows.filter((row) => {
+            const source = row.employeeToken || row.employeeId || row.employeeName;
+            if (!source) return false;
+            return normalizeBiometricToken(source) === normalizedTokenKey;
+          });
+
+          if (relevantRows.length) {
+            try {
+              const reEnrichResponse = await timeout(
+                fetch("/api/biometrics/re-enrich", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    sessionId: lastEvaluatedKey.current || "local",
+                    token,
+                    employeeId,
+                    entries: relevantRows.map((row) => ({
+                      employeeId: row.employeeId,
+                      employeeToken: row.employeeToken,
+                      employeeName: row.employeeName,
+                      officeId: row.officeId ?? null,
+                      officeName: row.officeName ?? null,
+                      dateISO: row.dateISO,
+                      day: row.day,
+                      earliest: row.earliest ?? null,
+                      latest: row.latest ?? null,
+                      allTimes: row.allTimes,
+                      punches: row.punches,
+                      sourceFiles: row.sourceFiles,
+                    })),
+                  }),
+                }),
+                15_000
+              );
+
+              if (!reEnrichResponse.ok) {
+                const message = await reEnrichResponse.text();
+                toast({
+                  title: "Re-enrich failed",
+                  description:
+                    message || "Unable to refresh attendance details for the resolved employee.",
+                  variant: "destructive",
+                });
+              } else {
+                const reEnrichPayload = (await reEnrichResponse.json()) as {
+                  perDay?: PerDayRow[];
+                  perEmployee?: PerEmployeeRow | null;
+                };
+
+                if (Array.isArray(reEnrichPayload.perDay) && reEnrichPayload.perDay.length) {
+                  const replacementMap = new Map<string, PerDayRow>();
+                  for (const row of reEnrichPayload.perDay) {
+                    const chrono = toChronologicalRow(row);
+                    const keyToken = normalizeBiometricToken(
+                      row.employeeToken || row.employeeId || row.employeeName || ""
+                    );
+                    if (!keyToken) continue;
+                    const key = `${keyToken}::${row.dateISO}`;
+                    replacementMap.set(key, chrono);
+                  }
+
+                  if (replacementMap.size) {
+                    setPerDay((prev) => {
+                      if (!prev) return prev;
+                      const next: PerDayRow[] = [];
+                      for (const row of prev) {
+                        const rowToken = normalizeBiometricToken(
+                          row.employeeToken || row.employeeId || row.employeeName || ""
+                        );
+                        if (rowToken && rowToken === normalizedTokenKey) {
+                          const key = `${rowToken}::${row.dateISO}`;
+                          const replacement = replacementMap.get(key);
+                          if (replacement) {
+                            next.push(replacement);
+                            replacementMap.delete(key);
+                            continue;
+                          }
+                        }
+                        next.push(row);
+                      }
+                      for (const replacement of replacementMap.values()) {
+                        next.push(replacement);
+                      }
+                      return sortPerDayRows(next.map((row) => toChronologicalRow(row)));
+                    });
+                  }
+                }
+
+                if (reEnrichPayload.perEmployee) {
+                  const updatedSummary = reEnrichPayload.perEmployee;
+                  setPerEmployee((prev) => {
+                    if (!prev) return prev;
+                    let replaced = false;
+                    const next = prev.map((row) => {
+                      const rowToken = normalizeBiometricToken(
+                        row.employeeToken || row.employeeId || row.employeeName || ""
+                      );
+                      if (rowToken && rowToken === normalizedTokenKey) {
+                        replaced = true;
+                        return updatedSummary;
+                      }
+                      return row;
+                    });
+                    if (!replaced) next.push(updatedSummary);
+                    return next;
+                  });
+                }
+
+                reEnriched = true;
+              }
+            } catch (error) {
+              console.error("Failed to re-enrich attendance after resolving token", error);
+              const message =
+                error instanceof Error ? error.message : "Unable to refresh attendance details.";
+              toast({
+                title: "Re-enrich failed",
+                description: message,
+                variant: "destructive",
+              });
+            }
+          }
+        }
+
         setResolveTarget(null);
         toast({
           title: "Identity resolved",
-          description: `${employeeName} is now linked to ${token}.`,
+          description: reEnriched
+            ? `${employeeName} is now linked to ${token}. Attendance metrics have been refreshed.`
+            : `${employeeName} is now linked to ${token}.`,
         });
       } catch (error) {
         console.error("Failed to resolve biometrics token", error);
@@ -1785,7 +1954,7 @@ export default function BioLogUploader() {
         setResolveBusy(false);
       }
     },
-    [toast]
+    [filteredPerDayRows, lastEvaluatedKey, setPerDay, setPerEmployee, toast]
   );
 
   const handleResolveSubmit = useCallback(
@@ -2813,12 +2982,17 @@ export default function BioLogUploader() {
                 {sortedPerEmployee.map((row) => {
                   const key = `${row.employeeToken || row.employeeId || row.employeeName}||${row.employeeName}`;
                   const types = row.scheduleTypes ?? [];
-                  const hasResolverMapping = Boolean(row.resolvedEmployeeId);
-                  const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
-                  const isSolved = hasResolverMapping && row.identityStatus !== "matched";
-                  const sourceLabel = isUnmatched
-                    ? "No mapping"
-                    : formatScheduleSource(row.scheduleSource);
+                  const matchStatus = resolveRowMatchStatus(
+                    row.matchStatus,
+                    row.identityStatus,
+                    row.resolvedEmployeeId
+                  );
+                  const isUnmatched = matchStatus === "unmatched";
+                  const isSolved = matchStatus === "solved";
+                  const sourceLabel =
+                    matchStatus === "unmatched"
+                      ? "No mapping"
+                      : formatScheduleSource(row.scheduleSource);
                   const displayEmployeeId =
                     row.employeeId?.trim().length
                       ? row.employeeId

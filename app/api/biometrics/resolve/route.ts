@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { normalizeBiometricToken, resolveBiometricTokenPadLength } from "@/utils/biometricsShared";
 
 const Payload = z.object({
   token: z.string().min(1),
@@ -38,7 +39,8 @@ export async function POST(req: Request) {
     const json = await req.json();
     const { token, employeeId } = Payload.parse(json);
 
-    const normalizedToken = token.trim();
+    const padLength = resolveBiometricTokenPadLength();
+    const normalizedToken = normalizeBiometricToken(token, padLength);
     if (!normalizedToken) {
       return NextResponse.json({ error: "Token cannot be empty." }, { status: 400 });
     }
@@ -86,6 +88,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      token: normalizedToken,
       identity: {
         status: "matched" as const,
         employeeId: employee.id,

@@ -48,6 +48,8 @@ import {
   UNASSIGNED_OFFICE_LABEL,
   UNKNOWN_OFFICE_LABEL,
   UNMATCHED_LABEL,
+  resolveMatchStatus,
+  type MatchStatus,
 } from "@/utils/biometricsShared";
 import {
   ALL_CHART_IDS,
@@ -253,9 +255,16 @@ const quantile = (values: number[], percentile: number): number => {
   return values[lower] * (1 - weight) + values[upper] * weight;
 };
 
-const resolveOfficeLabel = (row: { officeName?: string | null; resolvedEmployeeId?: string | null; identityStatus?: string }) => {
+const resolveOfficeLabel = (row: {
+  officeName?: string | null;
+  resolvedEmployeeId?: string | null;
+  identityStatus?: "matched" | "unmatched" | "ambiguous";
+  matchStatus?: MatchStatus | null;
+}) => {
   if (row.officeName && row.officeName.trim().length) return row.officeName.trim();
-  if (row.identityStatus === "unmatched") return UNKNOWN_OFFICE_LABEL;
+  if (resolveMatchStatus(row.matchStatus ?? null, row.identityStatus, row.resolvedEmployeeId) === "unmatched") {
+    return UNKNOWN_OFFICE_LABEL;
+  }
   if (row.resolvedEmployeeId) return UNASSIGNED_OFFICE_LABEL;
   return UNKNOWN_OFFICE_LABEL;
 };
