@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getScheduleFor, normalizeSchedule, type NormalizedSchedule } from "@/lib/schedules";
+import { getWeeklyExclusionForDate } from "@/lib/weeklyExclusions.server";
 import { evaluateDay, normalizePunchTimes } from "@/utils/evaluateDay";
 import type { HHMM } from "@/utils/evaluateDay";
 import type { ParsedPerDayRow, PerDayRow, PerEmployeeRow } from "@/utils/parseBioAttendance";
@@ -54,48 +55,45 @@ async function evaluate(payload: Payload): Promise<EvaluationResult> {
     const schedule = normalizeSchedule(scheduleRecord);
     const normalizedAllTimes = normalizePunchTimes(entry.allTimes);
 
-    const {
-      status,
-      isLate,
-      isUndertime,
-      workedHHMM,
-      workedMinutes,
-      lateMinutes,
-      undertimeMinutes,
-      requiredMinutes,
-      scheduleStart,
-      scheduleEnd,
-      scheduleGraceMinutes,
-      weeklyPatternApplied,
-      weeklyPatternWindows,
-      weeklyPatternPresence,
-    } = evaluateDay({
+    const weeklyExclusion = await getWeeklyExclusionForDate(entry.employeeId, dateISO);
+
+    const evaluation = evaluateDay({
       dateISO,
       earliest: (entry.earliest ?? undefined) as HHMM | undefined,
       latest: (entry.latest ?? undefined) as HHMM | undefined,
       allTimes: normalizedAllTimes,
       schedule,
+      weeklyExclusion: weeklyExclusion
+        ? {
+            mode: weeklyExclusion.mode,
+            ignoreUntilMinutes: weeklyExclusion.ignoreUntilMinutes,
+          }
+        : null,
     });
 
     evaluated.push({
       ...entry,
-      status,
+      status: evaluation.status,
       allTimes: normalizedAllTimes,
-      isLate,
-      isUndertime,
-      workedHHMM,
-      workedMinutes,
+      isLate: evaluation.isLate,
+      isUndertime: evaluation.isUndertime,
+      workedHHMM: evaluation.workedHHMM,
+      workedMinutes: evaluation.workedMinutes,
       scheduleType: schedule.type,
       scheduleSource: (schedule as NormalizedSchedule).source,
-      lateMinutes,
-      undertimeMinutes,
-      requiredMinutes,
-      scheduleStart: scheduleStart ?? null,
-      scheduleEnd: scheduleEnd ?? null,
-      scheduleGraceMinutes: scheduleGraceMinutes ?? null,
-      weeklyPatternApplied: weeklyPatternApplied ?? false,
-      weeklyPatternWindows: weeklyPatternWindows ?? null,
-      weeklyPatternPresence: weeklyPatternPresence ?? [],
+      lateMinutes: evaluation.lateMinutes,
+      undertimeMinutes: evaluation.undertimeMinutes,
+      requiredMinutes: evaluation.requiredMinutes,
+      scheduleStart: evaluation.scheduleStart ?? null,
+      scheduleEnd: evaluation.scheduleEnd ?? null,
+      scheduleGraceMinutes: evaluation.scheduleGraceMinutes ?? null,
+      weeklyPatternApplied: evaluation.weeklyPatternApplied ?? false,
+      weeklyPatternWindows: evaluation.weeklyPatternWindows ?? null,
+      weeklyPatternPresence: evaluation.weeklyPatternPresence ?? [],
+      weeklyExclusionApplied: evaluation.weeklyExclusionApplied ?? null,
+      weeklyExclusionMode: weeklyExclusion?.mode ?? null,
+      weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
+      weeklyExclusionId: weeklyExclusion?.id ?? null,
     });
   }
 

@@ -11,6 +11,8 @@ import type { HHMM } from "@/types/time";
 
 export type { HHMM };
 
+export type WeeklyExclusionMode = "EXCUSED" | "IGNORE_LATE_UNTIL";
+
 export type ScheduleFixed = {
   type: "FIXED";
   startTime: HHMM;
@@ -39,7 +41,7 @@ export type ScheduleShift = {
 
 export type Schedule = ScheduleFixed | ScheduleFlex | ScheduleShift;
 
-export type DayEvaluationStatus = "evaluated" | "no_punch";
+export type DayEvaluationStatus = "evaluated" | "no_punch" | "excused";
 
 export type DayEvalInput = {
   dateISO: string;
@@ -47,6 +49,10 @@ export type DayEvalInput = {
   latest?: HHMM | null;
   allTimes?: HHMM[];
   schedule: Schedule;
+  weeklyExclusion?: {
+    mode: WeeklyExclusionMode;
+    ignoreUntilMinutes: number | null;
+  } | null;
 };
 
 const toMin = (t: string) => {
@@ -146,6 +152,38 @@ export function evaluateDay(input: DayEvalInput) {
       ? input.schedule.breakMinutes
       : 60;
 
+  const weeklyExclusion = input.weeklyExclusion ?? null;
+  let weeklyExclusionApplied: { mode: WeeklyExclusionMode; ignoreUntil: string | null } | null = null;
+
+  if (weeklyExclusion) {
+    weeklyExclusionApplied = {
+      mode: weeklyExclusion.mode,
+      ignoreUntil:
+        weeklyExclusion.ignoreUntilMinutes != null
+          ? minToHHMM(weeklyExclusion.ignoreUntilMinutes)
+          : null,
+    };
+    if (weeklyExclusion.mode === "EXCUSED") {
+      return {
+        status: "excused" as DayEvaluationStatus,
+        workedMinutes: 0,
+        workedHHMM: minToHHMM(0),
+        isLate: false,
+        isUndertime: false,
+        lateMinutes: 0,
+        undertimeMinutes: 0,
+        requiredMinutes: null,
+        scheduleStart: null,
+        scheduleEnd: null,
+        scheduleGraceMinutes: null,
+        weeklyPatternApplied: false,
+        weeklyPatternWindows: null,
+        weeklyPatternPresence: [],
+        weeklyExclusionApplied,
+      };
+    }
+  }
+
   let worked = 0;
   let isLate = false;
   let isUndertime = false;
@@ -176,6 +214,7 @@ export function evaluateDay(input: DayEvalInput) {
       weeklyPatternApplied: false,
       weeklyPatternWindows: null,
       weeklyPatternPresence: [],
+      weeklyExclusionApplied,
     };
   }
 
@@ -184,19 +223,23 @@ export function evaluateDay(input: DayEvalInput) {
       const start = toMin(input.schedule.startTime);
       const end = toMin(input.schedule.endTime);
       const grace = input.schedule.graceMinutes ?? 0;
-      scheduleStart = input.schedule.startTime;
+      const lateStart =
+        weeklyExclusion?.mode === "IGNORE_LATE_UNTIL" && weeklyExclusion.ignoreUntilMinutes != null
+          ? Math.max(start, weeklyExclusion.ignoreUntilMinutes)
+          : start;
+      scheduleStart = minToHHMM(lateStart);
       scheduleEnd = input.schedule.endTime;
       scheduleGraceMinutes = grace;
 
       const span = e != null && l != null && l >= e ? l - e : 0;
       worked = Math.max(0, span - breakMin);
 
-      if (e != null) isLate = e > start + grace;
+      if (e != null) isLate = e > lateStart + grace;
       const required = Math.max(0, end - start - breakMin);
       requiredMinutes = required;
       isUndertime = worked < required;
       if (e != null) {
-        lateMinutes = Math.max(0, e - (start + grace));
+        lateMinutes = Math.max(0, e - (lateStart + grace));
       }
       undertimeMinutes = Math.max(0, required - worked);
       break;
@@ -209,7 +252,11 @@ export function evaluateDay(input: DayEvalInput) {
       const bandE = toMin(input.schedule.bandwidthEnd);
       const defaultRequired = input.schedule.requiredDailyMinutes;
       const grace = input.schedule.graceMinutes ?? 0;
-      scheduleStart = input.schedule.coreStart;
+      const coreLateStartBase =
+        weeklyExclusion?.mode === "IGNORE_LATE_UNTIL" && weeklyExclusion.ignoreUntilMinutes != null
+          ? Math.max(coreS, weeklyExclusion.ignoreUntilMinutes)
+          : coreS;
+      scheduleStart = minToHHMM(coreLateStartBase);
       scheduleEnd = input.schedule.coreEnd;
       requiredMinutes = defaultRequired;
       scheduleGraceMinutes = grace;
@@ -241,7 +288,11 @@ export function evaluateDay(input: DayEvalInput) {
           const earliestWindowStart = Math.min(
             ...weeklyDay.windows.map((window) => toMin(window.start))
           );
-          scheduleStart = minToHHMM(earliestWindowStart);
+          const coreLateStart =
+            weeklyExclusion?.mode === "IGNORE_LATE_UNTIL" && weeklyExclusion.ignoreUntilMinutes != null
+              ? Math.max(earliestWindowStart, weeklyExclusion.ignoreUntilMinutes)
+              : earliestWindowStart;
+          scheduleStart = minToHHMM(coreLateStart);
 
           const rawCandidates: number[] = [];
           if (normalizedTimes.length) {
@@ -264,7 +315,7 @@ export function evaluateDay(input: DayEvalInput) {
             ) {
               adjustedFirstPunch += MINUTES_IN_DAY;
             }
-            const threshold = earliestWindowStart + grace;
+            const threshold = coreLateStart + grace;
             isLate = adjustedFirstPunch > threshold;
             lateMinutes = isLate ? Math.max(0, adjustedFirstPunch - threshold) : 0;
           } else {
@@ -305,23 +356,31 @@ export function evaluateDay(input: DayEvalInput) {
       const workedRaw = effectiveEnd - effectiveStart;
       worked = Math.max(0, workedRaw - breakMin);
 
+      const coreStartForLate =
+        weeklyExclusion?.mode === "IGNORE_LATE_UNTIL" && weeklyExclusion.ignoreUntilMinutes != null
+          ? Math.max(coreS, weeklyExclusion.ignoreUntilMinutes)
+          : coreS;
+      scheduleStart = minToHHMM(coreStartForLate);
+
       const overlapStart = Math.max(effectiveStart, coreS);
       const overlapEnd = Math.min(effectiveEnd, coreE);
+      const overlapStartForLate = Math.max(effectiveStart, coreStartForLate);
       const presentInCore = overlapEnd > overlapStart;
+      const presentInCoreForLate = overlapEnd > overlapStartForLate;
 
       const hasCore = coreE > coreS;
-      isLate = hasCore ? effectiveStart > coreS || !presentInCore : false;
+      isLate = hasCore ? effectiveStart > coreStartForLate || !presentInCoreForLate : false;
 
       isUndertime = worked < defaultRequired;
       undertimeMinutes = Math.max(0, defaultRequired - worked);
 
       if (isLate) {
         let late = 0;
-        if (effectiveStart > coreS) {
-          late += effectiveStart - coreS;
+        if (effectiveStart > coreStartForLate) {
+          late += effectiveStart - coreStartForLate;
         }
-        if (!presentInCore) {
-          late = Math.max(late, coreE - coreS);
+        if (!presentInCoreForLate) {
+          late = Math.max(late, coreE - coreStartForLate);
         }
         lateMinutes = late;
       } else {
@@ -334,7 +393,11 @@ export function evaluateDay(input: DayEvalInput) {
       let shiftStart = toMin(input.schedule.shiftStart);
       let shiftEnd   = toMin(input.schedule.shiftEnd);
       const grace = input.schedule.graceMinutes ?? 0;
-      scheduleStart = input.schedule.shiftStart;
+      const lateStart =
+        weeklyExclusion?.mode === "IGNORE_LATE_UNTIL" && weeklyExclusion.ignoreUntilMinutes != null
+          ? Math.max(shiftStart, weeklyExclusion.ignoreUntilMinutes)
+          : shiftStart;
+      scheduleStart = minToHHMM(lateStart);
       scheduleEnd = input.schedule.shiftEnd;
       scheduleGraceMinutes = grace;
 
@@ -343,12 +406,12 @@ export function evaluateDay(input: DayEvalInput) {
       const span = e != null && l != null && l >= e ? l - e : 0;
       worked = Math.max(0, span - breakMin);
 
-      if (e != null) isLate = e > shiftStart + grace;
+      if (e != null) isLate = e > lateStart + grace;
       const planned = Math.max(0, shiftEnd - shiftStart - breakMin);
       requiredMinutes = planned;
       isUndertime = worked < planned;
       if (e != null) {
-        lateMinutes = Math.max(0, e - (shiftStart + grace));
+        lateMinutes = Math.max(0, e - (lateStart + grace));
       }
       undertimeMinutes = Math.max(0, planned - worked);
       break;
@@ -370,5 +433,6 @@ export function evaluateDay(input: DayEvalInput) {
     weeklyPatternApplied,
     weeklyPatternWindows,
     weeklyPatternPresence,
+    weeklyExclusionApplied,
   };
 }

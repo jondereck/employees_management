@@ -99,6 +99,10 @@ export type PerDayRow = ParsedPerDayRow & {
   weeklyPatternApplied?: boolean;
   weeklyPatternWindows?: WeeklyPatternWindow[] | null;
   weeklyPatternPresence?: { start: string; end: string }[];
+  weeklyExclusionApplied?: { mode: string; ignoreUntil: string | null } | null;
+  weeklyExclusionMode?: string | null;
+  weeklyExclusionIgnoreUntil?: string | null;
+  weeklyExclusionId?: string | null;
 };
 
 export type PerEmployeeRow = {
@@ -121,6 +125,7 @@ export type PerEmployeeRow = {
   totalRequiredMinutes: number;
   identityStatus: "matched" | "unmatched" | "ambiguous";
   weeklyPatternDayCount: number;
+  excusedDays: number;
 };
 
 export type ParsedWorkbook = {
@@ -1042,6 +1047,7 @@ type AggregateRow = {
   officeName?: string | null;
   daysWithLogs: number;
   noPunchDays: number;
+  excusedDays: number;
   lateDays: number;
   undertimeDays: number;
   totalLateMinutes: number;
@@ -1210,6 +1216,7 @@ export function summarizePerEmployee(
         officeName: row.officeName ?? null,
         daysWithLogs: 0,
         noPunchDays: 0,
+        excusedDays: 0,
         lateDays: 0,
         undertimeDays: 0,
         totalLateMinutes: 0,
@@ -1237,6 +1244,8 @@ export function summarizePerEmployee(
 
     if (status === "no_punch") {
       agg.noPunchDays += 1;
+    } else if (status === "excused") {
+      agg.excusedDays += 1;
     } else {
       agg.daysWithLogs += 1;
       if (row.isLate) agg.lateDays += 1;
@@ -1263,6 +1272,7 @@ export function summarizePerEmployee(
     officeName: entry.officeName ?? null,
     daysWithLogs: entry.daysWithLogs,
     noPunchDays: entry.noPunchDays,
+    excusedDays: entry.excusedDays,
     lateDays: entry.lateDays,
     undertimeDays: entry.undertimeDays,
     lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
@@ -1494,6 +1504,7 @@ const computeSummaryRow = (
     matchStatus: toMatchStatusLabel(row),
     source: sourceLabel,
     days: row.daysWithLogs ?? 0,
+    excusedDays: row.excusedDays ?? 0,
     lateDays: row.lateDays ?? 0,
     undertimeDays: row.undertimeDays ?? 0,
     latePercent: typeof row.lateRate === "number" ? row.lateRate / 100 : null,
@@ -1510,6 +1521,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
   const totals: SummaryTotals = {};
   let totalDays = 0;
   let totalLateDays = 0;
+  let totalExcusedDays = 0;
   let totalUndertimeDays = 0;
   let totalLateMinutes = 0;
   let totalUndertimeMinutes = 0;
@@ -1517,6 +1529,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
 
   for (const row of rows) {
     totalDays += Number(row.days ?? 0);
+    totalExcusedDays += Number(row.excusedDays ?? 0);
     totalLateDays += Number(row.lateDays ?? 0);
     totalUndertimeDays += Number(row.undertimeDays ?? 0);
     totalLateMinutes += Number(row.lateMinutes ?? 0);
@@ -1526,6 +1539,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
 
   totals.days = totalDays;
   totals.lateDays = totalLateDays;
+  totals.excusedDays = totalExcusedDays;
   totals.undertimeDays = totalUndertimeDays;
   totals.lateMinutes = totalLateMinutes;
   totals.undertimeMinutes = totalUndertimeMinutes;
@@ -1760,12 +1774,14 @@ const buildPerDaySheet = (rows: PerDayRow[]) => {
           return row.workedMinutes ?? null;
         case "lateFlag": {
           if (row.status === "no_punch") return "No punches";
+          if (row.status === "excused") return "Excused";
           return row.isLate ? "Yes" : "No";
         }
         case "lateMinutes":
           return resolveLateMinutes(row) ?? null;
         case "undertimeFlag": {
           if (row.status === "no_punch") return "No punches";
+          if (row.status === "excused") return "Excused";
           return row.isUndertime ? "Yes" : "No";
         }
         case "undertimeMinutes":
@@ -1837,6 +1853,10 @@ const buildMetadataSheet = (options: BiometricsExportOptions) => {
     ],
     ["Export filtered only", filters.exportFilteredOnly ? "Yes" : "No"],
     ["Column selection", metadata.columnLabels.length ? metadata.columnLabels.join(", ") : "Default"],
+    [
+      "Weekly exclusions",
+      "Excused days are excluded from Late/UT totals; see the Excused days column.",
+    ],
     ["App version", metadata.appVersion || "—"],
   ];
 

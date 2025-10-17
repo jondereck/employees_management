@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -26,6 +27,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
+import {
+  WEEKLY_EXCLUSION_MODES,
+  weekdayNumberToLabel,
+  type WeeklyExclusionDTO,
+  type WeeklyExclusionMode,
+} from "@/lib/weeklyExclusions";
 import {
   Tooltip,
   TooltipContent,
@@ -226,6 +233,42 @@ const exceptionFormSchema = z
 
 type ExceptionFormValues = z.infer<typeof exceptionFormSchema>;
 
+const WeeklyExclusionModeSchema = z.enum(["EXCUSED", "IGNORE_LATE_UNTIL"] as const);
+
+type WeeklyExclusionModeEnum = z.infer<typeof WeeklyExclusionModeSchema>;
+
+const weeklyExclusionFormSchema = z
+  .object({
+    weekdays: z
+      .array(z.number().int().min(1).max(7))
+      .min(1, "Select at least one weekday"),
+    mode: WeeklyExclusionModeSchema,
+    ignoreUntil: z.string().optional(),
+    effectiveFrom: z.string().min(1, "Effective from date is required"),
+    effectiveTo: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const trimmedIgnore = data.ignoreUntil?.trim() ?? "";
+    if (data.mode === "IGNORE_LATE_UNTIL") {
+      if (!trimmedIgnore || !HHMM_REGEX.test(trimmedIgnore)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["ignoreUntil"],
+          message: "Enter time as HH:MM (e.g., 08:30)",
+        });
+      }
+    }
+    if (data.effectiveTo && data.effectiveTo < data.effectiveFrom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["effectiveTo"],
+        message: "Effective to must be on or after effective from",
+      });
+    }
+  });
+
+type WeeklyExclusionFormValues = z.infer<typeof weeklyExclusionFormSchema>;
+
 const scheduleDefaults: ScheduleFormValues = {
   type: ScheduleType.FIXED,
   startTime: "08:00",
@@ -257,6 +300,14 @@ const exceptionDefaults: ExceptionFormValues = {
   shiftStart: "22:00",
   shiftEnd: "06:00",
   breakMinutes: 60,
+};
+
+const weeklyExclusionDefaults: WeeklyExclusionFormValues = {
+  weekdays: [],
+  mode: "EXCUSED",
+  ignoreUntil: "",
+  effectiveFrom: "",
+  effectiveTo: "",
 };
 
 const scheduleTypes = Object.values(ScheduleType) as ScheduleTypeEnum[];
@@ -339,13 +390,64 @@ const sortByDateDesc = <T extends { effectiveFrom?: string; date?: string }>(ite
   });
 };
 
+const sortWeeklyExclusions = (items: WeeklyExclusionDTO[]): WeeklyExclusionDTO[] => {
+  return [...items].sort((a, b) => {
+    const aFrom = a.effectiveFrom ?? "";
+    const bFrom = b.effectiveFrom ?? "";
+    if (aFrom !== bFrom) {
+      return bFrom.localeCompare(aFrom);
+    }
+    const aTo = a.effectiveTo ?? "9999-12-31T23:59:59.999Z";
+    const bTo = b.effectiveTo ?? "9999-12-31T23:59:59.999Z";
+    if (aTo !== bTo) {
+      return bTo.localeCompare(aTo);
+    }
+    if (a.weekday !== b.weekday) {
+      return a.weekday - b.weekday;
+    }
+    return a.mode.localeCompare(b.mode);
+  });
+};
+
+const WEEKDAY_NUMBERS = [1, 2, 3, 4, 5, 6, 7] as const;
+const WEEKDAY_LONG_LABELS: Record<number, string> = {
+  1: "Monday",
+  2: "Tuesday",
+  3: "Wednesday",
+  4: "Thursday",
+  5: "Friday",
+  6: "Saturday",
+  7: "Sunday",
+};
+
+const WEEKLY_EXCLUSION_MODE_LABELS: Record<WeeklyExclusionMode, string> = {
+  EXCUSED: "Excused (skip Late/UT)",
+  IGNORE_LATE_UNTIL: "Ignore lateness until",
+};
+
+const WEEKLY_EXCLUSION_MODE_DESCRIPTIONS: Record<WeeklyExclusionMode, string> = {
+  EXCUSED: "Days are excluded from Late/UT and Days counts. Punches remain visible.",
+  IGNORE_LATE_UNTIL: "Late is suppressed until the specified time. Undertime still applies.",
+};
+
+const WEEKLY_EXCLUSION_HELP_TEXT =
+  "Excused days are excluded from Late/UT and the Days count. Punches remain visible in Per-Day details.";
+
+const HHMM_REGEX = /^\d{1,2}:\d{2}$/;
+
 type Props = {
   employeeId: string;
   schedules: WorkScheduleDTO[];
   exceptions: ScheduleExceptionDTO[];
+  weeklyExclusions: WeeklyExclusionDTO[];
 };
 
-export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: Props) {
+export function EmployeeScheduleManager({
+  employeeId,
+  schedules,
+  exceptions,
+  weeklyExclusions,
+}: Props) {
   const [scheduleList, setScheduleList] = useState<WorkScheduleDTO[]>(() => sortByDateDesc(schedules));
   const [exceptionList, setExceptionList] = useState<ScheduleExceptionDTO[]>(() => sortByDateDesc(exceptions));
   const [editingSchedule, setEditingSchedule] = useState<WorkScheduleDTO | null>(null);
@@ -353,6 +455,12 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingException, setSavingException] = useState(false);
   const [deletingScheduleId, setDeletingScheduleId] = useState<string | null>(null);
+  const [weeklyExclusionList, setWeeklyExclusionList] = useState<WeeklyExclusionDTO[]>(() =>
+    sortWeeklyExclusions(weeklyExclusions)
+  );
+  const [editingWeeklyExclusion, setEditingWeeklyExclusion] = useState<WeeklyExclusionDTO | null>(null);
+  const [savingWeeklyExclusion, setSavingWeeklyExclusion] = useState(false);
+  const [deletingWeeklyExclusionId, setDeletingWeeklyExclusionId] = useState<string | null>(null);
   const [weeklyPattern, setWeeklyPattern] = useState<WeeklyPatternFormState>(() => createEmptyWeeklyPatternState());
   const [weeklyPatternErrors, setWeeklyPatternErrors] = useState<WeeklyPatternErrorState>(() =>
     createEmptyWeeklyPatternErrors()
@@ -486,8 +594,15 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
     defaultValues: exceptionDefaults,
   });
 
+  const weeklyExclusionForm = useForm<WeeklyExclusionFormValues>({
+    resolver: zodResolver(weeklyExclusionFormSchema),
+    defaultValues: weeklyExclusionDefaults,
+  });
+
   const scheduleType = scheduleForm.watch("type");
   const exceptionType = exceptionForm.watch("type");
+  const weeklyExclusionMode = weeklyExclusionForm.watch("mode");
+  const isEditingWeeklyExclusion = Boolean(editingWeeklyExclusion);
 
   const hasWeeklyPatternConfigured = useMemo(() => {
     return WEEKDAY_KEYS.some((key) => {
@@ -530,6 +645,11 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
     setEditingException(null);
     exceptionForm.reset(exceptionDefaults);
   }, [exceptionForm]);
+
+  const resetWeeklyExclusionForm = useCallback(() => {
+    setEditingWeeklyExclusion(null);
+    weeklyExclusionForm.reset(weeklyExclusionDefaults);
+  }, [weeklyExclusionForm]);
 
   const onSubmitSchedule = scheduleForm.handleSubmit(async (values) => {
     const usingWeeklyPattern = values.type === ScheduleType.FLEX;
@@ -630,6 +750,87 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
       setSavingException(false);
     }
   });
+
+  const onSubmitWeeklyExclusion = weeklyExclusionForm.handleSubmit(async (values) => {
+    try {
+      setSavingWeeklyExclusion(true);
+      const trimmedIgnore = values.ignoreUntil?.trim() ?? "";
+      const basePayload = {
+        effectiveFrom: values.effectiveFrom,
+        effectiveTo: values.effectiveTo ? values.effectiveTo : null,
+        mode: values.mode,
+        ignoreUntil:
+          values.mode === "IGNORE_LATE_UNTIL" ? (trimmedIgnore ? trimmedIgnore : null) : null,
+      };
+
+      if (editingWeeklyExclusion) {
+        const payload = {
+          ...basePayload,
+          weekday: values.weekdays[0],
+        };
+        const response = await fetch(
+          `/api/employee/${employeeId}/weekly-exclusions/${editingWeeklyExclusion.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }
+        );
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(body?.error ?? "Unable to save weekly exclusion");
+        }
+        const data = body as WeeklyExclusionDTO;
+        setWeeklyExclusionList((prev) =>
+          sortWeeklyExclusions(prev.map((item) => (item.id === data.id ? data : item)))
+        );
+        toast.success("Weekly exclusion updated");
+        resetWeeklyExclusionForm();
+        return;
+      }
+
+      const created: WeeklyExclusionDTO[] = [];
+      for (const weekday of values.weekdays) {
+        const response = await fetch(`/api/employee/${employeeId}/weekly-exclusions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...basePayload, weekday }),
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(body?.error ?? "Unable to save weekly exclusion");
+        }
+        created.push(body as WeeklyExclusionDTO);
+      }
+      if (created.length) {
+        setWeeklyExclusionList((prev) => sortWeeklyExclusions([...created, ...prev]));
+        toast.success(
+          created.length > 1
+            ? `${created.length} weekly exclusions added`
+            : "Weekly exclusion added"
+        );
+        resetWeeklyExclusionForm();
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Unable to save weekly exclusion");
+    } finally {
+      setSavingWeeklyExclusion(false);
+    }
+  });
+
+  const handleWeeklyExclusionFormSubmit = useCallback(
+    (event?: FormEvent<HTMLFormElement>) => {
+      event?.preventDefault();
+      event?.stopPropagation();
+      void onSubmitWeeklyExclusion();
+    },
+    [onSubmitWeeklyExclusion]
+  );
+
+  const handleWeeklyExclusionButtonClick = useCallback(() => {
+    void onSubmitWeeklyExclusion();
+  }, [onSubmitWeeklyExclusion]);
 
   const handleEditSchedule = useCallback(
     (schedule: WorkScheduleDTO) => {
@@ -732,8 +933,54 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
     [editingException, employeeId, resetExceptionForm]
   );
 
+  const handleEditWeeklyExclusion = useCallback(
+    (exclusion: WeeklyExclusionDTO) => {
+      setEditingWeeklyExclusion(exclusion);
+      weeklyExclusionForm.reset({
+        weekdays: [exclusion.weekday],
+        mode: exclusion.mode,
+        ignoreUntil: exclusion.ignoreUntil ?? "",
+        effectiveFrom: toDateInput(exclusion.effectiveFrom),
+        effectiveTo: toDateInput(exclusion.effectiveTo),
+      });
+    },
+    [weeklyExclusionForm]
+  );
+
+  const handleDeleteWeeklyExclusion = useCallback(
+    async (exclusion: WeeklyExclusionDTO) => {
+      if (!confirm("Remove this weekly exclusion?")) return;
+      try {
+        setDeletingWeeklyExclusionId(exclusion.id);
+        const response = await fetch(
+          `/api/employee/${employeeId}/weekly-exclusions/${exclusion.id}`,
+          { method: "DELETE" }
+        );
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(body?.error ?? "Unable to delete weekly exclusion");
+        }
+        setWeeklyExclusionList((prev) => prev.filter((item) => item.id !== exclusion.id));
+        toast.success("Weekly exclusion removed");
+        if (editingWeeklyExclusion?.id === exclusion.id) {
+          resetWeeklyExclusionForm();
+        }
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : "Unable to delete weekly exclusion");
+      } finally {
+        setDeletingWeeklyExclusionId(null);
+      }
+    },
+    [editingWeeklyExclusion, employeeId, resetWeeklyExclusionForm]
+  );
+
   const scheduleRows = useMemo(() => sortByDateDesc(scheduleList), [scheduleList]);
   const exceptionRows = useMemo(() => sortByDateDesc(exceptionList), [exceptionList]);
+  const weeklyExclusionRows = useMemo(
+    () => sortWeeklyExclusions(weeklyExclusionList),
+    [weeklyExclusionList]
+  );
 
   return (
     <div className="space-y-8">
@@ -1183,6 +1430,256 @@ export function EmployeeScheduleManager({ employeeId, schedules, exceptions }: P
                           disabled={deletingScheduleId === schedule.id}
                         >
                           {deletingScheduleId === schedule.id ? "Removing…" : "Remove"}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold">Weekly exclusions</h3>
+          <p className="text-sm text-muted-foreground">{WEEKLY_EXCLUSION_HELP_TEXT}</p>
+        </div>
+        <Form {...weeklyExclusionForm}>
+          <form onSubmit={handleWeeklyExclusionFormSubmit} className="space-y-4">
+            <FormField
+              control={weeklyExclusionForm.control}
+              name="weekdays"
+              render={({ field }) => {
+                const value: number[] = Array.isArray(field.value) ? field.value : [];
+                return (
+                  <FormItem>
+                    <FormLabel>Weekdays</FormLabel>
+                    <FormControl>
+                      <div className="grid gap-2 sm:grid-cols-4">
+                        {WEEKDAY_NUMBERS.map((weekday) => {
+                          const checked = value.includes(weekday);
+                          return (
+                            <label
+                              key={weekday}
+                              className="flex items-center gap-2 rounded-md border border-input bg-background p-2 text-sm"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(checkedState) => {
+                                  const isChecked = Boolean(checkedState);
+                                  const next = new Set(value);
+                                  if (isChecked) {
+                                    if (isEditingWeeklyExclusion) {
+                                      next.clear();
+                                    }
+                                    next.add(weekday);
+                                  } else {
+                                    next.delete(weekday);
+                                  }
+                                  field.onChange(Array.from(next).sort((a, b) => a - b));
+                                }}
+                              />
+                              <div>
+                                <p className="font-medium">{weekdayNumberToLabel(weekday)}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {WEEKDAY_LONG_LABELS[weekday] ?? ""}
+                                </p>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </FormControl>
+                    <FormDescription>
+                      Select one or more weekdays. Editing applies to the chosen weekday.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+
+            <FormField
+              control={weeklyExclusionForm.control}
+              name="mode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mode</FormLabel>
+                  <FormControl>
+                    <div className="space-y-2">
+                      {WEEKLY_EXCLUSION_MODES.map((mode) => (
+                        <label
+                          key={mode}
+                          className="flex items-start gap-3 rounded-md border border-input bg-background p-3"
+                        >
+                          <input
+                            type="radio"
+                            className="mt-1 h-4 w-4"
+                            checked={field.value === mode}
+                            onChange={() => field.onChange(mode)}
+                          />
+                          <div>
+                            <p className="font-medium">{WEEKLY_EXCLUSION_MODE_LABELS[mode]}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {WEEKLY_EXCLUSION_MODE_DESCRIPTIONS[mode]}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {weeklyExclusionMode === "IGNORE_LATE_UNTIL" && (
+              <FormField
+                control={weeklyExclusionForm.control}
+                name="ignoreUntil"
+                render={({ field }) => (
+                  <FormItem className="w-full sm:w-48">
+                    <FormLabel>Ignore lateness until</FormLabel>
+                    <FormControl>
+                      <Input placeholder="08:30" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Punches before this time are on time. Undertime still uses the base schedule end.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={weeklyExclusionForm.control}
+                name="effectiveFrom"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Effective from</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={weeklyExclusionForm.control}
+                name="effectiveTo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Effective to</FormLabel>
+                    <FormControl>
+                      <Input type="date" value={field.value ?? ""} onChange={field.onChange} />
+                    </FormControl>
+                    <FormDescription>Leave blank for open-ended.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                onClick={handleWeeklyExclusionButtonClick}
+                disabled={savingWeeklyExclusion}
+              >
+                {savingWeeklyExclusion
+                  ? "Saving..."
+                  : editingWeeklyExclusion
+                  ? "Update exclusion"
+                  : "Add exclusion"}
+              </Button>
+              {editingWeeklyExclusion && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetWeeklyExclusionForm}
+                  disabled={savingWeeklyExclusion}
+                >
+                  Cancel edit
+                </Button>
+              )}
+            </div>
+          </form>
+        </Form>
+
+        <div className="overflow-hidden rounded-lg border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="p-2 text-left">Weekday</th>
+                <th className="p-2 text-left">Mode</th>
+                <th className="p-2 text-left">Effective</th>
+                <th className="p-2 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {weeklyExclusionRows.length === 0 ? (
+                <tr>
+                  <td className="p-3 text-center text-muted-foreground" colSpan={4}>
+                    No weekly exclusions yet.
+                  </td>
+                </tr>
+              ) : (
+                weeklyExclusionRows.map((exclusion) => (
+                  <tr key={exclusion.id} className="odd:bg-muted/20">
+                    <td className="p-2">
+                      <div className="space-y-1">
+                        <Badge variant="secondary">
+                          {weekdayNumberToLabel(exclusion.weekday)}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
+                          {WEEKDAY_LONG_LABELS[exclusion.weekday] ?? ""}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      <div className="space-y-1">
+                        <Badge variant="outline">
+                          {WEEKLY_EXCLUSION_MODE_LABELS[exclusion.mode]}
+                        </Badge>
+                        {exclusion.mode === "IGNORE_LATE_UNTIL" && exclusion.ignoreUntil ? (
+                          <p className="text-xs text-muted-foreground">
+                            Ignore lateness until {exclusion.ignoreUntil}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Excused from Late/UT and Days
+                          </p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      {toDateInput(exclusion.effectiveFrom)}{" "}
+                      {exclusion.effectiveTo
+                        ? `to ${toDateInput(exclusion.effectiveTo)}`
+                        : "onward"}
+                    </td>
+                    <td className="p-2 text-center">
+                      <div className="flex justify-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditWeeklyExclusion(exclusion)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteWeeklyExclusion(exclusion)}
+                          disabled={deletingWeeklyExclusionId === exclusion.id}
+                        >
+                          {deletingWeeklyExclusionId === exclusion.id ? "Removing…" : "Remove"}
                         </Button>
                       </div>
                     </td>

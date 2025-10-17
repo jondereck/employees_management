@@ -3056,6 +3056,7 @@ export default function BioLogUploader() {
                   const weeklyWindowsLabel = formatTimelineLabel(row.weeklyPatternWindows ?? []);
                   const weeklyPresenceLabel = formatTimelineLabel(row.weeklyPatternPresence ?? []);
                   const isNoPunch = row.status === "no_punch";
+                  const isExcused = row.status === "excused";
                   return (
                     <tr
                       key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`}
@@ -3070,13 +3071,28 @@ export default function BioLogUploader() {
                       <td className="p-2">{dateFormatter.format(toDate(row.dateISO))}</td>
                       <td className="p-2 text-center">{row.earliest ?? ""}</td>
                       <td className="p-2 text-center">{row.latest ?? ""}</td>
-                      <td className="p-2 text-center">{row.workedHHMM ?? ""}</td>
+                      <td className="p-2 text-center">{isExcused ? "—" : row.workedHHMM ?? ""}</td>
                       <td className="p-2">
                         {row.scheduleType ? (
                           <Badge variant="outline">{formatScheduleType(row.scheduleType)}</Badge>
                         ) : (
                           ""
                         )}
+                        {row.weeklyExclusionMode === "EXCUSED" ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="secondary" className="mt-1 cursor-help">
+                                Excused
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>Weekly exclusion</TooltipContent>
+                          </Tooltip>
+                        ) : null}
+                        {row.weeklyExclusionMode === "IGNORE_LATE_UNTIL" && row.weeklyExclusionIgnoreUntil ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Ignore late until {row.weeklyExclusionIgnoreUntil}
+                          </p>
+                        ) : null}
                         {row.weeklyPatternApplied ? (
                           <p className="mt-1 text-xs text-muted-foreground">Weekly pattern applied</p>
                         ) : null}
@@ -3097,6 +3113,10 @@ export default function BioLogUploader() {
                             <Badge variant="outline" className="bg-muted/60 text-muted-foreground">
                               No punches
                             </Badge>
+                          ) : isExcused ? (
+                            <Badge variant="outline" className="bg-muted/60 text-muted-foreground">
+                              Excused — punches not evaluated
+                            </Badge>
                           ) : row.allTimes.length ? (
                             <p>{row.allTimes.join(", ")}</p>
                           ) : null}
@@ -3109,7 +3129,14 @@ export default function BioLogUploader() {
                         </div>
                       </td>
                       <td className="p-2 text-center">
-                        {isNoPunch ? (
+                        {isExcused ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help">Excused</span>
+                            </TooltipTrigger>
+                            <TooltipContent>Weekly exclusion — late not evaluated.</TooltipContent>
+                          </Tooltip>
+                        ) : isNoPunch ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="cursor-help">No</span>
@@ -3123,7 +3150,14 @@ export default function BioLogUploader() {
                         )}
                       </td>
                       <td className="p-2 text-center">
-                        {isNoPunch ? (
+                        {isExcused ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help">Excused</span>
+                            </TooltipTrigger>
+                            <TooltipContent>Weekly exclusion — undertime still tracked when applicable.</TooltipContent>
+                          </Tooltip>
+                        ) : isNoPunch ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="cursor-help">No</span>
