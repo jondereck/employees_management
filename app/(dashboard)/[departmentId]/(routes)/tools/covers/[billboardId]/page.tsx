@@ -1,7 +1,6 @@
-import prismadb from "@/lib/prismadb";
-
-import { ToolsLayout } from "@/app/tools/layout";
+import { ToolsLayout } from "@/components/layouts/tools-layout";
 import { BillboardForm } from "./components/billboard-form";
+import prismadb from "@/lib/prismadb";
 
 const BillboardDetailsPage = async ({
   params,

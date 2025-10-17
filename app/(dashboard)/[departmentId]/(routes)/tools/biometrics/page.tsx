@@ -1,4 +1,4 @@
-import { ToolsLayout } from "@/app/tools/layout";
+import { ToolsLayout } from "@/components/layouts/tools-layout";
 import BioLogUploader from "./BioLogUploader";
 
 export default function BiometricsToolPage({

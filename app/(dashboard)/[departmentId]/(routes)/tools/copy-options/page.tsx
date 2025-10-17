@@ -1,6 +1,6 @@
 import dynamic from "next/dynamic";
 
-import { ToolsLayout } from "@/app/tools/layout";
+import { ToolsLayout } from "@/components/layouts/tools-layout";
 
 const CopyOptionsCard = dynamic(
   () => import("@/app/(dashboard)/[departmentId]/(routes)/settings/components/copy-options-card"),

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import {
   Copy,
@@ -10,7 +9,8 @@ import {
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import prismadb from "@/lib/prismadb";
 import { extractToolAccess, type ToolKey } from "@/lib/tool-access";
-import { ToolsLayout } from "@/app/tools/layout";
+import { ToolsLayout } from "@/components/layouts/tools-layout";
+import { ToolNavigationLink } from "@/components/tools/navigation-link";
 
 const TOOL_CARD_CONFIG: Array<{
   key: ToolKey;
@@ -89,7 +89,7 @@ export default async function ToolsLandingPage({
         cards.map((card) => {
           const Icon = card.icon;
           return (
-            <Link
+            <ToolNavigationLink
               key={card.key}
               href={`/${departmentId}/${card.slug}`}
               className="group block focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
@@ -105,7 +105,7 @@ export default async function ToolsLandingPage({
                   </div>
                 </CardHeader>
               </Card>
-            </Link>
+            </ToolNavigationLink>
           );
         })
       ) : (

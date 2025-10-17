@@ -1,4 +1,4 @@
-import { ToolsLayout } from "@/app/tools/layout";
+import { ToolsLayout } from "@/components/layouts/tools-layout";
 import CsvAttendanceImport from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/csv-attendance-import";
 
 export default function AttendanceImportPage({

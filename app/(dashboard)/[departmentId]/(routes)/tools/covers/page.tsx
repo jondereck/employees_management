@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
-import { ToolsLayout } from "@/app/tools/layout";
+import { ToolsLayout } from "@/components/layouts/tools-layout";
+import { ToolNavigationLink } from "@/components/tools/navigation-link";
 import { BillboardsClient } from "./components/client";
 import { BillboardColumn } from "./components/columns";
 import prismadb from "@/lib/prismadb";
@@ -35,7 +35,9 @@ const CoversPage = async ({
       breadcrumbs={[{ label: "Covers" }]}
       actions={
         <Button asChild>
-          <Link href={`/${params.departmentId}/tools/covers/new`}>New Cover</Link>
+          <ToolNavigationLink href={`/${params.departmentId}/tools/covers/new`}>
+            New Cover
+          </ToolNavigationLink>
         </Button>
       }
       contentClassName="space-y-6"
