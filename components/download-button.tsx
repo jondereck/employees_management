@@ -1,10 +1,26 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { toast } from 'sonner';
 
 import { FaFileExcel } from 'react-icons/fa';
-import { ChevronDown, FileDown, FileUp, Save, Trash2 } from "lucide-react";
+import { ChevronDown, FileDown, FileUp, GripVertical, Save, Trash2 } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import Modal from './ui/modal';
 import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -60,6 +76,76 @@ const TAB_VALUE_TO_KEY = Object.entries(TAB_KEY_TO_VALUE).reduce<Record<string, 
 );
 
 const BIO_INDEX_EMPTY_KEY = '__NO_CODE__';
+
+const COLUMN_STORAGE_KEY = 'hrps-emp-export-columns';
+
+const COLUMN_HELP_TEXT: Record<string, string> = {
+  middleName: "Middle initial (e.g., 'A.').",
+};
+
+type SelectedColumnDraggableProps = {
+  column: { key: string; name: string };
+  onToggle: (key: string) => void;
+};
+
+const SelectedColumnDraggable = ({ column, onToggle }: SelectedColumnDraggableProps) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: column.key,
+  });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 20 : undefined,
+  };
+
+  const helpText = COLUMN_HELP_TEXT[column.key];
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'flex items-center justify-between gap-3 bg-background px-3 py-2 text-sm shadow-sm',
+        'rounded-md border border-border',
+        isDragging ? 'ring-2 ring-ring ring-offset-1' : ''
+      )}
+    >
+      <div className="flex flex-1 items-center gap-3">
+        <ActionTooltip label="Drag to reorder (↑/↓)." side="top">
+          <button
+            type="button"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-dashed bg-background text-muted-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label={`Drag ${column.name} to reorder`}
+            {...listeners}
+            {...attributes}
+          >
+            <GripVertical className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </ActionTooltip>
+        {helpText ? (
+          <ActionTooltip label={helpText} side="top" align="start">
+            <span className="cursor-help font-medium text-foreground">{column.name}</span>
+          </ActionTooltip>
+        ) : (
+          <span className="font-medium text-foreground">{column.name}</span>
+        )}
+      </div>
+      <ActionTooltip label="Uncheck to remove from the export" side="top" align="end">
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked
+            onChange={() => onToggle(column.key)}
+            aria-label={`Remove ${column.name} from export`}
+            className="h-4 w-4"
+          />
+          <span>Included</span>
+        </label>
+      </ActionTooltip>
+    </div>
+  );
+};
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
@@ -330,7 +416,7 @@ export default function DownloadStyledExcel() {
 
   function applyTemplate(tpl: ExportTemplate) {
     setSelectedTemplateId(tpl.id);
-    setSelectedColumns(tpl.selectedKeys.map((key) => normalizeColumnKey(String(key))));
+    setSelectedColumns(sanitizeSelection(tpl.selectedKeys.map((key) => String(key))));
     const normalized = normalizeTemplate(tpl);
     setSelectedOffices(normalized.officesSelection);
     setSheetMode(normalized.sheetMode);
@@ -889,8 +975,40 @@ export default function DownloadStyledExcel() {
     []
   );
 
+  const applyDynamicLabels = useCallback(
+    (cols: { key: string; name: string }[]) => {
+      const idLabel =
+        idColumnSource === 'uuid'
+          ? 'Employee UUID'
+          : idColumnSource === 'bio'
+            ? 'Employee Code'
+            : 'Employee No';
+      return cols.map((col) => {
+        if (col.key === 'rowNumber') {
+          return { ...col, name: 'No.' };
+        }
+        if (col.key === 'employeeNo') {
+          return { ...col, name: idLabel };
+        }
+        return col;
+      });
+    },
+    [idColumnSource]
+  );
+
+  const labeledColumnOrder = useMemo(
+    () => applyDynamicLabels(columnOrder),
+    [applyDynamicLabels, columnOrder]
+  );
+
+  const columnLabelMap = useMemo(() => {
+    const map = new Map<string, { key: string; name: string }>();
+    labeledColumnOrder.forEach((col) => map.set(col.key, col));
+    return map;
+  }, [labeledColumnOrder]);
+
   const groupedColumns = useMemo<GroupedColumn[]>(() => {
-    const map = new Map(columnOrder.map((col) => [col.key, col]));
+    const map = new Map(labeledColumnOrder.map((col) => [col.key, col]));
     const assigned = new Set<string>();
 
     const groups: GroupedColumn[] = COLUMN_GROUPS.map((group) => {
@@ -901,15 +1019,15 @@ export default function DownloadStyledExcel() {
       return { key: group.key, title: group.title, columns };
     }).filter((group) => group.columns.length > 0);
 
-    const extras = columnOrder.filter((col) => col.key !== 'rowNumber' && !assigned.has(col.key));
+    const extras = labeledColumnOrder.filter((col) => col.key !== 'rowNumber' && !assigned.has(col.key));
     if (extras.length) {
       groups.push({ key: 'other' as ColumnGroupKey, title: 'Other Fields', columns: extras });
     }
 
     return groups;
-  }, [columnOrder]);
+  }, [labeledColumnOrder]);
 
-  const rowNumberLabel = columnOrder.find((col) => col.key === 'rowNumber')?.name ?? 'No. (row number)';
+  const rowNumberLabel = columnLabelMap.get('rowNumber')?.name ?? 'No.';
 
   const defaultSelectedColumns = [
     'rowNumber',
@@ -928,56 +1046,141 @@ export default function DownloadStyledExcel() {
   const normalizeColumnKey = (key: string) => (key === 'officeId' ? 'office' : key);
 
   const [selectedColumns, setSelectedColumns] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('selectedColumns');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
-            return parsed.map((key: string) => normalizeColumnKey(String(key)));
-          }
-        } catch (error) {
-          console.warn('Failed to parse selectedColumns', error);
+    const allowed = new Set(columnOrder.map((col) => col.key));
+    const sanitize = (keys: string[]): string[] => {
+      const seen = new Set<string>();
+      const next: string[] = [];
+      keys.forEach((raw) => {
+        const normalized = normalizeColumnKey(String(raw));
+        if (allowed.has(normalized) && !seen.has(normalized)) {
+          seen.add(normalized);
+          next.push(normalized);
         }
-      }
-      return defaultSelectedColumns;
+      });
+      return next;
+    };
+
+    const fallback = sanitize(defaultSelectedColumns);
+
+    if (typeof window === 'undefined') {
+      return fallback;
     }
-    return defaultSelectedColumns;
+
+    const readStored = (raw: string | null): string[] => {
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.map((key: unknown) => normalizeColumnKey(String(key)));
+        }
+        if (parsed && typeof parsed === 'object' && Array.isArray((parsed as any).selected)) {
+          return (parsed as any).selected.map((key: unknown) => normalizeColumnKey(String(key)));
+        }
+      } catch (error) {
+        console.warn('Failed to parse stored column selection', error);
+      }
+      return [];
+    };
+
+    const stored = readStored(localStorage.getItem(COLUMN_STORAGE_KEY));
+    if (stored.length) {
+      const sanitized = sanitize(stored);
+      if (sanitized.length) return sanitized;
+    }
+
+    const legacy = readStored(localStorage.getItem('selectedColumns'));
+    if (legacy.length) {
+      const sanitizedLegacy = sanitize(legacy);
+      if (sanitizedLegacy.length) return sanitizedLegacy;
+    }
+
+    return fallback;
   });
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const isAllSelected = selectedColumns.length === columnOrder.length;
 
+  const allowedColumnKeys = useMemo(() => new Set(columnOrder.map((col) => col.key)), [columnOrder]);
+
+  const sanitizeSelection = useCallback(
+    (keys: string[]) => {
+      const seen = new Set<string>();
+      const result: string[] = [];
+      keys.forEach((raw) => {
+        const normalized = normalizeColumnKey(String(raw));
+        if (allowedColumnKeys.has(normalized) && !seen.has(normalized)) {
+          seen.add(normalized);
+          result.push(normalized);
+        }
+      });
+      return result;
+    },
+    [allowedColumnKeys]
+  );
+
+  const selectedColumnSet = useMemo(() => new Set(selectedColumns), [selectedColumns]);
+
+  const selectedColumnItems = useMemo(
+    () =>
+      selectedColumns
+        .map((key) => columnLabelMap.get(key))
+        .filter((col): col is { key: string; name: string } => Boolean(col)),
+    [selectedColumns, columnLabelMap]
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleSelectedColumnDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      setSelectedColumns((prev) => {
+        const oldIndex = prev.indexOf(String(active.id));
+        const newIndex = prev.indexOf(String(over.id));
+        if (oldIndex === -1 || newIndex === -1) return prev;
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    },
+    [setSelectedColumns]
+  );
+
+  const exportColumnOrder = useMemo(() => {
+    const map = new Map(columnOrder.map((col) => [col.key, col]));
+    const ordered = selectedColumns
+      .map((key) => map.get(key))
+      .filter((col): col is { key: string; name: string } => Boolean(col));
+    return applyDynamicLabels(ordered);
+  }, [applyDynamicLabels, columnOrder, selectedColumns]);
+
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedColumns = localStorage.getItem('selectedColumns');
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(
+        COLUMN_STORAGE_KEY,
+        JSON.stringify({ selected: selectedColumns })
+      );
+      localStorage.removeItem('selectedColumns');
+    } catch (error) {
+      console.warn('Failed to persist column selection', error);
+    }
+  }, [selectedColumns]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
       const storedStatus = localStorage.getItem('statusFilter');
-
-      if (storedColumns) {
-        try {
-          const parsed = JSON.parse(storedColumns);
-          if (Array.isArray(parsed)) {
-            setSelectedColumns(parsed.map((key: string) => normalizeColumnKey(String(key))));
-          }
-        } catch (err) {
-          console.error('Invalid stored selectedColumns:', err);
-        }
-      }
-
       if (storedStatus === 'active' || storedStatus === 'retired') {
         setStatusFilter(storedStatus);
       }
+    } catch (error) {
+      console.warn('Failed to parse statusFilter', error);
     }
   }, []); // Load from localStorage once on mount
-
-  // Save selectedColumns when it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedColumns', JSON.stringify(selectedColumns));
-    }
-  }, [selectedColumns]);
 
   // Save statusFilter when it changes
   useEffect(() => {
@@ -988,11 +1191,16 @@ export default function DownloadStyledExcel() {
 
 
   const toggleColumn = (key: string) => {
-    setSelectedColumns((prev) =>
-      prev.includes(key)
-        ? prev.filter((k) => k !== key)
-        : [...prev, key]
-    );
+    const normalized = normalizeColumnKey(String(key));
+    setSelectedColumns((prev) => {
+      if (prev.includes(normalized)) {
+        return prev.filter((k) => k !== normalized);
+      }
+      if (!allowedColumnKeys.has(normalized)) {
+        return prev;
+      }
+      return [...prev, normalized];
+    });
   };
 
   const toggleSelectAll = () => {
@@ -1010,11 +1218,16 @@ export default function DownloadStyledExcel() {
   const handleGroupSelectAll = (columnKeys: string[]) => {
     setSelectedColumns((prev) => {
       const set = new Set(prev);
-      const allSelected = columnKeys.every((key) => set.has(key));
+      const normalizedKeys = sanitizeSelection(columnKeys);
+      const allSelected = normalizedKeys.every((key) => set.has(key));
       if (allSelected) {
-        columnKeys.forEach((key) => set.delete(key));
+        normalizedKeys.forEach((key) => set.delete(key));
       } else {
-        columnKeys.forEach((key) => set.add(key));
+        normalizedKeys.forEach((key) => {
+          if (!set.has(key)) {
+            set.add(key);
+          }
+        });
       }
       return Array.from(set);
     });
@@ -1027,22 +1240,7 @@ export default function DownloadStyledExcel() {
     selectedColumnsRef.current = selectedColumns;
   }, [selectedColumns]);
 
-  const effectiveColumnOrder = useMemo(() => {
-    const label =
-      idColumnSource === 'uuid' ? 'Employee UUID' :
-        idColumnSource === 'bio' ? 'Employee Code' :
-          'Employee No';
-
-    return columnOrder.map((col) => {
-      if (col.key === 'rowNumber') {
-        return { ...col, name: 'No.' };
-      }
-      if (col.key === 'employeeNo') {
-        return { ...col, name: label };
-      }
-      return col;
-    });
-  }, [columnOrder, idColumnSource]);
+  const effectiveColumnOrder = useMemo(() => labeledColumnOrder, [labeledColumnOrder]);
 
   const sortFieldOptions = useMemo(() => {
     const entries = new Map<string, string>();
@@ -1116,7 +1314,7 @@ export default function DownloadStyledExcel() {
 
       const blob = await generateExcelFile({
         selectedKeys,
-        columnOrder: effectiveColumnOrder,
+        columnOrder: exportColumnOrder,
         statusFilter,
         baseImageDir: imageBaseDir,
         baseQrDir: qrBaseDir,
@@ -1766,17 +1964,44 @@ export default function DownloadStyledExcel() {
                         </div>
 
                         <div className="space-y-4">
-                          <label className="flex items-center gap-2 text-sm font-medium">
-                            <input
-                              type="checkbox"
-                              checked={selectedColumns.includes('rowNumber')}
-                              onChange={() => toggleColumn('rowNumber')}
-                            />
-                            <span>{rowNumberLabel}</span>
-                          </label>
+                          <div>
+                            <label className="flex items-center gap-2 text-sm font-medium">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumnSet.has('rowNumber')}
+                                onChange={() => toggleColumn('rowNumber')}
+                              />
+                              <span>{rowNumberLabel}</span>
+                            </label>
+                          </div>
+
+                          <p className="text-xs text-muted-foreground">
+                            Drag to arrange the sequence used in the Excel file.
+                          </p>
+                          <div className="rounded-md border border-dashed bg-muted/30 p-2">
+                            {selectedColumnItems.length ? (
+                              <DndContext sensors={sensors} onDragEnd={handleSelectedColumnDragEnd}>
+                                <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
+                                  <div className="space-y-2">
+                                    {selectedColumnItems.map((column) => (
+                                      <SelectedColumnDraggable
+                                        key={column.key}
+                                        column={column}
+                                        onToggle={toggleColumn}
+                                      />
+                                    ))}
+                                  </div>
+                                </SortableContext>
+                              </DndContext>
+                            ) : (
+                              <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                                Select columns to enable ordering.
+                              </div>
+                            )}
+                          </div>
 
                           {groupedColumns.map((group) => {
-                            const groupSelectedCount = group.columns.filter((col) => selectedColumns.includes(col.key)).length;
+                            const groupSelectedCount = group.columns.filter((col) => selectedColumnSet.has(col.key)).length;
                             const totalInGroup = group.columns.length;
                             const allGroupSelected = totalInGroup > 0 && groupSelectedCount === totalInGroup;
                             const isOpen = openGroups[group.key] ?? true;
@@ -1805,16 +2030,25 @@ export default function DownloadStyledExcel() {
                                 </div>
                                 {isOpen ? (
                                   <div className="grid gap-2 border-t bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    {group.columns.map((col) => (
-                                      <label key={col.key} className="flex items-center gap-2 text-sm">
-                                        <input
-                                          type="checkbox"
-                                          checked={selectedColumns.includes(col.key)}
-                                          onChange={() => toggleColumn(col.key)}
-                                        />
-                                        <span className="truncate">{col.name}</span>
-                                      </label>
-                                    ))}
+                                    {group.columns.map((col) => {
+                                      const helpText = COLUMN_HELP_TEXT[col.key];
+                                      return (
+                                        <label key={col.key} className="flex items-center gap-2 text-sm">
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedColumnSet.has(col.key)}
+                                            onChange={() => toggleColumn(col.key)}
+                                          />
+                                          {helpText ? (
+                                            <ActionTooltip label={helpText} side="top" align="start">
+                                              <span className="truncate cursor-help">{col.name}</span>
+                                            </ActionTooltip>
+                                          ) : (
+                                            <span className="truncate">{col.name}</span>
+                                          )}
+                                        </label>
+                                      );
+                                    })}
                                   </div>
                                 ) : null}
                               </div>
