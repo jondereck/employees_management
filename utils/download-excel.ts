@@ -93,6 +93,15 @@ function normalizeRowStringsNFC<T extends Record<string, any>>(row: T): T {
   return out as T;
 }
 
+function toMiddleInitial(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trimStart();
+  if (!trimmed) return '';
+  const first = trimmed.charAt(0);
+  if (!first) return '';
+  return `${first.toUpperCase()}.`;
+}
+
 
 function normalizeWindowsDir(p: string) {
   const trimmed = (p || '').trim().replace(/[\/]/g, '\\');
@@ -429,6 +438,16 @@ export async function generateExcelFile({
         } else {
           val = codePart || bioPart || row.id || '';
         }
+      } else if (col.key === 'middleName') {
+        const source =
+          row.middleName ??
+          row.middle_name ??
+          row.middleInitial ??
+          row.middle_initial ??
+          '';
+        val = toMiddleInitial(source);
+      } else if (col.key === 'signature') {
+        val = '';
       } else {
         const def = COLUMN_DEFS[col.key];
         if (def?.accessor) {
@@ -455,8 +474,8 @@ export async function generateExcelFile({
       const cellAddress = XLSX.utils.encode_cell({ r: headerRowIdx, c: colIdx });
       const cell = worksheet[cellAddress] || { t: 's', v: header };
       cell.s = {
-        font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12 },
-        fill: { fgColor: { rgb: '28a745' } },
+        font: { bold: true, color: { rgb: '000000' }, sz: 12 },
+        fill: { fgColor: { rgb: 'E5E7EB' } },
         alignment: { horizontal: 'center', vertical: 'center' },
         border: {
           top: { style: 'thin', color: { rgb: '000000' } },
@@ -564,15 +583,22 @@ export async function generateExcelFile({
       if (header === 'No.') {
         return { wch: 8 };
       }
+      if (header === 'Signature') {
+        return { wch: 24 };
+      }
       let maxLength = header.length;
       data.forEach((row: any) => {
         const cellValue = row?.[header] ?? '';
-        const cellLength = String(cellValue).length;
-        if (cellLength > maxLength) {
-          maxLength = cellLength;
-        }
+        const str = typeof cellValue === 'number' ? String(cellValue) : String(cellValue ?? '');
+        const lines = str.split(/\r?\n/);
+        lines.forEach((line) => {
+          if (line.length > maxLength) {
+            maxLength = line.length;
+          }
+        });
       });
-      return { wch: maxLength + 1 };
+      const width = Math.max(12, Math.min(maxLength + 2, 28));
+      return { wch: width };
     });
     if (columnWidths.length > 0) {
       worksheet['!cols'] = columnWidths;

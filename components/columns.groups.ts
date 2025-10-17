@@ -44,6 +44,11 @@ export const COLUMN_GROUPS = [
     title: "Government IDs",
     items: ["gsisNo", "tinNo", "philHealthNo", "pagIbigNo"],
   },
+  {
+    key: "export",
+    title: "Export Extras",
+    items: ["rowNumber", "comma", "signature"],
+  },
 ] as const;
 
 export type ColumnGroupKey = typeof COLUMN_GROUPS[number]["key"] | "other";
