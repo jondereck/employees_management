@@ -7,9 +7,13 @@ import { FaFileExcel } from 'react-icons/fa';
 import { ChevronDown, FileDown, FileUp, GripVertical, Save, Trash2 } from "lucide-react";
 import {
   DndContext,
+  DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
+  defaultDropAnimation,
   type DragEndEvent,
+  type DragStartEvent,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -21,6 +25,7 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import Modal from './ui/modal';
 import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -88,6 +93,9 @@ type SelectedColumnDraggableProps = {
   onToggle: (key: string) => void;
 };
 
+const SELECTED_COLUMN_ROW_BASE_CLASS =
+  'flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2 text-sm shadow-sm';
+
 const SelectedColumnDraggable = ({ column, onToggle }: SelectedColumnDraggableProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: column.key,
@@ -106,8 +114,7 @@ const SelectedColumnDraggable = ({ column, onToggle }: SelectedColumnDraggablePr
       ref={setNodeRef}
       style={style}
       className={cn(
-        'flex items-center justify-between gap-3 bg-background px-3 py-2 text-sm shadow-sm',
-        'rounded-md border border-border',
+        SELECTED_COLUMN_ROW_BASE_CLASS,
         isDragging ? 'ring-2 ring-ring ring-offset-1' : ''
       )}
     >
@@ -146,6 +153,18 @@ const SelectedColumnDraggable = ({ column, onToggle }: SelectedColumnDraggablePr
     </div>
   );
 };
+
+const SelectedColumnGhost = ({ column }: { column: { key: string; name: string } }) => (
+  <div className={cn(SELECTED_COLUMN_ROW_BASE_CLASS, 'ring-2 ring-ring ring-offset-1')}>
+    <div className="flex flex-1 items-center gap-3">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-dashed bg-background text-muted-foreground">
+        <GripVertical className="h-4 w-4" aria-hidden="true" />
+      </div>
+      <span className="font-medium text-foreground">{column.name}</span>
+    </div>
+    <span className="text-xs text-muted-foreground">Included</span>
+  </div>
+);
 
 export default function DownloadStyledExcel() {
   const [loading, setLoading] = useState(false);
@@ -1129,14 +1148,27 @@ export default function DownloadStyledExcel() {
     [selectedColumns, columnLabelMap]
   );
 
+  const [activeDragColumnId, setActiveDragColumnId] = useState<string | null>(null);
+
+  const activeDragColumn = useMemo(
+    () => selectedColumnItems.find((column) => column.key === activeDragColumnId) ?? null,
+    [activeDragColumnId, selectedColumnItems]
+  );
+
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  const handleSelectedColumnDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragColumnId(String(event.active.id));
+  }, []);
 
   const handleSelectedColumnDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
+      setActiveDragColumnId(null);
       if (!over || active.id === over.id) return;
       setSelectedColumns((prev) => {
         const oldIndex = prev.indexOf(String(active.id));
@@ -1147,6 +1179,10 @@ export default function DownloadStyledExcel() {
     },
     [setSelectedColumns]
   );
+
+  const handleSelectedColumnDragCancel = useCallback(() => {
+    setActiveDragColumnId(null);
+  }, []);
 
   const exportColumnOrder = useMemo(() => {
     const map = new Map(columnOrder.map((col) => [col.key, col]));
@@ -1951,9 +1987,9 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
                     {/* TAB: Columns */}
-                    <TabsContent value="columns_path" id="panel-columns" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 w-full min-w-0">
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <TabsContent value="columns_path" id="panel-columns" className="mt-3 h-full">
+                      <div className="flex h-full min-h-0 w-full min-w-0 flex-col rounded-md border bg-white p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                           <label className="font-medium">Select Columns</label>
                           <button
                             onClick={toggleSelectAll}
@@ -1963,7 +1999,7 @@ export default function DownloadStyledExcel() {
                           </button>
                         </div>
 
-                        <div className="space-y-4">
+                        <div className="mt-3 flex min-h-0 flex-1 flex-col gap-4">
                           <div>
                             <label className="flex items-center gap-2 text-sm font-medium">
                               <input
@@ -1980,18 +2016,36 @@ export default function DownloadStyledExcel() {
                           </p>
                           <div className="rounded-md border border-dashed bg-muted/30 p-2">
                             {selectedColumnItems.length ? (
-                              <DndContext sensors={sensors} onDragEnd={handleSelectedColumnDragEnd}>
-                                <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
-                                  <div className="space-y-2">
-                                    {selectedColumnItems.map((column) => (
-                                      <SelectedColumnDraggable
-                                        key={column.key}
-                                        column={column}
-                                        onToggle={toggleColumn}
-                                      />
-                                    ))}
-                                  </div>
-                                </SortableContext>
+                              <DndContext
+                                sensors={sensors}
+                                onDragStart={handleSelectedColumnDragStart}
+                                onDragEnd={handleSelectedColumnDragEnd}
+                                onDragCancel={handleSelectedColumnDragCancel}
+                                modifiers={[restrictToVerticalAxis]}
+                                autoScroll={{ enabled: true, acceleration: 12, interval: 10, threshold: { x: 0, y: 16 } }}
+                              >
+                                <div className="flex flex-col min-h-0">
+                                  <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
+                                    <div
+                                      id="export-columns-scroll"
+                                      className="mt-1 max-h-[60vh] min-h-[240px] overflow-y-auto overscroll-contain pr-1"
+                                    >
+                                      <div className="space-y-2">
+                                        {selectedColumnItems.map((column) => (
+                                          <SelectedColumnDraggable
+                                            key={column.key}
+                                            column={column}
+                                            onToggle={toggleColumn}
+                                          />
+                                        ))}
+                                        <div className="pb-16" aria-hidden="true" />
+                                      </div>
+                                    </div>
+                                  </SortableContext>
+                                </div>
+                                <DragOverlay dropAnimation={defaultDropAnimation}>
+                                  {activeDragColumn ? <SelectedColumnGhost column={activeDragColumn} /> : null}
+                                </DragOverlay>
                               </DndContext>
                             ) : (
                               <div className="px-3 py-6 text-center text-xs text-muted-foreground">
