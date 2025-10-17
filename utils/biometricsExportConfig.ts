@@ -15,6 +15,7 @@ export type SummaryColumnKey =
   | "schedule"
   | "matchStatus"
   | "source"
+  | "head"
   | "days"
   | "excusedDays"
   | "lateDays"
@@ -43,9 +44,9 @@ export type SummaryColumnDefinition = {
 export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
   {
     key: "employeeId",
-    label: "Employee ID",
+    label: "Employee No",
     groupId: "identity",
-    description: "Official employee identifier or token when missing.",
+    description: "Employee number when mapped; unmatched rows show the token.",
     type: "text",
     width: "id",
     defaultSelected: true,
@@ -94,6 +95,15 @@ export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
     type: "text",
     width: "schedule",
     defaultSelected: true,
+  },
+  {
+    key: "head",
+    label: "Head",
+    groupId: "identity",
+    description: "Marks employees flagged as heads (Yes/No).",
+    type: "text",
+    width: "id",
+    defaultSelected: false,
   },
   {
     key: "days",

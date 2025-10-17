@@ -168,6 +168,33 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
     }
   }
 
+  const employeeDetails = internalIds.size
+    ? await prisma.employee.findMany({
+        where: { id: { in: Array.from(internalIds) } },
+        select: {
+          id: true,
+          employeeNo: true,
+          isHead: true,
+          officeId: true,
+          offices: { select: { id: true, name: true } },
+        },
+      })
+    : [];
+
+  const employeeMetaById = new Map<
+    string,
+    { employeeNo: string | null; isHead: boolean; officeId: string | null; officeName: string | null }
+  >();
+
+  for (const detail of employeeDetails) {
+    employeeMetaById.set(detail.id, {
+      employeeNo: detail.employeeNo || null,
+      isHead: detail.isHead,
+      officeId: detail.officeId || detail.offices?.id || null,
+      officeName: detail.offices?.name?.trim() || null,
+    });
+  }
+
   const maps = await getScheduleMapsForMonth(Array.from(internalIds), window);
 
   const tokenList = entries.map((row) => row.employeeToken.trim()).filter(Boolean);
@@ -221,13 +248,19 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
 
     const resolvedEmployeeId = internalEmployeeId ?? row.resolvedEmployeeId ?? null;
 
+    const details = resolvedEmployeeId ? employeeMetaById.get(resolvedEmployeeId) ?? null : null;
+    const officeId = details?.officeId ?? row.officeId ?? null;
+    const officeName = details?.officeName ?? row.officeName ?? null;
+
     const perDay: PerDayRow = {
       employeeId: row.employeeId,
       employeeName: row.employeeName,
       employeeToken: row.employeeToken,
       resolvedEmployeeId,
-      officeId: row.officeId ?? null,
-      officeName: row.officeName ?? null,
+      officeId,
+      officeName,
+      employeeNo: details?.employeeNo ?? null,
+      isHead: details ? details.isHead : null,
       dateISO: row.dateISO,
       day: row.day,
       earliest: row.earliest,

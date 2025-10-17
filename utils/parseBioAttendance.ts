@@ -1,6 +1,8 @@
 import * as XLSX from "xlsx-js-style";
 import type { WorkBook } from "xlsx";
 
+import { firstEmployeeNoToken } from "@/lib/employeeNo";
+
 import {
   DEFAULT_SUMMARY_SELECTED_COLUMNS,
   SUMMARY_COLUMN_DEFINITION_MAP,
@@ -66,6 +68,8 @@ export type ParsedPerDayRow = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  employeeNo?: string | null;
+  isHead?: boolean | null;
   employeeDept?: string | null;
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
@@ -110,6 +114,8 @@ export type PerEmployeeRow = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  employeeNo?: string | null;
+  isHead?: boolean | null;
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
@@ -1042,6 +1048,8 @@ type AggregateRow = {
   employeeId: string;
   employeeToken: string;
   employeeName: string;
+  employeeNo?: string | null;
+  isHead?: boolean | null;
   identityStatus: "matched" | "unmatched" | "ambiguous";
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
@@ -1218,10 +1226,12 @@ export function summarizePerEmployee(
       | "employeeId"
       | "employeeToken"
       | "employeeName"
+      | "employeeNo"
       | "resolvedEmployeeId"
       | "officeId"
       | "officeName"
       | "status"
+      | "isHead"
       | "earliest"
       | "latest"
       | "allTimes"
@@ -1246,11 +1256,14 @@ export function summarizePerEmployee(
     const token = row.employeeToken || row.employeeId || row.employeeName;
     const key = `${token}||${row.employeeName}`;
     const identityStatus = row.identityStatus ?? (row.resolvedEmployeeId ? "matched" : "unmatched");
+    const employeeNo = firstEmployeeNoToken(row.employeeNo);
     if (!map.has(key)) {
       map.set(key, {
         employeeId: row.employeeId,
         employeeToken: token,
         employeeName: row.employeeName,
+        employeeNo: employeeNo ?? null,
+        isHead: row.isHead ?? null,
         identityStatus,
         resolvedEmployeeId: row.resolvedEmployeeId ?? null,
         officeId: row.officeId ?? null,
@@ -1273,6 +1286,12 @@ export function summarizePerEmployee(
     if (!agg.officeName && row.officeName) agg.officeName = row.officeName;
     if (!agg.resolvedEmployeeId && row.resolvedEmployeeId) {
       agg.resolvedEmployeeId = row.resolvedEmployeeId;
+    }
+    if (!agg.employeeNo && employeeNo) {
+      agg.employeeNo = employeeNo;
+    }
+    if (agg.isHead == null && row.isHead != null) {
+      agg.isHead = row.isHead;
     }
     if (statusPriority[identityStatus] > statusPriority[agg.identityStatus]) {
       agg.identityStatus = identityStatus;
@@ -1308,6 +1327,8 @@ export function summarizePerEmployee(
     employeeId: entry.employeeId,
     employeeToken: entry.employeeToken,
     employeeName: entry.employeeName,
+    employeeNo: entry.employeeNo ?? null,
+    isHead: entry.isHead ?? null,
     resolvedEmployeeId: entry.resolvedEmployeeId ?? null,
     officeId: entry.officeId ?? null,
     officeName: entry.officeName ?? null,
@@ -1421,7 +1442,7 @@ type PerDayColumnDefinition = {
 };
 
 const PER_DAY_COLUMNS: PerDayColumnDefinition[] = [
-  { key: "employeeId", label: "Employee ID", type: "text", width: "id" },
+  { key: "employeeId", label: "Employee No", type: "text", width: "id" },
   { key: "employeeName", label: "Name", type: "text", width: "name" },
   { key: "office", label: "Office", type: "text", width: "office" },
   { key: "scheduleType", label: "Schedule", type: "text", width: "schedule" },
@@ -1449,13 +1470,19 @@ const isTotalsSupported = (type: ColumnType | SummaryColumnDefinition["type"] | 
 const toEmployeeKey = (token: string | null | undefined, name: string | null | undefined) =>
   `${token || ""}||${name || ""}`;
 
-const toDisplayEmployeeId = (row: Pick<PerEmployeeRow, "employeeId" | "employeeToken" | "identityStatus" | "resolvedEmployeeId">) => {
-  const trimmedId = row.employeeId?.trim();
-  if (trimmedId) return trimmedId;
-  if (row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
-    return row.employeeToken?.trim() || "";
+const toDisplayEmployeeId = (row: Pick<PerEmployeeRow, "employeeNo" | "employeeToken" | "identityStatus" | "resolvedEmployeeId">) => {
+  const employeeNo = firstEmployeeNoToken(row.employeeNo);
+  const token = row.employeeToken?.trim();
+  if (row.resolvedEmployeeId) {
+    return employeeNo && employeeNo.length ? employeeNo : "—";
   }
-  return "";
+  if (row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
+    return token || "";
+  }
+  if (employeeNo && employeeNo.length) {
+    return employeeNo;
+  }
+  return token || "";
 };
 
 const toDisplayOffice = (
@@ -1552,6 +1579,7 @@ const computeSummaryRow = (
     schedule: toScheduleLabel(row.scheduleTypes),
     matchStatus: toMatchStatusLabel(row, manualSolved),
     source: sourceLabel,
+    head: row.isHead == null ? null : row.isHead ? "Yes" : "No",
     days: row.daysWithLogs ?? 0,
     excusedDays: row.excusedDays ?? 0,
     lateDays: row.lateDays ?? 0,
@@ -1798,12 +1826,17 @@ const buildPerDaySheet = (rows: PerDayRow[]) => {
     PER_DAY_COLUMNS.map((column) => {
       switch (column.key) {
         case "employeeId": {
-          const trimmed = row.employeeId?.trim();
-          if (trimmed) return trimmed;
-          if (row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
-            return row.employeeToken || "";
+          const employeeNo = firstEmployeeNoToken(row.employeeNo);
+          if (row.resolvedEmployeeId) {
+            return employeeNo && employeeNo.length ? employeeNo : "—";
           }
-          return "";
+          if (row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
+            return row.employeeToken || row.employeeId || "";
+          }
+          if (employeeNo && employeeNo.length) {
+            return employeeNo;
+          }
+          return row.employeeToken || row.employeeId || "";
         }
         case "employeeName":
           return row.employeeName?.trim() ? row.employeeName : UNMATCHED_LABEL;

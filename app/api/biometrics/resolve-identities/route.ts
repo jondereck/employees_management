@@ -18,6 +18,8 @@ type IdentityRecord = {
   employeeName: string;
   officeId: string | null;
   officeName: string;
+  employeeNo: string | null;
+  isHead: boolean | null;
   candidates?: string[];
   missingOffice?: boolean;
 };
@@ -25,6 +27,7 @@ type IdentityRecord = {
 type EmployeeCandidate = {
   id: string;
   employeeNo: string | null;
+  isHead: boolean;
   firstName: string;
   lastName: string;
   middleName: string | null;
@@ -39,6 +42,8 @@ const UNKNOWN_RESULT: IdentityRecord = {
   employeeName: UNMATCHED_NAME,
   officeId: null,
   officeName: UNKNOWN_OFFICE,
+  employeeNo: null,
+  isHead: null,
 };
 
 function formatName(candidate: EmployeeCandidate): string {
@@ -103,6 +108,7 @@ export async function POST(req: Request) {
             select: {
               id: true,
               employeeNo: true,
+              isHead: true,
               firstName: true,
               lastName: true,
               middleName: true,
@@ -126,6 +132,7 @@ export async function POST(req: Request) {
       const candidate: EmployeeCandidate = {
         id: employee.id,
         employeeNo: employee.employeeNo,
+        isHead: employee.isHead,
         firstName: employee.firstName,
         lastName: employee.lastName,
         middleName: employee.middleName,
@@ -139,6 +146,8 @@ export async function POST(req: Request) {
         employeeName: formatName(candidate),
         officeId,
         officeName,
+        employeeNo: employee.employeeNo,
+        isHead: employee.isHead,
       };
     }
 
@@ -153,6 +162,7 @@ export async function POST(req: Request) {
         select: {
           id: true,
           employeeNo: true,
+          isHead: true,
           firstName: true,
           lastName: true,
           middleName: true,
@@ -171,6 +181,7 @@ export async function POST(req: Request) {
         matches.get(token)!.push({
           id: candidate.id,
           employeeNo: candidate.employeeNo,
+          isHead: candidate.isHead,
           firstName: candidate.firstName,
           lastName: candidate.lastName,
           middleName: candidate.middleName,
@@ -201,6 +212,8 @@ export async function POST(req: Request) {
         employeeName: formatName(primary),
         officeId,
         officeName,
+        employeeNo: primary.employeeNo,
+        isHead: primary.isHead,
         candidates: status === "ambiguous" ? sorted.map(describeCandidate) : undefined,
         missingOffice: !primary.office,
       };
