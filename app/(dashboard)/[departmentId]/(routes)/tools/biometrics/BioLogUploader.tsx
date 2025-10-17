@@ -26,7 +26,6 @@ import * as XLSX from "xlsx";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -36,18 +35,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/components/ui/use-toast";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import { cn } from "@/lib/utils";
+import SummaryFiltersBar from "@/components/tools/biometrics/SummaryFiltersBar";
+import {
+  useSummaryFilters,
+  type HeadsFilterValue,
+  type SummarySortField,
+  type SortDirection,
+} from "@/hooks/use-summary-filters";
 import {
   exportResultsToXlsx,
   detectWorkbookParsers,
@@ -67,7 +70,6 @@ import {
 import {
   EXPORT_COLUMNS_STORAGE_KEY,
   formatScheduleSource,
-  OFFICE_FILTER_STORAGE_KEY,
   UNASSIGNED_OFFICE_LABEL,
   UNKNOWN_OFFICE_KEY_PREFIX,
   UNKNOWN_OFFICE_LABEL,
@@ -91,7 +93,6 @@ import {
 } from "@/utils/weeklyPattern";
 import InsightsPanel from "./InsightsPanel";
 import ResolveIdentityDialog, { ResolveSearchResult } from "./ResolveIdentityDialog";
-import OfficeFilterControl from "./OfficeFilterControl";
 import SummaryColumnSelector from "./SummaryColumnSelector";
 import {
   ALL_CHART_IDS,
@@ -105,8 +106,6 @@ import {
 const PAGE_SIZE = 25;
 
 const MINUTES_IN_DAY = 24 * 60;
-
-const SUMMARY_METRIC_MODE_KEY = "hrps-bio-summary-metric-mode";
 
 const APP_VERSION =
   process.env.NEXT_PUBLIC_APP_VERSION ??
@@ -212,27 +211,6 @@ const computeUndertimePercentMinutes = (row: PerEmployeeRow): number | null => {
 const formatPercentLabel = (value: number | null | undefined) => {
   if (value == null || Number.isNaN(value)) return "—";
   return `${value.toFixed(1)}%`;
-};
-
-const getSortValue = (row: PerEmployeeRow, key: SortKey): number => {
-  switch (key) {
-    case "daysWithLogs":
-      return row.daysWithLogs ?? 0;
-    case "lateDays":
-      return row.lateDays ?? 0;
-    case "undertimeDays":
-      return row.undertimeDays ?? 0;
-    case "totalLateMinutes":
-      return row.totalLateMinutes ?? 0;
-    case "totalUndertimeMinutes":
-      return row.totalUndertimeMinutes ?? 0;
-    case "latePercent":
-      return computeLatePercentMinutes(row) ?? Number.NEGATIVE_INFINITY;
-    case "undertimePercent":
-      return computeUndertimePercentMinutes(row) ?? Number.NEGATIVE_INFINITY;
-    default:
-      return 0;
-  }
 };
 
 const getEmployeeIdentifierSortKey = (
@@ -377,42 +355,85 @@ type OutOfPeriodRow = {
   reason: "outside-period" | "invalid-day";
 };
 
-type SortKey =
-  | "daysWithLogs"
-  | "lateDays"
-  | "undertimeDays"
-  | "totalLateMinutes"
-  | "totalUndertimeMinutes"
-  | "latePercent"
-  | "undertimePercent";
-type SortDirection = "asc" | "desc";
-
-type HeadsFilterValue = "all" | "heads" | "nonHeads";
-
-const DEFAULT_HEADS_FILTER: HeadsFilterValue = "all";
-
-const HEADS_FILTER_LABEL: Record<Exclude<HeadsFilterValue, "all">, string> = {
-  heads: "Heads only",
-  nonHeads: "Exclude heads",
+const getOfficeSortLabel = (
+  row: Pick<PerEmployeeRow, "officeName" | "identityStatus" | "resolvedEmployeeId">
+) => {
+  const label = row.officeName?.trim();
+  if (label) return label.toLowerCase();
+  if (row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
+    return UNKNOWN_OFFICE_LABEL.toLowerCase();
+  }
+  if (row.resolvedEmployeeId) {
+    return UNASSIGNED_OFFICE_LABEL.toLowerCase();
+  }
+  return UNKNOWN_OFFICE_LABEL.toLowerCase();
 };
 
-const HEADS_FILTER_URL_VALUE: Record<HeadsFilterValue, string> = {
-  all: "all",
-  heads: "heads",
-  nonHeads: "non",
+const getScheduleSortLabel = (row: Pick<PerEmployeeRow, "scheduleTypes">) => {
+  if (!row.scheduleTypes?.length) return "";
+  return row.scheduleTypes.slice().sort().join("|").toLowerCase();
 };
 
-const parseHeadsFilterParam = (value: string | null): HeadsFilterValue | null => {
-  if (!value) return null;
-  const normalized = value.toLowerCase();
-  if (normalized === "heads") return "heads";
-  if (normalized === "non") return "nonHeads";
-  if (normalized === "all") return "all";
-  return null;
+const makeEmployeeDedupeKey = (row: PerEmployeeRow) => {
+  const resolved = row.resolvedEmployeeId?.trim();
+  if (resolved) return `resolved:${resolved}`;
+  const employeeId = row.employeeId?.trim();
+  if (employeeId) return `id:${employeeId}`;
+  const employeeNo = firstEmployeeNoToken(row.employeeNo)?.trim();
+  if (employeeNo) return `no:${employeeNo}`;
+  const token = row.employeeToken?.trim();
+  if (token) return `token:${token}`;
+  const name = row.employeeName?.trim();
+  if (name) return `name:${name}`;
+  return `row:${row.employeeId ?? ""}:${row.employeeName ?? ""}`;
 };
 
-const getHeadsFilterLabel = (value: HeadsFilterValue) =>
-  value === "all" ? null : HEADS_FILTER_LABEL[value];
+const getSummarySortValue = (row: PerEmployeeRow, field: SummarySortField): number | string => {
+  switch (field) {
+    case "employeeName":
+      return row.employeeName?.toLowerCase() ?? "";
+    case "employeeNo": {
+      const employeeNo = firstEmployeeNoToken(row.employeeNo)?.toLowerCase();
+      if (employeeNo) return employeeNo;
+      const token = row.employeeToken?.toLowerCase();
+      if (token) return token;
+      return row.employeeId?.toLowerCase() ?? "";
+    }
+    case "office":
+      return getOfficeSortLabel(row);
+    case "schedule":
+      return getScheduleSortLabel(row);
+    case "days":
+      return row.daysWithLogs ?? 0;
+    case "noPunch":
+      return row.noPunchDays ?? 0;
+    case "lateDays":
+      return row.lateDays ?? 0;
+    case "undertimeDays":
+      return row.undertimeDays ?? 0;
+    case "latePercent":
+      if (typeof row.lateRate === "number") return row.lateRate;
+      return computeLatePercentMinutes(row) ?? Number.NEGATIVE_INFINITY;
+    case "undertimePercent":
+      if (typeof row.undertimeRate === "number") return row.undertimeRate;
+      return computeUndertimePercentMinutes(row) ?? Number.NEGATIVE_INFINITY;
+    case "lateMinutes":
+      return row.totalLateMinutes ?? 0;
+    case "undertimeMinutes":
+      return row.totalUndertimeMinutes ?? 0;
+    default:
+      return 0;
+  }
+};
+
+const compareSummaryField = (a: PerEmployeeRow, b: PerEmployeeRow, field: SummarySortField) => {
+  const aValue = getSummarySortValue(a, field);
+  const bValue = getSummarySortValue(b, field);
+  if (typeof aValue === "string" || typeof bValue === "string") {
+    return String(aValue).localeCompare(String(bValue));
+  }
+  return (aValue as number) - (bValue as number);
+};
 
 type FileStatus = "queued" | "parsing" | "parsed" | "failed";
 
@@ -490,21 +511,6 @@ const getDayOfficeKey = (
     ? UNASSIGNED_OFFICE_LABEL
     : UNKNOWN_OFFICE_LABEL;
   return makeOfficeKey(row.officeId ?? null, label);
-};
-
-const readStoredOfficeFilter = (): string[] | undefined => {
-  if (typeof window === "undefined") return undefined;
-  try {
-    const raw = window.localStorage.getItem(OFFICE_FILTER_STORAGE_KEY);
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return undefined;
-    const filtered = parsed.filter((value): value is string => typeof value === "string");
-    return filtered.length ? filtered : undefined;
-  } catch (error) {
-    console.warn("Failed to read office filter", error);
-    return undefined;
-  }
 };
 
 type StoredColumnSettings = {
@@ -615,36 +621,14 @@ const readInsightsSettings = (): InsightsSettings => {
     const parsed = JSON.parse(raw) as InsightsSettings;
     if (!parsed || typeof parsed !== "object") return {};
 
-    const storedOffices = readStoredOfficeFilter();
-    const selectedOffices = storedOffices
-      ? storedOffices
-      : Array.isArray(parsed.selectedOffices)
-      ? parsed.selectedOffices.filter((value): value is string => typeof value === "string")
-      : undefined;
-    const selectedScheduleTypes = Array.isArray(parsed.selectedScheduleTypes)
-      ? parsed.selectedScheduleTypes.filter((value): value is string => typeof value === "string")
-      : undefined;
-    const showUnmatched = typeof parsed.showUnmatched === "boolean" ? parsed.showUnmatched : undefined;
-    const metricMode: MetricMode | undefined = parsed.metricMode === "minutes"
-      ? "minutes"
-      : parsed.metricMode === "days"
-      ? "days"
-      : undefined;
     const visibleCharts = Array.isArray(parsed.visibleCharts)
       ? (parsed.visibleCharts.filter(isChartId) as ChartId[])
       : undefined;
     const collapsed = typeof parsed.collapsed === "boolean" ? parsed.collapsed : undefined;
-    const showNoPunchColumn =
-      typeof parsed.showNoPunchColumn === "boolean" ? parsed.showNoPunchColumn : undefined;
 
     return {
-      selectedOffices,
-      selectedScheduleTypes,
-      showUnmatched,
-      metricMode,
       visibleCharts,
       collapsed,
-      showNoPunchColumn,
     } satisfies InsightsSettings;
   } catch (error) {
     console.warn("Failed to read insights settings", error);
@@ -878,8 +862,6 @@ export default function BioLogUploader() {
   const [perEmployee, setPerEmployee] = useState<PerEmployeeRow[] | null>(null);
   const [perDay, setPerDay] = useState<PerDayRow[] | null>(null);
   const [page, setPage] = useState(0);
-  const [sortKey, setSortKey] = useState<SortKey>("lateDays");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [isDragging, setIsDragging] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [showMixedMonthsPrompt, setShowMixedMonthsPrompt] = useState(false);
@@ -899,38 +881,41 @@ export default function BioLogUploader() {
     unmatched: 0,
   });
   const [identityMap, setIdentityMap] = useState<Map<string, IdentityRecord>>(() => new Map());
-  const [selectedOffices, setSelectedOffices] = useState<string[]>(
-    () => settingsRef.current?.selectedOffices ?? []
-  );
-  const [headsFilter, setHeadsFilter] = useState<HeadsFilterValue>(DEFAULT_HEADS_FILTER);
-  const [headsFilterHydrated, setHeadsFilterHydrated] = useState(false);
-  const [selectedScheduleTypes, setSelectedScheduleTypes] = useState<string[]>(
-    () => settingsRef.current?.selectedScheduleTypes ?? []
-  );
-  const [showUnmatched, setShowUnmatched] = useState<boolean>(
-    () => settingsRef.current?.showUnmatched ?? true
-  );
-  const [showNoPunchColumn, setShowNoPunchColumn] = useState<boolean>(
-    () => settingsRef.current?.showNoPunchColumn ?? false
-  );
-  const [applyOfficeFilterToExport, setApplyOfficeFilterToExport] = useState(true);
+  const { filters, setOffices, clearOffices, setSchedules, clearSchedules, setSort, togglePrimarySort } =
+    useSummaryFilters();
+  const {
+    offices: selectedOffices,
+    schedules: selectedScheduleTypes,
+    heads: headsFilter,
+    showUnmatched,
+    showNoPunch: showNoPunchColumn,
+    metricMode,
+    search: employeeSearch,
+    sortBy,
+    sortDir,
+    secondarySortBy,
+    secondarySortDir,
+  } = filters;
+  const dedupedPerEmployee = useMemo(() => {
+    if (!perEmployee?.length) return [] as PerEmployeeRow[];
+    const seen = new Set<string>();
+    const rows: PerEmployeeRow[] = [];
+    for (const row of perEmployee) {
+      const key = makeEmployeeDedupeKey(row);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(row);
+    }
+    return rows;
+  }, [perEmployee]);
+
   const [columnOrder, setColumnOrder] = useState<SummaryColumnKey[]>(initialColumnSettings.order);
   const [selectedColumnKeys, setSelectedColumnKeys] = useState<SummaryColumnKey[]>(
     initialColumnSettings.selected
   );
   const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
-  const [metricMode, setMetricMode] = useState<MetricMode>(() => {
-    if (typeof window !== "undefined") {
-      const stored = window.localStorage.getItem(SUMMARY_METRIC_MODE_KEY);
-      if (stored === "minutes" || stored === "days") {
-        return stored;
-      }
-    }
-    return settingsRef.current?.metricMode ?? "days";
-  });
   const manualResolvedRef = useRef<Set<string>>(new Set());
   const manualResolvedTokens = useMemo(() => Array.from(manualResolved), [manualResolved]);
-  const activeHeadsLabel = useMemo(() => getHeadsFilterLabel(headsFilter), [headsFilter]);
   useEffect(() => {
     manualResolvedRef.current = manualResolved;
   }, [manualResolved]);
@@ -966,8 +951,6 @@ export default function BioLogUploader() {
   const [insightsCollapsed, setInsightsCollapsed] = useState<boolean>(
     () => settingsRef.current?.collapsed ?? false
   );
-  const [exportFilteredOnly, setExportFilteredOnly] = useState(false);
-  const [employeeSearch, setEmployeeSearch] = useState("");
   const [expandedWarnings, setExpandedWarnings] = useState<Record<string, boolean>>({});
   const [resolveTarget, setResolveTarget] = useState<{
     token: string;
@@ -977,19 +960,29 @@ export default function BioLogUploader() {
 
   useEffect(() => {
     if (metricMode === "minutes") {
-      if (sortKey === "latePercent") {
-        setSortKey("totalLateMinutes");
-      } else if (sortKey === "undertimePercent") {
-        setSortKey("totalUndertimeMinutes");
+      if (sortBy === "latePercent") {
+        setSort({ sortBy: "lateMinutes" });
+      } else if (sortBy === "undertimePercent") {
+        setSort({ sortBy: "undertimeMinutes" });
+      }
+      if (secondarySortBy === "latePercent") {
+        setSort({ secondarySortBy: "lateMinutes" });
+      } else if (secondarySortBy === "undertimePercent") {
+        setSort({ secondarySortBy: "undertimeMinutes" });
       }
     } else {
-      if (sortKey === "totalLateMinutes") {
-        setSortKey("latePercent");
-      } else if (sortKey === "totalUndertimeMinutes") {
-        setSortKey("undertimePercent");
+      if (sortBy === "lateMinutes") {
+        setSort({ sortBy: "latePercent" });
+      } else if (sortBy === "undertimeMinutes") {
+        setSort({ sortBy: "undertimePercent" });
+      }
+      if (secondarySortBy === "lateMinutes") {
+        setSort({ secondarySortBy: "latePercent" });
+      } else if (secondarySortBy === "undertimeMinutes") {
+        setSort({ secondarySortBy: "undertimePercent" });
       }
     }
-  }, [metricMode, sortKey]);
+  }, [metricMode, secondarySortBy, setSort, sortBy]);
 
   const updateVisibleCharts = useCallback(
     (updater: ChartId[] | ((prev: ChartId[]) => ChartId[])) => {
@@ -1457,11 +1450,6 @@ export default function BioLogUploader() {
     return `hrps:manual-resolved:${departmentId}:${activePeriod.year}-${pad2(activePeriod.month)}`;
   }, [activePeriod, departmentId]);
 
-  const headsFilterStorageKey = useMemo(() => {
-    if (!departmentId || !activePeriod) return null;
-    return `hrps:bio:headsFilter:${departmentId}:${activePeriod.year}-${pad2(activePeriod.month)}`;
-  }, [activePeriod, departmentId]);
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!manualResolvedStorageKey) {
@@ -1511,57 +1499,6 @@ export default function BioLogUploader() {
       console.warn("Failed to persist manual resolved tokens", error);
     }
   }, [manualResolved, manualResolvedHydrated, manualResolvedStorageKey]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!headsFilterStorageKey) {
-      setHeadsFilter(DEFAULT_HEADS_FILTER);
-      setHeadsFilterHydrated(true);
-      return;
-    }
-    setHeadsFilterHydrated(false);
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const fromUrl = parseHeadsFilterParam(params.get("heads"));
-      if (fromUrl) {
-        setHeadsFilter(fromUrl);
-        setHeadsFilterHydrated(true);
-        return;
-      }
-      const stored = window.localStorage.getItem(headsFilterStorageKey);
-      if (stored === "heads" || stored === "nonHeads" || stored === "all") {
-        setHeadsFilter(stored as HeadsFilterValue);
-      } else {
-        setHeadsFilter(DEFAULT_HEADS_FILTER);
-      }
-    } catch (error) {
-      console.warn("Failed to load heads filter", error);
-      setHeadsFilter(DEFAULT_HEADS_FILTER);
-    } finally {
-      setHeadsFilterHydrated(true);
-    }
-  }, [headsFilterStorageKey]);
-
-  useEffect(() => {
-    if (!headsFilterHydrated) return;
-    if (typeof window === "undefined") return;
-    if (!headsFilterStorageKey) return;
-    try {
-      window.localStorage.setItem(headsFilterStorageKey, headsFilter);
-    } catch (error) {
-      console.warn("Failed to persist heads filter", error);
-    }
-  }, [headsFilter, headsFilterHydrated, headsFilterStorageKey]);
-
-  useEffect(() => {
-    if (!headsFilterHydrated) return;
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    params.set("heads", HEADS_FILTER_URL_VALUE[headsFilter]);
-    const query = params.toString();
-    const next = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
-    window.history.replaceState(null, "", next);
-  }, [headsFilter, headsFilterHydrated]);
 
   const identityWarnings = useMemo(
     () => computeIdentityWarnings(filteredPerDayRows, identityMap, identityState.status),
@@ -1752,22 +1689,22 @@ export default function BioLogUploader() {
   }, [officeOptionMap]);
 
   const scheduleTypeOptions = useMemo<string[]>(() => {
-    if (!perEmployee?.length) return [];
+    if (!dedupedPerEmployee.length) return [];
     const set = new Set<string>();
-    for (const row of perEmployee) {
+    for (const row of dedupedPerEmployee) {
       if (!row.scheduleTypes?.length) continue;
       for (const type of row.scheduleTypes) {
         if (type) set.add(type);
       }
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [perEmployee]);
+  }, [dedupedPerEmployee]);
 
   const filteredPerEmployee = useMemo(() => {
-    if (!perEmployee) return [] as PerEmployeeRow[];
+    if (!dedupedPerEmployee.length) return [] as PerEmployeeRow[];
     const officeKeys = selectedOffices.length ? new Set(selectedOffices) : null;
     const scheduleKeys = selectedScheduleTypes.length ? new Set(selectedScheduleTypes) : null;
-    return perEmployee.filter((row) => {
+    return dedupedPerEmployee.filter((row) => {
       if (officeKeys) {
         const key = makeOfficeKey(
           row.officeId ?? null,
@@ -1792,7 +1729,7 @@ export default function BioLogUploader() {
     });
   }, [
     headsFilter,
-    perEmployee,
+    dedupedPerEmployee,
     selectedOffices,
     selectedScheduleTypes,
     showUnmatched,
@@ -1870,65 +1807,44 @@ export default function BioLogUploader() {
   }, [filteredPerDayPreview]);
 
   useEffect(() => {
-    setSelectedScheduleTypes((prev) => {
-      if (!prev.length) return prev;
-      const available = new Set(scheduleTypeOptions);
-      const filtered = prev.filter((type) => available.has(type));
-      return filtered.length === prev.length ? prev : filtered;
-    });
-  }, [scheduleTypeOptions]);
+    if (!selectedScheduleTypes.length) return;
+    const available = new Set(scheduleTypeOptions);
+    const filtered = selectedScheduleTypes.filter((type) => available.has(type));
+    if (filtered.length !== selectedScheduleTypes.length) {
+      setSchedules(filtered);
+    }
+  }, [scheduleTypeOptions, selectedScheduleTypes, setSchedules]);
 
   useEffect(() => {
-    setSelectedOffices((prev) => {
-      if (!prev.length) return prev;
-      const available = new Set(officeOptions.map((option) => option.key));
-      const filtered = prev.filter((key) => available.has(key));
-      return filtered.length === prev.length ? prev : filtered;
-    });
-  }, [officeOptions]);
+    if (!selectedOffices.length) return;
+    const available = new Set(officeOptions.map((option) => option.key));
+    const filtered = selectedOffices.filter((key) => available.has(key));
+    if (filtered.length !== selectedOffices.length) {
+      setOffices(filtered);
+    }
+  }, [officeOptions, selectedOffices, setOffices]);
 
   useEffect(() => {
     if (perDay === null) {
-      setSelectedOffices([]);
-      setSelectedScheduleTypes([]);
-      setExportFilteredOnly(false);
+      if (selectedOffices.length) {
+        clearOffices();
+      }
+      if (selectedScheduleTypes.length) {
+        clearSchedules();
+      }
     }
-  }, [perDay]);
-
-  useEffect(() => {
-    if (!selectedOffices.length && exportFilteredOnly) {
-      setExportFilteredOnly(false);
-    }
-  }, [exportFilteredOnly, selectedOffices.length]);
-
-  useEffect(() => {
-    if (!selectedOffices.length) {
-      setApplyOfficeFilterToExport(true);
-    }
-  }, [selectedOffices.length]);
+  }, [clearOffices, clearSchedules, perDay, selectedOffices.length, selectedScheduleTypes.length]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const payload: InsightsSettings = {
-      selectedOffices,
-      selectedScheduleTypes,
-      showUnmatched,
-      metricMode,
       visibleCharts,
       collapsed: insightsCollapsed,
-      showNoPunchColumn,
     };
     window.localStorage.setItem(INSIGHTS_SETTINGS_KEY, JSON.stringify(payload));
-    window.localStorage.setItem(OFFICE_FILTER_STORAGE_KEY, JSON.stringify(selectedOffices));
-    window.localStorage.setItem(SUMMARY_METRIC_MODE_KEY, metricMode);
   }, [
-    selectedOffices,
-    selectedScheduleTypes,
-    showUnmatched,
-    metricMode,
     visibleCharts,
     insightsCollapsed,
-    showNoPunchColumn,
   ]);
 
   useEffect(() => {
@@ -1939,26 +1855,6 @@ export default function BioLogUploader() {
     };
     window.localStorage.setItem(EXPORT_COLUMNS_STORAGE_KEY, JSON.stringify(payload));
   }, [columnOrder, selectedColumnKeys]);
-
-  const handleOfficeToggle = useCallback((key: string, nextChecked: boolean) => {
-    setSelectedOffices((prev) => {
-      if (nextChecked) {
-        if (prev.includes(key)) return prev;
-        return [...prev, key];
-      }
-      return prev.filter((value) => value !== key);
-    });
-  }, []);
-
-  const handleScheduleToggle = useCallback((type: string, nextChecked: boolean) => {
-    setSelectedScheduleTypes((prev) => {
-      if (nextChecked) {
-        if (prev.includes(type)) return prev;
-        return [...prev, type];
-      }
-      return prev.filter((value) => value !== type);
-    });
-  }, []);
 
   const handleToggleExportColumn = useCallback(
     (key: SummaryColumnKey, nextChecked: boolean) => {
@@ -2247,18 +2143,25 @@ export default function BioLogUploader() {
   }, [identityState.completed, identityState.status, identityState.total, identityState.unmatched, identityTokens.length]);
 
   const sortedPerEmployee = useMemo(() => {
-    if (!searchedPerEmployee.length) return [];
+    if (!searchedPerEmployee.length) return [] as PerEmployeeRow[];
     const rows = [...searchedPerEmployee];
-    const multiplier = sortDirection === "asc" ? 1 : -1;
+    const primaryMultiplier = sortDir === "asc" ? 1 : -1;
+    const secondaryMultiplier = secondarySortDir === "asc" ? 1 : -1;
     rows.sort((a, b) => {
-      const diff = getSortValue(a, sortKey) - getSortValue(b, sortKey);
-      if (diff !== 0) {
-        return diff * multiplier;
+      const primary = compareSummaryField(a, b, sortBy);
+      if (primary !== 0) {
+        return primary * primaryMultiplier;
       }
-      return compareEmployeeIdentifiers(a, b) * multiplier;
+      if (secondarySortBy) {
+        const secondary = compareSummaryField(a, b, secondarySortBy);
+        if (secondary !== 0) {
+          return secondary * secondaryMultiplier;
+        }
+      }
+      return compareEmployeeIdentifiers(a, b);
     });
     return rows;
-  }, [searchedPerEmployee, sortDirection, sortKey]);
+  }, [searchedPerEmployee, secondarySortBy, secondarySortDir, sortBy, sortDir]);
 
   const pagedPerDay = useMemo(() => {
     if (!filteredPerDayPreview.length) return [];
@@ -2278,11 +2181,10 @@ export default function BioLogUploader() {
   );
 
   const handleSort = useCallback(
-    (key: SortKey) => {
-      setSortDirection((prev) => (sortKey === key ? (prev === "asc" ? "desc" : "asc") : "desc"));
-      setSortKey(key);
+    (field: SummarySortField) => {
+      togglePrimarySort(field);
     },
-    [sortKey]
+    [togglePrimarySort]
   );
 
   const handleFiles = useCallback(
@@ -2413,22 +2315,11 @@ export default function BioLogUploader() {
   const exportPeriodLabel = summary?.dateRange ?? "—";
 
   const handleDownloadResults = useCallback(() => {
-    if (!perEmployee?.length || !perDay?.length) return;
+    if (!dedupedPerEmployee.length || !perDay?.length) return;
     if (useManualPeriod && !manualSelectionValid) return;
 
-    const baseEmployees = exportFilteredOnly ? filteredPerEmployee : perEmployee;
-    const baseDays = exportFilteredOnly ? filteredPerDayPreview : perDay;
-
-    const shouldApplyOfficeFilter =
-      selectedOffices.length > 0 && (exportFilteredOnly || applyOfficeFilterToExport);
-    const officeSet = shouldApplyOfficeFilter ? new Set(selectedOffices) : null;
-
-    const employees = shouldApplyOfficeFilter
-      ? baseEmployees.filter((row) => officeSet!.has(getEmployeeOfficeKey(row)))
-      : baseEmployees;
-    const days = shouldApplyOfficeFilter
-      ? baseDays.filter((row) => officeSet!.has(getDayOfficeKey(row)))
-      : baseDays;
+    const employees = sortedPerEmployee;
+    const days = filteredPerDayPreview;
 
     if (!employees.length || !days.length) {
       toast({
@@ -2438,19 +2329,60 @@ export default function BioLogUploader() {
       return;
     }
 
-    const viewOfficeLabels = selectedOffices.map((key) => getOfficeLabel(key) ?? key);
-    const officeIdentifiers = shouldApplyOfficeFilter
-      ? selectedOffices.map((key) =>
-          key.startsWith(UNKNOWN_OFFICE_KEY_PREFIX) ? "__unknown__" : key
-        )
-      : [];
-    const officeLabels = shouldApplyOfficeFilter ? viewOfficeLabels : [];
-
-    const columnsForExport = exportColumnKeys.length
+    const baseColumns = exportColumnKeys.length
       ? exportColumnKeys
       : DEFAULT_SUMMARY_SELECTED_COLUMNS;
+    const baseOrder = columnOrder.length ? columnOrder : DEFAULT_SUMMARY_COLUMN_ORDER;
+
+    const allowedColumns = baseColumns.filter((key) => {
+      if (!showNoPunchColumn && key === "noPunchDays") return false;
+      if (metricMode === "minutes") {
+        return key !== "latePercent" && key !== "undertimePercent";
+      }
+      return key !== "lateMinutes" && key !== "undertimeMinutes";
+    });
+
+    const insertColumn = (key: SummaryColumnKey) => {
+      if (allowedColumns.includes(key)) return;
+      const targetIndex = baseOrder.indexOf(key);
+      if (targetIndex === -1) {
+        allowedColumns.push(key);
+        return;
+      }
+      let inserted = false;
+      for (let index = 0; index < allowedColumns.length; index += 1) {
+        const current = allowedColumns[index];
+        const currentIndex = baseOrder.indexOf(current);
+        if (currentIndex === -1 || currentIndex > targetIndex) {
+          allowedColumns.splice(index, 0, key);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) {
+        allowedColumns.push(key);
+      }
+    };
+
+    const requiredMetricColumns: SummaryColumnKey[] =
+      metricMode === "minutes"
+        ? ["lateMinutes", "undertimeMinutes"]
+        : ["latePercent", "undertimePercent"];
+    requiredMetricColumns.forEach(insertColumn);
+
+    if (showNoPunchColumn) {
+      insertColumn("noPunchDays");
+    }
+
+    const columnsForExport = allowedColumns;
+
     const columnLabels = columnsForExport.map(
       (key) => SUMMARY_COLUMN_DEFINITION_MAP[key]?.label ?? key
+    );
+
+    const viewOfficeLabels = selectedOffices.map((key) => getOfficeLabel(key) ?? key);
+    const officeIdentifiers = selectedOffices.map((key) =>
+      key.startsWith(UNKNOWN_OFFICE_KEY_PREFIX) ? "__unknown__" : key
     );
 
     try {
@@ -2458,11 +2390,11 @@ export default function BioLogUploader() {
         columns: columnsForExport,
         filters: {
           offices: officeIdentifiers,
-          labels: officeLabels,
+          labels: viewOfficeLabels,
           viewLabels: viewOfficeLabels,
-          applied: shouldApplyOfficeFilter,
-          applyToDownload: applyOfficeFilterToExport,
-          exportFilteredOnly,
+          applied: selectedOffices.length > 0,
+          applyToDownload: true,
+          exportFilteredOnly: true,
         },
         metadata: {
           exportTime: new Date(),
@@ -2485,18 +2417,19 @@ export default function BioLogUploader() {
       });
     }
   }, [
-    applyOfficeFilterToExport,
     APP_VERSION,
+    columnOrder,
+    dedupedPerEmployee,
     exportColumnKeys,
-    exportFilteredOnly,
+    exportPeriodLabel,
     filteredPerDayPreview,
-    filteredPerEmployee,
     manualSelectionValid,
     manualResolvedTokens,
+    metricMode,
     perDay,
-    perEmployee,
-    exportPeriodLabel,
     selectedOffices,
+    showNoPunchColumn,
+    sortedPerEmployee,
     toast,
     useManualPeriod,
   ]);
@@ -2531,10 +2464,6 @@ export default function BioLogUploader() {
       description: "Remove conflicting files or confirm to continue merging across months.",
     });
   }, [toast]);
-
-  const handleUploadMore = useCallback(() => {
-    inputRef.current?.click();
-  }, []);
 
   const totalFiles = files.length;
   const processedFiles = files.filter((file) => file.status === "parsed" || file.status === "failed").length;
@@ -2927,7 +2856,7 @@ export default function BioLogUploader() {
         </Alert>
       )}
 
-      {perEmployee && perDay && perEmployee.length > 0 && (
+      {perEmployee && perDay && dedupedPerEmployee.length > 0 && (
         <div className="space-y-4">
           {identityStatusBadge && (
             <div className="flex flex-wrap items-center gap-2">
@@ -2940,168 +2869,42 @@ export default function BioLogUploader() {
           <InsightsPanel
             collapsed={insightsCollapsed}
             onCollapsedChange={setInsightsCollapsed}
-            officeOptions={officeOptions}
-            selectedOffices={selectedOffices}
-            onOfficeToggle={handleOfficeToggle}
-            onClearOffices={() => setSelectedOffices([])}
-            scheduleTypeOptions={scheduleTypeOptions}
-            selectedScheduleTypes={selectedScheduleTypes}
-            onScheduleToggle={handleScheduleToggle}
-            onClearScheduleTypes={() => setSelectedScheduleTypes([])}
-            showUnmatched={showUnmatched}
-            onShowUnmatchedChange={setShowUnmatched}
-            showNoPunchColumn={showNoPunchColumn}
-            onShowNoPunchColumnChange={setShowNoPunchColumn}
-            metricMode={metricMode}
-            onMetricModeChange={setMetricMode}
-            employeeSearch={employeeSearch}
-            onEmployeeSearchChange={setEmployeeSearch}
             visibleCharts={visibleCharts}
             onVisibleChartsChange={updateVisibleCharts}
-            perEmployee={perEmployee ?? []}
+            perEmployee={dedupedPerEmployee}
             perDay={perDay ?? []}
-            filteredPerEmployee={searchedPerEmployee}
+            filteredPerEmployee={sortedPerEmployee}
             filteredPerDay={filteredPerDayPreview}
-            getOfficeLabel={getOfficeLabel}
-            exportFilteredOnly={exportFilteredOnly}
-            onExportFilteredOnlyChange={setExportFilteredOnly}
           />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
-              {(selectedOffices.length || activeHeadsLabel) ? (
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                  {selectedOffices.length ? (
-                    <>
-                      <span className="font-semibold uppercase tracking-wide">Office:</span>
-                      {selectedOffices.map((key) => (
-                        <span
-                          key={key}
-                          className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground"
-                        >
-                          {getOfficeLabel(key)}
-                        </span>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedOffices([])}
-                        className="font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      >
-                        Clear
-                      </button>
-                      {!applyOfficeFilterToExport ? (
-                        <span className="text-amber-600 dark:text-amber-500">
-                          Download includes all offices
-                        </span>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {activeHeadsLabel ? (
-                    <>
-                      <span className="font-semibold uppercase tracking-wide">Heads:</span>
-                      <button
-                        type="button"
-                        onClick={() => setHeadsFilter("all")}
-                        className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                        aria-label="Clear heads filter"
-                      >
-                        {activeHeadsLabel}
-                        <X className="h-3 w-3" aria-hidden="true" />
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="font-medium">View:</span>
-                <div className="inline-flex overflow-hidden rounded-md border">
-                  <Button
-                    type="button"
-                    variant={metricMode === "days" ? "default" : "ghost"}
-                    size="sm"
-                    className="rounded-none"
-                    aria-pressed={metricMode === "days"}
-                    onClick={() => setMetricMode("days")}
-                  >
-                    Days %
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={metricMode === "minutes" ? "default" : "ghost"}
-                    size="sm"
-                    className="rounded-none"
-                    aria-pressed={metricMode === "minutes"}
-                    onClick={() => setMetricMode("minutes")}
-                  >
-                    Minutes
-                  </Button>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1 text-left text-sm">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Heads
-                </span>
-                <ToggleGroup
-                  type="single"
-                  value={headsFilter}
-                  onValueChange={(value) => {
-                    if (value === "heads" || value === "nonHeads" || value === "all") {
-                      setHeadsFilter(value as HeadsFilterValue);
-                    } else {
-                      setHeadsFilter(DEFAULT_HEADS_FILTER);
-                    }
-                  }}
-                  size="sm"
-                  className="rounded-md border bg-background p-0.5"
-                  aria-label="Filter by head status"
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="inline-flex items-center gap-2"
+                  onClick={() => setColumnSelectorOpen(true)}
                 >
-                  <ToggleGroupItem value="all" className="px-2 py-1 text-xs">
-                    All
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="heads" className="px-2 py-1 text-xs">
-                    Heads only
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="nonHeads" className="px-2 py-1 text-xs">
-                    Exclude heads
-                  </ToggleGroupItem>
-                </ToggleGroup>
+                  <Columns className="h-4 w-4" aria-hidden="true" />
+                  Columns
+                </Button>
+                <Button
+                  onClick={handleDownloadResults}
+                  disabled={
+                    evaluating ||
+                    hasPendingParses ||
+                    !perEmployee.length ||
+                    !perDay.length ||
+                    (useManualPeriod && !manualSelectionValid) ||
+                    !sortedPerEmployee.length
+                  }
+                >
+                  Download Results (Excel)
+                </Button>
               </div>
-              <OfficeFilterControl
-                options={officeOptions}
-                selected={selectedOffices}
-                onToggle={handleOfficeToggle}
-                onClear={() => setSelectedOffices([])}
-                applyToExport={applyOfficeFilterToExport}
-                onApplyToExportChange={setApplyOfficeFilterToExport}
-              />
-              <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingParses}>
-                Upload more
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="inline-flex items-center gap-2"
-                onClick={() => setColumnSelectorOpen(true)}
-              >
-                <Columns className="h-4 w-4" aria-hidden="true" />
-                Columns
-              </Button>
-              <Button
-                onClick={handleDownloadResults}
-                disabled={
-                  evaluating ||
-                  hasPendingParses ||
-                  !perEmployee.length ||
-                  !perDay.length ||
-                  (useManualPeriod && !manualSelectionValid) ||
-                  (exportFilteredOnly && (!filteredPerEmployee.length || !filteredPerDayPreview.length))
-                }
-              >
-                Download Results (Excel)
-              </Button>
             </div>
+            <SummaryFiltersBar officeOptions={officeOptions} scheduleOptions={scheduleTypeOptions} />
           </div>
           <div className="overflow-x-auto rounded-xl border">
             <table className="w-full text-sm">
@@ -3114,15 +2917,16 @@ export default function BioLogUploader() {
                   <th className="p-2 text-center">
                     <button
                       type="button"
-                      onClick={() => handleSort("daysWithLogs")}
+                      onClick={() => handleSort("days")}
                       className="inline-flex items-center gap-1 font-semibold"
                       aria-label="Sort by evaluated days"
                     >
                       Days
                       <ArrowUpDown
                         className={cn(
-                          "h-3.5 w-3.5",
-                          sortKey === "daysWithLogs" ? "opacity-100" : "opacity-40"
+                          "h-3.5 w-3.5 transition-transform",
+                          sortBy === "days" ? "opacity-100" : "opacity-40",
+                          sortBy === "days" && sortDir === "asc" ? "rotate-180" : undefined
                         )}
                       />
                     </button>
@@ -3138,8 +2942,9 @@ export default function BioLogUploader() {
                       Late
                       <ArrowUpDown
                         className={cn(
-                          "h-3.5 w-3.5",
-                          sortKey === "lateDays" ? "opacity-100" : "opacity-40"
+                          "h-3.5 w-3.5 transition-transform",
+                          sortBy === "lateDays" ? "opacity-100" : "opacity-40",
+                          sortBy === "lateDays" && sortDir === "asc" ? "rotate-180" : undefined
                         )}
                       />
                     </button>
@@ -3154,8 +2959,9 @@ export default function BioLogUploader() {
                       Undertime
                       <ArrowUpDown
                         className={cn(
-                          "h-3.5 w-3.5",
-                          sortKey === "undertimeDays" ? "opacity-100" : "opacity-40"
+                          "h-3.5 w-3.5 transition-transform",
+                          sortBy === "undertimeDays" ? "opacity-100" : "opacity-40",
+                          sortBy === "undertimeDays" && sortDir === "asc" ? "rotate-180" : undefined
                         )}
                       />
                     </button>
@@ -3172,9 +2978,7 @@ export default function BioLogUploader() {
                       <button
                         type="button"
                         onClick={() =>
-                          handleSort(
-                            metricMode === "minutes" ? "totalLateMinutes" : "latePercent"
-                          )
+                          handleSort(metricMode === "minutes" ? "lateMinutes" : "latePercent")
                         }
                         className="inline-flex items-center gap-1 font-semibold"
                         aria-label={
@@ -3186,13 +2990,14 @@ export default function BioLogUploader() {
                         {metricMode === "minutes" ? "Late (min)" : "Late %"}
                         <ArrowUpDown
                           className={cn(
-                            "h-3.5 w-3.5",
-                            sortKey ===
-                              (metricMode === "minutes"
-                                ? "totalLateMinutes"
-                                : "latePercent")
+                            "h-3.5 w-3.5 transition-transform",
+                            sortBy === (metricMode === "minutes" ? "lateMinutes" : "latePercent")
                               ? "opacity-100"
-                              : "opacity-40"
+                              : "opacity-40",
+                            sortBy === (metricMode === "minutes" ? "lateMinutes" : "latePercent") &&
+                              sortDir === "asc"
+                              ? "rotate-180"
+                              : undefined
                           )}
                         />
                       </button>
@@ -3227,9 +3032,7 @@ export default function BioLogUploader() {
                         type="button"
                         onClick={() =>
                           handleSort(
-                            metricMode === "minutes"
-                              ? "totalUndertimeMinutes"
-                              : "undertimePercent"
+                            metricMode === "minutes" ? "undertimeMinutes" : "undertimePercent"
                           )
                         }
                         className="inline-flex items-center gap-1 font-semibold"
@@ -3242,13 +3045,14 @@ export default function BioLogUploader() {
                         {metricMode === "minutes" ? "UT (min)" : "UT %"}
                         <ArrowUpDown
                           className={cn(
-                            "h-3.5 w-3.5",
-                            sortKey ===
-                              (metricMode === "minutes"
-                                ? "totalUndertimeMinutes"
-                                : "undertimePercent")
+                            "h-3.5 w-3.5 transition-transform",
+                            sortBy === (metricMode === "minutes" ? "undertimeMinutes" : "undertimePercent")
                               ? "opacity-100"
-                              : "opacity-40"
+                              : "opacity-40",
+                            sortBy === (metricMode === "minutes" ? "undertimeMinutes" : "undertimePercent") &&
+                              sortDir === "asc"
+                              ? "rotate-180"
+                              : undefined
                           )}
                         />
                       </button>
