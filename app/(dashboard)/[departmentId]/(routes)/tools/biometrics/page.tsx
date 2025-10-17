@@ -1,5 +1,5 @@
-import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import BioLogUploader from "./BioLogUploader";
+import { ToolsPageShell } from "@/app/tools/layout";
 
 export default function BiometricsToolPage({
   params,
@@ -8,20 +8,16 @@ export default function BiometricsToolPage({
 }) {
   const { departmentId } = params;
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <Breadcrumbs
-        items={[
-          { label: "Tools", href: `/${departmentId}/tools` },
-          { label: "Biometrics Uploader" }
-        ]}
-      />
-      <div>
-        <h1 className="mb-4 text-2xl font-semibold">Biometrics Uploader</h1>
-        <p className="mb-6 text-sm text-muted-foreground">
-          Upload the monthly “Employee Attendance Record” (.xlsx). We’ll compute Late &amp; Undertime based on earliest-in &amp; latest-out.
-        </p>
-        <BioLogUploader />
-      </div>
-    </div>
+    <ToolsPageShell
+      heading="Biometrics Uploader"
+      description={`Upload the monthly "Employee Attendance Record" (.xlsx). We'll compute Late & Undertime based on earliest-in & latest-out.`}
+      breadcrumbs={[
+        { label: "Tools", href: `/${departmentId}/tools` },
+        { label: "Biometrics Uploader" },
+      ]}
+      fullWidth
+    >
+      <BioLogUploader />
+    </ToolsPageShell>
   );
 }

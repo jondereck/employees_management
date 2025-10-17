@@ -8,7 +8,6 @@ import {
   Fingerprint,
   Image as ImageIcon,
   LayoutDashboard,
-  Monitor,
   Settings,
 } from "lucide-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -64,12 +63,6 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       label: "Overview",
       active: pathname === `/${departmentId}`,
       icon: <LayoutDashboard className="mr-1 h-5 w-5" aria-hidden="true" />,
-    },
-    {
-      href: `/${departmentId}/tools/covers`,
-      label: "Covers",
-      active: pathname.startsWith(`/${departmentId}/tools/covers`),
-      icon: <Monitor className="mr-1 h-5 w-5" aria-hidden="true" />,
     },
     {
       href: `/${departmentId}/offices`,

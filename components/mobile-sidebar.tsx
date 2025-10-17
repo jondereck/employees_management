@@ -23,7 +23,6 @@ import {
   BadgeCheck,
   Briefcase,
   LayoutDashboard,
-  Monitor,
   ShieldCheck,
   Building,
   UserCheck2,
@@ -118,11 +117,6 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
           label: "Overview",
           path: ``,
           icon: LayoutDashboard,
-        },
-        {
-          label: "Covers",
-          path: `tools/covers`,
-          icon: Monitor,
         },
         {
           label: "Offices",

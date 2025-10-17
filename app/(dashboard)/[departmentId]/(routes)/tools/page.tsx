@@ -7,10 +7,10 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 
-import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import prismadb from "@/lib/prismadb";
 import { extractToolAccess, type ToolKey } from "@/lib/tool-access";
+import { ToolsPageShell } from "@/app/tools/layout";
 
 const TOOL_CARD_CONFIG: Array<{
   key: ToolKey;
@@ -74,8 +74,12 @@ export default async function ToolsLandingPage({
   const cards = TOOL_CARD_CONFIG.filter((card) => allowedTools.has(card.key));
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <Breadcrumbs items={[{ label: "Tools" }]} />
+    <ToolsPageShell
+      heading="Tools"
+      description="Access department utilities and workflows."
+      breadcrumbs={[{ label: "Tools" }]}
+      fullWidth
+    >
       {cards.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {cards.map((card) => {
@@ -106,6 +110,6 @@ export default async function ToolsLandingPage({
           You do not have access to any tools yet.
         </p>
       )}
-    </div>
+    </ToolsPageShell>
   );
 }

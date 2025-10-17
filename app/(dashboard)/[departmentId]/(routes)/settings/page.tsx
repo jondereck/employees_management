@@ -4,16 +4,6 @@ import { redirect } from "next/navigation";
 import { SettingsForm } from "./components/settings-form";
 import SettingsFooter from "./components/settings-footer";
 import { Separator } from "@/components/ui/separator";
-import NeonUsageCard from "@/components/neon-usage-card";
-import TogglePublicButton from "./components/toggle-public-button";
-
-
-// ⬇️ add this
-import dynamic from "next/dynamic";
-const CopyOptionsCard = dynamic(
-  () => import("./components/copy-options-card"),
-  { ssr: false }
-);
 
 interface settingsPageProps {
   params: {

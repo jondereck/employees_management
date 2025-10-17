@@ -1,6 +1,10 @@
-import prismadb from "@/lib/prismadb";
 import { format } from "date-fns";
-import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { ToolsPageShell } from "@/app/tools/layout";
+import prismadb from "@/lib/prismadb";
 import { BillboardsClient } from "./components/client";
 import { BillboardColumn } from "./components/columns";
 
@@ -25,17 +29,25 @@ const CoversPage = async ({
   }));
 
   return (
-    <div className="flex-col">
-      <div className="flex-1 space-y-6 p-4 pt-6 md:p-8">
-        <Breadcrumbs
-          items={[
-            { label: "Tools", href: `/${params.departmentId}/tools` },
-            { label: "Covers" }
-          ]}
-        />
-        <BillboardsClient data={formattedBillboards} />
-      </div>
-    </div>
+    <ToolsPageShell
+      heading="Covers"
+      description="Manage lobby covers and office assignments."
+      breadcrumbs={[
+        { label: "Tools", href: `/${params.departmentId}/tools` },
+        { label: "Covers" },
+      ]}
+      fullWidth
+      actions={(
+        <Button asChild>
+          <Link href={`/${params.departmentId}/tools/covers/new`}>
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+            New cover
+          </Link>
+        </Button>
+      )}
+    >
+      <BillboardsClient data={formattedBillboards} />
+    </ToolsPageShell>
   );
 }
 

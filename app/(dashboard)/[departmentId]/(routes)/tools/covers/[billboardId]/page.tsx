@@ -1,5 +1,5 @@
 import prismadb from "@/lib/prismadb";
-import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { ToolsPageShell } from "@/app/tools/layout";
 import { BillboardForm } from "./components/billboard-form";
 
 const BillboardDetailsPage = async ({
@@ -14,19 +14,25 @@ const BillboardDetailsPage = async ({
   });
 
 
+  const heading = billboard?.label ?? "New Cover";
+  const description = billboard
+    ? "Update cover artwork and scheduling."
+    : "Create a new cover to feature across offices.";
+
   return (
-    <div className="flex-col">
-      <div className="flex-1 space-y-6 p-4 pt-6 md:p-8">
-        <Breadcrumbs
-          items={[
-            { label: "Tools", href: `/${params.departmentId}/tools` },
-            { label: "Covers", href: `/${params.departmentId}/tools/covers` },
-            { label: billboard?.label ?? "New Cover" }
-          ]}
-        />
-        <BillboardForm initialData={billboard} />
-      </div>
-    </div>
+    <ToolsPageShell
+      heading={heading}
+      description={description}
+      breadcrumbs={[
+        { label: "Tools", href: `/${params.departmentId}/tools` },
+        { label: "Covers", href: `/${params.departmentId}/tools/covers` },
+        { label: heading },
+      ]}
+      fullWidth
+      contentClassName="max-w-4xl"
+    >
+      <BillboardForm initialData={billboard} />
+    </ToolsPageShell>
   );
 }
 
