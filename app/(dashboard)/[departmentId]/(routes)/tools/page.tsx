@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { Copy, FileSpreadsheet, Fingerprint, ImageDown } from "lucide-react";
+import {
+  Copy,
+  FileSpreadsheet,
+  Fingerprint,
+  Image as ImageIcon,
+} from "lucide-react";
 
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +31,7 @@ const TOOL_CARD_CONFIG: Array<{
     label: "Covers",
     description: "Manage lobby covers and office assignments.",
     slug: "tools/covers",
-    icon: ImageDown,
+    icon: ImageIcon,
   },
   {
     key: "attendance-import",

@@ -28,7 +28,7 @@ import {
   Building,
   UserCheck2,
   Fingerprint,
-  ImageDown,
+  Image as ImageIcon,
   FileSpreadsheet,
   Copy,
   Cake,
@@ -59,7 +59,7 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
   covers: {
     label: "Covers",
     path: "tools/covers",
-    icon: ImageDown,
+    icon: ImageIcon,
   },
   "attendance-import": {
     label: "CSV Attendance Import",

@@ -6,7 +6,7 @@ import {
   Copy,
   FileSpreadsheet,
   Fingerprint,
-  ImageDown,
+  Image as ImageIcon,
   LayoutDashboard,
   Monitor,
   Settings,
@@ -139,7 +139,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       href: `/${departmentId}/tools/covers`,
       label: "Covers",
       description: "Design and publish lobby covers across offices.",
-      icon: <ImageDown className="h-5 w-5" aria-hidden="true" />,
+      icon: <ImageIcon className="h-5 w-5" aria-hidden="true" />,
     },
     {
       key: "attendance-import",
