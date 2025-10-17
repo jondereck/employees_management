@@ -30,7 +30,7 @@ export const  BillboardsClient = ({
       title={`Covers (${data.length})`}
       description="Manage covers for your departments"
     />
-    <Button onClick={() => router.push(`/${params.departmentId}/billboards/new`)}>
+    <Button onClick={() => router.push(`/${params.departmentId}/tools/covers/new`)}>
       <Plus className="mr-2 h-4 w-4"/>
       New
     </Button>
@@ -39,7 +39,7 @@ export const  BillboardsClient = ({
     <DataTable searchKeys={['label']} columns={columns} data={data}/>
     <ApiHeading
     title="API"
-    description="API calls for billboards"
+    description="API calls for covers"
     />
     <ApiList entityIdName="billboardsId" entityName="billboards"/>
     </>

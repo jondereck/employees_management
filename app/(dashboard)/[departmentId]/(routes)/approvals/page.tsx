@@ -1,6 +1,7 @@
 import prismadb from "@/lib/prismadb";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import Container from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/container";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import ChangeRequestCard from "./components/change-request-card";
 import ApprovalsRealtime from "./components/approvals-tealtime";
 
@@ -65,8 +66,14 @@ export default async function ApprovalsPage({
     <div className="bg-white">
       <ApprovalsRealtime />
       <Container>
-        <div className="px-4 py-10 sm:px-6 lg:px-8">
-          <div className="mb-4 flex items-baseline justify-between">
+        <div className="space-y-6 px-4 py-10 sm:px-6 lg:px-8">
+          <Breadcrumbs
+            items={[
+              { label: "Employees", href: `/${departmentId}/employees` },
+              { label: "Approvals" },
+            ]}
+          />
+          <div className="flex items-baseline justify-between">
             <h1 className="text-xl font-bold">Approvals</h1>
             <span className="text-xs text-muted-foreground">
               {items.length} pending
