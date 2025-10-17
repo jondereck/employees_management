@@ -29,6 +29,7 @@ const Row = z.object({
   allTimes: z.array(z.string().regex(hhmmRegex)).default([]),
   punches: z.array(Punch).default([]),
   sourceFiles: z.array(z.string()).default([]),
+  composedFromDayOnly: z.boolean().optional(),
 });
 
 const Payload = z.object({
@@ -54,6 +55,7 @@ export async function POST(req: Request) {
       allTimes: entry.allTimes,
       punches: entry.punches,
       sourceFiles: entry.sourceFiles,
+      composedFromDayOnly: entry.composedFromDayOnly ?? false,
     }));
 
     const result = await evaluateAttendanceEntries(payloadEntries);

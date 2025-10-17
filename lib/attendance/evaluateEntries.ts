@@ -35,6 +35,7 @@ export type EvaluationEntry = {
   allTimes: string[];
   punches: DayPunch[];
   sourceFiles: string[];
+  composedFromDayOnly: boolean;
 };
 
 export type EvaluationResult = {
@@ -218,11 +219,13 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       weeklyPatternByEmployee.set(internalEmployeeId, true);
     }
 
+    const resolvedEmployeeId = internalEmployeeId ?? row.resolvedEmployeeId ?? null;
+
     const perDay: PerDayRow = {
       employeeId: row.employeeId,
       employeeName: row.employeeName,
       employeeToken: row.employeeToken,
-      resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+      resolvedEmployeeId,
       officeId: row.officeId ?? null,
       officeName: row.officeName ?? null,
       dateISO: row.dateISO,
@@ -232,6 +235,7 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       allTimes: normalizedAllTimes,
       punches: row.punches,
       sourceFiles: row.sourceFiles,
+      composedFromDayOnly: row.composedFromDayOnly ?? false,
       status: evaluation.status as DayEvaluationStatus,
       isLate: evaluation.isLate,
       isUndertime: evaluation.isUndertime,
@@ -252,7 +256,7 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       weeklyExclusionMode: weeklyExclusion?.mode ?? null,
       weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
       weeklyExclusionId: weeklyExclusion?.id ?? null,
-      identityStatus: internalEmployeeId ? "matched" : "unmatched",
+      identityStatus: resolvedEmployeeId ? "matched" : "unmatched",
     };
 
     evaluatedPerDay.push(perDay);

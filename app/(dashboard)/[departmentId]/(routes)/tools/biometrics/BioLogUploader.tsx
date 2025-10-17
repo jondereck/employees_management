@@ -1527,6 +1527,7 @@ export default function BioLogUploader() {
             allTimes: row.allTimes,
             punches: row.punches,
             sourceFiles: row.sourceFiles,
+            composedFromDayOnly: row.composedFromDayOnly,
           })),
         };
 
@@ -1873,6 +1874,7 @@ export default function BioLogUploader() {
         allTimes: row.allTimes,
         punches: row.punches,
         sourceFiles: row.sourceFiles,
+        composedFromDayOnly: row.composedFromDayOnly,
       }));
 
       const response = await timeout(
@@ -3067,12 +3069,15 @@ export default function BioLogUploader() {
                     ? manualResolved.has(normalizedRowToken)
                     : false;
                   const sourceLabel = formatScheduleSource(row.scheduleSource);
-                  const displayEmployeeId =
-                    row.employeeId?.trim().length
-                      ? row.employeeId
-                      : isUnmatched
-                      ? row.employeeToken || "—"
-                      : "—";
+                  const resolvedEmployeeId = row.resolvedEmployeeId?.trim();
+                  const baseEmployeeId = row.employeeId?.trim();
+                  const displayEmployeeId = resolvedEmployeeId?.length
+                    ? resolvedEmployeeId
+                    : baseEmployeeId?.length
+                    ? baseEmployeeId
+                    : isUnmatched
+                    ? row.employeeToken || "—"
+                    : "—";
                   const displayEmployeeName =
                     row.employeeName?.trim().length ? row.employeeName : UNMATCHED_LABEL;
                   const displayOffice = row.officeName?.trim().length
@@ -3305,12 +3310,22 @@ export default function BioLogUploader() {
                   const weeklyPresenceLabel = formatTimelineLabel(row.weeklyPatternPresence ?? []);
                   const isNoPunch = row.status === "no_punch";
                   const isExcused = row.status === "excused";
+                  const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
+                  const resolvedEmployeeId = row.resolvedEmployeeId?.trim();
+                  const baseEmployeeId = row.employeeId?.trim();
+                  const displayEmployeeId = resolvedEmployeeId?.length
+                    ? resolvedEmployeeId
+                    : baseEmployeeId?.length
+                    ? baseEmployeeId
+                    : isUnmatched
+                    ? row.employeeToken || "—"
+                    : "—";
                   return (
                     <tr
                       key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`}
                       className="odd:bg-muted/20"
                     >
-                      <td className="p-2">{row.employeeId || "—"}</td>
+                      <td className="p-2">{displayEmployeeId}</td>
                       <td className="p-2">{row.employeeName || "—"}</td>
                       <td className="p-2">
                         {row.officeName ||
