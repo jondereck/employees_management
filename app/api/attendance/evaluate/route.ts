@@ -18,6 +18,7 @@ import {
 } from "@/utils/evaluateDay";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
 import type { WeeklyPatternWindow } from "@/utils/weeklyPattern";
+import { normalizeBiometricToken, resolveBiometricTokenPadLength } from "@/utils/biometricsShared";
 
 type EvaluatedDay = {
   employeeId: string;
@@ -100,28 +101,66 @@ export async function POST(req: Request) {
       return NextResponse.json({ perDay: [], perEmployee: [] });
     }
 
-    const bioIds = Array.from(new Set(entries.map((row) => row.employeeId)));
+    const padLength = resolveBiometricTokenPadLength();
+    const normalizedTokensPerRow = entries.map((row) =>
+      normalizeBiometricToken(row.employeeToken || row.employeeId || row.employeeName, padLength)
+    );
+    const uniqueNormalizedTokens = Array.from(
+      new Set(normalizedTokensPerRow.filter((token): token is string => Boolean(token)))
+    );
 
-    const candidates: { id: string; employeeNo: string | null }[] = [];
-    const CHUNK_SIZE = 200;
-    for (let i = 0; i < bioIds.length; i += CHUNK_SIZE) {
-      const slice = bioIds.slice(i, i + CHUNK_SIZE);
-      const orConditions = slice.map((id) => ({ employeeNo: { startsWith: id } }));
-      if (!orConditions.length) continue;
-      const batch = await prisma.employee.findMany({
-        where: { OR: orConditions },
-        select: { id: true, employeeNo: true },
-      });
-      candidates.push(...batch);
+    const identityMapModel = (prisma as typeof prisma & {
+      biometricsIdentityMap?: typeof prisma.biometricsIdentityMap;
+    }).biometricsIdentityMap;
+
+    const manualMappings: Array<{ token: string; employeeId: string }> =
+      identityMapModel && uniqueNormalizedTokens.length
+        ? await identityMapModel.findMany({
+            where: { token: { in: uniqueNormalizedTokens } },
+            select: { token: true, employeeId: true },
+          })
+        : [];
+
+    const manualMap = new Map<string, string>();
+    for (const mapping of manualMappings) {
+      manualMap.set(mapping.token, mapping.employeeId);
     }
 
-    const bioToInternal = new Map<string, string>();
-    for (const candidate of candidates) {
-      const token = firstEmployeeNoToken(candidate.employeeNo);
-      if (token && !bioToInternal.has(token)) {
-        bioToInternal.set(token, candidate.id);
+    const tokensForAuto = uniqueNormalizedTokens.filter((token) => !manualMap.has(token));
+    const autoMap = new Map<string, string>();
+    if (tokensForAuto.length) {
+      const CHUNK_SIZE = 200;
+      for (let i = 0; i < tokensForAuto.length; i += CHUNK_SIZE) {
+        const slice = tokensForAuto.slice(i, i + CHUNK_SIZE);
+        const orConditions = slice.flatMap((token) => [
+          { employeeNo: { startsWith: `${token},` } },
+          { employeeNo: { equals: token } },
+        ]);
+        if (!orConditions.length) continue;
+        const batch = await prisma.employee.findMany({
+          where: { OR: orConditions },
+          select: { id: true, employeeNo: true },
+        });
+        for (const candidate of batch) {
+          const token = firstEmployeeNoToken(candidate.employeeNo);
+          if (!token) continue;
+          const normalized = normalizeBiometricToken(token, padLength);
+          if (!normalized || manualMap.has(normalized)) continue;
+          if (!autoMap.has(normalized)) {
+            autoMap.set(normalized, candidate.id);
+          }
+        }
       }
     }
+
+    const rowContexts = entries.map((row, index) => {
+      const normalizedToken = normalizedTokensPerRow[index] || null;
+      const manualEmployeeId = normalizedToken ? manualMap.get(normalizedToken) ?? null : null;
+      const autoEmployeeId = normalizedToken ? autoMap.get(normalizedToken) ?? null : null;
+      const resolvedEmployeeId = row.resolvedEmployeeId?.trim() || null;
+      const internalEmployeeId = manualEmployeeId ?? autoEmployeeId ?? resolvedEmployeeId ?? null;
+      return { normalizedToken, manualEmployeeId, autoEmployeeId, resolvedEmployeeId, internalEmployeeId };
+    });
 
     const sortedDates = entries
       .map((row) => row.dateISO)
@@ -132,11 +171,14 @@ export async function POST(req: Request) {
     const from = new Date(`${firstDate}T00:00:00.000Z`);
     const to = new Date(`${lastDate}T23:59:59.999Z`);
 
-    const internalIds = Array.from(new Set(bioToInternal.values()));
+    const internalIds = Array.from(
+      new Set(rowContexts.map((context) => context.internalEmployeeId).filter((value): value is string => Boolean(value)))
+    );
     const maps = await getScheduleMapsForMonth(internalIds, { from, to });
 
-    const evaluatedPerDay: EvaluatedDay[] = entries.map((row) => {
-      const internalEmployeeId = bioToInternal.get(row.employeeId) ?? null;
+    const evaluatedPerDay: EvaluatedDay[] = entries.map((row, index) => {
+      const context = rowContexts[index];
+      const internalEmployeeId = context.internalEmployeeId ?? null;
       const scheduleRecord = resolveScheduleForDate(internalEmployeeId, row.dateISO, maps);
       const normalized = normalizeSchedule(scheduleRecord);
       const earliest = (row.earliest ?? null) as HHMM | null;
@@ -167,7 +209,8 @@ export async function POST(req: Request) {
       return {
         employeeId: row.employeeId,
         employeeName: row.employeeName,
-        resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+        resolvedEmployeeId:
+          row.resolvedEmployeeId ?? context.manualEmployeeId ?? context.autoEmployeeId ?? null,
         officeId: row.officeId ?? null,
         officeName: row.officeName ?? null,
         day: row.day,

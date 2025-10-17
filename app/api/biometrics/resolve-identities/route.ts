@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
+import { normalizeBiometricToken, resolveBiometricTokenPadLength } from "@/utils/biometricsShared";
 
 const Payload = z.object({
   tokens: z.array(z.string().min(1)).max(2000),
@@ -77,12 +78,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ results: {} as Record<string, IdentityRecord> });
     }
 
-    const uniqueTokens = Array.from(new Set(tokens.map((token) => token.trim()).filter(Boolean)));
-    if (!uniqueTokens.length) {
+    const trimmedTokens = tokens.map((token) => token.trim()).filter(Boolean);
+    if (!trimmedTokens.length) {
       return NextResponse.json({ results: {} as Record<string, IdentityRecord> });
     }
 
-    const tokenSet = new Set(uniqueTokens);
+    const padLength = resolveBiometricTokenPadLength();
+
+    const uniqueOriginalTokens = Array.from(new Set(trimmedTokens));
+    const variants = new Map<string, string[]>();
+    const invalidTokens: string[] = [];
+
+    for (const original of uniqueOriginalTokens) {
+      const normalized = normalizeBiometricToken(original, padLength);
+      if (!normalized) {
+        invalidTokens.push(original);
+        continue;
+      }
+      const existing = variants.get(normalized);
+      if (existing) {
+        if (!existing.includes(original)) existing.push(original);
+      } else {
+        variants.set(normalized, [original]);
+      }
+    }
+
+    const normalizedTokens = Array.from(variants.keys());
+    if (!normalizedTokens.length && !invalidTokens.length) {
+      return NextResponse.json({ results: {} as Record<string, IdentityRecord> });
+    }
+
     const matches = new Map<string, EmployeeCandidate[]>();
 
     const identityMapModel = (prisma as typeof prisma & {
@@ -95,9 +120,9 @@ export async function POST(req: Request) {
       console.warn(
         "Biometrics identity map model is unavailable. Skipping manual mapping lookup until migrations are applied."
       );
-    } else {
+    } else if (normalizedTokens.length) {
       manualMappings = await identityMapModel.findMany({
-        where: { token: { in: uniqueTokens } },
+        where: { token: { in: normalizedTokens } },
         include: {
           employee: {
             select: {
@@ -117,10 +142,17 @@ export async function POST(req: Request) {
 
     const results: Record<string, IdentityRecord> = {};
 
+    for (const token of invalidTokens) {
+      results[token] = { ...UNKNOWN_RESULT };
+    }
+
+    const remainingTokens = new Set(normalizedTokens);
+
     for (const mapping of manualMappings) {
       const employee = mapping.employee;
       if (!employee) continue;
-      tokenSet.delete(mapping.token);
+      const originals = variants.get(mapping.token) ?? [];
+      if (!originals.length) continue;
       const officeName = employee.offices?.name?.trim() || UNASSIGNED_OFFICE;
       const officeId = employee.offices?.id ?? null;
       const candidate: EmployeeCandidate = {
@@ -133,16 +165,20 @@ export async function POST(req: Request) {
         updatedAt: employee.updatedAt,
         office: employee.offices ? { id: employee.offices.id, name: employee.offices.name } : null,
       };
-      results[mapping.token] = {
+      const identity: IdentityRecord = {
         status: "matched",
         employeeId: employee.id,
         employeeName: formatName(candidate),
         officeId,
         officeName,
       };
+      for (const original of originals) {
+        results[original] = identity;
+      }
+      remainingTokens.delete(mapping.token);
     }
 
-    const orConditions = Array.from(tokenSet).flatMap((token) => [
+    const orConditions = Array.from(remainingTokens).flatMap((token) => [
       { employeeNo: { startsWith: `${token},` } },
       { employeeNo: { equals: token } },
     ]);
@@ -164,11 +200,13 @@ export async function POST(req: Request) {
 
       for (const candidate of batch) {
         const token = firstEmployeeNoToken(candidate.employeeNo);
-        if (!token || !tokenSet.has(token)) continue;
-        if (!matches.has(token)) {
-          matches.set(token, []);
+        if (!token) continue;
+        const normalized = normalizeBiometricToken(token, padLength);
+        if (!normalized || !remainingTokens.has(normalized)) continue;
+        if (!matches.has(normalized)) {
+          matches.set(normalized, []);
         }
-        matches.get(token)!.push({
+        matches.get(normalized)!.push({
           id: candidate.id,
           employeeNo: candidate.employeeNo,
           firstName: candidate.firstName,
@@ -181,11 +219,15 @@ export async function POST(req: Request) {
       }
     }
 
-    for (const token of uniqueTokens) {
-      if (results[token]) continue;
-      const candidates = matches.get(token) ?? [];
+    for (const [normalized, originals] of variants.entries()) {
+      const unresolved = originals.filter((original) => !results[original]);
+      if (!unresolved.length) continue;
+
+      const candidates = matches.get(normalized) ?? [];
       if (!candidates.length) {
-        results[token] = { ...UNKNOWN_RESULT };
+        for (const original of unresolved) {
+          results[original] = { ...UNKNOWN_RESULT };
+        }
         continue;
       }
 
@@ -194,8 +236,7 @@ export async function POST(req: Request) {
       const officeName = primary.office?.name?.trim() || UNASSIGNED_OFFICE;
       const officeId = primary.office?.id ?? null;
       const status = sorted.length > 1 ? "ambiguous" : "matched";
-
-      results[token] = {
+      const identity: IdentityRecord = {
         status,
         employeeId: primary.id,
         employeeName: formatName(primary),
@@ -204,6 +245,10 @@ export async function POST(req: Request) {
         candidates: status === "ambiguous" ? sorted.map(describeCandidate) : undefined,
         missingOffice: !primary.office,
       };
+
+      for (const original of unresolved) {
+        results[original] = identity;
+      }
     }
 
     return NextResponse.json({ results });

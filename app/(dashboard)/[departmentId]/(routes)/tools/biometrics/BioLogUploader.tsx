@@ -64,6 +64,7 @@ import {
 import {
   EXPORT_COLUMNS_STORAGE_KEY,
   formatScheduleSource,
+  normalizeBiometricToken,
   OFFICE_FILTER_STORAGE_KEY,
   UNASSIGNED_OFFICE_LABEL,
   UNKNOWN_OFFICE_KEY_PREFIX,
@@ -1767,10 +1768,138 @@ export default function BioLogUploader() {
           setIdentityState((prev) => ({ ...prev, unmatched }));
         }
 
+        let reEnriched = false;
+        const normalizedTokenKey = normalizeBiometricToken(token);
+        if (normalizedTokenKey) {
+          const relevantRows = filteredPerDayRows.filter((row) => {
+            const source = row.employeeToken || row.employeeId || row.employeeName;
+            if (!source) return false;
+            return normalizeBiometricToken(source) === normalizedTokenKey;
+          });
+
+          if (relevantRows.length) {
+            try {
+              const reEnrichResponse = await timeout(
+                fetch("/api/biometrics/re-enrich", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    sessionId: lastEvaluatedKey.current || "local",
+                    token,
+                    employeeId,
+                    entries: relevantRows.map((row) => ({
+                      employeeId: row.employeeId,
+                      employeeToken: row.employeeToken,
+                      employeeName: row.employeeName,
+                      officeId: row.officeId ?? null,
+                      officeName: row.officeName ?? null,
+                      dateISO: row.dateISO,
+                      day: row.day,
+                      earliest: row.earliest ?? null,
+                      latest: row.latest ?? null,
+                      allTimes: row.allTimes,
+                      punches: row.punches,
+                      sourceFiles: row.sourceFiles,
+                    })),
+                  }),
+                }),
+                15_000
+              );
+
+              if (!reEnrichResponse.ok) {
+                const message = await reEnrichResponse.text();
+                toast({
+                  title: "Re-enrich failed",
+                  description:
+                    message || "Unable to refresh attendance details for the resolved employee.",
+                  variant: "destructive",
+                });
+              } else {
+                const reEnrichPayload = (await reEnrichResponse.json()) as {
+                  perDay?: PerDayRow[];
+                  perEmployee?: PerEmployeeRow | null;
+                };
+
+                if (Array.isArray(reEnrichPayload.perDay) && reEnrichPayload.perDay.length) {
+                  const replacementMap = new Map<string, PerDayRow>();
+                  for (const row of reEnrichPayload.perDay) {
+                    const chrono = toChronologicalRow(row);
+                    const keyToken = normalizeBiometricToken(
+                      row.employeeToken || row.employeeId || row.employeeName || ""
+                    );
+                    if (!keyToken) continue;
+                    const key = `${keyToken}::${row.dateISO}`;
+                    replacementMap.set(key, chrono);
+                  }
+
+                  if (replacementMap.size) {
+                    setPerDay((prev) => {
+                      if (!prev) return prev;
+                      const next: PerDayRow[] = [];
+                      for (const row of prev) {
+                        const rowToken = normalizeBiometricToken(
+                          row.employeeToken || row.employeeId || row.employeeName || ""
+                        );
+                        if (rowToken && rowToken === normalizedTokenKey) {
+                          const key = `${rowToken}::${row.dateISO}`;
+                          const replacement = replacementMap.get(key);
+                          if (replacement) {
+                            next.push(replacement);
+                            replacementMap.delete(key);
+                            continue;
+                          }
+                        }
+                        next.push(row);
+                      }
+                      for (const replacement of replacementMap.values()) {
+                        next.push(replacement);
+                      }
+                      return sortPerDayRows(next.map((row) => toChronologicalRow(row)));
+                    });
+                  }
+                }
+
+                if (reEnrichPayload.perEmployee) {
+                  const updatedSummary = reEnrichPayload.perEmployee;
+                  setPerEmployee((prev) => {
+                    if (!prev) return prev;
+                    let replaced = false;
+                    const next = prev.map((row) => {
+                      const rowToken = normalizeBiometricToken(
+                        row.employeeToken || row.employeeId || row.employeeName || ""
+                      );
+                      if (rowToken && rowToken === normalizedTokenKey) {
+                        replaced = true;
+                        return updatedSummary;
+                      }
+                      return row;
+                    });
+                    if (!replaced) next.push(updatedSummary);
+                    return next;
+                  });
+                }
+
+                reEnriched = true;
+              }
+            } catch (error) {
+              console.error("Failed to re-enrich attendance after resolving token", error);
+              const message =
+                error instanceof Error ? error.message : "Unable to refresh attendance details.";
+              toast({
+                title: "Re-enrich failed",
+                description: message,
+                variant: "destructive",
+              });
+            }
+          }
+        }
+
         setResolveTarget(null);
         toast({
           title: "Identity resolved",
-          description: `${employeeName} is now linked to ${token}.`,
+          description: reEnriched
+            ? `${employeeName} is now linked to ${token}. Attendance metrics have been refreshed.`
+            : `${employeeName} is now linked to ${token}.`,
         });
       } catch (error) {
         console.error("Failed to resolve biometrics token", error);
@@ -1785,7 +1914,7 @@ export default function BioLogUploader() {
         setResolveBusy(false);
       }
     },
-    [toast]
+    [filteredPerDayRows, lastEvaluatedKey, setPerDay, setPerEmployee, toast]
   );
 
   const handleResolveSubmit = useCallback(
