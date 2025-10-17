@@ -44,7 +44,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/components/ui/use-toast";
+import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import { cn } from "@/lib/utils";
 import {
   exportResultsToXlsx,
@@ -233,6 +235,42 @@ const getSortValue = (row: PerEmployeeRow, key: SortKey): number => {
   }
 };
 
+const getEmployeeIdentifierSortKey = (
+  row: Pick<PerEmployeeRow, "employeeNo" | "employeeToken" | "employeeId">
+) => {
+  const employeeNo = firstEmployeeNoToken(row.employeeNo);
+  if (employeeNo && employeeNo.length) {
+    return { key: employeeNo, priority: 0 } as const;
+  }
+  const fallback = row.employeeToken?.trim() || row.employeeId?.trim() || "";
+  if (fallback) {
+    return { key: fallback, priority: 1 } as const;
+  }
+  return { key: "", priority: 2 } as const;
+};
+
+const compareEmployeeIdentifiers = (
+  a: Pick<PerEmployeeRow, "employeeNo" | "employeeToken" | "employeeId" | "employeeName">,
+  b: Pick<PerEmployeeRow, "employeeNo" | "employeeToken" | "employeeId" | "employeeName">
+) => {
+  const aKey = getEmployeeIdentifierSortKey(a);
+  const bKey = getEmployeeIdentifierSortKey(b);
+  if (aKey.priority !== bKey.priority) {
+    return aKey.priority - bKey.priority;
+  }
+  if (aKey.key && bKey.key) {
+    const diff = aKey.key.localeCompare(bKey.key);
+    if (diff !== 0) return diff;
+  } else if (aKey.key) {
+    return -1;
+  } else if (bKey.key) {
+    return 1;
+  }
+  const aName = a.employeeName?.trim() || "";
+  const bName = b.employeeName?.trim() || "";
+  return aName.localeCompare(bName);
+};
+
 const timeout = <T,>(promise: Promise<T>, ms = 15_000) =>
   new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -349,6 +387,33 @@ type SortKey =
   | "undertimePercent";
 type SortDirection = "asc" | "desc";
 
+type HeadsFilterValue = "all" | "heads" | "nonHeads";
+
+const DEFAULT_HEADS_FILTER: HeadsFilterValue = "all";
+
+const HEADS_FILTER_LABEL: Record<Exclude<HeadsFilterValue, "all">, string> = {
+  heads: "Heads only",
+  nonHeads: "Exclude heads",
+};
+
+const HEADS_FILTER_URL_VALUE: Record<HeadsFilterValue, string> = {
+  all: "all",
+  heads: "heads",
+  nonHeads: "non",
+};
+
+const parseHeadsFilterParam = (value: string | null): HeadsFilterValue | null => {
+  if (!value) return null;
+  const normalized = value.toLowerCase();
+  if (normalized === "heads") return "heads";
+  if (normalized === "non") return "nonHeads";
+  if (normalized === "all") return "all";
+  return null;
+};
+
+const getHeadsFilterLabel = (value: HeadsFilterValue) =>
+  value === "all" ? null : HEADS_FILTER_LABEL[value];
+
 type FileStatus = "queued" | "parsing" | "parsed" | "failed";
 
 type FileState = {
@@ -372,6 +437,8 @@ type IdentityRecord = {
   employeeName: string;
   officeId: string | null;
   officeName: string;
+  employeeNo: string | null;
+  isHead: boolean | null;
   candidates?: string[];
   missingOffice?: boolean;
 };
@@ -492,6 +559,8 @@ const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord
       employeeName: UNMATCHED_LABEL,
       officeId: null,
       officeName: UNKNOWN_OFFICE_LABEL,
+      employeeNo: null,
+      isHead: null,
     };
   }
 
@@ -506,6 +575,8 @@ const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord
       employeeName: employeeName && employeeName.length ? employeeName : UNMATCHED_LABEL,
       officeId: null,
       officeName: UNKNOWN_OFFICE_LABEL,
+      employeeNo: null,
+      isHead: null,
     };
   }
 
@@ -515,6 +586,8 @@ const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord
     employeeName: employeeName && employeeName.length ? employeeName : UNMATCHED_LABEL,
     officeId: record.officeId ?? null,
     officeName: officeName && officeName.length ? officeName : UNASSIGNED_OFFICE_LABEL,
+    employeeNo: firstEmployeeNoToken(record.employeeNo) ?? null,
+    isHead: typeof record.isHead === "boolean" ? record.isHead : null,
     candidates:
       status === "ambiguous" && record.candidates && record.candidates.length
         ? [...record.candidates]
@@ -829,6 +902,8 @@ export default function BioLogUploader() {
   const [selectedOffices, setSelectedOffices] = useState<string[]>(
     () => settingsRef.current?.selectedOffices ?? []
   );
+  const [headsFilter, setHeadsFilter] = useState<HeadsFilterValue>(DEFAULT_HEADS_FILTER);
+  const [headsFilterHydrated, setHeadsFilterHydrated] = useState(false);
   const [selectedScheduleTypes, setSelectedScheduleTypes] = useState<string[]>(
     () => settingsRef.current?.selectedScheduleTypes ?? []
   );
@@ -855,6 +930,7 @@ export default function BioLogUploader() {
   });
   const manualResolvedRef = useRef<Set<string>>(new Set());
   const manualResolvedTokens = useMemo(() => Array.from(manualResolved), [manualResolved]);
+  const activeHeadsLabel = useMemo(() => getHeadsFilterLabel(headsFilter), [headsFilter]);
   useEffect(() => {
     manualResolvedRef.current = manualResolved;
   }, [manualResolved]);
@@ -1381,6 +1457,11 @@ export default function BioLogUploader() {
     return `hrps:manual-resolved:${departmentId}:${activePeriod.year}-${pad2(activePeriod.month)}`;
   }, [activePeriod, departmentId]);
 
+  const headsFilterStorageKey = useMemo(() => {
+    if (!departmentId || !activePeriod) return null;
+    return `hrps:bio:headsFilter:${departmentId}:${activePeriod.year}-${pad2(activePeriod.month)}`;
+  }, [activePeriod, departmentId]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!manualResolvedStorageKey) {
@@ -1430,6 +1511,57 @@ export default function BioLogUploader() {
       console.warn("Failed to persist manual resolved tokens", error);
     }
   }, [manualResolved, manualResolvedHydrated, manualResolvedStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!headsFilterStorageKey) {
+      setHeadsFilter(DEFAULT_HEADS_FILTER);
+      setHeadsFilterHydrated(true);
+      return;
+    }
+    setHeadsFilterHydrated(false);
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = parseHeadsFilterParam(params.get("heads"));
+      if (fromUrl) {
+        setHeadsFilter(fromUrl);
+        setHeadsFilterHydrated(true);
+        return;
+      }
+      const stored = window.localStorage.getItem(headsFilterStorageKey);
+      if (stored === "heads" || stored === "nonHeads" || stored === "all") {
+        setHeadsFilter(stored as HeadsFilterValue);
+      } else {
+        setHeadsFilter(DEFAULT_HEADS_FILTER);
+      }
+    } catch (error) {
+      console.warn("Failed to load heads filter", error);
+      setHeadsFilter(DEFAULT_HEADS_FILTER);
+    } finally {
+      setHeadsFilterHydrated(true);
+    }
+  }, [headsFilterStorageKey]);
+
+  useEffect(() => {
+    if (!headsFilterHydrated) return;
+    if (typeof window === "undefined") return;
+    if (!headsFilterStorageKey) return;
+    try {
+      window.localStorage.setItem(headsFilterStorageKey, headsFilter);
+    } catch (error) {
+      console.warn("Failed to persist heads filter", error);
+    }
+  }, [headsFilter, headsFilterHydrated, headsFilterStorageKey]);
+
+  useEffect(() => {
+    if (!headsFilterHydrated) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    params.set("heads", HEADS_FILTER_URL_VALUE[headsFilter]);
+    const query = params.toString();
+    const next = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", next);
+  }, [headsFilter, headsFilterHydrated]);
 
   const identityWarnings = useMemo(
     () => computeIdentityWarnings(filteredPerDayRows, identityMap, identityState.status),
@@ -1650,9 +1782,21 @@ export default function BioLogUploader() {
       if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
         return false;
       }
+      if (headsFilter === "heads" && row.isHead !== true) {
+        return false;
+      }
+      if (headsFilter === "nonHeads" && row.isHead !== false) {
+        return false;
+      }
       return true;
     });
-  }, [perEmployee, selectedOffices, selectedScheduleTypes, showUnmatched]);
+  }, [
+    headsFilter,
+    perEmployee,
+    selectedOffices,
+    selectedScheduleTypes,
+    showUnmatched,
+  ]);
 
   const searchedPerEmployee = useMemo(() => {
     if (!filteredPerEmployee.length) return filteredPerEmployee;
@@ -1661,8 +1805,14 @@ export default function BioLogUploader() {
     return filteredPerEmployee.filter((row) => {
       const name = row.employeeName?.toLowerCase() ?? "";
       const id = row.employeeId?.toLowerCase() ?? "";
+      const employeeNo = firstEmployeeNoToken(row.employeeNo)?.toLowerCase() ?? "";
       const token = row.employeeToken?.toLowerCase() ?? "";
-      return name.includes(query) || id.includes(query) || token.includes(query);
+      return (
+        name.includes(query) ||
+        employeeNo.includes(query) ||
+        id.includes(query) ||
+        token.includes(query)
+      );
     });
   }, [employeeSearch, filteredPerEmployee]);
 
@@ -1685,17 +1835,30 @@ export default function BioLogUploader() {
       } else if (scheduleKeys && !row.scheduleType) {
         return false;
       }
+      if (headsFilter === "heads" && row.isHead !== true) {
+        return false;
+      }
+      if (headsFilter === "nonHeads" && row.isHead !== false) {
+        return false;
+      }
       if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
         return false;
       }
       if (!hasQuery) return true;
       const name = row.employeeName?.toLowerCase() ?? "";
       const id = row.employeeId?.toLowerCase() ?? "";
+      const employeeNo = firstEmployeeNoToken(row.employeeNo)?.toLowerCase() ?? "";
       const token = row.employeeToken?.toLowerCase() ?? "";
-      return name.includes(query) || id.includes(query) || token.includes(query);
+      return (
+        name.includes(query) ||
+        employeeNo.includes(query) ||
+        id.includes(query) ||
+        token.includes(query)
+      );
     });
   }, [
     employeeSearch,
+    headsFilter,
     perDay,
     selectedOffices,
     selectedScheduleTypes,
@@ -1859,6 +2022,11 @@ export default function BioLogUploader() {
       const resolvedEmployeeId = identity?.employeeId ?? relevantRows[0]?.resolvedEmployeeId ?? null;
       const officeId = identity?.officeId ?? relevantRows[0]?.officeId ?? null;
       const officeName = identity?.officeName ?? relevantRows[0]?.officeName ?? null;
+      const employeeNo =
+        firstEmployeeNoToken(identity?.employeeNo) ??
+        firstEmployeeNoToken(relevantRows[0]?.employeeNo) ??
+        null;
+      const isHead = identity?.isHead ?? relevantRows[0]?.isHead ?? null;
 
       const entries = relevantRows.map((row) => ({
         employeeId: row.employeeId,
@@ -1925,6 +2093,8 @@ export default function BioLogUploader() {
           resolvedEmployeeId,
           officeId,
           officeName,
+          employeeNo,
+          isHead,
         };
       });
       lastEvaluatedKey.current = makeEvaluationPayloadKey(manualKey, updatedFilteredRows);
@@ -2085,7 +2255,7 @@ export default function BioLogUploader() {
       if (diff !== 0) {
         return diff * multiplier;
       }
-      return a.employeeName.localeCompare(b.employeeName);
+      return compareEmployeeIdentifiers(a, b) * multiplier;
     });
     return rows;
   }, [searchedPerEmployee, sortDirection, sortKey]);
@@ -2799,28 +2969,46 @@ export default function BioLogUploader() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1">
               <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
-              {selectedOffices.length ? (
+              {(selectedOffices.length || activeHeadsLabel) ? (
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                  <span className="font-semibold uppercase tracking-wide">Office:</span>
-                  {selectedOffices.map((key) => (
-                    <span
-                      key={key}
-                      className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground"
-                    >
-                      {getOfficeLabel(key)}
-                    </span>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedOffices([])}
-                    className="font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    Clear
-                  </button>
-                  {!applyOfficeFilterToExport ? (
-                    <span className="text-amber-600 dark:text-amber-500">
-                      Download includes all offices
-                    </span>
+                  {selectedOffices.length ? (
+                    <>
+                      <span className="font-semibold uppercase tracking-wide">Office:</span>
+                      {selectedOffices.map((key) => (
+                        <span
+                          key={key}
+                          className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground"
+                        >
+                          {getOfficeLabel(key)}
+                        </span>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOffices([])}
+                        className="font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        Clear
+                      </button>
+                      {!applyOfficeFilterToExport ? (
+                        <span className="text-amber-600 dark:text-amber-500">
+                          Download includes all offices
+                        </span>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {activeHeadsLabel ? (
+                    <>
+                      <span className="font-semibold uppercase tracking-wide">Heads:</span>
+                      <button
+                        type="button"
+                        onClick={() => setHeadsFilter("all")}
+                        className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                        aria-label="Clear heads filter"
+                      >
+                        {activeHeadsLabel}
+                        <X className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </>
                   ) : null}
                 </div>
               ) : null}
@@ -2850,6 +3038,35 @@ export default function BioLogUploader() {
                     Minutes
                   </Button>
                 </div>
+              </div>
+              <div className="flex flex-col gap-1 text-left text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Heads
+                </span>
+                <ToggleGroup
+                  type="single"
+                  value={headsFilter}
+                  onValueChange={(value) => {
+                    if (value === "heads" || value === "nonHeads" || value === "all") {
+                      setHeadsFilter(value as HeadsFilterValue);
+                    } else {
+                      setHeadsFilter(DEFAULT_HEADS_FILTER);
+                    }
+                  }}
+                  size="sm"
+                  className="rounded-md border bg-background p-0.5"
+                  aria-label="Filter by head status"
+                >
+                  <ToggleGroupItem value="all" className="px-2 py-1 text-xs">
+                    All
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="heads" className="px-2 py-1 text-xs">
+                    Heads only
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="nonHeads" className="px-2 py-1 text-xs">
+                    Exclude heads
+                  </ToggleGroupItem>
+                </ToggleGroup>
               </div>
               <OfficeFilterControl
                 options={officeOptions}
@@ -2890,7 +3107,7 @@ export default function BioLogUploader() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="p-2 text-left">Employee ID</th>
+                  <th className="p-2 text-left">Employee No</th>
                   <th className="p-2 text-left">Name</th>
                   <th className="p-2 text-left">Office</th>
                   <th className="p-2 text-left">Schedule</th>
@@ -3070,14 +3287,19 @@ export default function BioLogUploader() {
                     : false;
                   const sourceLabel = formatScheduleSource(row.scheduleSource);
                   const resolvedEmployeeId = row.resolvedEmployeeId?.trim();
-                  const baseEmployeeId = row.employeeId?.trim();
-                  const displayEmployeeId = resolvedEmployeeId?.length
-                    ? resolvedEmployeeId
-                    : baseEmployeeId?.length
-                    ? baseEmployeeId
+                  const employeeNo = firstEmployeeNoToken(row.employeeNo);
+                  const tokenDisplay = row.employeeToken || row.employeeId || "—";
+                  const displayEmployeeNo = resolvedEmployeeId
+                    ? employeeNo && employeeNo.length
+                      ? employeeNo
+                      : "—"
                     : isUnmatched
-                    ? row.employeeToken || "—"
-                    : "—";
+                    ? tokenDisplay
+                    : employeeNo && employeeNo.length
+                    ? employeeNo
+                    : tokenDisplay || "—";
+                  const showTokenTooltip =
+                    isUnmatched && Boolean(row.employeeToken || row.employeeId);
                   const displayEmployeeName =
                     row.employeeName?.trim().length ? row.employeeName : UNMATCHED_LABEL;
                   const displayOffice = row.officeName?.trim().length
@@ -3143,7 +3365,22 @@ export default function BioLogUploader() {
                   const resolveActionLabel = isUnmatched ? "Resolve…" : "Re-resolve…";
                   return (
                     <tr key={key} className="odd:bg-muted/20">
-                      <td className="p-2">{displayEmployeeId}</td>
+                      <td className="p-2">
+                        {showTokenTooltip ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="font-mono">
+                                {displayEmployeeNo}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={6}>
+                              Unmatched token (resolve to link to an employee).
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="font-mono">{displayEmployeeNo}</span>
+                        )}
+                      </td>
                       <td className="p-2 max-w-[16rem]">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="truncate" title={displayEmployeeName}>
@@ -3289,7 +3526,7 @@ export default function BioLogUploader() {
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-30 bg-muted/50">
                 <tr>
-                  <th className="p-2 text-left">Employee ID</th>
+                  <th className="p-2 text-left">Employee No</th>
                   <th className="p-2 text-left">Name</th>
                   <th className="p-2 text-left">Office</th>
                   <th className="p-2 text-left">Date</th>
@@ -3312,20 +3549,38 @@ export default function BioLogUploader() {
                   const isExcused = row.status === "excused";
                   const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
                   const resolvedEmployeeId = row.resolvedEmployeeId?.trim();
-                  const baseEmployeeId = row.employeeId?.trim();
-                  const displayEmployeeId = resolvedEmployeeId?.length
-                    ? resolvedEmployeeId
-                    : baseEmployeeId?.length
-                    ? baseEmployeeId
+                  const employeeNo = firstEmployeeNoToken(row.employeeNo);
+                  const tokenDisplay = row.employeeToken || row.employeeId || "—";
+                  const displayEmployeeId = resolvedEmployeeId
+                    ? employeeNo && employeeNo.length
+                      ? employeeNo
+                      : "—"
                     : isUnmatched
-                    ? row.employeeToken || "—"
-                    : "—";
+                    ? tokenDisplay
+                    : employeeNo && employeeNo.length
+                    ? employeeNo
+                    : tokenDisplay || "—";
+                  const showTokenTooltip =
+                    isUnmatched && Boolean(row.employeeToken || row.employeeId);
                   return (
                     <tr
                       key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`}
                       className="odd:bg-muted/20"
                     >
-                      <td className="p-2">{displayEmployeeId}</td>
+                      <td className="p-2">
+                        {showTokenTooltip ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="font-mono">{displayEmployeeId}</span>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={6}>
+                              Unmatched token (resolve to link to an employee).
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="font-mono">{displayEmployeeId}</span>
+                        )}
+                      </td>
                       <td className="p-2">{row.employeeName || "—"}</td>
                       <td className="p-2">
                         {row.officeName ||
