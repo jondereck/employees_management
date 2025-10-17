@@ -879,55 +879,6 @@ export default function BioLogUploader() {
     });
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!manualResolvedStorageKey) {
-      setManualResolvedState(new Set<string>());
-      setManualResolvedHydrated(true);
-      return;
-    }
-    setManualResolvedHydrated(false);
-    try {
-      const raw = window.localStorage.getItem(manualResolvedStorageKey);
-      if (!raw) {
-        setManualResolvedState(new Set<string>(manualResolvedRef.current));
-      } else {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const tokens = parsed
-            .filter((value): value is string => typeof value === "string")
-            .map((value) => normalizeBiometricToken(value))
-            .filter((value) => value.length > 0);
-          const merged = new Set<string>(tokens);
-          for (const token of manualResolvedRef.current) {
-            merged.add(token);
-          }
-          setManualResolvedState(merged);
-        } else {
-          setManualResolvedState(new Set<string>(manualResolvedRef.current));
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to load manual resolved tokens", error);
-      setManualResolvedState(new Set<string>(manualResolvedRef.current));
-    } finally {
-      setManualResolvedHydrated(true);
-    }
-  }, [manualResolvedStorageKey]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!manualResolvedStorageKey) return;
-    if (!manualResolvedHydrated) return;
-    try {
-      window.localStorage.setItem(
-        manualResolvedStorageKey,
-        JSON.stringify(Array.from(manualResolved))
-      );
-    } catch (error) {
-      console.warn("Failed to persist manual resolved tokens", error);
-    }
-  }, [manualResolved, manualResolvedHydrated, manualResolvedStorageKey]);
   const [visibleCharts, setVisibleChartsState] = useState<ChartId[]>(() => {
     const stored = settingsRef.current?.visibleCharts;
     if (stored?.length) {
@@ -1429,6 +1380,56 @@ export default function BioLogUploader() {
     if (!departmentId || !activePeriod) return null;
     return `hrps:manual-resolved:${departmentId}:${activePeriod.year}-${pad2(activePeriod.month)}`;
   }, [activePeriod, departmentId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!manualResolvedStorageKey) {
+      setManualResolvedState(new Set<string>());
+      setManualResolvedHydrated(true);
+      return;
+    }
+    setManualResolvedHydrated(false);
+    try {
+      const raw = window.localStorage.getItem(manualResolvedStorageKey);
+      if (!raw) {
+        setManualResolvedState(new Set<string>(manualResolvedRef.current));
+      } else {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const tokens = parsed
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => normalizeBiometricToken(value))
+            .filter((value) => value.length > 0);
+          const merged = new Set<string>(tokens);
+          for (const token of manualResolvedRef.current) {
+            merged.add(token);
+          }
+          setManualResolvedState(merged);
+        } else {
+          setManualResolvedState(new Set<string>(manualResolvedRef.current));
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to load manual resolved tokens", error);
+      setManualResolvedState(new Set<string>(manualResolvedRef.current));
+    } finally {
+      setManualResolvedHydrated(true);
+    }
+  }, [manualResolvedStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!manualResolvedStorageKey) return;
+    if (!manualResolvedHydrated) return;
+    try {
+      window.localStorage.setItem(
+        manualResolvedStorageKey,
+        JSON.stringify(Array.from(manualResolved))
+      );
+    } catch (error) {
+      console.warn("Failed to persist manual resolved tokens", error);
+    }
+  }, [manualResolved, manualResolvedHydrated, manualResolvedStorageKey]);
 
   const identityWarnings = useMemo(
     () => computeIdentityWarnings(filteredPerDayRows, identityMap, identityState.status),
