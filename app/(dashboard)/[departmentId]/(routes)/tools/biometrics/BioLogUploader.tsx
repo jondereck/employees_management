@@ -173,6 +173,14 @@ const formatBytes = (value: number) => {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const formatDurationMs = (value: number) => {
+  if (!Number.isFinite(value) || value <= 0) return "0 ms";
+  if (value < 1000) return `${Math.round(value)} ms`;
+  const seconds = value / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+  return `${(seconds / 60).toFixed(1)} min`;
+};
+
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -322,6 +330,13 @@ type OutOfPeriodRow = {
   reason: "outside-period" | "invalid-day";
 };
 
+type UploadStatus = "idle" | "creating" | "uploading" | "uploaded" | "failed";
+
+type UploadMetrics = {
+  size: number;
+  uploadMs: number;
+};
+
 type SortKey =
   | "daysWithLogs"
   | "lateDays"
@@ -347,6 +362,46 @@ type FileState = {
   parserTypes?: WorkbookParserType[];
   parserLabel?: string | null;
   parseSummary?: { employees: number; punches: number };
+  uploadStatus: UploadStatus;
+  uploadProgress: number;
+  uploadError?: string;
+  blobUrl?: string;
+  remoteId?: string;
+  uploadMetrics?: UploadMetrics;
+};
+
+type EvaluationFileMetric = {
+  id: string;
+  name: string;
+  size: number | null;
+  downloadMs: number;
+  parseMs: number;
+  rows: number;
+  punches: number;
+};
+
+type EvaluationMetadata = {
+  files: EvaluationFileMetric[];
+  totals: {
+    files: number;
+    rows: number;
+    employees: number;
+    punches: number;
+    downloadMs: number;
+    parseMs: number;
+    mergeMs: number;
+    evaluationMs: number;
+    manualPeriodApplied: boolean;
+  };
+};
+
+type CreateUploadResponse = {
+  fileId: string;
+  uploadUrl: string;
+  uploadHeaders: Record<string, string>;
+  publicUrl?: string;
+  blobPath?: string;
+  expiresAt?: number;
 };
 
 type IdentityRecord = {
@@ -845,6 +900,8 @@ export default function BioLogUploader() {
     name: string | null;
   } | null>(null);
   const [resolveBusy, setResolveBusy] = useState(false);
+  const [evaluationMetadata, setEvaluationMetadata] = useState<EvaluationMetadata | null>(null);
+  const [evaluationStage, setEvaluationStage] = useState<string | null>(null);
 
   useEffect(() => {
     if (metricMode === "minutes") {
@@ -878,6 +935,8 @@ export default function BioLogUploader() {
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const parseInProgress = useRef(false);
+  const uploadInProgress = useRef<string | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
   const lastEvaluatedKey = useRef<string>("");
   const identityCacheRef = useRef<Map<string, IdentityRecord>>(new Map());
   const identitySetCacheRef = useRef<Map<string, Map<string, IdentityRecord>>>(new Map());
@@ -893,6 +952,20 @@ export default function BioLogUploader() {
       [key]: !prev[key],
     }));
   }, []);
+
+  const cancelActiveUpload = useCallback(() => {
+    if (uploadAbortRef.current) {
+      uploadAbortRef.current.abort();
+      uploadAbortRef.current = null;
+    }
+    uploadInProgress.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      cancelActiveUpload();
+    };
+  }, [cancelActiveUpload]);
 
   const mergeResult = useMemo(() => {
     if (!parsedFiles.length) return null;
@@ -978,7 +1051,7 @@ export default function BioLogUploader() {
     let cancelled = false;
 
     if (!identityTokens.length) {
-      if (identityMap.size) setIdentityMap(new Map());
+      setIdentityMap((prev) => (prev.size ? new Map() : prev));
       setIdentityState({ status: "idle", total: 0, completed: 0, unmatched: 0 });
       return;
     }
@@ -1180,6 +1253,120 @@ export default function BioLogUploader() {
     void parse();
   }, [files, toast]);
 
+  useEffect(() => {
+    if (uploadInProgress.current) return;
+    const next = files.find(
+      (file) => file.uploadStatus === "idle" && file.status !== "failed"
+    );
+    if (!next) return;
+
+    uploadInProgress.current = next.id;
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
+
+    const start = performance.now();
+
+    setFiles((prev) =>
+      prev.map((file) =>
+        file.id === next.id
+          ? { ...file, uploadStatus: "creating", uploadError: undefined, uploadProgress: 0 }
+          : file
+      )
+    );
+
+    const upload = async () => {
+      try {
+        const prepareResponse = await fetch("/api/uploads/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: next.name,
+            size: next.size,
+            type: next.type || "application/octet-stream",
+          }),
+          signal: controller.signal,
+        });
+
+        if (!prepareResponse.ok) {
+          const message = await prepareResponse.text();
+          throw new Error(message || "Unable to prepare upload.");
+        }
+
+        const uploadInfo = (await prepareResponse.json()) as CreateUploadResponse;
+
+        setFiles((prev) =>
+          prev.map((file) =>
+            file.id === next.id
+              ? { ...file, uploadStatus: "uploading", remoteId: uploadInfo.fileId, uploadProgress: 10 }
+              : file
+          )
+        );
+
+        const uploadResponse = await fetch(uploadInfo.uploadUrl, {
+          method: "PUT",
+          headers: {
+            ...uploadInfo.uploadHeaders,
+            "Content-Type": next.type || "application/octet-stream",
+          },
+          body: next.file,
+          signal: controller.signal,
+        });
+
+        if (!uploadResponse.ok) {
+          const message = await uploadResponse.text();
+          throw new Error(message || "Upload failed.");
+        }
+
+        const payload = (await uploadResponse
+          .json()
+          .catch(() => null)) as
+          | { url?: string; downloadUrl?: string }
+          | null;
+        const uploadMs = performance.now() - start;
+        const blobUrl =
+          payload?.url ?? payload?.downloadUrl ?? uploadInfo.publicUrl ?? uploadInfo.uploadUrl;
+
+        setFiles((prev) =>
+          prev.map((file) =>
+            file.id === next.id
+              ? {
+                  ...file,
+                  uploadStatus: "uploaded",
+                  uploadProgress: 100,
+                  uploadMetrics: { size: next.size, uploadMs },
+                  blobUrl,
+                }
+              : file
+          )
+        );
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+        const message = error instanceof Error ? error.message : "Upload failed.";
+        setFiles((prev) =>
+          prev.map((file) =>
+            file.id === next.id
+              ? { ...file, uploadStatus: "failed", uploadError: message }
+              : file
+          )
+        );
+        toast({
+          title: `Upload failed for ${next.name}`,
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        if (uploadInProgress.current === next.id) {
+          uploadInProgress.current = null;
+        }
+        if (uploadAbortRef.current === controller) {
+          uploadAbortRef.current = null;
+        }
+      }
+    };
+
+    void upload();
+  }, [files, toast]);
+
   const manualMonthNumber = manualMonth ? Number(manualMonth) : null;
   const manualYearNumber = manualYear ? Number(manualYear) : null;
   const manualMonthValid =
@@ -1345,6 +1532,17 @@ export default function BioLogUploader() {
   const hasPendingParses = files.some(
     (file) => file.status === "parsing" || file.status === "queued"
   );
+  const hasPendingUploads = files.some((file) => {
+    if (file.status === "failed") return false;
+    if (file.uploadStatus === "failed") return false;
+    if (file.uploadStatus === "uploaded") return false;
+    return true;
+  });
+  const hasUploadFailure = files.some((file) => file.uploadStatus === "failed");
+  const uploadsReady = files
+    .filter((file) => file.status === "parsed")
+    .every((file) => file.uploadStatus === "uploaded" && Boolean(file.blobUrl));
+  const hasPendingProcessing = hasPendingParses || hasPendingUploads;
 
   const identityReady = identityTokens.length === 0 || identityState.status !== "resolving";
 
@@ -1353,9 +1551,17 @@ export default function BioLogUploader() {
       setPerDay(null);
       setPerEmployee(null);
       lastEvaluatedKey.current = "";
+      setEvaluationMetadata(null);
+      setEvaluationStage(null);
       return;
     }
-    if (hasPendingParses) return;
+    if (hasPendingProcessing) return;
+    if (!uploadsReady) return;
+    if (hasUploadFailure) {
+      setEvaluationMetadata(null);
+      setEvaluationStage(null);
+      return;
+    }
     if (!identityReady) return;
     if (mergeResult.months.length > 1 && !mixedMonthsContext.confirmed) return;
 
@@ -1377,6 +1583,8 @@ export default function BioLogUploader() {
         setPerEmployee([]);
         lastEvaluatedKey.current = emptyKey;
       }
+      setEvaluationMetadata(null);
+      setEvaluationStage(null);
       return;
     }
 
@@ -1391,25 +1599,43 @@ export default function BioLogUploader() {
     const controller = new AbortController();
     const evaluate = async () => {
       setEvaluating(true);
+      setEvaluationStage("Preparing evaluation request…");
+      setEvaluationMetadata(null);
       try {
-        const body = {
-          entries: filteredPerDayRows.map((row) => ({
-            employeeId: row.employeeId,
-            employeeName: row.employeeName,
-            employeeToken: row.employeeToken,
-            resolvedEmployeeId: row.resolvedEmployeeId ?? null,
-            officeId: row.officeId ?? null,
-            officeName: row.officeName ?? null,
-            dateISO: row.dateISO,
-            day: row.day,
-            earliest: row.earliest,
-            latest: row.latest,
-            allTimes: row.allTimes,
-            punches: row.punches,
-            sourceFiles: row.sourceFiles,
-          })),
-        };
+        const uploadFiles = parsedFiles.filter(
+          (file) => file.uploadStatus === "uploaded" && file.blobUrl
+        );
+        if (!uploadFiles.length) {
+          throw new Error("No uploaded biometrics logs are available for evaluation.");
+        }
 
+        const body = {
+          month: manualPeriodSelection?.month ?? null,
+          year: manualPeriodSelection?.year ?? null,
+          files: uploadFiles.map((file) => ({
+            id: file.remoteId ?? file.id,
+            name: file.name,
+            blobUrl: file.blobUrl!,
+            size: file.size,
+            type: file.type,
+          })),
+          identity: Array.from(identityMap.entries()).map(([token, record]) => ({
+            token,
+            record,
+          })),
+          options: {
+            manualPeriod: useManualPeriod,
+            useManualPeriod,
+            manualSelection: manualPeriodSelection
+              ? {
+                  month: manualPeriodSelection.month,
+                  year: manualPeriodSelection.year,
+                }
+              : null,
+          },
+        } satisfies Record<string, unknown>;
+
+        setEvaluationStage("Submitting evaluation request…");
         const response = await timeout(
           fetch("/api/attendance/evaluate", {
             method: "POST",
@@ -1424,9 +1650,11 @@ export default function BioLogUploader() {
           throw new Error(message || "Unable to evaluate attendance.");
         }
 
+        setEvaluationStage("Processing server response…");
         const result = (await response.json()) as {
           perDay: PerDayRow[];
           perEmployee: PerEmployeeRow[];
+          metadata?: EvaluationMetadata | null;
         };
 
         const chronological = sortPerDayRows(
@@ -1435,6 +1663,7 @@ export default function BioLogUploader() {
 
         setPerDay(chronological);
         setPerEmployee(result.perEmployee);
+        setEvaluationMetadata(result.metadata ?? null);
         lastEvaluatedKey.current = payloadKey;
         toast({
           title: "Evaluation complete",
@@ -1450,8 +1679,10 @@ export default function BioLogUploader() {
           description: message,
           variant: "destructive",
         });
+        setEvaluationMetadata(null);
       } finally {
         setEvaluating(false);
+        setEvaluationStage(null);
       }
     };
 
@@ -1462,13 +1693,17 @@ export default function BioLogUploader() {
     };
   }, [
     filteredPerDayRows,
-    hasPendingParses,
+    hasPendingProcessing,
+    hasUploadFailure,
     identityReady,
     manualPeriodSelection,
     manualSelectionValid,
     mergeResult,
     mixedMonthsContext.confirmed,
+    identityMap,
     toast,
+    uploadsReady,
+    parsedFiles,
     useManualPeriod,
   ]);
 
@@ -1889,6 +2124,8 @@ export default function BioLogUploader() {
           size: file.size,
           type: file.type,
           status: "queued",
+          uploadStatus: "idle",
+          uploadProgress: 0,
         });
       });
 
@@ -1937,19 +2174,35 @@ export default function BioLogUploader() {
   }, []);
 
   const handleClearAll = useCallback(() => {
+    cancelActiveUpload();
     setFiles([]);
     setPerDay(null);
     setPerEmployee(null);
     setShowMixedMonthsPrompt(false);
     setMixedMonthsContext({ key: "", months: [], confirmed: true });
     lastEvaluatedKey.current = "";
+    setEvaluationMetadata(null);
+    setEvaluationStage(null);
     if (inputRef.current) {
       inputRef.current.value = "";
     }
-  }, []);
+  }, [cancelActiveUpload]);
 
   const handleRemoveFile = useCallback((id: string) => {
+    if (uploadInProgress.current === id) {
+      cancelActiveUpload();
+    }
     setFiles((prev) => prev.filter((file) => file.id !== id));
+  }, [cancelActiveUpload]);
+
+  const handleRetryUpload = useCallback((id: string) => {
+    setFiles((prev) =>
+      prev.map((file) =>
+        file.id === id
+          ? { ...file, uploadStatus: "idle", uploadError: undefined, uploadProgress: 0 }
+          : file
+      )
+    );
   }, []);
 
   const summary = useMemo(() => {
@@ -2120,7 +2373,9 @@ export default function BioLogUploader() {
   }, []);
 
   const totalFiles = files.length;
-  const processedFiles = files.filter((file) => file.status === "parsed" || file.status === "failed").length;
+  const processedFiles = files.filter(
+    (file) => file.status === "parsed" && file.uploadStatus === "uploaded"
+  ).length;
   const progress = totalFiles ? Math.round((processedFiles / totalFiles) * 100) : 0;
 
   return (
@@ -2228,13 +2483,13 @@ export default function BioLogUploader() {
             multiple
             onChange={onInputChange}
             className="hidden"
-            disabled={hasPendingParses || evaluating}
+            disabled={hasPendingProcessing || evaluating}
           />
           <label htmlFor="biometrics-files">
-            <Button disabled={hasPendingParses && !totalFiles}>{hasPendingParses ? "Processing..." : "Choose files"}</Button>
+            <Button disabled={hasPendingProcessing && !totalFiles}>{hasPendingProcessing ? "Processing..." : "Choose files"}</Button>
           </label>
           {totalFiles > 0 && (
-            <Button variant="ghost" onClick={handleClearAll} disabled={hasPendingParses}>
+            <Button variant="ghost" onClick={handleClearAll} disabled={hasPendingProcessing}>
               <XCircle className="mr-2 h-4 w-4" />
               Clear all
             </Button>
@@ -2244,7 +2499,7 @@ export default function BioLogUploader() {
 
       {totalFiles > 0 && (
         <div className="space-y-3">
-          {hasPendingParses || progress < 100 ? (
+          {hasPendingProcessing || progress < 100 ? (
             <div className="h-2 rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-primary transition-all"
@@ -2258,7 +2513,7 @@ export default function BioLogUploader() {
               Files in queue
             </h3>
             <span className="text-xs text-muted-foreground">
-              {processedFiles}/{totalFiles} processed
+              {processedFiles}/{totalFiles} ready
             </span>
           </div>
 
@@ -2266,6 +2521,30 @@ export default function BioLogUploader() {
             {files.map((file) => {
               const isParsed = file.status === "parsed";
               const hasNormalization = Boolean(file.parsed?.normalizedXlsx);
+              const uploadStatusVariant =
+                file.uploadStatus === "uploaded"
+                  ? "secondary"
+                  : file.uploadStatus === "failed"
+                  ? "destructive"
+                  : "outline";
+              const uploadStatusLabel =
+                file.uploadStatus === "uploaded" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Uploaded
+                  </span>
+                ) : file.uploadStatus === "uploading" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading
+                  </span>
+                ) : file.uploadStatus === "creating" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing upload
+                  </span>
+                ) : file.uploadStatus === "failed" ? (
+                  "Upload failed"
+                ) : (
+                  "Pending upload"
+                );
               return (
                 <div
                   key={file.id}
@@ -2287,6 +2566,11 @@ export default function BioLogUploader() {
                           Parsed: {file.parseSummary.employees} employees, {file.parseSummary.punches} punches.
                         </p>
                       ) : null}
+                      {file.uploadStatus === "uploaded" && file.uploadMetrics ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Uploaded {formatBytes(file.uploadMetrics.size)} in {formatDurationMs(file.uploadMetrics.uploadMs)}.
+                        </p>
+                      ) : null}
                       {file.parsed?.monthHints?.length ? (
                         <p className="mt-1 text-xs text-muted-foreground">
                           Detected month: {file.parsed.monthHints.join(", ")}
@@ -2294,6 +2578,9 @@ export default function BioLogUploader() {
                       ) : null}
                       {file.error ? (
                         <p className="mt-1 text-xs text-destructive">{file.error}</p>
+                      ) : null}
+                      {file.uploadError ? (
+                        <p className="mt-1 text-xs text-destructive">{file.uploadError}</p>
                       ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -2319,6 +2606,7 @@ export default function BioLogUploader() {
                         )}
                         {file.status === "failed" && "Failed"}
                       </Badge>
+                      <Badge variant={uploadStatusVariant}>{uploadStatusLabel}</Badge>
                       {isParsed && hasNormalization ? (
                         <Button
                           variant="outline"
@@ -2329,11 +2617,24 @@ export default function BioLogUploader() {
                           Download normalized .xlsx
                         </Button>
                       ) : null}
+                      {file.uploadStatus === "failed" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRetryUpload(file.id)}
+                        >
+                          Retry upload
+                        </Button>
+                      ) : null}
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveFile(file.id)}
-                        disabled={file.status === "parsing"}
+                        disabled={
+                          file.status === "parsing" ||
+                          file.uploadStatus === "uploading" ||
+                          file.uploadStatus === "creating"
+                        }
                       >
                         <X className="mr-2 h-4 w-4" />
                         Remove
@@ -2386,6 +2687,48 @@ export default function BioLogUploader() {
               <p className="text-muted-foreground">Date range</p>
               <p className="font-semibold text-foreground">{summary.dateRange}</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {evaluationStage && (
+        <Alert>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <AlertTitle>Evaluating attendance…</AlertTitle>
+          <AlertDescription>{evaluationStage}</AlertDescription>
+        </Alert>
+      )}
+
+      {evaluationMetadata && (
+        <div className="rounded-xl border bg-muted/40 p-4 text-sm">
+          <div className="flex flex-wrap gap-4">
+            <div>
+              <p className="text-muted-foreground">Rows evaluated</p>
+              <p className="font-semibold text-foreground">{evaluationMetadata.totals.rows}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Employees</p>
+              <p className="font-semibold text-foreground">{evaluationMetadata.totals.employees}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Server time</p>
+              <p className="font-semibold text-foreground">
+                download {formatDurationMs(evaluationMetadata.totals.downloadMs)} · parse {formatDurationMs(evaluationMetadata.totals.parseMs)} · merge {formatDurationMs(evaluationMetadata.totals.mergeMs)} · evaluate {formatDurationMs(evaluationMetadata.totals.evaluationMs)}
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+            {evaluationMetadata.files.map((file) => (
+              <p key={file.id} className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-foreground">{file.name}</span>
+                <span>
+                  {file.rows} rows · {file.punches} punches · download {formatDurationMs(file.downloadMs)} · parse {formatDurationMs(file.parseMs)}
+                </span>
+              </p>
+            ))}
+            {evaluationMetadata.totals.manualPeriodApplied ? (
+              <p>Manual period constraints applied during evaluation.</p>
+            ) : null}
           </div>
         </div>
       )}
@@ -2612,7 +2955,7 @@ export default function BioLogUploader() {
                 applyToExport={applyOfficeFilterToExport}
                 onApplyToExportChange={setApplyOfficeFilterToExport}
               />
-              <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingParses}>
+              <Button variant="outline" onClick={handleUploadMore} disabled={evaluating || hasPendingProcessing}>
                 Upload more
               </Button>
               <Button
@@ -2628,7 +2971,7 @@ export default function BioLogUploader() {
                 onClick={handleDownloadResults}
                 disabled={
                   evaluating ||
-                  hasPendingParses ||
+                  hasPendingProcessing ||
                   !perEmployee.length ||
                   !perDay.length ||
                   (useManualPeriod && !manualSelectionValid) ||

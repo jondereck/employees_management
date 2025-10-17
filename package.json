@@ -54,6 +54,7 @@
     "@types/moment": "^2.13.0",
     "@types/react": "18.2.21",
     "@types/react-dom": "18.2.7",
+    "@vercel/blob": "^2.0.0",
     "@vorlefan/prisma-backup": "^0.3.5",
     "@zxing/browser": "^0.1.5",
     "autoprefixer": "10.4.15",
