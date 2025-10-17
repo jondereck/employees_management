@@ -961,6 +961,12 @@ export default function BioLogUploader() {
     uploadInProgress.current = null;
   }, []);
 
+  useEffect(() => {
+    return () => {
+      cancelActiveUpload();
+    };
+  }, [cancelActiveUpload]);
+
   const mergeResult = useMemo(() => {
     if (!parsedFiles.length) return null;
     return mergeParsedWorkbooks(parsedFiles.map((file) => file.parsed!));
@@ -1359,10 +1365,6 @@ export default function BioLogUploader() {
     };
 
     void upload();
-
-    return () => {
-      controller.abort();
-    };
   }, [files, toast]);
 
   const manualMonthNumber = manualMonth ? Number(manualMonth) : null;
