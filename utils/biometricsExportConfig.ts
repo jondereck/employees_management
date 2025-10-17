@@ -16,6 +16,7 @@ export type SummaryColumnKey =
   | "matchStatus"
   | "source"
   | "days"
+  | "excusedDays"
   | "lateDays"
   | "undertimeDays"
   | "latePercent"
@@ -102,6 +103,15 @@ export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
     type: "number",
     width: "numeric",
     defaultSelected: true,
+  },
+  {
+    key: "excusedDays",
+    label: "Excused days",
+    groupId: "attendance",
+    description: "Count of weekly excused days (excluded from Late/UT).",
+    type: "number",
+    width: "numeric",
+    defaultSelected: false,
   },
   {
     key: "lateDays",

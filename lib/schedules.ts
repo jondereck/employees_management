@@ -4,6 +4,10 @@ import { ScheduleException, WorkSchedule } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { Schedule, ScheduleFlex, ScheduleFixed, ScheduleShift } from "@/utils/evaluateDay";
 import { sanitizeWeeklyPattern } from "@/utils/weeklyPattern";
+import {
+  toWeeklyExclusionEvaluation,
+  type WeeklyExclusionEvaluation,
+} from "@/lib/weeklyExclusions";
 
 export type ScheduleSource = "EXCEPTION" | "WORKSCHEDULE" | "DEFAULT" | "NOMAPPING";
 
@@ -100,10 +104,11 @@ export async function getScheduleMapsForMonth(
     return {
       schedulesByEmployee: new Map<string, WorkSchedule[]>(),
       exceptionsByEmployeeDate: new Map<string, ScheduleException>(),
+      weeklyExclusionsByEmployee: new Map<string, WeeklyExclusionEvaluation[]>(),
     };
   }
 
-  const [schedules, exceptions] = await Promise.all([
+  const [schedules, exceptions, weeklyExclusions] = await Promise.all([
     prisma.workSchedule.findMany({
       where: {
         employeeId: { in: internalEmployeeIds },
@@ -117,6 +122,14 @@ export async function getScheduleMapsForMonth(
         employeeId: { in: internalEmployeeIds },
         date: { gte: window.from, lte: window.to },
       },
+    }),
+    prisma.weeklyExclusion.findMany({
+      where: {
+        employeeId: { in: internalEmployeeIds },
+        effectiveFrom: { lte: window.to },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: window.from } }],
+      },
+      orderBy: [{ employeeId: "asc" }, { effectiveFrom: "desc" }],
     }),
   ]);
 
@@ -136,7 +149,17 @@ export async function getScheduleMapsForMonth(
     exceptionsByEmployeeDate.set(key, exception);
   }
 
-  return { schedulesByEmployee, exceptionsByEmployeeDate };
+  const weeklyExclusionsByEmployee = new Map<string, WeeklyExclusionEvaluation[]>();
+  for (const exclusion of weeklyExclusions) {
+    const list = weeklyExclusionsByEmployee.get(exclusion.employeeId) ?? [];
+    list.push(toWeeklyExclusionEvaluation(exclusion));
+    weeklyExclusionsByEmployee.set(exclusion.employeeId, list);
+  }
+  for (const list of weeklyExclusionsByEmployee.values()) {
+    list.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
+  }
+
+  return { schedulesByEmployee, exceptionsByEmployeeDate, weeklyExclusionsByEmployee };
 }
 
 export function resolveScheduleForDate(
@@ -145,6 +168,7 @@ export function resolveScheduleForDate(
   maps: {
     schedulesByEmployee: Map<string, WorkSchedule[]>;
     exceptionsByEmployeeDate: Map<string, ScheduleException>;
+    weeklyExclusionsByEmployee?: Map<string, WeeklyExclusionEvaluation[]>;
   }
 ): ScheduleLookupResult {
   if (!internalEmployeeId) {

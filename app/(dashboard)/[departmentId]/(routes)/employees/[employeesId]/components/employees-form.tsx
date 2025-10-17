@@ -39,6 +39,7 @@ import AddAward from "@/app/(public)/components/admin/add-award";
 import Timeline from "@/app/(public)/components/timeline";
 import AwardsGallery from "@/app/(public)/components/awards-gallery";
 import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
+import type { WeeklyExclusionDTO } from "@/lib/weeklyExclusions";
 import { EmployeeScheduleManager } from "./employee-schedule-manager";
 
 
@@ -264,6 +265,7 @@ interface EmployeesFormProps {
   employeeType: EmployeeType[];
   workSchedules: WorkScheduleDTO[];
   scheduleExceptions: ScheduleExceptionDTO[];
+  weeklyExclusions: WeeklyExclusionDTO[];
 }
 
 
@@ -274,6 +276,7 @@ export const EmployeesForm = ({
   employeeType,
   workSchedules,
   scheduleExceptions,
+  weeklyExclusions,
 }: EmployeesFormProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1701,6 +1704,7 @@ export const EmployeesForm = ({
                   employeeId={employeeId}
                   schedules={workSchedules}
                   exceptions={scheduleExceptions}
+                  weeklyExclusions={weeklyExclusions}
                 />
               ) : (
                 <p className="mt-4 text-sm text-muted-foreground">

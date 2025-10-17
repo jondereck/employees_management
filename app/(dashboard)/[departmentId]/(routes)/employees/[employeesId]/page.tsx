@@ -1,5 +1,6 @@
 import prismadb from "@/lib/prismadb";
 import { toScheduleExceptionDto, toWorkScheduleDto } from "@/lib/schedules";
+import { toWeeklyExclusionDto } from "@/lib/weeklyExclusions";
 
 import { EmployeesForm } from "./components/employees-form";
 
@@ -40,6 +41,14 @@ const EmployeesIdPage = async ({
         })
       : [];
 
+  const weeklyExclusions =
+    params.employeesId !== "new"
+      ? await prismadb.weeklyExclusion.findMany({
+          where: { employeeId: params.employeesId },
+          orderBy: [{ effectiveFrom: "desc" }, { weekday: "asc" }],
+        })
+      : [];
+
   const offices = await prismadb.offices.findMany({
     where: {
       id: params.officeId,
@@ -68,6 +77,7 @@ const EmployeesIdPage = async ({
           initialData={employees}
           workSchedules={workSchedules.map(toWorkScheduleDto)}
           scheduleExceptions={scheduleExceptions.map(toScheduleExceptionDto)}
+          weeklyExclusions={weeklyExclusions.map(toWeeklyExclusionDto)}
         />
       </div>
     </div>

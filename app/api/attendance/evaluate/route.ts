@@ -8,6 +8,7 @@ import {
   normalizeSchedule,
   type ScheduleSource,
 } from "@/lib/schedules";
+import { findWeeklyExclusionForDate } from "@/lib/weeklyExclusions";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import {
   evaluateDay,
@@ -54,6 +55,10 @@ type EvaluatedDay = {
   weeklyPatternApplied?: boolean;
   weeklyPatternWindows?: WeeklyPatternWindow[] | null;
   weeklyPatternPresence: { start: string; end: string }[];
+  weeklyExclusionApplied?: { mode: string; ignoreUntil: string | null } | null;
+  weeklyExclusionMode?: string | null;
+  weeklyExclusionIgnoreUntil?: string | null;
+  weeklyExclusionId?: string | null;
   identityStatus?: "matched" | "unmatched" | "ambiguous";
 };
 
@@ -138,12 +143,25 @@ export async function POST(req: Request) {
       const latest = (row.latest ?? null) as HHMM | null;
       const normalizedAllTimes = normalizePunchTimes(row.allTimes);
 
+      const weeklyExclusion = internalEmployeeId
+        ? findWeeklyExclusionForDate(
+            maps.weeklyExclusionsByEmployee.get(internalEmployeeId),
+            row.dateISO
+          )
+        : null;
+
       const evaluation = evaluateDay({
         dateISO: row.dateISO,
         earliest,
         latest,
         allTimes: normalizedAllTimes,
         schedule: normalized,
+        weeklyExclusion: weeklyExclusion
+          ? {
+              mode: weeklyExclusion.mode,
+              ignoreUntilMinutes: weeklyExclusion.ignoreUntilMinutes,
+            }
+          : null,
       });
 
       return {
@@ -177,6 +195,10 @@ export async function POST(req: Request) {
         weeklyPatternApplied: evaluation.weeklyPatternApplied ?? false,
         weeklyPatternWindows: evaluation.weeklyPatternWindows ?? null,
         weeklyPatternPresence: evaluation.weeklyPatternPresence ?? [],
+        weeklyExclusionApplied: evaluation.weeklyExclusionApplied ?? null,
+        weeklyExclusionMode: weeklyExclusion?.mode ?? null,
+        weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
+        weeklyExclusionId: weeklyExclusion?.id ?? null,
         identityStatus: internalEmployeeId ? "matched" : "unmatched",
       };
     });
