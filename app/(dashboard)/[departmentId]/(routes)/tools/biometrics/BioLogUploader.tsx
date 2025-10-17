@@ -3166,17 +3166,6 @@ export default function BioLogUploader() {
                                 Linked manually during this session. Attendance uses the selected employee details.
                               </TooltipContent>
                             </Tooltip>
-                          ) : hasResolverMapping ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="outline" className="border-muted-foreground/40 bg-muted/20 text-muted-foreground">
-                                  Linked
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs text-sm">
-                                Token is linked to an employee record. You can re-resolve if needed.
-                              </TooltipContent>
-                            </Tooltip>
                           ) : null}
                         </div>
                       </td>
