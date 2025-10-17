@@ -26,9 +26,11 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { Portal } from '@radix-ui/react-portal';
 import Modal from './ui/modal';
 import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useParams } from 'next/navigation';
@@ -1554,7 +1556,7 @@ export default function DownloadStyledExcel() {
         onClose={() => setModalOpen(false)}
         hideDefaultHeader
         contentClassName={cn(
-          'z-[90] flex max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-hidden sm:max-w-none gap-0 p-0 flex-col',
+          'z-[90] flex max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-visible sm:max-w-none gap-0 p-0 flex-col',
           MODAL_WIDTH_CLASSES[modalSize]
         )}
         bodyClassName="flex h-full min-h-0 flex-col overflow-y-auto scrollbar-gutter-stable"
@@ -1987,127 +1989,140 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
                     {/* TAB: Columns */}
-                    <TabsContent value="columns_path" id="panel-columns" className="mt-3 h-full">
+                    <TabsContent value="columns_path" id="panel-columns" className="mt-3 h-full min-h-0">
                       <div className="flex h-full min-h-0 w-full min-w-0 flex-col rounded-md border bg-white p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                           <label className="font-medium">Select Columns</label>
                           <button
                             onClick={toggleSelectAll}
-                            className="text-blue-600 hover:underline text-xs"
+                            className="text-xs text-blue-600 hover:underline"
                           >
                             {isAllSelected ? "Deselect All" : "Select All"}
                           </button>
                         </div>
 
-                        <div className="mt-3 flex min-h-0 flex-1 flex-col gap-4">
-                          <div>
-                            <label className="flex items-center gap-2 text-sm font-medium">
-                              <input
-                                type="checkbox"
-                                checked={selectedColumnSet.has('rowNumber')}
-                                onChange={() => toggleColumn('rowNumber')}
-                              />
-                              <span>{rowNumberLabel}</span>
-                            </label>
-                          </div>
+                        <div className="mt-3 flex-1 min-h-0">
+                          <div
+                            id="export-columns-scroll"
+                            className="h-full overflow-y-auto overscroll-contain pr-2"
+                          >
+                            <div className="space-y-4 pb-16">
+                              <div className="space-y-3">
+                                <div className="sticky top-0 z-10 bg-background/95 px-1 py-2 text-sm font-medium text-foreground backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                                  Column groups
+                                </div>
+                                <div>
+                                  <label className="flex items-center gap-2 text-sm font-medium">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedColumnSet.has('rowNumber')}
+                                      onChange={() => toggleColumn('rowNumber')}
+                                    />
+                                    <span>{rowNumberLabel}</span>
+                                  </label>
+                                </div>
 
-                          <p className="text-xs text-muted-foreground">
-                            Drag to arrange the sequence used in the Excel file.
-                          </p>
-                          <div className="rounded-md border border-dashed bg-muted/30 p-2">
-                            {selectedColumnItems.length ? (
-                              <DndContext
-                                sensors={sensors}
-                                onDragStart={handleSelectedColumnDragStart}
-                                onDragEnd={handleSelectedColumnDragEnd}
-                                onDragCancel={handleSelectedColumnDragCancel}
-                                modifiers={[restrictToVerticalAxis]}
-                                autoScroll={{ enabled: true, acceleration: 12, interval: 10, threshold: { x: 0, y: 16 } }}
-                              >
-                                <div className="flex flex-col min-h-0">
-                                  <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
-                                    <div
-                                      id="export-columns-scroll"
-                                      className="mt-1 max-h-[60vh] min-h-[240px] overflow-y-auto overscroll-contain pr-1"
-                                    >
-                                      <div className="space-y-2">
-                                        {selectedColumnItems.map((column) => (
-                                          <SelectedColumnDraggable
-                                            key={column.key}
-                                            column={column}
-                                            onToggle={toggleColumn}
-                                          />
-                                        ))}
-                                        <div className="pb-16" aria-hidden="true" />
+                                {groupedColumns.map((group) => {
+                                  const groupSelectedCount = group.columns.filter((col) => selectedColumnSet.has(col.key)).length;
+                                  const totalInGroup = group.columns.length;
+                                  const allGroupSelected = totalInGroup > 0 && groupSelectedCount === totalInGroup;
+                                  const isOpen = openGroups[group.key] ?? true;
+                                  return (
+                                    <div key={group.key} className="rounded-md border">
+                                      <div className="flex items-center justify-between gap-3 px-3 py-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleGroupOpen(group.key)}
+                                          className="flex items-center gap-2 text-sm font-semibold"
+                                          aria-expanded={isOpen}
+                                        >
+                                          <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen ? 'rotate-180' : '')} />
+                                          <span>{group.title}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {groupSelectedCount}/{totalInGroup}
+                                          </span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleGroupSelectAll(group.columns.map((col) => col.key))}
+                                          className="text-xs text-blue-600 hover:underline"
+                                        >
+                                          {allGroupSelected ? 'Deselect All' : 'Select All'}
+                                        </button>
                                       </div>
+                                      {isOpen ? (
+                                        <div className="grid gap-2 border-t bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                                          {group.columns.map((col) => {
+                                            const helpText = COLUMN_HELP_TEXT[col.key];
+                                            return (
+                                              <label key={col.key} className="flex items-center gap-2 text-sm">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={selectedColumnSet.has(col.key)}
+                                                  onChange={() => toggleColumn(col.key)}
+                                                />
+                                                {helpText ? (
+                                                  <ActionTooltip label={helpText} side="top" align="start">
+                                                    <span className="truncate cursor-help">{col.name}</span>
+                                                  </ActionTooltip>
+                                                ) : (
+                                                  <span className="truncate">{col.name}</span>
+                                                )}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : null}
                                     </div>
-                                  </SortableContext>
-                                </div>
-                                <DragOverlay dropAnimation={defaultDropAnimation}>
-                                  {activeDragColumn ? <SelectedColumnGhost column={activeDragColumn} /> : null}
-                                </DragOverlay>
-                              </DndContext>
-                            ) : (
-                              <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-                                Select columns to enable ordering.
+                                  );
+                                })}
                               </div>
-                            )}
-                          </div>
 
-                          {groupedColumns.map((group) => {
-                            const groupSelectedCount = group.columns.filter((col) => selectedColumnSet.has(col.key)).length;
-                            const totalInGroup = group.columns.length;
-                            const allGroupSelected = totalInGroup > 0 && groupSelectedCount === totalInGroup;
-                            const isOpen = openGroups[group.key] ?? true;
-                            return (
-                              <div key={group.key} className="overflow-hidden rounded-md border">
-                                <div className="flex items-center justify-between gap-3 px-3 py-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleGroupOpen(group.key)}
-                                    className="flex items-center gap-2 text-sm font-semibold"
-                                    aria-expanded={isOpen}
-                                  >
-                                    <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen ? 'rotate-180' : '')} />
-                                    <span>{group.title}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {groupSelectedCount}/{totalInGroup}
-                                    </span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleGroupSelectAll(group.columns.map((col) => col.key))}
-                                    className="text-xs text-blue-600 hover:underline"
-                                  >
-                                    {allGroupSelected ? 'Deselect All' : 'Select All'}
-                                  </button>
+                              <Separator className="my-2" />
+
+                              <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground">
+                                  Drag to arrange the sequence used in the Excel file.
+                                </p>
+                                <div className="rounded-md border border-dashed bg-muted/30 p-2">
+                                  {selectedColumnItems.length ? (
+                                    <DndContext
+                                      sensors={sensors}
+                                      onDragStart={handleSelectedColumnDragStart}
+                                      onDragEnd={handleSelectedColumnDragEnd}
+                                      onDragCancel={handleSelectedColumnDragCancel}
+                                      modifiers={[restrictToVerticalAxis]}
+                                      autoScroll={{ enabled: true, threshold: { y: 16 } }}
+                                    >
+                                      <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
+                                        <div className="space-y-2">
+                                          {selectedColumnItems.map((column) => (
+                                            <SelectedColumnDraggable
+                                              key={column.key}
+                                              column={column}
+                                              onToggle={toggleColumn}
+                                            />
+                                          ))}
+                                        </div>
+                                      </SortableContext>
+                                      <Portal>
+                                        <DragOverlay
+                                          dropAnimation={defaultDropAnimation}
+                                          style={{ pointerEvents: 'none', zIndex: 80 }}
+                                        >
+                                          {activeDragColumn ? <SelectedColumnGhost column={activeDragColumn} /> : null}
+                                        </DragOverlay>
+                                      </Portal>
+                                    </DndContext>
+                                  ) : (
+                                    <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                                      Select columns to enable ordering.
+                                    </div>
+                                  )}
                                 </div>
-                                {isOpen ? (
-                                  <div className="grid gap-2 border-t bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    {group.columns.map((col) => {
-                                      const helpText = COLUMN_HELP_TEXT[col.key];
-                                      return (
-                                        <label key={col.key} className="flex items-center gap-2 text-sm">
-                                          <input
-                                            type="checkbox"
-                                            checked={selectedColumnSet.has(col.key)}
-                                            onChange={() => toggleColumn(col.key)}
-                                          />
-                                          {helpText ? (
-                                            <ActionTooltip label={helpText} side="top" align="start">
-                                              <span className="truncate cursor-help">{col.name}</span>
-                                            </ActionTooltip>
-                                          ) : (
-                                            <span className="truncate">{col.name}</span>
-                                          )}
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                ) : null}
                               </div>
-                            );
-                          })}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </TabsContent>
