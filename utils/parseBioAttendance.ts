@@ -1581,6 +1581,7 @@ const computeSummaryRow = (
     source: sourceLabel,
     head: row.isHead == null ? null : row.isHead ? "Yes" : "No",
     days: row.daysWithLogs ?? 0,
+    noPunchDays: row.noPunchDays ?? 0,
     excusedDays: row.excusedDays ?? 0,
     lateDays: row.lateDays ?? 0,
     undertimeDays: row.undertimeDays ?? 0,
@@ -1597,6 +1598,7 @@ const computeSummaryRow = (
 const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
   const totals: SummaryTotals = {};
   let totalDays = 0;
+  let totalNoPunch = 0;
   let totalLateDays = 0;
   let totalExcusedDays = 0;
   let totalUndertimeDays = 0;
@@ -1606,6 +1608,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
 
   for (const row of rows) {
     totalDays += Number(row.days ?? 0);
+    totalNoPunch += Number(row.noPunchDays ?? 0);
     totalExcusedDays += Number(row.excusedDays ?? 0);
     totalLateDays += Number(row.lateDays ?? 0);
     totalUndertimeDays += Number(row.undertimeDays ?? 0);
@@ -1615,6 +1618,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
   }
 
   totals.days = totalDays;
+  totals.noPunchDays = totalNoPunch;
   totals.lateDays = totalLateDays;
   totals.excusedDays = totalExcusedDays;
   totals.undertimeDays = totalUndertimeDays;
