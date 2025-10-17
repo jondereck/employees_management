@@ -1518,12 +1518,12 @@ export default function DownloadStyledExcel() {
         onClose={() => setModalOpen(false)}
         hideDefaultHeader
         contentClassName={cn(
-          'z-[90] max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-hidden sm:max-w-none gap-0 p-0',
+          'z-[90] flex max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-hidden sm:max-w-none gap-0 p-0 flex-col',
           MODAL_WIDTH_CLASSES[modalSize]
         )}
-        bodyClassName="flex h-full flex-col overflow-hidden"
+        bodyClassName="flex h-full min-h-0 flex-col overflow-hidden"
       >
-        <div className="flex h-full w-full min-w-0 flex-col">
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-col">
           <div className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
@@ -1620,7 +1620,7 @@ export default function DownloadStyledExcel() {
             </div>
           </div>
 
-          <div className="flex-1 w-full min-w-0 pl-4 pr-2 py-4 overflow-y-auto overflow-x-hidden max-h-[calc(88vh-112px)] scrollbar-gutter-stable">
+          <div className="flex-1 w-full min-h-0 min-w-0 pl-4 pr-2 py-4 overflow-y-auto overflow-x-hidden max-h-[calc(88vh-112px)] scrollbar-gutter-stable">
             <TemplatePickerBar
               className="mb-3 w-full"
               value={selectedTemplateId}
