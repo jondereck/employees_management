@@ -6,6 +6,11 @@ export const UNKNOWN_OFFICE_KEY_PREFIX = "__unknown__::";
 export const OFFICE_FILTER_STORAGE_KEY = "hrps-bio-office-filter";
 export const EXPORT_COLUMNS_STORAGE_KEY = "hrps-bio-export-columns";
 
+export const normalizeBiometricToken = (token: string | null | undefined): string => {
+  if (!token) return "";
+  return token.trim().toUpperCase();
+};
+
 export const formatScheduleSource = (value?: string | null): string | null => {
   switch (value) {
     case "WORKSCHEDULE":

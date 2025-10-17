@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useParams } from "next/navigation";
 import {
   AlertCircle,
   ArrowUpDown,
@@ -69,6 +70,7 @@ import {
   UNKNOWN_OFFICE_KEY_PREFIX,
   UNKNOWN_OFFICE_LABEL,
   UNMATCHED_LABEL,
+  normalizeBiometricToken,
 } from "@/utils/biometricsShared";
 import {
   ALL_SUMMARY_COLUMN_KEYS,
@@ -308,6 +310,21 @@ const composeManualDate = (year: number, month: number, day: number): string | n
   }
   return `${year}-${pad2(month)}-${pad2(day)}`;
 };
+
+const makeEvaluationPayloadKey = (manualKey: string, rows: ParsedPerDayRow[]) =>
+  `${manualKey}:${rows.length}:${rows
+    .map((row) => {
+      const officeKey = row.officeId ?? row.officeName ?? "";
+      const token = row.employeeToken ?? row.employeeId ?? row.employeeName ?? "";
+      return `${token}:${row.dateISO}:${row.allTimes.join("|")}:${row.employeeName}:${officeKey}`;
+    })
+    .join("#")}`;
+
+const getNormalizedTokenForRow = (row: {
+  employeeToken?: string | null;
+  employeeId?: string | null;
+  employeeName?: string | null;
+}) => normalizeBiometricToken(row.employeeToken ?? row.employeeId ?? row.employeeName ?? "");
 
 type ManualPeriodSelection = {
   month: number;
@@ -764,6 +781,14 @@ const formatDateRange = (range: MergeResult["dateRange"]) => {
 
 export default function BioLogUploader() {
   const { toast } = useToast();
+  const params = useParams<{ departmentId?: string }>();
+  const rawDepartmentId = params?.departmentId;
+  const departmentId =
+    typeof rawDepartmentId === "string"
+      ? rawDepartmentId
+      : Array.isArray(rawDepartmentId)
+      ? rawDepartmentId[0] ?? ""
+      : "";
   const settingsRef = useRef<InsightsSettings | null>(null);
   if (settingsRef.current === null && typeof window !== "undefined") {
     settingsRef.current = readInsightsSettings();
@@ -775,6 +800,8 @@ export default function BioLogUploader() {
   const initialColumnSettings = sanitizeColumnSettings(columnSettingsRef.current);
 
   const [files, setFiles] = useState<FileState[]>([]);
+  const [manualResolved, setManualResolvedState] = useState<Set<string>>(() => new Set());
+  const [manualResolvedHydrated, setManualResolvedHydrated] = useState(false);
   const [perEmployee, setPerEmployee] = useState<PerEmployeeRow[] | null>(null);
   const [perDay, setPerDay] = useState<PerDayRow[] | null>(null);
   const [page, setPage] = useState(0);
@@ -826,6 +853,32 @@ export default function BioLogUploader() {
     }
     return settingsRef.current?.metricMode ?? "days";
   });
+  const manualResolvedRef = useRef<Set<string>>(new Set());
+  const manualResolvedTokens = useMemo(() => Array.from(manualResolved), [manualResolved]);
+  useEffect(() => {
+    manualResolvedRef.current = manualResolved;
+  }, [manualResolved]);
+
+  const addManualResolved = useCallback((token: string) => {
+    if (!token) return;
+    setManualResolvedState((prev) => {
+      if (prev.has(token)) return prev;
+      const next = new Set(prev);
+      next.add(token);
+      return next;
+    });
+  }, []);
+
+  const removeManualResolved = useCallback((token: string) => {
+    if (!token) return;
+    setManualResolvedState((prev) => {
+      if (!prev.has(token)) return prev;
+      const next = new Set(prev);
+      next.delete(token);
+      return next;
+    });
+  }, []);
+
   const [visibleCharts, setVisibleChartsState] = useState<ChartId[]>(() => {
     const stored = settingsRef.current?.visibleCharts;
     if (stored?.length) {
@@ -877,6 +930,7 @@ export default function BioLogUploader() {
   );
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const skipAutoEvaluateRef = useRef(false);
   const parseInProgress = useRef(false);
   const lastEvaluatedKey = useRef<string>("");
   const identityCacheRef = useRef<Map<string, IdentityRecord>>(new Map());
@@ -1308,6 +1362,75 @@ export default function BioLogUploader() {
     };
   }, [basePerDay, manualPeriodSelection, manualSelectionValid, mergeResult, useManualPeriod]);
 
+  const activePeriod = useMemo(() => {
+    if (useManualPeriod) {
+      if (!manualSelectionValid || !manualPeriodSelection) return null;
+      return { year: manualPeriodSelection.year, month: manualPeriodSelection.month };
+    }
+    const firstRow = filteredPerDayRows[0];
+    if (!firstRow) return null;
+    const [yearStr, monthStr] = firstRow.dateISO.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+    return { year, month };
+  }, [filteredPerDayRows, manualPeriodSelection, manualSelectionValid, useManualPeriod]);
+
+  const manualResolvedStorageKey = useMemo(() => {
+    if (!departmentId || !activePeriod) return null;
+    return `hrps:manual-resolved:${departmentId}:${activePeriod.year}-${pad2(activePeriod.month)}`;
+  }, [activePeriod, departmentId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!manualResolvedStorageKey) {
+      setManualResolvedState(new Set<string>());
+      setManualResolvedHydrated(true);
+      return;
+    }
+    setManualResolvedHydrated(false);
+    try {
+      const raw = window.localStorage.getItem(manualResolvedStorageKey);
+      if (!raw) {
+        setManualResolvedState(new Set<string>(manualResolvedRef.current));
+      } else {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const tokens = parsed
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => normalizeBiometricToken(value))
+            .filter((value) => value.length > 0);
+          const merged = new Set<string>(tokens);
+          for (const token of manualResolvedRef.current) {
+            merged.add(token);
+          }
+          setManualResolvedState(merged);
+        } else {
+          setManualResolvedState(new Set<string>(manualResolvedRef.current));
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to load manual resolved tokens", error);
+      setManualResolvedState(new Set<string>(manualResolvedRef.current));
+    } finally {
+      setManualResolvedHydrated(true);
+    }
+  }, [manualResolvedStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!manualResolvedStorageKey) return;
+    if (!manualResolvedHydrated) return;
+    try {
+      window.localStorage.setItem(
+        manualResolvedStorageKey,
+        JSON.stringify(Array.from(manualResolved))
+      );
+    } catch (error) {
+      console.warn("Failed to persist manual resolved tokens", error);
+    }
+  }, [manualResolved, manualResolvedHydrated, manualResolvedStorageKey]);
+
   const identityWarnings = useMemo(
     () => computeIdentityWarnings(filteredPerDayRows, identityMap, identityState.status),
     [filteredPerDayRows, identityMap, identityState.status]
@@ -1370,6 +1493,8 @@ export default function BioLogUploader() {
       ? `${manualPeriodSelection.year}-${pad2(manualPeriodSelection.month)}`
       : "auto";
 
+    if (skipAutoEvaluateRef.current) return;
+
     if (!filteredPerDayRows.length) {
       const emptyKey = `${manualKey}:empty`;
       if (lastEvaluatedKey.current !== emptyKey) {
@@ -1380,12 +1505,7 @@ export default function BioLogUploader() {
       return;
     }
 
-    const payloadKey = `${manualKey}:${filteredPerDayRows.length}:${filteredPerDayRows
-      .map((row) => {
-        const officeKey = row.officeId ?? row.officeName ?? "";
-        return `${row.employeeToken ?? row.employeeId}:${row.dateISO}:${row.allTimes.join("|")}:${row.employeeName}:${officeKey}`;
-      })
-      .join("#")}`;
+    const payloadKey = makeEvaluationPayloadKey(manualKey, filteredPerDayRows);
     if (payloadKey === lastEvaluatedKey.current) return;
 
     const controller = new AbortController();
@@ -1407,6 +1527,7 @@ export default function BioLogUploader() {
             allTimes: row.allTimes,
             punches: row.punches,
             sourceFiles: row.sourceFiles,
+            composedFromDayOnly: row.composedFromDayOnly,
           })),
         };
 
@@ -1715,9 +1836,121 @@ export default function BioLogUploader() {
     setSelectedColumnKeys(defaults.selected);
   }, []);
 
+  const reEnrichToken = useCallback(
+    async (token: string, identity: IdentityRecord | null) => {
+      const normalizedToken = normalizeBiometricToken(token);
+      if (!normalizedToken) return;
+
+      const relevantRows = filteredPerDayRows.filter(
+        (row) => getNormalizedTokenForRow(row) === normalizedToken
+      );
+
+      const manualKey =
+        useManualPeriod && manualPeriodSelection
+          ? `${manualPeriodSelection.year}-${pad2(manualPeriodSelection.month)}`
+          : "auto";
+
+      if (!relevantRows.length) {
+        lastEvaluatedKey.current = makeEvaluationPayloadKey(manualKey, filteredPerDayRows);
+        return;
+      }
+
+      const employeeName = identity?.employeeName ?? relevantRows[0]?.employeeName ?? null;
+      const resolvedEmployeeId = identity?.employeeId ?? relevantRows[0]?.resolvedEmployeeId ?? null;
+      const officeId = identity?.officeId ?? relevantRows[0]?.officeId ?? null;
+      const officeName = identity?.officeName ?? relevantRows[0]?.officeName ?? null;
+
+      const entries = relevantRows.map((row) => ({
+        employeeId: row.employeeId,
+        employeeName: employeeName ?? row.employeeName,
+        employeeToken: row.employeeToken ?? token,
+        resolvedEmployeeId,
+        officeId,
+        officeName,
+        dateISO: row.dateISO,
+        day: row.day,
+        earliest: row.earliest,
+        latest: row.latest,
+        allTimes: row.allTimes,
+        punches: row.punches,
+        sourceFiles: row.sourceFiles,
+        composedFromDayOnly: row.composedFromDayOnly,
+      }));
+
+      const response = await timeout(
+        fetch("/api/biometrics/re-enrich", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entries }),
+        }),
+        15_000
+      );
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Unable to refresh attendance details.");
+      }
+
+      const payload = (await response.json()) as {
+        perDay: PerDayRow[];
+        perEmployee: PerEmployeeRow[];
+      };
+
+      const updatedPerDayRows = sortPerDayRows(
+        payload.perDay.map((row) => toChronologicalRow(row))
+      );
+
+      setPerDay((prev) => {
+        if (!prev) return prev;
+        const filtered = prev.filter(
+          (row) => getNormalizedTokenForRow(row) !== normalizedToken
+        );
+        return sortPerDayRows([...filtered, ...updatedPerDayRows]);
+      });
+
+      setPerEmployee((prev) => {
+        if (!prev) return prev;
+        const filtered = prev.filter(
+          (row) =>
+            normalizeBiometricToken(row.employeeToken ?? row.employeeId ?? "") !== normalizedToken
+        );
+        return [...filtered, ...payload.perEmployee];
+      });
+
+      const updatedFilteredRows = filteredPerDayRows.map((row) => {
+        if (getNormalizedTokenForRow(row) !== normalizedToken) return row;
+        return {
+          ...row,
+          employeeName: employeeName ?? row.employeeName,
+          resolvedEmployeeId,
+          officeId,
+          officeName,
+        };
+      });
+      lastEvaluatedKey.current = makeEvaluationPayloadKey(manualKey, updatedFilteredRows);
+
+      const hasResolvedEmployee = payload.perEmployee.some((row) => row.resolvedEmployeeId);
+      if (!hasResolvedEmployee) {
+        removeManualResolved(normalizedToken);
+      }
+    },
+    [
+      filteredPerDayRows,
+      manualPeriodSelection,
+      removeManualResolved,
+      setPerDay,
+      setPerEmployee,
+      useManualPeriod,
+    ]
+  );
+
   const handleResolveMapping = useCallback(
     async (token: string, employeeId: string, employeeName: string) => {
+      const normalizedToken = normalizeBiometricToken(token);
+      const wasManual = manualResolvedRef.current.has(normalizedToken);
+      skipAutoEvaluateRef.current = true;
       setResolveBusy(true);
+      let addedManual = false;
       try {
         const response = await timeout(
           fetch("/api/biometrics/resolve", {
@@ -1767,6 +2000,13 @@ export default function BioLogUploader() {
           setIdentityState((prev) => ({ ...prev, unmatched }));
         }
 
+        if (!wasManual) {
+          addManualResolved(normalizedToken);
+          addedManual = true;
+        }
+
+        await reEnrichToken(token, normalized);
+
         setResolveTarget(null);
         toast({
           title: "Identity resolved",
@@ -1774,6 +2014,10 @@ export default function BioLogUploader() {
         });
       } catch (error) {
         console.error("Failed to resolve biometrics token", error);
+        if (addedManual) {
+          removeManualResolved(normalizedToken);
+        }
+        lastEvaluatedKey.current = "";
         const message =
           error instanceof Error ? error.message : "Unable to resolve biometrics token.";
         toast({
@@ -1782,10 +2026,11 @@ export default function BioLogUploader() {
           variant: "destructive",
         });
       } finally {
+        skipAutoEvaluateRef.current = false;
         setResolveBusy(false);
       }
     },
-    [toast]
+    [addManualResolved, reEnrichToken, removeManualResolved, toast]
   );
 
   const handleResolveSubmit = useCallback(
@@ -2055,6 +2300,7 @@ export default function BioLogUploader() {
           columnLabels,
           appVersion: APP_VERSION,
         },
+        manualResolvedTokens: manualResolvedTokens,
       });
       toast({
         title: "Download started",
@@ -2076,6 +2322,7 @@ export default function BioLogUploader() {
     filteredPerDayPreview,
     filteredPerEmployee,
     manualSelectionValid,
+    manualResolvedTokens,
     perDay,
     perEmployee,
     exportPeriodLabel,
@@ -2813,18 +3060,24 @@ export default function BioLogUploader() {
                 {sortedPerEmployee.map((row) => {
                   const key = `${row.employeeToken || row.employeeId || row.employeeName}||${row.employeeName}`;
                   const types = row.scheduleTypes ?? [];
+                  const normalizedRowToken = normalizeBiometricToken(
+                    row.employeeToken ?? row.employeeId ?? ""
+                  );
                   const hasResolverMapping = Boolean(row.resolvedEmployeeId);
                   const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
-                  const isSolved = hasResolverMapping && row.identityStatus !== "matched";
-                  const sourceLabel = isUnmatched
-                    ? "No mapping"
-                    : formatScheduleSource(row.scheduleSource);
-                  const displayEmployeeId =
-                    row.employeeId?.trim().length
-                      ? row.employeeId
-                      : isUnmatched
-                      ? row.employeeToken || "—"
-                      : "—";
+                  const isManualSolved = normalizedRowToken
+                    ? manualResolved.has(normalizedRowToken)
+                    : false;
+                  const sourceLabel = formatScheduleSource(row.scheduleSource);
+                  const resolvedEmployeeId = row.resolvedEmployeeId?.trim();
+                  const baseEmployeeId = row.employeeId?.trim();
+                  const displayEmployeeId = resolvedEmployeeId?.length
+                    ? resolvedEmployeeId
+                    : baseEmployeeId?.length
+                    ? baseEmployeeId
+                    : isUnmatched
+                    ? row.employeeToken || "—"
+                    : "—";
                   const displayEmployeeName =
                     row.employeeName?.trim().length ? row.employeeName : UNMATCHED_LABEL;
                   const displayOffice = row.officeName?.trim().length
@@ -2886,8 +3139,8 @@ export default function BioLogUploader() {
                     metricMode === "minutes" ? lateMinutesLabel : formatPercentLabel(latePercentValue);
                   const undertimeMetricLabel =
                     metricMode === "minutes" ? undertimeMinutesLabel : formatPercentLabel(undertimePercentValue);
-                  const canResolve = Boolean(row.employeeToken) && (isUnmatched || isSolved);
-                  const resolveActionLabel = isSolved ? "Re-resolve…" : "Resolve…";
+                  const canResolve = Boolean(row.employeeToken) && (isUnmatched || hasResolverMapping);
+                  const resolveActionLabel = isUnmatched ? "Resolve…" : "Re-resolve…";
                   return (
                     <tr key={key} className="odd:bg-muted/20">
                       <td className="p-2">{displayEmployeeId}</td>
@@ -2907,7 +3160,7 @@ export default function BioLogUploader() {
                                 No DB record; using name from uploaded log. You can resolve this below.
                               </TooltipContent>
                             </Tooltip>
-                          ) : isSolved ? (
+                          ) : isManualSolved ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Badge className="border-emerald-500/70 bg-emerald-500/20 text-emerald-700">
@@ -2915,7 +3168,7 @@ export default function BioLogUploader() {
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs text-sm">
-                                Token resolved via manual mapping. Using mapped employee details.
+                                Linked manually during this session. Attendance uses the selected employee details.
                               </TooltipContent>
                             </Tooltip>
                           ) : null}
@@ -3057,12 +3310,22 @@ export default function BioLogUploader() {
                   const weeklyPresenceLabel = formatTimelineLabel(row.weeklyPatternPresence ?? []);
                   const isNoPunch = row.status === "no_punch";
                   const isExcused = row.status === "excused";
+                  const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
+                  const resolvedEmployeeId = row.resolvedEmployeeId?.trim();
+                  const baseEmployeeId = row.employeeId?.trim();
+                  const displayEmployeeId = resolvedEmployeeId?.length
+                    ? resolvedEmployeeId
+                    : baseEmployeeId?.length
+                    ? baseEmployeeId
+                    : isUnmatched
+                    ? row.employeeToken || "—"
+                    : "—";
                   return (
                     <tr
                       key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`}
                       className="odd:bg-muted/20"
                     >
-                      <td className="p-2">{row.employeeId || "—"}</td>
+                      <td className="p-2">{displayEmployeeId}</td>
                       <td className="p-2">{row.employeeName || "—"}</td>
                       <td className="p-2">
                         {row.officeName ||
