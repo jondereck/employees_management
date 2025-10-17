@@ -1719,6 +1719,10 @@ function BioLogUploaderContent() {
     });
   }, [employeeSearch, filteredPerEmployee]);
 
+  const setApplyOfficeFilterToExport = useCallback(() => {
+    // Legacy no-op: exports always follow the currently filtered offices.
+  }, []);
+
   const filteredPerDayPreview = useMemo(() => {
     if (!perDay) return [] as PerDayRow[];
     const officeKeys = selectedOffices.length ? new Set(selectedOffices) : null;
@@ -1789,6 +1793,12 @@ function BioLogUploaderContent() {
       setOffices(filtered);
     }
   }, [officeOptions, selectedOffices, setOffices]);
+
+  useEffect(() => {
+    if (!selectedOffices.length) {
+      setApplyOfficeFilterToExport(true);
+    }
+  }, [selectedOffices.length, setApplyOfficeFilterToExport]);
 
   useEffect(() => {
     if (perDay === null) {
