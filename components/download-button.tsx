@@ -2080,7 +2080,7 @@ export default function DownloadStyledExcel() {
                                       onDragEnd={handleSelectedColumnDragEnd}
                                       onDragCancel={handleSelectedColumnDragCancel}
                                       modifiers={[restrictToVerticalAxis]}
-                                      autoScroll={{ enabled: true, threshold: { y: 16 } }}
+                                      autoScroll={{ enabled: true, threshold: { x: 0, y: 16 } }}
                                     >
                                       <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
                                         <div className="max-h-[48vh] space-y-2 overflow-y-auto pr-1 pb-2">
