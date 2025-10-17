@@ -1,12 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Building2, LayoutDashboard, Monitor, Settings } from "lucide-react";
+import { Building2, LayoutDashboard, Settings, Wrench } from "lucide-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 
 import Loading from "@/app/loading";
 import { cn } from "@/lib/utils";
-
 import { EmployeesMenu, EmployeesMenuLink } from "./employees-menu";
 
 type Route = {
@@ -21,7 +20,6 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   const params = useParams();
   const router = useRouter();
   const [loading, setLoading] = React.useState(false);
-
   const departmentParam = params.departmentId;
   const departmentId = Array.isArray(departmentParam)
     ? departmentParam[0]
@@ -53,12 +51,6 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       icon: <LayoutDashboard className="mr-1 h-5 w-5" aria-hidden="true" />,
     },
     {
-      href: `/${departmentId}/billboards`,
-      label: "Covers",
-      active: pathname === `/${departmentId}/billboards`,
-      icon: <Monitor className="mr-1 h-5 w-5" aria-hidden="true" />,
-    },
-    {
       href: `/${departmentId}/offices`,
       label: "Offices",
       active: pathname === `/${departmentId}/offices`,
@@ -74,16 +66,16 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       active: pathname === `/${departmentId}/employees`,
     },
     {
-      href: `/${departmentId}/biometrics`,
-      label: "Biometrics Uploader",
-      description: "Upload monthly biometric logs and export attendance reports.",
-      active: pathname === `/${departmentId}/biometrics`,
+      href: `/${departmentId}/approvals`,
+      label: "Approvals",
+      description: "Review pending change requests awaiting action.",
+      active: pathname === `/${departmentId}/approvals`,
     },
     {
-      href: `/${departmentId}/eligibility`,
-      label: "Eligibility",
-      description: "View and update eligibility criteria for employees.",
-      active: pathname === `/${departmentId}/eligibility`,
+      href: `/${departmentId}/birthdays`,
+      label: "Birthdays",
+      description: "See upcoming celebrants and special milestones.",
+      active: pathname === `/${departmentId}/birthdays`,
     },
     {
       href: `/${departmentId}/view`,
@@ -97,11 +89,19 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       description: "Manage employee appointment details.",
       active: pathname === `/${departmentId}/employee_type`,
     },
+    {
+      href: `/${departmentId}/eligibility`,
+      label: "Eligibility",
+      description: "View and update eligibility criteria for employees.",
+      active: pathname === `/${departmentId}/eligibility`,
+    },
   ];
 
   const manageRoute = employeesLinks[0];
   const quickLinks = employeesLinks.slice(1);
   const activeEmployeesRoute = employeesLinks.find((route) => route.active);
+
+  const toolsSectionActive = pathname.startsWith(`/${departmentId}/tools`);
 
   return (
     <>
@@ -141,6 +141,20 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
           activeRoute={activeEmployeesRoute}
           onNavigate={handleNavClick}
         />
+
+        <button
+          type="button"
+          onClick={() => handleNavClick(`/${departmentId}/tools`)}
+          className={cn(
+            "inline-flex items-center border-b-2 px-3 py-2 text-base transition-colors duration-300",
+            toolsSectionActive
+              ? "border-green-600 text-green-700 font-semibold"
+              : "border-transparent hover:border-green-400 hover:text-green-600"
+          )}
+        >
+          <Wrench className="mr-2 h-5 w-5" aria-hidden="true" />
+          Tools
+        </button>
 
         <button
           type="button"

@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import prismadb from "@/lib/prismadb";
 import BirthdayMonthClient from "./components/birthday-month-client";
 
@@ -11,7 +11,7 @@ function clampMonth(m: string | null | undefined, fallback: number) {
 
 export const revalidate = 3600;
 
-export default async function Page({
+export default async function BirthdaysPage({
   params,
   searchParams,
 }: {
@@ -77,11 +77,19 @@ export default async function Page({
   const subtitle = `HRPS • ${people.length} celebrant${people.length === 1 ? "" : "s"} for this month`;
 
   return (
-    <BirthdayMonthClient
-      departmentId={departmentId}
-      initialMonth={month}
-      people={people}
-      subtitle={subtitle}
-    />
+    <div className="space-y-6 p-4 md:p-6">
+      <Breadcrumbs
+        items={[
+          { label: "Employees", href: `/${departmentId}/employees` },
+          { label: "Birthdays" },
+        ]}
+      />
+      <BirthdayMonthClient
+        departmentId={departmentId}
+        initialMonth={month}
+        people={people}
+        subtitle={subtitle}
+      />
+    </div>
   );
 }

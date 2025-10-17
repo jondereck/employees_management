@@ -52,7 +52,7 @@ export function EmployeesMenu({ manageRoute, quickLinks, activeRoute, onNavigate
           <ChevronDown className="h-4 w-4" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={8} className="z-40 w-[560px] p-4">
+      <DropdownMenuContent align="start" sideOffset={8} className="z-70 w-[560px] p-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-[200px_1fr_1fr]">
           <button
             type="button"

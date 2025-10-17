@@ -1,36 +1,40 @@
-"use client"
+"use client";
+
 import axios from "axios";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useState } from "react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { BillboardColumn } from "./columns";
+
+import { AlertModal } from "@/components/modals/alert-modal";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "@/components/ui/use-toast";
+import { useToolsNavigation } from "@/components/tools/navigation-provider";
 import { Copy, Edit, MoreHorizontal, Trash } from "lucide-react";
 import toasts from "react-hot-toast";
-import { toast } from "@/components/ui/use-toast";
-import { ApiAlert } from "@/components/api-alert";
-import { AlertModal } from "@/components/modals/alert-modal";
 
-
+import { BillboardColumn } from "./columns";
 
 interface CellActionProps {
   data: BillboardColumn;
 }
 
-export const CellAction = ({
-  data
-}: CellActionProps) => {
-  const router = useRouter();
+export const CellAction = ({ data }: CellActionProps) => {
   const params = useParams();
+  const { navigate } = useToolsNavigation();
 
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
   const onCopy = (id: string) => {
     navigator.clipboard.writeText(id);
-    toasts.success("Succefully copied.")
-
-  }
+    toasts.success("Succefully copied.");
+  };
 
   const onConfirm = async () => {
     try {
@@ -40,23 +44,22 @@ export const CellAction = ({
 
       toast({
         title: "Success!",
-        description: "Billboards deleted."
-      })
+        description: "Billboards deleted.",
+      });
 
       window.location.reload();
-
     } catch (error) {
       toast({
         title: "Error!",
-        description: "To remove this billboard, please make sure to first remove all offices associated with it."
-
-        
-      })
+        description:
+          "To remove this billboard, please make sure to first remove all offices associated with it.",
+      });
     } finally {
       setLoading(false);
       setOpen(false);
     }
-  }
+  };
+
   return (
     <>
       <AlertModal
@@ -78,19 +81,16 @@ export const CellAction = ({
             <Copy className="mr-2 h-4 w-4" />
             Copy Id
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => router.push(`/${params.departmentId}/billboards/${data.id}`)}
-          >
+          <DropdownMenuItem onClick={() => navigate(`/${params.departmentId}/tools/covers/${data.id}`)}>
             <Edit className="mr-2 h-4 w-4" />
             Update
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setOpen(true)}>
-            <Trash
-              className="mr-2 h-4 w-4" />
+            <Trash className="mr-2 h-4 w-4" />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </>
   );
-}
+};
