@@ -47,7 +47,7 @@ export const COLUMN_GROUPS = [
   {
     key: "export",
     title: "Export Extras",
-    items: ["signature"],
+    items: ["rowNumber", "comma", "signature"],
   },
 ] as const;
 

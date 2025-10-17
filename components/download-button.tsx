@@ -1040,15 +1040,13 @@ export default function DownloadStyledExcel() {
       return { key: group.key, title: group.title, columns };
     }).filter((group) => group.columns.length > 0);
 
-    const extras = labeledColumnOrder.filter((col) => col.key !== 'rowNumber' && !assigned.has(col.key));
+    const extras = labeledColumnOrder.filter((col) => !assigned.has(col.key));
     if (extras.length) {
       groups.push({ key: 'other' as ColumnGroupKey, title: 'Other Fields', columns: extras });
     }
 
     return groups;
   }, [labeledColumnOrder]);
-
-  const rowNumberLabel = columnLabelMap.get('rowNumber')?.name ?? 'No.';
 
   const defaultSelectedColumns = [
     'rowNumber',
@@ -1559,7 +1557,7 @@ export default function DownloadStyledExcel() {
           'z-[90] flex max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-visible sm:max-w-none gap-0 p-0 flex-col',
           MODAL_WIDTH_CLASSES[modalSize]
         )}
-        bodyClassName="flex h-full min-h-0 flex-col overflow-y-auto scrollbar-gutter-stable"
+        bodyClassName="flex h-full min-h-0 flex-col overflow-visible scrollbar-gutter-stable"
       >
         <div className="flex h-full min-h-0 w-full min-w-0 flex-col">
           <div className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -1658,7 +1656,7 @@ export default function DownloadStyledExcel() {
             </div>
           </div>
 
-          <div className="flex-1 w-full min-h-0 min-w-0 pl-4 pr-2 py-4 overflow-x-hidden pb-6">
+          <div className="flex-1 w-full min-h-0 min-w-0 pl-4 pr-2 py-4 pb-6 overflow-x-hidden flex flex-col">
             <TemplatePickerBar
               className="mb-3 w-full"
               value={selectedTemplateId}
@@ -2004,22 +2002,12 @@ export default function DownloadStyledExcel() {
                         <div className="mt-3 flex-1 min-h-0">
                           <div
                             id="export-columns-scroll"
-                            className="h-full overflow-y-auto overscroll-contain pr-2"
+                            className="h-full max-h-[78vh] min-h-[240px] overflow-y-auto overscroll-contain pr-2"
                           >
                             <div className="space-y-4 pb-16">
                               <div className="space-y-3">
                                 <div className="sticky top-0 z-10 bg-background/95 px-1 py-2 text-sm font-medium text-foreground backdrop-blur supports-[backdrop-filter]:bg-background/60">
                                   Column groups
-                                </div>
-                                <div>
-                                  <label className="flex items-center gap-2 text-sm font-medium">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedColumnSet.has('rowNumber')}
-                                      onChange={() => toggleColumn('rowNumber')}
-                                    />
-                                    <span>{rowNumberLabel}</span>
-                                  </label>
                                 </div>
 
                                 {groupedColumns.map((group) => {
