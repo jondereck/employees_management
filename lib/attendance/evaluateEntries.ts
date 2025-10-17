@@ -168,7 +168,35 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
     }
   }
 
-  const maps = await getScheduleMapsForMonth(Array.from(internalIds), window);
+  const internalIdList = Array.from(internalIds);
+  const employees = internalIdList.length
+    ? await prisma.employee.findMany({
+        where: { id: { in: internalIdList } },
+        select: {
+          id: true,
+          employeeNo: true,
+          isHead: true,
+          officeId: true,
+          offices: { select: { id: true, name: true } },
+        },
+      })
+    : [];
+
+  const enrichmentByEmployee = new Map<
+    string,
+    { employeeNo: string | null; isHead: boolean | null; officeId: string | null; officeName: string | null }
+  >();
+
+  for (const employee of employees) {
+    enrichmentByEmployee.set(employee.id, {
+      employeeNo: employee.employeeNo ?? null,
+      isHead: employee.isHead,
+      officeId: employee.officeId ?? employee.offices?.id ?? null,
+      officeName: employee.offices?.name ?? null,
+    });
+  }
+
+  const maps = await getScheduleMapsForMonth(internalIdList, window);
 
   const tokenList = entries.map((row) => row.employeeToken.trim()).filter(Boolean);
   const manualMappings = identityMapModel
@@ -192,6 +220,7 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
   for (const row of entries) {
     const internalEmployeeId = resolveInternalId(row, bioToInternal);
     const scheduleRecord = resolveScheduleForDate(internalEmployeeId, row.dateISO, maps);
+    const enrichment = internalEmployeeId ? enrichmentByEmployee.get(internalEmployeeId) : null;
     const normalized = normalizeSchedule(scheduleRecord);
     const earliest = (row.earliest ?? null) as HHMM | null;
     const latest = (row.latest ?? null) as HHMM | null;
@@ -221,13 +250,15 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
 
     const resolvedEmployeeId = internalEmployeeId ?? row.resolvedEmployeeId ?? null;
 
+    const officeId = row.officeId ?? enrichment?.officeId ?? null;
+    const officeName = row.officeName ?? enrichment?.officeName ?? null;
     const perDay: PerDayRow = {
       employeeId: row.employeeId,
       employeeName: row.employeeName,
       employeeToken: row.employeeToken,
       resolvedEmployeeId,
-      officeId: row.officeId ?? null,
-      officeName: row.officeName ?? null,
+      officeId,
+      officeName,
       dateISO: row.dateISO,
       day: row.day,
       earliest: row.earliest,
@@ -257,6 +288,8 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
       weeklyExclusionId: weeklyExclusion?.id ?? null,
       identityStatus: resolvedEmployeeId ? "matched" : "unmatched",
+      employeeNo: enrichment?.employeeNo ?? null,
+      isHead: enrichment?.isHead ?? null,
     };
 
     evaluatedPerDay.push(perDay);
