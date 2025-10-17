@@ -84,7 +84,7 @@ export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
     description: "Matched, unmatched, or solved via resolver.",
     type: "text",
     width: "id",
-    defaultSelected: true,
+    defaultSelected: false,
   },
   {
     key: "source",

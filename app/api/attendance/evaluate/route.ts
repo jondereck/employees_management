@@ -18,7 +18,11 @@ import {
 } from "@/utils/evaluateDay";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
 import type { WeeklyPatternWindow } from "@/utils/weeklyPattern";
-import { normalizeBiometricToken, resolveBiometricTokenPadLength } from "@/utils/biometricsShared";
+import {
+  normalizeBiometricToken,
+  resolveBiometricTokenPadLength,
+  type MatchStatus,
+} from "@/utils/biometricsShared";
 
 type EvaluatedDay = {
   employeeId: string;
@@ -61,6 +65,7 @@ type EvaluatedDay = {
   weeklyExclusionIgnoreUntil?: string | null;
   weeklyExclusionId?: string | null;
   identityStatus?: "matched" | "unmatched" | "ambiguous";
+  matchStatus?: MatchStatus;
 };
 
 const hhmmRegex = /^\d{1,2}:\d{2}$/;
@@ -159,7 +164,19 @@ export async function POST(req: Request) {
       const autoEmployeeId = normalizedToken ? autoMap.get(normalizedToken) ?? null : null;
       const resolvedEmployeeId = row.resolvedEmployeeId?.trim() || null;
       const internalEmployeeId = manualEmployeeId ?? autoEmployeeId ?? resolvedEmployeeId ?? null;
-      return { normalizedToken, manualEmployeeId, autoEmployeeId, resolvedEmployeeId, internalEmployeeId };
+      const matchStatus: MatchStatus = manualEmployeeId || resolvedEmployeeId
+        ? "solved"
+        : internalEmployeeId
+        ? "matched"
+        : "unmatched";
+      return {
+        normalizedToken,
+        manualEmployeeId,
+        autoEmployeeId,
+        resolvedEmployeeId,
+        internalEmployeeId,
+        matchStatus,
+      };
     });
 
     const sortedDates = entries
@@ -243,6 +260,7 @@ export async function POST(req: Request) {
         weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
         weeklyExclusionId: weeklyExclusion?.id ?? null,
         identityStatus: internalEmployeeId ? "matched" : "unmatched",
+        matchStatus: context.matchStatus,
       };
     });
 

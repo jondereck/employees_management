@@ -10,9 +10,12 @@ import {
 } from "./biometricsExportConfig";
 import {
   formatScheduleSource,
+  MATCH_STATUS_PRIORITY,
+  resolveMatchStatus,
   UNASSIGNED_OFFICE_LABEL,
   UNKNOWN_OFFICE_LABEL,
   UNMATCHED_LABEL,
+  type MatchStatus,
 } from "./biometricsShared";
 
 import type { DayEvaluationStatus } from "./evaluateDay";
@@ -96,6 +99,7 @@ export type PerDayRow = ParsedPerDayRow & {
   scheduleEnd?: string | null;
   scheduleGraceMinutes?: number | null;
   identityStatus?: "matched" | "unmatched" | "ambiguous";
+  matchStatus?: MatchStatus | null;
   weeklyPatternApplied?: boolean;
   weeklyPatternWindows?: WeeklyPatternWindow[] | null;
   weeklyPatternPresence?: { start: string; end: string }[];
@@ -124,6 +128,7 @@ export type PerEmployeeRow = {
   totalUndertimeMinutes: number;
   totalRequiredMinutes: number;
   identityStatus: "matched" | "unmatched" | "ambiguous";
+  matchStatus: MatchStatus;
   weeklyPatternDayCount: number;
   excusedDays: number;
 };
@@ -1042,6 +1047,7 @@ type AggregateRow = {
   employeeToken: string;
   employeeName: string;
   identityStatus: "matched" | "unmatched" | "ambiguous";
+  matchStatus: MatchStatus;
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
@@ -1075,15 +1081,6 @@ const statusPriority = {
   ambiguous: 1,
   matched: 2,
 } as const;
-
-const resolveMatchStatus = (
-  status?: "matched" | "unmatched" | "ambiguous",
-  resolvedEmployeeId?: string | null
-): "matched" | "unmatched" | "solved" => {
-  if (resolvedEmployeeId && status !== "matched") return "solved";
-  if (status === "matched") return "matched";
-  return "unmatched";
-};
 
 const toMinute = (value: string | null | undefined): number | null => {
   if (!value) return null;
@@ -1205,12 +1202,14 @@ export function summarizePerEmployee(
     const token = row.employeeToken || row.employeeId || row.employeeName;
     const key = `${token}||${row.employeeName}`;
     const identityStatus = row.identityStatus ?? (row.resolvedEmployeeId ? "matched" : "unmatched");
+    const matchStatus = resolveMatchStatus(row.matchStatus ?? null, identityStatus, row.resolvedEmployeeId);
     if (!map.has(key)) {
       map.set(key, {
         employeeId: row.employeeId,
         employeeToken: token,
         employeeName: row.employeeName,
         identityStatus,
+        matchStatus,
         resolvedEmployeeId: row.resolvedEmployeeId ?? null,
         officeId: row.officeId ?? null,
         officeName: row.officeName ?? null,
@@ -1235,6 +1234,9 @@ export function summarizePerEmployee(
     }
     if (statusPriority[identityStatus] > statusPriority[agg.identityStatus]) {
       agg.identityStatus = identityStatus;
+    }
+    if (MATCH_STATUS_PRIORITY[matchStatus] > MATCH_STATUS_PRIORITY[agg.matchStatus]) {
+      agg.matchStatus = matchStatus;
     }
     const status: DayEvaluationStatus = row.status
       ? row.status
@@ -1283,6 +1285,7 @@ export function summarizePerEmployee(
     totalUndertimeMinutes: Math.round(entry.totalUndertimeMinutes),
     totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
     identityStatus: entry.identityStatus,
+    matchStatus: entry.matchStatus,
     weeklyPatternDayCount: entry.weeklyPatternDays,
   }));
 }
@@ -1407,22 +1410,33 @@ const isTotalsSupported = (type: ColumnType | SummaryColumnDefinition["type"] | 
 const toEmployeeKey = (token: string | null | undefined, name: string | null | undefined) =>
   `${token || ""}||${name || ""}`;
 
-const toDisplayEmployeeId = (row: Pick<PerEmployeeRow, "employeeId" | "employeeToken" | "identityStatus" | "resolvedEmployeeId">) => {
+const toDisplayEmployeeId = (
+  row: Pick<
+    PerEmployeeRow,
+    "employeeId" | "employeeToken" | "identityStatus" | "resolvedEmployeeId" | "matchStatus"
+  >
+) => {
   const trimmedId = row.employeeId?.trim();
   if (trimmedId) return trimmedId;
-  if (row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
+  if (resolveMatchStatus(row.matchStatus ?? null, row.identityStatus, row.resolvedEmployeeId) === "unmatched") {
     return row.employeeToken?.trim() || "";
   }
   return "";
 };
 
 const toDisplayOffice = (
-  row: Pick<PerEmployeeRow | PerDayRow, "officeName" | "resolvedEmployeeId" | "identityStatus">,
+  row: Pick<
+    PerEmployeeRow | PerDayRow,
+    "officeName" | "resolvedEmployeeId" | "identityStatus" | "matchStatus"
+  >,
   fallbackUnmatched = false
 ) => {
   const label = row.officeName?.trim();
   if (label) return label;
-  if (fallbackUnmatched && row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
+  if (
+    fallbackUnmatched &&
+    resolveMatchStatus(row.matchStatus ?? null, row.identityStatus, row.resolvedEmployeeId) === "unmatched"
+  ) {
     return UNKNOWN_OFFICE_LABEL;
   }
   if (row.resolvedEmployeeId) {
@@ -1438,8 +1452,10 @@ const toScheduleLabel = (types: string[] | undefined | null) => {
     .join(", ");
 };
 
-const toMatchStatusLabel = (row: Pick<PerEmployeeRow, "identityStatus" | "resolvedEmployeeId">) => {
-  const status = resolveMatchStatus(row.identityStatus, row.resolvedEmployeeId);
+const toMatchStatusLabel = (
+  row: Pick<PerEmployeeRow, "identityStatus" | "resolvedEmployeeId" | "matchStatus">
+) => {
+  const status = resolveMatchStatus(row.matchStatus ?? null, row.identityStatus, row.resolvedEmployeeId);
   switch (status) {
     case "matched":
       return "Matched";
@@ -1494,8 +1510,8 @@ const computeSummaryRow = (
   sourceFileCounts: Map<string, number>
 ): SummaryRowValues => {
   const key = toEmployeeKey(row.employeeToken, row.employeeName);
-  const isUnmatched = row.identityStatus === "unmatched" && !row.resolvedEmployeeId;
-  const sourceLabel = isUnmatched ? "No mapping" : formatScheduleSource(row.scheduleSource) ?? "";
+  const resolvedStatus = resolveMatchStatus(row.matchStatus ?? null, row.identityStatus, row.resolvedEmployeeId);
+  const sourceLabel = resolvedStatus === "unmatched" ? "No mapping" : formatScheduleSource(row.scheduleSource) ?? "";
   return {
     employeeId: toDisplayEmployeeId(row) || null,
     employeeName: row.employeeName?.trim() ? row.employeeName : UNMATCHED_LABEL,
@@ -1751,7 +1767,7 @@ const buildPerDaySheet = (rows: PerDayRow[]) => {
         case "employeeId": {
           const trimmed = row.employeeId?.trim();
           if (trimmed) return trimmed;
-          if (row.identityStatus === "unmatched" && !row.resolvedEmployeeId) {
+          if (resolveMatchStatus(row.matchStatus ?? null, row.identityStatus, row.resolvedEmployeeId) === "unmatched") {
             return row.employeeToken || "";
           }
           return "";

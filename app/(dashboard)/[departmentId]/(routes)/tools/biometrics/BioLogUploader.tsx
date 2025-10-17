@@ -65,6 +65,7 @@ import {
   EXPORT_COLUMNS_STORAGE_KEY,
   formatScheduleSource,
   normalizeBiometricToken,
+  resolveMatchStatus,
   OFFICE_FILTER_STORAGE_KEY,
   UNASSIGNED_OFFICE_LABEL,
   UNKNOWN_OFFICE_KEY_PREFIX,
@@ -187,10 +188,17 @@ const formatScheduleType = (value?: string | null) => {
   return value.charAt(0) + value.slice(1).toLowerCase();
 };
 
-const isUnmatchedIdentity = (
-  status: PerEmployeeRow["identityStatus"] | undefined,
+const resolveRowMatchStatus = (
+  matchStatus: PerEmployeeRow["matchStatus"] | PerDayRow["matchStatus"] | null | undefined,
+  identityStatus: PerEmployeeRow["identityStatus"] | PerDayRow["identityStatus"] | undefined,
   resolvedEmployeeId?: string | null
-) => status === "unmatched" && !resolvedEmployeeId;
+) => resolveMatchStatus(matchStatus ?? null, identityStatus, resolvedEmployeeId);
+
+const isUnmatchedIdentity = (
+  matchStatus: PerEmployeeRow["matchStatus"] | PerDayRow["matchStatus"] | null | undefined,
+  identityStatus: PerEmployeeRow["identityStatus"] | PerDayRow["identityStatus"] | undefined,
+  resolvedEmployeeId?: string | null
+) => resolveRowMatchStatus(matchStatus, identityStatus, resolvedEmployeeId) === "unmatched";
 
 const computeLatePercentMinutes = (row: PerEmployeeRow): number | null => {
   if (!row.totalRequiredMinutes || row.totalRequiredMinutes <= 0) return null;
@@ -1527,7 +1535,7 @@ export default function BioLogUploader() {
         const hasType = row.scheduleTypes?.some((type) => scheduleKeys.has(type)) ?? false;
         if (!hasType) return false;
       }
-      if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
+      if (!showUnmatched && isUnmatchedIdentity(row.matchStatus, row.identityStatus, row.resolvedEmployeeId)) {
         return false;
       }
       return true;
@@ -1565,7 +1573,7 @@ export default function BioLogUploader() {
       } else if (scheduleKeys && !row.scheduleType) {
         return false;
       }
-      if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
+      if (!showUnmatched && isUnmatchedIdentity(row.matchStatus, row.identityStatus, row.resolvedEmployeeId)) {
         return false;
       }
       if (!hasQuery) return true;
@@ -1771,6 +1779,38 @@ export default function BioLogUploader() {
         let reEnriched = false;
         const normalizedTokenKey = normalizeBiometricToken(token);
         if (normalizedTokenKey) {
+          setPerDay((prev) => {
+            if (!prev) return prev;
+            let updated = false;
+            const next = prev.map((row) => {
+              const source = row.employeeToken || row.employeeId || row.employeeName || "";
+              const rowToken = source ? normalizeBiometricToken(source) : "";
+              if (!rowToken || rowToken !== normalizedTokenKey) return row;
+              updated = true;
+              return {
+                ...row,
+                resolvedEmployeeId: employeeId,
+                matchStatus: "solved",
+              };
+            });
+            return updated ? next : prev;
+          });
+          setPerEmployee((prev) => {
+            if (!prev) return prev;
+            let updated = false;
+            const next = prev.map((row) => {
+              const source = row.employeeToken || row.employeeId || row.employeeName || "";
+              const rowToken = source ? normalizeBiometricToken(source) : "";
+              if (!rowToken || rowToken !== normalizedTokenKey) return row;
+              updated = true;
+              return {
+                ...row,
+                resolvedEmployeeId: employeeId,
+                matchStatus: "solved",
+              };
+            });
+            return updated ? next : prev;
+          });
           const relevantRows = filteredPerDayRows.filter((row) => {
             const source = row.employeeToken || row.employeeId || row.employeeName;
             if (!source) return false;
@@ -2942,12 +2982,17 @@ export default function BioLogUploader() {
                 {sortedPerEmployee.map((row) => {
                   const key = `${row.employeeToken || row.employeeId || row.employeeName}||${row.employeeName}`;
                   const types = row.scheduleTypes ?? [];
-                  const hasResolverMapping = Boolean(row.resolvedEmployeeId);
-                  const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
-                  const isSolved = hasResolverMapping && row.identityStatus !== "matched";
-                  const sourceLabel = isUnmatched
-                    ? "No mapping"
-                    : formatScheduleSource(row.scheduleSource);
+                  const matchStatus = resolveRowMatchStatus(
+                    row.matchStatus,
+                    row.identityStatus,
+                    row.resolvedEmployeeId
+                  );
+                  const isUnmatched = matchStatus === "unmatched";
+                  const isSolved = matchStatus === "solved";
+                  const sourceLabel =
+                    matchStatus === "unmatched"
+                      ? "No mapping"
+                      : formatScheduleSource(row.scheduleSource);
                   const displayEmployeeId =
                     row.employeeId?.trim().length
                       ? row.employeeId

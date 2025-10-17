@@ -19,6 +19,7 @@ import {
   normalizeBiometricToken,
   resolveBiometricTokenPadLength,
   UNASSIGNED_OFFICE_LABEL,
+  type MatchStatus,
 } from "@/utils/biometricsShared";
 
 const hhmmRegex = /^\d{1,2}:\d{2}$/;
@@ -119,6 +120,7 @@ type ReEnrichedDay = {
   weeklyExclusionIgnoreUntil: string | null;
   weeklyExclusionId: string | null;
   identityStatus: "matched";
+  matchStatus: MatchStatus;
 };
 
 export async function POST(req: Request) {
@@ -238,6 +240,7 @@ export async function POST(req: Request) {
         weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
         weeklyExclusionId: weeklyExclusion?.id ?? null,
         identityStatus: "matched",
+        matchStatus: "solved",
       };
     });
 
