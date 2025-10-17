@@ -15,7 +15,6 @@ import { toast } from "@/components/ui/use-toast";
 import axios from "axios";
 import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
-import { useOrigin } from "@/hooks/use-origin";
 import ImageUpload from "@/components/ui/image-upload";
 
 
@@ -68,7 +67,7 @@ export const BillboardForm = ({
       }
 
       router.refresh();
-      router.push(`/${params.departmentId}/billboards`)
+      router.push(`/${params.departmentId}/tools/covers`)
 
 
       toast({
@@ -110,7 +109,7 @@ export const BillboardForm = ({
       })
 
       router.refresh();
-      router.push(`/${params.departmentId}/billboards`)
+      router.push(`/${params.departmentId}/tools/covers`)
 
 
     } catch (error) {

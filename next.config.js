@@ -29,6 +29,35 @@ const nextConfig = {
 
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/:departmentId/biometrics",
+        destination: "/:departmentId/tools/biometrics",
+        permanent: true,
+      },
+      {
+        source: "/:departmentId/billboards/:path*",
+        destination: "/:departmentId/tools/covers/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:departmentId/covers",
+        destination: "/:departmentId/tools/covers",
+        permanent: true,
+      },
+      {
+        source: "/:departmentId/attendance/import",
+        destination: "/:departmentId/tools/attendance-import",
+        permanent: true,
+      },
+      {
+        source: "/:departmentId/copy-options",
+        destination: "/:departmentId/tools/copy-options",
+        permanent: true,
+      },
+    ];
+  },
 }
 
 module.exports = withPWA(nextConfig);

@@ -234,11 +234,11 @@ const Info = ({
                 <CopyIcon className="w-4 h-4" />
               </Button>
             </ActionTooltip>
-            <ActionTooltip label="Copy settings">
+            <ActionTooltip label="Copy options">
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => router.push(`/${data.department}/settings#copy-options`)}
+                onClick={() => router.push(`/${data.department}/tools/copy-options`)}
               >
                 <Settings2Icon />
               </Button>

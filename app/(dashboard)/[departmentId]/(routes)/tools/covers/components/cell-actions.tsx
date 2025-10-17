@@ -79,7 +79,7 @@ export const CellAction = ({
             Copy Id
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => router.push(`/${params.departmentId}/billboards/${data.id}`)}
+            onClick={() => router.push(`/${params.departmentId}/tools/covers/${data.id}`)}
           >
             <Edit className="mr-2 h-4 w-4" />
             Update
