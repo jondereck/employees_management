@@ -85,6 +85,7 @@ import {
   toMinutes,
   type WeeklyPatternWindow,
 } from "@/utils/weeklyPattern";
+import { normalizeBiometricToken } from "@/utils/normalizeBiometricToken";
 import InsightsPanel from "./InsightsPanel";
 import ResolveIdentityDialog, { ResolveSearchResult } from "./ResolveIdentityDialog";
 import OfficeFilterControl from "./OfficeFilterControl";
@@ -577,15 +578,16 @@ const computeIdentityWarnings = (
 
   for (const row of rows) {
     const token = row.employeeToken || row.employeeId || row.employeeName;
-    if (!token) continue;
-    const identity = identityMap.get(token);
+    const normalizedToken = normalizeBiometricToken(token);
+    if (!normalizedToken) continue;
+    const identity = identityMap.get(normalizedToken);
     if (!identity) continue;
 
     if (identity.status === "unmatched") {
-      let entry = unmatchedSamples.get(token);
+      let entry = unmatchedSamples.get(normalizedToken);
       if (!entry) {
         entry = new Set<string>();
-        unmatchedSamples.set(token, entry);
+        unmatchedSamples.set(normalizedToken, entry);
       }
 
       if (row.employeeId) {
@@ -596,14 +598,14 @@ const computeIdentityWarnings = (
     }
 
     if (identity.status === "ambiguous" && identity.candidates?.length) {
-      if (!ambiguous.has(token)) {
-        ambiguous.set(token, [...identity.candidates]);
+      if (!ambiguous.has(normalizedToken)) {
+        ambiguous.set(normalizedToken, [...identity.candidates]);
       }
     }
 
     if (identity.missingOffice) {
-      if (!missingOffice.has(token)) {
-        missingOffice.set(token, identity.employeeName);
+      if (!missingOffice.has(normalizedToken)) {
+        missingOffice.set(normalizedToken, identity.employeeName);
       }
     }
   }
@@ -842,9 +844,11 @@ export default function BioLogUploader() {
   const [expandedWarnings, setExpandedWarnings] = useState<Record<string, boolean>>({});
   const [resolveTarget, setResolveTarget] = useState<{
     token: string;
+    normalizedToken: string;
     name: string | null;
   } | null>(null);
   const [resolveBusy, setResolveBusy] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (metricMode === "minutes") {
@@ -904,7 +908,8 @@ export default function BioLogUploader() {
     const tokens = new Set<string>();
     for (const row of mergeResult.perDay) {
       const token = row.employeeToken || row.employeeId || row.employeeName;
-      if (token) tokens.add(token.trim());
+      const normalized = normalizeBiometricToken(token);
+      if (normalized) tokens.add(normalized);
     }
     return Array.from(tokens).sort((a, b) => a.localeCompare(b));
   }, [mergeResult]);
@@ -1229,8 +1234,9 @@ export default function BioLogUploader() {
     }
     const mapped = rawPerDay.map((row) => {
       const token = row.employeeToken || row.employeeId || row.employeeName;
-      if (!token) return row;
-      const identity = identityMap.get(token);
+      const normalizedToken = normalizeBiometricToken(token);
+      if (!normalizedToken) return row;
+      const identity = identityMap.get(normalizedToken);
       if (!identity) return row;
       const normalized = normalizeIdentityRecord(identity);
       const isUnmatched = normalized.status === "unmatched";
@@ -1241,7 +1247,7 @@ export default function BioLogUploader() {
         ? UNKNOWN_OFFICE_LABEL
         : normalized.officeName ?? null;
       const officeId = isUnmatched ? null : normalized.officeId ?? null;
-      const employeeId = isUnmatched ? token : row.employeeId;
+      const employeeId = isUnmatched ? token : normalized.employeeId ?? row.employeeId;
 
       return {
         ...row,
@@ -1353,6 +1359,7 @@ export default function BioLogUploader() {
       setPerDay(null);
       setPerEmployee(null);
       lastEvaluatedKey.current = "";
+      setSessionId(null);
       return;
     }
     if (hasPendingParses) return;
@@ -1363,6 +1370,7 @@ export default function BioLogUploader() {
       setPerDay(null);
       setPerEmployee(null);
       lastEvaluatedKey.current = "";
+      setSessionId(null);
       return;
     }
 
@@ -1376,6 +1384,7 @@ export default function BioLogUploader() {
         setPerDay([]);
         setPerEmployee([]);
         lastEvaluatedKey.current = emptyKey;
+        setSessionId(null);
       }
       return;
     }
@@ -1427,6 +1436,7 @@ export default function BioLogUploader() {
         const result = (await response.json()) as {
           perDay: PerDayRow[];
           perEmployee: PerEmployeeRow[];
+          sessionId?: string | null;
         };
 
         const chronological = sortPerDayRows(
@@ -1436,6 +1446,7 @@ export default function BioLogUploader() {
         setPerDay(chronological);
         setPerEmployee(result.perEmployee);
         lastEvaluatedKey.current = payloadKey;
+        setSessionId(result.sessionId ?? null);
         toast({
           title: "Evaluation complete",
           description: `${result.perEmployee.length} employees processed.`,
@@ -1450,6 +1461,7 @@ export default function BioLogUploader() {
           description: message,
           variant: "destructive",
         });
+        setSessionId(null);
       } finally {
         setEvaluating(false);
       }
@@ -1716,7 +1728,12 @@ export default function BioLogUploader() {
   }, []);
 
   const handleResolveMapping = useCallback(
-    async (token: string, employeeId: string, employeeName: string) => {
+    async (
+      token: string,
+      normalizedToken: string,
+      employeeId: string,
+      employeeName: string
+    ) => {
       setResolveBusy(true);
       try {
         const response = await timeout(
@@ -1733,38 +1750,105 @@ export default function BioLogUploader() {
           throw new Error(message || "Unable to save biometrics mapping.");
         }
 
-        const identityResponse = await timeout(
-          fetch("/api/biometrics/resolve-identities", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tokens: [token] }),
-          }),
-          15_000
-        );
-
-        if (!identityResponse.ok) {
-          const message = await identityResponse.text();
-          throw new Error(message || "Unable to refresh identity details.");
-        }
-
-        const payload = (await identityResponse.json()) as {
-          results?: Record<string, IdentityRecord>;
+        const payload = (await response.json()) as {
+          identity?: IdentityRecord;
         };
-        const normalized = normalizeIdentityRecord(payload.results?.[token]);
-        identityCacheRef.current.set(token, normalized);
+
+        const normalizedIdentity = normalizeIdentityRecord(payload.identity);
+        identityCacheRef.current.set(normalizedToken, normalizedIdentity);
         identitySetCacheRef.current.clear();
 
         let nextMap: Map<string, IdentityRecord> | null = null;
         setIdentityMap((prev) => {
           const next = new Map(prev);
-          next.set(token, normalized);
+          next.set(normalizedToken, normalizedIdentity);
           nextMap = next;
           return next;
         });
 
         if (nextMap) {
+          identitySetCacheRef.current.set(identityTokens.join("|"), new Map(nextMap));
           const unmatched = countUnmatchedIdentities(nextMap);
           setIdentityState((prev) => ({ ...prev, unmatched }));
+        }
+
+        if (sessionId) {
+          const reEnrichResponse = await timeout(
+            fetch("/api/biometrics/re-enrich", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId, token: normalizedToken, employeeId }),
+            }),
+            15_000
+          );
+
+          if (!reEnrichResponse.ok) {
+            const message = await reEnrichResponse.text();
+            throw new Error(message || "Unable to re-enrich biometrics data.");
+          }
+
+          const reEnrichPayload = (await reEnrichResponse.json()) as {
+            sessionId?: string | null;
+            perDay?: PerDayRow[];
+            perEmployee?: PerEmployeeRow | null;
+          };
+
+          if (reEnrichPayload.sessionId) {
+            setSessionId(reEnrichPayload.sessionId);
+          }
+
+          if (Array.isArray(reEnrichPayload.perDay) && reEnrichPayload.perDay.length) {
+            const updates = new Map(
+              reEnrichPayload.perDay.map((row) => [
+                `${normalizeBiometricToken(row.employeeToken || row.employeeId || "")}:${row.dateISO}`,
+                toChronologicalRow(row),
+              ])
+            );
+            setPerDay((prev) => {
+              if (!prev) return prev;
+              let changed = false;
+              const next = prev.map((row) => {
+                const key = `${normalizeBiometricToken(row.employeeToken || row.employeeId || "")}:${row.dateISO}`;
+                const update = updates.get(key);
+                if (update) {
+                  changed = true;
+                  return { ...row, ...update };
+                }
+                return row;
+              });
+              return changed ? next : prev;
+            });
+          }
+
+          if (reEnrichPayload.perEmployee) {
+            setPerEmployee((prev) => {
+              if (!prev) return prev;
+              const normalized = normalizeBiometricToken(
+                reEnrichPayload.perEmployee.employeeToken ||
+                  reEnrichPayload.perEmployee.employeeId ||
+                  reEnrichPayload.perEmployee.employeeName
+              );
+              if (!normalized) return prev;
+              let updated = false;
+              const next = prev.map((row) => {
+                const keyToken = normalizeBiometricToken(
+                  row.employeeToken || row.employeeId || row.employeeName
+                );
+                if (keyToken === normalized) {
+                  updated = true;
+                  return { ...row, ...reEnrichPayload.perEmployee };
+                }
+                return row;
+              });
+              if (!updated) {
+                return [...next, reEnrichPayload.perEmployee];
+              }
+              return next;
+            });
+          }
+        } else {
+          lastEvaluatedKey.current = "";
+          setSessionId(null);
         }
 
         setResolveTarget(null);
@@ -1785,13 +1869,18 @@ export default function BioLogUploader() {
         setResolveBusy(false);
       }
     },
-    [toast]
+    [identityTokens, sessionId, toast]
   );
 
   const handleResolveSubmit = useCallback(
     async (result: ResolveSearchResult) => {
-      if (!resolveTarget?.token) return;
-      await handleResolveMapping(resolveTarget.token, result.id, result.name);
+      if (!resolveTarget?.token || !resolveTarget.normalizedToken) return;
+      await handleResolveMapping(
+        resolveTarget.token,
+        resolveTarget.normalizedToken,
+        result.id,
+        result.name
+      );
     },
     [handleResolveMapping, resolveTarget]
   );
@@ -2815,10 +2904,19 @@ export default function BioLogUploader() {
                   const types = row.scheduleTypes ?? [];
                   const hasResolverMapping = Boolean(row.resolvedEmployeeId);
                   const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
-                  const isSolved = hasResolverMapping && row.identityStatus !== "matched";
-                  const sourceLabel = isUnmatched
+                  const isSolved = hasResolverMapping;
+                  const rawSourceLabel = isUnmatched
                     ? "No mapping"
                     : formatScheduleSource(row.scheduleSource);
+                  const sourceLabel = rawSourceLabel ?? "—";
+                  const sourceTooltip =
+                    sourceLabel === "Work schedule"
+                      ? "Evaluated using the employee’s effective schedule."
+                      : sourceLabel === "Default"
+                      ? "Mapped to employee; no work schedule found—used default rule."
+                      : sourceLabel === "No mapping"
+                      ? "Biolog not linked to an employee yet."
+                      : "Schedule source unavailable.";
                   const displayEmployeeId =
                     row.employeeId?.trim().length
                       ? row.employeeId
@@ -2925,6 +3023,14 @@ export default function BioLogUploader() {
                         <span className="block truncate" title={displayOffice}>
                           {displayOffice}
                         </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <p className="mt-1 cursor-help text-xs text-muted-foreground">
+                              Source: {sourceLabel}
+                            </p>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs text-sm">{sourceTooltip}</TooltipContent>
+                        </Tooltip>
                       </td>
                       <td className="p-2">
                         {types.length ? (
@@ -2985,12 +3091,16 @@ export default function BioLogUploader() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() =>
+                            onClick={() => {
+                              const rawToken = row.employeeToken || row.employeeId || "";
+                              const normalizedToken = normalizeBiometricToken(rawToken);
+                              if (!normalizedToken) return;
                               setResolveTarget({
                                 token: row.employeeToken!,
+                                normalizedToken,
                                 name: row.employeeName ?? null,
-                              })
-                            }
+                              });
+                            }}
                             disabled={resolveBusy}
                           >
                             {resolveActionLabel}

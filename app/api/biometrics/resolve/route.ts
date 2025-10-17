@@ -2,43 +2,20 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { normalizeBiometricToken } from "@/utils/normalizeBiometricToken";
+import { formatEmployeeName } from "@/utils/formatEmployeeName";
 
 const Payload = z.object({
   token: z.string().min(1),
   employeeId: z.string().min(1),
 });
 
-const formatName = (employee: {
-  lastName: string;
-  firstName: string;
-  middleName: string | null;
-  suffix: string | null;
-}) => {
-  const last = employee.lastName?.trim();
-  const first = employee.firstName?.trim();
-  const middle = employee.middleName?.trim();
-  const suffix = employee.suffix?.trim();
-
-  const middleInitial = middle
-    ? middle
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((part) => `${part.charAt(0).toUpperCase()}.`)
-        .join(" ")
-    : "";
-
-  const pieces = [last, ", ", first];
-  if (middleInitial) pieces.push(" ", middleInitial);
-  if (suffix) pieces.push(" ", suffix);
-  return pieces.filter(Boolean).join("") || first || last || "Unnamed";
-};
-
 export async function POST(req: Request) {
   try {
     const json = await req.json();
     const { token, employeeId } = Payload.parse(json);
 
-    const normalizedToken = token.trim();
+    const normalizedToken = normalizeBiometricToken(token);
     if (!normalizedToken) {
       return NextResponse.json({ error: "Token cannot be empty." }, { status: 400 });
     }
@@ -89,7 +66,7 @@ export async function POST(req: Request) {
       identity: {
         status: "matched" as const,
         employeeId: employee.id,
-        employeeName: formatName(employee),
+        employeeName: formatEmployeeName(employee),
         officeId: employee.offices?.id ?? null,
         officeName,
       },

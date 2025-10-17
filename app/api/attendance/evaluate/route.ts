@@ -6,6 +6,7 @@ import {
   getScheduleMapsForMonth,
   resolveScheduleForDate,
   normalizeSchedule,
+  DEFAULT_SCHEDULE,
   type ScheduleSource,
 } from "@/lib/schedules";
 import { findWeeklyExclusionForDate } from "@/lib/weeklyExclusions";
@@ -18,6 +19,11 @@ import {
 } from "@/utils/evaluateDay";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
 import type { WeeklyPatternWindow } from "@/utils/weeklyPattern";
+import { normalizeBiometricToken } from "@/utils/normalizeBiometricToken";
+import {
+  createBiometricsSession,
+  type AttendanceEvaluationRow,
+} from "@/lib/biometricsSessionStore";
 
 type EvaluatedDay = {
   employeeId: string;
@@ -100,27 +106,80 @@ export async function POST(req: Request) {
       return NextResponse.json({ perDay: [], perEmployee: [] });
     }
 
-    const bioIds = Array.from(new Set(entries.map((row) => row.employeeId)));
+    const normalizedEntries = entries.map((entry) => ({
+      ...entry,
+      employeeToken: entry.employeeToken.trim(),
+      employeeId: entry.employeeId.trim(),
+    }));
 
-    const candidates: { id: string; employeeNo: string | null }[] = [];
-    const CHUNK_SIZE = 200;
-    for (let i = 0; i < bioIds.length; i += CHUNK_SIZE) {
-      const slice = bioIds.slice(i, i + CHUNK_SIZE);
-      const orConditions = slice.map((id) => ({ employeeNo: { startsWith: id } }));
-      if (!orConditions.length) continue;
-      const batch = await prisma.employee.findMany({
-        where: { OR: orConditions },
-        select: { id: true, employeeNo: true },
-      });
-      candidates.push(...batch);
+    const tokens = new Set<string>();
+    const rawTokens = new Set<string>();
+    const resolvedIds = new Map<string, string>();
+    for (const entry of normalizedEntries) {
+      const normalizedToken = normalizeBiometricToken(entry.employeeToken || entry.employeeId);
+      if (normalizedToken) {
+        tokens.add(normalizedToken);
+        if (entry.resolvedEmployeeId) {
+          resolvedIds.set(normalizedToken, entry.resolvedEmployeeId);
+        }
+      }
+      const rawToken = (entry.employeeToken || entry.employeeId || "").trim();
+      if (rawToken) rawTokens.add(rawToken);
     }
 
-    const bioToInternal = new Map<string, string>();
-    for (const candidate of candidates) {
-      const token = firstEmployeeNoToken(candidate.employeeNo);
-      if (token && !bioToInternal.has(token)) {
-        bioToInternal.set(token, candidate.id);
+    const identityMapModel = (prisma as typeof prisma & {
+      biometricsIdentityMap?: typeof prisma.biometricsIdentityMap;
+    }).biometricsIdentityMap;
+
+    const manualMappings = new Map<string, string>();
+    if (identityMapModel && (tokens.size || rawTokens.size)) {
+      const lookupTokens = new Set<string>([...tokens, ...rawTokens]);
+      const stored = await identityMapModel.findMany({
+        where: { token: { in: Array.from(lookupTokens) } },
+        select: { token: true, employeeId: true },
+      });
+      for (const mapping of stored) {
+        const normalizedToken = normalizeBiometricToken(mapping.token);
+        if (!normalizedToken) continue;
+        manualMappings.set(normalizedToken, mapping.employeeId);
       }
+    }
+
+    const unresolvedTokens = Array.from(tokens).filter(
+      (token) => !manualMappings.has(token) && !resolvedIds.has(token)
+    );
+
+    const candidateEmployees: { id: string; employeeNo: string | null }[] = [];
+    if (unresolvedTokens.length) {
+      const CHUNK_SIZE = 200;
+      for (let i = 0; i < unresolvedTokens.length; i += CHUNK_SIZE) {
+        const slice = unresolvedTokens.slice(i, i + CHUNK_SIZE);
+        const orConditions = slice.map((token) => ({ employeeNo: { startsWith: token } }));
+        if (!orConditions.length) continue;
+        const batch = await prisma.employee.findMany({
+          where: { OR: orConditions },
+          select: { id: true, employeeNo: true },
+        });
+        candidateEmployees.push(...batch);
+      }
+    }
+
+    const autoMappings = new Map<string, string>();
+    for (const candidate of candidateEmployees) {
+      const token = normalizeBiometricToken(firstEmployeeNoToken(candidate.employeeNo));
+      if (!token) continue;
+      if (!autoMappings.has(token)) {
+        autoMappings.set(token, candidate.id);
+      }
+    }
+
+    const tokenToEmployeeId = new Map<string, string | null>();
+    const mappedEmployeeIds = new Set<string>();
+    for (const token of tokens) {
+      const employeeId =
+        manualMappings.get(token) ?? resolvedIds.get(token) ?? autoMappings.get(token) ?? null;
+      tokenToEmployeeId.set(token, employeeId);
+      if (employeeId) mappedEmployeeIds.add(employeeId);
     }
 
     const sortedDates = entries
@@ -132,20 +191,39 @@ export async function POST(req: Request) {
     const from = new Date(`${firstDate}T00:00:00.000Z`);
     const to = new Date(`${lastDate}T23:59:59.999Z`);
 
-    const internalIds = Array.from(new Set(bioToInternal.values()));
-    const maps = await getScheduleMapsForMonth(internalIds, { from, to });
+    const maps = await getScheduleMapsForMonth(Array.from(mappedEmployeeIds), { from, to });
 
-    const evaluatedPerDay: EvaluatedDay[] = entries.map((row) => {
-      const internalEmployeeId = bioToInternal.get(row.employeeId) ?? null;
-      const scheduleRecord = resolveScheduleForDate(internalEmployeeId, row.dateISO, maps);
+    const evaluationEntries: AttendanceEvaluationRow[] = normalizedEntries.map((row) => ({
+      employeeId: row.employeeId,
+      employeeName: row.employeeName,
+      resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+      officeId: row.officeId ?? null,
+      officeName: row.officeName ?? null,
+      employeeToken: row.employeeToken,
+      dateISO: row.dateISO,
+      day: row.day,
+      earliest: row.earliest ?? null,
+      latest: row.latest ?? null,
+      allTimes: row.allTimes,
+      punches: row.punches ?? [],
+      sourceFiles: row.sourceFiles ?? [],
+    }));
+
+    const evaluatedPerDay: EvaluatedDay[] = normalizedEntries.map((row) => {
+      const normalizedToken = normalizeBiometricToken(row.employeeToken || row.employeeId);
+      const mappedEmployeeId = normalizedToken ? tokenToEmployeeId.get(normalizedToken) ?? null : null;
+
+      const scheduleRecord = mappedEmployeeId
+        ? resolveScheduleForDate(mappedEmployeeId, row.dateISO, maps)
+        : { ...DEFAULT_SCHEDULE, source: "NOMAPPING" as ScheduleSource };
       const normalized = normalizeSchedule(scheduleRecord);
       const earliest = (row.earliest ?? null) as HHMM | null;
       const latest = (row.latest ?? null) as HHMM | null;
       const normalizedAllTimes = normalizePunchTimes(row.allTimes);
 
-      const weeklyExclusion = internalEmployeeId
+      const weeklyExclusion = mappedEmployeeId
         ? findWeeklyExclusionForDate(
-            maps.weeklyExclusionsByEmployee.get(internalEmployeeId),
+            maps.weeklyExclusionsByEmployee.get(mappedEmployeeId),
             row.dateISO
           )
         : null;
@@ -164,10 +242,12 @@ export async function POST(req: Request) {
           : null,
       });
 
+      const identityStatus = mappedEmployeeId ? "matched" : "unmatched";
+
       return {
         employeeId: row.employeeId,
         employeeName: row.employeeName,
-        resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+        resolvedEmployeeId: row.resolvedEmployeeId ?? mappedEmployeeId ?? null,
         officeId: row.officeId ?? null,
         officeName: row.officeName ?? null,
         day: row.day,
@@ -175,7 +255,7 @@ export async function POST(req: Request) {
         latest: row.latest ?? null,
         allTimes: normalizedAllTimes,
         dateISO: row.dateISO,
-        internalEmployeeId,
+        internalEmployeeId: mappedEmployeeId,
         status: evaluation.status,
         isLate: evaluation.isLate,
         isUndertime: evaluation.isUndertime,
@@ -183,8 +263,8 @@ export async function POST(req: Request) {
         workedMinutes: evaluation.workedMinutes,
         scheduleType: normalized.type,
         scheduleSource: scheduleRecord.source,
-        punches: row.punches,
-        sourceFiles: row.sourceFiles,
+        punches: row.punches ?? [],
+        sourceFiles: row.sourceFiles ?? [],
         employeeToken: row.employeeToken,
         lateMinutes: evaluation.lateMinutes ?? null,
         undertimeMinutes: evaluation.undertimeMinutes ?? null,
@@ -199,13 +279,20 @@ export async function POST(req: Request) {
         weeklyExclusionMode: weeklyExclusion?.mode ?? null,
         weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
         weeklyExclusionId: weeklyExclusion?.id ?? null,
-        identityStatus: internalEmployeeId ? "matched" : "unmatched",
+        identityStatus,
       };
     });
 
     const perEmployee = summarizePerEmployee(evaluatedPerDay);
 
-    return NextResponse.json({ perDay: evaluatedPerDay, perEmployee });
+    const sessionId = createBiometricsSession({
+      entries: evaluationEntries,
+      perDay: evaluatedPerDay,
+      perEmployee,
+      tokenToEmployeeId,
+    });
+
+    return NextResponse.json({ perDay: evaluatedPerDay, perEmployee, sessionId });
   } catch (error) {
     console.error("Failed to evaluate attendance", error);
     if (error instanceof z.ZodError) {
