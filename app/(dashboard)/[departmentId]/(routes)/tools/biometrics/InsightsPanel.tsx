@@ -8,10 +8,8 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
-  Filter,
   FileImage,
   LayoutGrid,
-  Layers,
   RefreshCcw,
 } from "lucide-react";
 import {
@@ -35,13 +33,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useSummaryFilters } from "@/hooks/use-summary-filters";
 
 import type { PerDayRow, PerEmployeeRow } from "@/utils/parseBioAttendance";
 import {
@@ -90,12 +86,6 @@ const CHART_DESCRIPTIONS: Partial<Record<ChartId, string>> = {
   "first-last-scatter": "Earliest vs latest punch distribution per day.",
 };
 
-type OfficeFilterOption = {
-  key: string;
-  label: string;
-  count: number;
-};
-
 type ChartCardProps = {
   id: ChartId;
   title: string;
@@ -127,6 +117,18 @@ type HeatmapCell = {
     lateMinutes: number;
     utMinutes: number;
   };
+};
+
+type OfficeChartDatum = {
+  office: string;
+  latePercent: number;
+  utPercent: number;
+  lateDays: number;
+  utDays: number;
+  days: number;
+  lateMinutes: number;
+  utMinutes: number;
+  requiredMinutes: number;
 };
 
 type TopEmployee = {
@@ -168,22 +170,6 @@ type ScatterPoint = {
 type InsightsPanelProps = {
   collapsed: boolean;
   onCollapsedChange: (next: boolean) => void;
-  officeOptions: OfficeFilterOption[];
-  selectedOffices: string[];
-  onOfficeToggle: (key: string, next: boolean) => void;
-  onClearOffices: () => void;
-  scheduleTypeOptions: string[];
-  selectedScheduleTypes: string[];
-  onScheduleToggle: (type: string, next: boolean) => void;
-  onClearScheduleTypes: () => void;
-  showUnmatched: boolean;
-  onShowUnmatchedChange: (next: boolean) => void;
-  showNoPunchColumn: boolean;
-  onShowNoPunchColumnChange: (next: boolean) => void;
-  metricMode: MetricMode;
-  onMetricModeChange: (mode: MetricMode) => void;
-  employeeSearch: string;
-  onEmployeeSearchChange: (value: string) => void;
   visibleCharts: ChartId[];
   onVisibleChartsChange: (value: ChartId[] | ((prev: ChartId[]) => ChartId[])) => void;
   perEmployee: PerEmployeeRow[];
@@ -191,8 +177,6 @@ type InsightsPanelProps = {
   filteredPerEmployee: PerEmployeeRow[];
   filteredPerDay: PerDayRow[];
   getOfficeLabel: (key: string) => string;
-  exportFilteredOnly: boolean;
-  onExportFilteredOnlyChange: (next: boolean) => void;
 };
 
 const escapeCsvValue = (value: string | number | null | undefined) => {
@@ -363,22 +347,6 @@ function ChartCard({
 export default function InsightsPanel({
   collapsed,
   onCollapsedChange,
-  officeOptions,
-  selectedOffices,
-  onOfficeToggle,
-  onClearOffices,
-  scheduleTypeOptions,
-  selectedScheduleTypes,
-  onScheduleToggle,
-  onClearScheduleTypes,
-  showUnmatched,
-  onShowUnmatchedChange,
-  showNoPunchColumn,
-  onShowNoPunchColumnChange,
-  metricMode,
-  onMetricModeChange,
-  employeeSearch,
-  onEmployeeSearchChange,
   visibleCharts,
   onVisibleChartsChange,
   perEmployee,
@@ -386,33 +354,16 @@ export default function InsightsPanel({
   filteredPerEmployee,
   filteredPerDay,
   getOfficeLabel: _getOfficeLabel,
-  exportFilteredOnly,
-  onExportFilteredOnlyChange,
 }: InsightsPanelProps) {
+  const { filters } = useSummaryFilters();
   const visibleChartSet = useMemo(() => new Set(visibleCharts), [visibleCharts]);
   const filteredEmployeeCount = filteredPerEmployee.length;
   const filteredDayCount = filteredPerDay.length;
+  const metricMode = filters.metricMode;
 
   const toggleCollapsed = useCallback(() => {
     onCollapsedChange(!collapsed);
   }, [collapsed, onCollapsedChange]);
-
-  const handleOfficeClear = useCallback(() => {
-    onClearOffices();
-  }, [onClearOffices]);
-
-  const handleScheduleClear = useCallback(() => {
-    onClearScheduleTypes();
-  }, [onClearScheduleTypes]);
-
-  const handleMetricMode = useCallback(
-    (mode: MetricMode) => {
-      if (mode !== metricMode) {
-        onMetricModeChange(mode);
-      }
-    },
-    [metricMode, onMetricModeChange]
-  );
 
   const handleChartToggle = useCallback(
     (chartId: ChartId, next: boolean) => {
@@ -1014,79 +965,6 @@ export default function InsightsPanel({
     return `${filteredEmployeeCount} of ${totalEmployees} employees · ${filteredDayCount} of ${totalDays} day entries`;
   }, [filteredDayCount, filteredEmployeeCount, perDay.length, perEmployee.length]);
 
-  const renderOfficePopover = () => (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="inline-flex items-center gap-2">
-          <Filter className="h-4 w-4" aria-hidden="true" />
-          {selectedOffices.length ? `Offices (${selectedOffices.length})` : "Offices"}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64" align="start">
-        <div className="flex items-center justify-between pb-2">
-          <p className="text-sm font-medium">Filter by office</p>
-          {selectedOffices.length ? (
-            <Button variant="ghost" size="sm" onClick={handleOfficeClear}>
-              Clear
-            </Button>
-          ) : null}
-        </div>
-        <ScrollArea className="h-56 pr-2">
-          <div className="space-y-2">
-            {officeOptions.map((option) => (
-              <label key={option.key} className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedOffices.includes(option.key)}
-                    onCheckedChange={(checked) => onOfficeToggle(option.key, Boolean(checked))}
-                  />
-                  {option.label}
-                </span>
-                <span className="text-xs text-muted-foreground">{option.count}</span>
-              </label>
-            ))}
-          </div>
-        </ScrollArea>
-      </PopoverContent>
-    </Popover>
-  );
-
-  const renderSchedulePopover = () => (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="inline-flex items-center gap-2">
-          <Layers className="h-4 w-4" aria-hidden="true" />
-          {selectedScheduleTypes.length ? `Schedules (${selectedScheduleTypes.length})` : "Schedules"}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-60" align="start">
-        <div className="flex items-center justify-between pb-2">
-          <p className="text-sm font-medium">Schedule types</p>
-          {selectedScheduleTypes.length ? (
-            <Button variant="ghost" size="sm" onClick={handleScheduleClear}>
-              Clear
-            </Button>
-          ) : null}
-        </div>
-        <ScrollArea className="h-48 pr-2">
-          <div className="space-y-2">
-            {scheduleTypeOptions.map((option) => (
-              <label key={option} className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedScheduleTypes.includes(option)}
-                    onCheckedChange={(checked) => onScheduleToggle(option, Boolean(checked))}
-                  />
-                  {option}
-                </span>
-              </label>
-            ))}
-          </div>
-        </ScrollArea>
-      </PopoverContent>
-    </Popover>
-  );
-
   const renderChartVisibility = () => (
     <Popover>
       <PopoverTrigger asChild>
@@ -1121,32 +999,7 @@ export default function InsightsPanel({
     </Popover>
   );
 
-  const renderMetricToggle = () => (
-    <div className="inline-flex overflow-hidden rounded-md border">
-      <Button
-        type="button"
-        variant={metricMode === "days" ? "default" : "ghost"}
-        size="sm"
-        className="rounded-none"
-        aria-pressed={metricMode === "days"}
-        onClick={() => handleMetricMode("days")}
-      >
-        Days
-      </Button>
-      <Button
-        type="button"
-        variant={metricMode === "minutes" ? "default" : "ghost"}
-        size="sm"
-        className="rounded-none"
-        aria-pressed={metricMode === "minutes"}
-        onClick={() => handleMetricMode("minutes")}
-      >
-        Minutes
-      </Button>
-    </div>
-  );
-
-  const officeChartData = useMemo(() => {
+  const officeChartData = useMemo<OfficeChartDatum[]>(() => {
     return officeLeaderboardData.map((entry) => ({
       office: entry.office,
       latePercent: metricMode === "minutes" ? entry.latePercentMinutes ?? 0 : entry.latePercentDays,
@@ -1168,9 +1021,15 @@ export default function InsightsPanel({
   }, [officeChartData]);
 
   const renderOfficeTooltip = useCallback(
-    ({ active, payload }: { active?: boolean; payload?: any[] }) => {
+    ({
+      active,
+      payload,
+    }: {
+      active?: boolean;
+      payload?: Array<{ payload: OfficeChartDatum; value: number }>;
+    }) => {
       if (!active || !payload?.length) return null;
-      const data = payload[0].payload as (typeof officeChartData)[number];
+      const data = payload[0].payload;
       return (
         <div className="min-w-[220px] rounded-md border bg-background p-3 text-xs shadow">
           <p className="font-medium">{data.office}</p>
@@ -1186,7 +1045,7 @@ export default function InsightsPanel({
         </div>
       );
     },
-    [metricMode, officeChartData]
+    [metricMode]
   );
 
   const arrivalRange = Math.max(1, arrivalDomain.max - arrivalDomain.min);
@@ -1362,61 +1221,7 @@ export default function InsightsPanel({
       {!collapsed && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Label
-                htmlFor="insights-search"
-                className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-              >
-                Search
-              </Label>
-              <Input
-                id="insights-search"
-                value={employeeSearch}
-                onChange={(event) => onEmployeeSearchChange(event.target.value)}
-                placeholder="Name, employee #, or token"
-                className="h-9 w-64"
-              />
-            </div>
-            {renderOfficePopover()}
-            {renderSchedulePopover()}
-            <div className="flex items-center gap-2">
-              <Switch
-                id="insights-show-unmatched"
-                checked={showUnmatched}
-                onCheckedChange={(checked) => onShowUnmatchedChange(Boolean(checked))}
-              />
-              <Label htmlFor="insights-show-unmatched" className="text-sm text-muted-foreground">
-                Show unmatched
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="insights-show-no-punch"
-                checked={showNoPunchColumn}
-                onCheckedChange={(checked) => onShowNoPunchColumnChange(Boolean(checked))}
-              />
-              <Label htmlFor="insights-show-no-punch" className="text-sm text-muted-foreground">
-                Show no-punch column
-              </Label>
-            </div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div>{renderMetricToggle()}</div>
-              </TooltipTrigger>
-              <TooltipContent>Toggle between day-based percentages and minute-based totals.</TooltipContent>
-            </Tooltip>
             {renderChartVisibility()}
-            <div className="ml-auto flex items-center gap-2 text-xs">
-              <Switch
-                id="insights-export-filtered"
-                checked={exportFilteredOnly}
-                onCheckedChange={(checked) => onExportFilteredOnlyChange(Boolean(checked))}
-                disabled={!selectedOffices.length}
-              />
-              <Label htmlFor="insights-export-filtered" className="text-sm text-muted-foreground">
-                Export filtered only
-              </Label>
-            </div>
           </div>
 
           <div className="space-y-4">
