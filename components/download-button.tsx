@@ -2083,7 +2083,7 @@ export default function DownloadStyledExcel() {
                                       autoScroll={{ enabled: true, threshold: { y: 16 } }}
                                     >
                                       <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
-                                        <div className="space-y-2">
+                                        <div className="max-h-[48vh] space-y-2 overflow-y-auto pr-1 pb-2">
                                           {selectedColumnItems.map((column) => (
                                             <SelectedColumnDraggable
                                               key={column.key}
