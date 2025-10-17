@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
+import { normalizeBiometricToken } from "@/utils/normalizeBiometricToken";
+import { formatEmployeeName } from "@/utils/formatEmployeeName";
 
 const Payload = z.object({
   tokens: z.array(z.string().min(1)).max(2000),
@@ -41,29 +43,8 @@ const UNKNOWN_RESULT: IdentityRecord = {
   officeName: UNKNOWN_OFFICE,
 };
 
-function formatName(candidate: EmployeeCandidate): string {
-  const last = candidate.lastName?.trim();
-  const first = candidate.firstName?.trim();
-  const middle = candidate.middleName?.trim();
-  const suffix = candidate.suffix?.trim();
-
-  const middleInitial = middle
-    ? middle
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((part) => `${part.charAt(0).toUpperCase()}.`)
-        .join(" ")
-    : "";
-
-  const pieces = [last, ", ", first];
-  if (middleInitial) pieces.push(" ", middleInitial);
-  if (suffix) pieces.push(" ", suffix);
-  const formatted = pieces.filter(Boolean).join("");
-  return formatted || candidate.employeeNo || "Unnamed";
-}
-
 function describeCandidate(candidate: EmployeeCandidate): string {
-  const name = formatName(candidate);
+  const name = formatEmployeeName(candidate);
   const officeName = candidate.office?.name?.trim() || UNASSIGNED_OFFICE;
   return `${name} — ${officeName}`;
 }
@@ -82,7 +63,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ results: {} as Record<string, IdentityRecord> });
     }
 
-    const tokenSet = new Set(uniqueTokens);
+    const normalizedTokens = uniqueTokens
+      .map((token) => normalizeBiometricToken(token))
+      .filter((token) => token.length > 0);
+
+    if (!normalizedTokens.length) {
+      return NextResponse.json({ results: {} as Record<string, IdentityRecord> });
+    }
+
+    const tokenSet = new Set(normalizedTokens);
     const matches = new Map<string, EmployeeCandidate[]>();
 
     const identityMapModel = (prisma as typeof prisma & {
@@ -96,8 +85,12 @@ export async function POST(req: Request) {
         "Biometrics identity map model is unavailable. Skipping manual mapping lookup until migrations are applied."
       );
     } else {
+      const lookupTokens = new Set<string>([
+        ...normalizedTokens,
+        ...uniqueTokens.map((token) => token.toUpperCase()),
+      ]);
       manualMappings = await identityMapModel.findMany({
-        where: { token: { in: uniqueTokens } },
+        where: { token: { in: Array.from(lookupTokens) } },
         include: {
           employee: {
             select: {
@@ -120,7 +113,9 @@ export async function POST(req: Request) {
     for (const mapping of manualMappings) {
       const employee = mapping.employee;
       if (!employee) continue;
-      tokenSet.delete(mapping.token);
+      const normalizedToken = normalizeBiometricToken(mapping.token);
+      if (!normalizedToken) continue;
+      tokenSet.delete(normalizedToken);
       const officeName = employee.offices?.name?.trim() || UNASSIGNED_OFFICE;
       const officeId = employee.offices?.id ?? null;
       const candidate: EmployeeCandidate = {
@@ -133,10 +128,10 @@ export async function POST(req: Request) {
         updatedAt: employee.updatedAt,
         office: employee.offices ? { id: employee.offices.id, name: employee.offices.name } : null,
       };
-      results[mapping.token] = {
+      results[normalizedToken] = {
         status: "matched",
         employeeId: employee.id,
-        employeeName: formatName(candidate),
+        employeeName: formatEmployeeName(candidate),
         officeId,
         officeName,
       };
@@ -163,7 +158,7 @@ export async function POST(req: Request) {
       });
 
       for (const candidate of batch) {
-        const token = firstEmployeeNoToken(candidate.employeeNo);
+        const token = normalizeBiometricToken(firstEmployeeNoToken(candidate.employeeNo));
         if (!token || !tokenSet.has(token)) continue;
         if (!matches.has(token)) {
           matches.set(token, []);
@@ -181,7 +176,7 @@ export async function POST(req: Request) {
       }
     }
 
-    for (const token of uniqueTokens) {
+    for (const token of normalizedTokens) {
       if (results[token]) continue;
       const candidates = matches.get(token) ?? [];
       if (!candidates.length) {
@@ -198,7 +193,7 @@ export async function POST(req: Request) {
       results[token] = {
         status,
         employeeId: primary.id,
-        employeeName: formatName(primary),
+        employeeName: formatEmployeeName(primary),
         officeId,
         officeName,
         candidates: status === "ambiguous" ? sorted.map(describeCandidate) : undefined,
