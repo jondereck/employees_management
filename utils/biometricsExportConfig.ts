@@ -25,7 +25,8 @@ export type SummaryColumnKey =
   | "undertimeMinutes"
   | "resolvedEmployeeId"
   | "resolvedAt"
-  | "sourceFilesCount";
+  | "sourceFilesCount"
+  | "head";
 
 export type SummaryColumnType = "text" | "number" | "percent" | "minutes" | "date";
 export type SummaryColumnWidth = "id" | "name" | "office" | "schedule" | "numeric";
@@ -43,9 +44,9 @@ export type SummaryColumnDefinition = {
 export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
   {
     key: "employeeId",
-    label: "Employee ID",
+    label: "Employee No",
     groupId: "identity",
-    description: "Official employee identifier or token when missing.",
+    description: "Official employee number or token when unmatched.",
     type: "text",
     width: "id",
     defaultSelected: true,
@@ -193,6 +194,15 @@ export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
     type: "number",
     width: "numeric",
     defaultSelected: true,
+  },
+  {
+    key: "head",
+    label: "Head",
+    groupId: "audit",
+    description: "Indicates if the employee is marked as a head.",
+    type: "text",
+    width: "id",
+    defaultSelected: false,
   },
 ];
 
