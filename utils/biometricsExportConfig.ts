@@ -14,6 +14,7 @@ export type SummaryColumnKey =
   | "office"
   | "schedule"
   | "matchStatus"
+  | "matchStatusCode"
   | "source"
   | "days"
   | "excusedDays"
@@ -85,6 +86,15 @@ export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
     type: "text",
     width: "id",
     defaultSelected: true,
+  },
+  {
+    key: "matchStatusCode",
+    label: "Match Status (code)",
+    groupId: "identity",
+    description: "Machine-readable match state for downstream processing.",
+    type: "text",
+    width: "id",
+    defaultSelected: false,
   },
   {
     key: "source",

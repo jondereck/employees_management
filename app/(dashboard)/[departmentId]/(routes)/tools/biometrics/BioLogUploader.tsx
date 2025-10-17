@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useParams } from "next/navigation";
 import {
   AlertCircle,
   ArrowUpDown,
@@ -69,6 +70,7 @@ import {
   UNKNOWN_OFFICE_KEY_PREFIX,
   UNKNOWN_OFFICE_LABEL,
   UNMATCHED_LABEL,
+  normalizeBiometricToken,
 } from "@/utils/biometricsShared";
 import {
   ALL_SUMMARY_COLUMN_KEYS,
@@ -252,6 +254,7 @@ const timeout = <T,>(promise: Promise<T>, ms = 15_000) =>
 const pad2 = (value: number) => String(value).padStart(2, "0");
 
 const MANUAL_STORAGE_KEY = "biometrics-uploader-period";
+const MANUAL_RESOLVED_STORAGE_PREFIX = "hrps:manual-resolved";
 
 const manualMonthOptions = [
   { value: "1", label: "Jan" },
@@ -764,6 +767,8 @@ const formatDateRange = (range: MergeResult["dateRange"]) => {
 
 export default function BioLogUploader() {
   const { toast } = useToast();
+  const params = useParams<{ departmentId: string }>();
+  const departmentId = params?.departmentId ?? "unknown";
   const settingsRef = useRef<InsightsSettings | null>(null);
   if (settingsRef.current === null && typeof window !== "undefined") {
     settingsRef.current = readInsightsSettings();
@@ -845,6 +850,8 @@ export default function BioLogUploader() {
     name: string | null;
   } | null>(null);
   const [resolveBusy, setResolveBusy] = useState(false);
+  const [manualMappings, setManualMappings] = useState<Set<string>>(() => new Set());
+  const [manualResolved, setManualResolved] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (metricMode === "minutes") {
@@ -937,6 +944,33 @@ export default function BioLogUploader() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!manualResolvedStorageKey) {
+      setManualResolved(new Set());
+      return;
+    }
+    try {
+      const stored = window.localStorage.getItem(manualResolvedStorageKey);
+      if (!stored) {
+        setManualResolved(new Set());
+        return;
+      }
+      const parsed = JSON.parse(stored) as unknown;
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .map((token) => normalizeBiometricToken(typeof token === "string" ? token : ""))
+          .filter((token): token is string => Boolean(token));
+        setManualResolved(new Set(normalized));
+      } else {
+        setManualResolved(new Set());
+      }
+    } catch (error) {
+      console.warn("Failed to load manual resolved tokens", error);
+      setManualResolved(new Set());
+    }
+  }, [manualResolvedStorageKey]);
+
+  useEffect(() => {
     if (!manualPeriodHydrated) return;
     if (typeof window === "undefined") return;
     try {
@@ -950,6 +984,27 @@ export default function BioLogUploader() {
       console.warn("Failed to persist manual period settings", error);
     }
   }, [manualMonth, manualPeriodHydrated, manualYear, useManualPeriod]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!manualResolvedStorageKey) return;
+    try {
+      window.localStorage.setItem(
+        manualResolvedStorageKey,
+        JSON.stringify(Array.from(manualResolved))
+      );
+    } catch (error) {
+      console.warn("Failed to persist manual resolved tokens", error);
+    }
+  }, [manualResolved, manualResolvedStorageKey]);
+
+  useEffect(() => {
+    setManualResolved((prev) => {
+      if (!prev.size) return prev;
+      const next = new Set(Array.from(prev).filter((token) => manualMappings.has(token)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [manualMappings]);
 
   useEffect(() => {
     if (!mergeResult) {
@@ -1201,6 +1256,30 @@ export default function BioLogUploader() {
     return { month: manualMonthNumber, year: manualYearNumber };
   }, [manualMonthNumber, manualMonthValid, manualYearNumber, manualYearValid, useManualPeriod]);
 
+  const currentPeriodKey = useMemo(() => {
+    if (perDay && perDay.length) {
+      const prefixes = perDay
+        .map((row) => row.dateISO?.slice(0, 7))
+        .filter((value): value is string => Boolean(value));
+      if (prefixes.length) {
+        prefixes.sort();
+        return prefixes[0] ?? null;
+      }
+    }
+    if (manualPeriodSelection) {
+      return `${manualPeriodSelection.year}-${pad2(manualPeriodSelection.month)}`;
+    }
+    if (mergeResult?.months?.length === 1) {
+      return mergeResult.months[0] ?? null;
+    }
+    return null;
+  }, [manualPeriodSelection, mergeResult, perDay]);
+
+  const manualResolvedStorageKey = useMemo(() => {
+    if (!currentPeriodKey) return null;
+    return `${MANUAL_RESOLVED_STORAGE_PREFIX}:${departmentId}:${currentPeriodKey}`;
+  }, [currentPeriodKey, departmentId]);
+
   const manualPeriodError = useMemo(() => {
     if (!useManualPeriod) return null;
     if (!manualMonthValid && !manualYearValid) {
@@ -1427,6 +1506,7 @@ export default function BioLogUploader() {
         const result = (await response.json()) as {
           perDay: PerDayRow[];
           perEmployee: PerEmployeeRow[];
+          manualMappings?: string[];
         };
 
         const chronological = sortPerDayRows(
@@ -1435,6 +1515,12 @@ export default function BioLogUploader() {
 
         setPerDay(chronological);
         setPerEmployee(result.perEmployee);
+        setManualMappings(() => {
+          const tokens = (result.manualMappings ?? [])
+            .map((token) => normalizeBiometricToken(token))
+            .filter((token): token is string => Boolean(token));
+          return new Set(tokens);
+        });
         lastEvaluatedKey.current = payloadKey;
         toast({
           title: "Evaluation complete",
@@ -1767,6 +1853,116 @@ export default function BioLogUploader() {
           setIdentityState((prev) => ({ ...prev, unmatched }));
         }
 
+        const normalizedTokenValue = normalizeBiometricToken(token);
+        if (normalizedTokenValue) {
+          setManualMappings((prev) => {
+            const next = new Set(prev);
+            next.add(normalizedTokenValue);
+            return next;
+          });
+          setManualResolved((prev) => {
+            if (prev.has(normalizedTokenValue)) return prev;
+            const next = new Set(prev);
+            next.add(normalizedTokenValue);
+            return next;
+          });
+        }
+
+        if (normalizedTokenValue && perDay && perDay.length) {
+          const related = perDay.filter((row) => {
+            const rowToken = normalizeBiometricToken(
+              row.employeeToken || row.employeeId || row.employeeName || ""
+            );
+            return rowToken === normalizedTokenValue;
+          });
+          if (related.length) {
+            try {
+              const reEnrichBody = {
+                entries: related.map((row) => ({
+                  employeeId: row.employeeId,
+                  employeeName: row.employeeName,
+                  employeeToken: row.employeeToken || row.employeeId || "",
+                  resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+                  officeId: row.officeId ?? null,
+                  officeName: row.officeName ?? null,
+                  dateISO: row.dateISO,
+                  day: row.day,
+                  earliest: row.earliest,
+                  latest: row.latest,
+                  allTimes: row.allTimes,
+                  punches: row.punches,
+                  sourceFiles: row.sourceFiles,
+                })),
+              };
+
+              const reEnrichResponse = await timeout(
+                fetch("/api/biometrics/re-enrich", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(reEnrichBody),
+                }),
+                15_000
+              );
+
+              if (reEnrichResponse.ok) {
+                const reEnrichResult = (await reEnrichResponse.json()) as {
+                  perDay: PerDayRow[];
+                  perEmployee: PerEmployeeRow[];
+                  manualMappings?: string[];
+                };
+                const enrichedDays = sortPerDayRows(
+                  reEnrichResult.perDay.map((row) => toChronologicalRow(row))
+                );
+                setPerDay((prev) => {
+                  if (!prev) return prev;
+                  const filtered = prev.filter((row) => {
+                    const rowToken = normalizeBiometricToken(
+                      row.employeeToken || row.employeeId || row.employeeName || ""
+                    );
+                    return rowToken !== normalizedTokenValue;
+                  });
+                  return sortPerDayRows([...filtered, ...enrichedDays]);
+                });
+                if (reEnrichResult.perEmployee.length) {
+                  const replacement = reEnrichResult.perEmployee[0];
+                  setPerEmployee((prev) => {
+                    if (!prev) return prev;
+                    let replaced = false;
+                    const next = prev.map((entry) => {
+                      const entryToken = normalizeBiometricToken(
+                        entry.employeeToken || entry.employeeId || entry.employeeName || ""
+                      );
+                      if (entryToken === normalizedTokenValue) {
+                        replaced = true;
+                        return replacement;
+                      }
+                      return entry;
+                    });
+                    if (!replaced) {
+                      next.push(replacement);
+                    }
+                    return next;
+                  });
+                }
+                if (reEnrichResult.manualMappings?.length) {
+                  setManualMappings((prev) => {
+                    const next = new Set(prev);
+                    for (const mappingToken of reEnrichResult.manualMappings ?? []) {
+                      const normalized = normalizeBiometricToken(mappingToken);
+                      if (normalized) next.add(normalized);
+                    }
+                    return next;
+                  });
+                }
+              } else {
+                console.warn("Re-enrich request failed", await reEnrichResponse.text());
+              }
+            } catch (error) {
+              console.warn("Failed to refresh evaluation after resolve", error);
+            }
+          }
+        }
+
         setResolveTarget(null);
         toast({
           title: "Identity resolved",
@@ -1785,7 +1981,7 @@ export default function BioLogUploader() {
         setResolveBusy(false);
       }
     },
-    [toast]
+    [perDay, toast]
   );
 
   const handleResolveSubmit = useCallback(
@@ -1946,7 +2142,12 @@ export default function BioLogUploader() {
     if (inputRef.current) {
       inputRef.current.value = "";
     }
-  }, []);
+    setManualMappings(new Set());
+    setManualResolved(new Set());
+    if (typeof window !== "undefined" && manualResolvedStorageKey) {
+      window.localStorage.removeItem(manualResolvedStorageKey);
+    }
+  }, [manualResolvedStorageKey]);
 
   const handleRemoveFile = useCallback((id: string) => {
     setFiles((prev) => prev.filter((file) => file.id !== id));
@@ -2055,6 +2256,9 @@ export default function BioLogUploader() {
           columnLabels,
           appVersion: APP_VERSION,
         },
+      }, {
+        manualResolvedTokens: manualResolved,
+        manualMappingTokens: manualMappings,
       });
       toast({
         title: "Download started",
@@ -2081,6 +2285,8 @@ export default function BioLogUploader() {
     exportPeriodLabel,
     selectedOffices,
     toast,
+    manualMappings,
+    manualResolved,
     useManualPeriod,
   ]);
 
@@ -2813,12 +3019,17 @@ export default function BioLogUploader() {
                 {sortedPerEmployee.map((row) => {
                   const key = `${row.employeeToken || row.employeeId || row.employeeName}||${row.employeeName}`;
                   const types = row.scheduleTypes ?? [];
-                  const hasResolverMapping = Boolean(row.resolvedEmployeeId);
-                  const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
-                  const isSolved = hasResolverMapping && row.identityStatus !== "matched";
-                  const sourceLabel = isUnmatched
-                    ? "No mapping"
-                    : formatScheduleSource(row.scheduleSource);
+                  const identityUnmatched = isUnmatchedIdentity(
+                    row.identityStatus,
+                    row.resolvedEmployeeId
+                  );
+                  const normalizedToken = normalizeBiometricToken(
+                    row.employeeToken || row.employeeId || row.employeeName || ""
+                  );
+                  const hasMapping = normalizedToken ? manualMappings.has(normalizedToken) : false;
+                  const isManualSolved = normalizedToken ? manualResolved.has(normalizedToken) : false;
+                  const sourceLabel = formatScheduleSource(row.scheduleSource);
+                  const isUnmatched = identityUnmatched;
                   const displayEmployeeId =
                     row.employeeId?.trim().length
                       ? row.employeeId
@@ -2886,8 +3097,8 @@ export default function BioLogUploader() {
                     metricMode === "minutes" ? lateMinutesLabel : formatPercentLabel(latePercentValue);
                   const undertimeMetricLabel =
                     metricMode === "minutes" ? undertimeMinutesLabel : formatPercentLabel(undertimePercentValue);
-                  const canResolve = Boolean(row.employeeToken) && (isUnmatched || isSolved);
-                  const resolveActionLabel = isSolved ? "Re-resolve…" : "Resolve…";
+                  const canResolve = Boolean(row.employeeToken);
+                  const resolveActionLabel = hasMapping ? "Re-resolve…" : "Resolve…";
                   return (
                     <tr key={key} className="odd:bg-muted/20">
                       <td className="p-2">{displayEmployeeId}</td>
@@ -2896,7 +3107,7 @@ export default function BioLogUploader() {
                           <span className="truncate" title={displayEmployeeName}>
                             {displayEmployeeName}
                           </span>
-                          {isUnmatched ? (
+                          {!hasMapping ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Badge className="border-amber-500/70 bg-amber-500/20 text-amber-700">
@@ -2907,7 +3118,7 @@ export default function BioLogUploader() {
                                 No DB record; using name from uploaded log. You can resolve this below.
                               </TooltipContent>
                             </Tooltip>
-                          ) : isSolved ? (
+                          ) : isManualSolved ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Badge className="border-emerald-500/70 bg-emerald-500/20 text-emerald-700">
@@ -2916,6 +3127,17 @@ export default function BioLogUploader() {
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs text-sm">
                                 Token resolved via manual mapping. Using mapped employee details.
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : hasMapping ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="border-muted text-muted-foreground">
+                                  Linked
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-sm">
+                                Token has a saved mapping. You can re-resolve this below.
                               </TooltipContent>
                             </Tooltip>
                           ) : null}

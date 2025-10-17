@@ -24,3 +24,8 @@ export const formatScheduleSource = (value?: string | null): string | null => {
       return value.charAt(0) + value.slice(1).toLowerCase();
   }
 };
+
+export const normalizeBiometricToken = (value: string | null | undefined): string => {
+  if (!value) return "";
+  return value.trim().toUpperCase();
+};

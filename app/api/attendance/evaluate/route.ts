@@ -17,6 +17,8 @@ import {
   type HHMM,
 } from "@/utils/evaluateDay";
 import { summarizePerEmployee } from "@/utils/parseBioAttendance";
+import type { PerEmployeeRow } from "@/utils/parseBioAttendance";
+import { normalizeBiometricToken } from "@/utils/biometricsShared";
 import type { WeeklyPatternWindow } from "@/utils/weeklyPattern";
 
 type EvaluatedDay = {
@@ -91,121 +93,207 @@ const Payload = z.object({
   entries: z.array(Row),
 });
 
+export type AttendanceRow = z.infer<typeof Row>;
+export const AttendanceRowSchema = Row;
+
+type AttendanceEvaluationResult = {
+  perDay: EvaluatedDay[];
+  perEmployee: PerEmployeeRow[];
+  manualMappings: string[];
+};
+
+const collectEmployeesWithSchedule = (
+  maps: Awaited<ReturnType<typeof getScheduleMapsForMonth>>,
+  window: { from: Date; to: Date }
+) => {
+  const presence = new Map<string, boolean>();
+  for (const [employeeId, schedules] of maps.schedulesByEmployee.entries()) {
+    const hasActive = schedules.some((schedule) => {
+      const effectiveFrom = schedule.effectiveFrom;
+      const effectiveTo = schedule.effectiveTo;
+      return effectiveFrom <= window.to && (!effectiveTo || effectiveTo >= window.from);
+    });
+    if (hasActive) {
+      presence.set(employeeId, true);
+    }
+  }
+  for (const [key] of maps.exceptionsByEmployeeDate.entries()) {
+    const [employeeId, dateKey] = key.split("::");
+    if (!employeeId || !dateKey) continue;
+    const date = new Date(`${dateKey}T00:00:00.000Z`);
+    if (date >= window.from && date <= window.to) {
+      presence.set(employeeId, true);
+    }
+  }
+  return presence;
+};
+
+export async function evaluateAttendance(
+  entries: AttendanceRow[]
+): Promise<AttendanceEvaluationResult> {
+  if (!entries.length) {
+    return { perDay: [], perEmployee: [], manualMappings: [] };
+  }
+
+  const sanitizedEntries = entries.map((row) => ({
+    ...row,
+    employeeId: row.employeeId.trim(),
+    employeeToken: row.employeeToken.trim(),
+    employeeName: row.employeeName.trim(),
+  }));
+
+  const normalizedTokenLookup = new Map<string, string>();
+  for (const row of sanitizedEntries) {
+    const normalized = normalizeBiometricToken(row.employeeToken);
+    if (!normalized || normalizedTokenLookup.has(normalized)) continue;
+    normalizedTokenLookup.set(normalized, row.employeeToken);
+  }
+
+  const lookupTokens = Array.from(new Set(normalizedTokenLookup.values()));
+
+  const candidates: { id: string; employeeNo: string | null }[] = [];
+  const CHUNK_SIZE = 200;
+  for (let i = 0; i < lookupTokens.length; i += CHUNK_SIZE) {
+    const slice = lookupTokens.slice(i, i + CHUNK_SIZE);
+    const orConditions = slice.map((id) => ({ employeeNo: { startsWith: id } }));
+    if (!orConditions.length) continue;
+    const batch = await prisma.employee.findMany({
+      where: { OR: orConditions },
+      select: { id: true, employeeNo: true },
+    });
+    candidates.push(...batch);
+  }
+
+  const bioToInternal = new Map<string, string>();
+  for (const candidate of candidates) {
+    const token = firstEmployeeNoToken(candidate.employeeNo);
+    const normalized = normalizeBiometricToken(token);
+    if (normalized && !bioToInternal.has(normalized)) {
+      bioToInternal.set(normalized, candidate.id);
+    }
+  }
+
+  const identityMapModel = (prisma as typeof prisma & {
+    biometricsIdentityMap?: typeof prisma.biometricsIdentityMap;
+  }).biometricsIdentityMap;
+
+  const manualMappingTokens = new Set<string>();
+
+  if (identityMapModel && lookupTokens.length) {
+    const mappings = await identityMapModel.findMany({
+      where: { token: { in: lookupTokens } },
+      select: { token: true, employeeId: true },
+    });
+    for (const mapping of mappings) {
+      const normalized = normalizeBiometricToken(mapping.token);
+      if (!normalized) continue;
+      bioToInternal.set(normalized, mapping.employeeId);
+      manualMappingTokens.add(mapping.token.trim());
+    }
+  }
+
+  const sortedDates = sanitizedEntries
+    .map((row) => row.dateISO)
+    .sort((a, b) => a.localeCompare(b));
+  const firstDate = sortedDates[0];
+  const lastDate = sortedDates[sortedDates.length - 1];
+
+  const from = new Date(`${firstDate}T00:00:00.000Z`);
+  const to = new Date(`${lastDate}T23:59:59.999Z`);
+
+  const internalIds = Array.from(new Set(bioToInternal.values()));
+  const maps = await getScheduleMapsForMonth(internalIds, { from, to });
+  const schedulePresence = collectEmployeesWithSchedule(maps, { from, to });
+
+  const evaluatedPerDay: EvaluatedDay[] = sanitizedEntries.map((row) => {
+    const normalized = normalizeBiometricToken(row.employeeToken);
+    const internalEmployeeId = normalized ? bioToInternal.get(normalized) ?? null : null;
+    const scheduleRecord = resolveScheduleForDate(internalEmployeeId, row.dateISO, maps);
+    const normalizedSchedule = normalizeSchedule(scheduleRecord);
+    const earliest = (row.earliest ?? null) as HHMM | null;
+    const latest = (row.latest ?? null) as HHMM | null;
+    const normalizedAllTimes = normalizePunchTimes(row.allTimes);
+
+    const weeklyExclusion = internalEmployeeId
+      ? findWeeklyExclusionForDate(
+          maps.weeklyExclusionsByEmployee.get(internalEmployeeId),
+          row.dateISO
+        )
+      : null;
+
+    const evaluation = evaluateDay({
+      dateISO: row.dateISO,
+      earliest,
+      latest,
+      allTimes: normalizedAllTimes,
+      schedule: normalizedSchedule,
+      weeklyExclusion: weeklyExclusion
+        ? {
+            mode: weeklyExclusion.mode,
+            ignoreUntilMinutes: weeklyExclusion.ignoreUntilMinutes,
+          }
+        : null,
+    });
+
+    return {
+      employeeId: row.employeeId,
+      employeeName: row.employeeName,
+      resolvedEmployeeId: row.resolvedEmployeeId ?? null,
+      officeId: row.officeId ?? null,
+      officeName: row.officeName ?? null,
+      day: row.day,
+      earliest: row.earliest ?? null,
+      latest: row.latest ?? null,
+      allTimes: normalizedAllTimes,
+      dateISO: row.dateISO,
+      internalEmployeeId,
+      status: evaluation.status,
+      isLate: evaluation.isLate,
+      isUndertime: evaluation.isUndertime,
+      workedHHMM: evaluation.workedHHMM,
+      workedMinutes: evaluation.workedMinutes,
+      scheduleType: normalizedSchedule.type,
+      scheduleSource: scheduleRecord.source,
+      punches: row.punches,
+      sourceFiles: row.sourceFiles,
+      employeeToken: row.employeeToken,
+      lateMinutes: evaluation.lateMinutes ?? null,
+      undertimeMinutes: evaluation.undertimeMinutes ?? null,
+      requiredMinutes: evaluation.requiredMinutes ?? null,
+      scheduleStart: evaluation.scheduleStart ?? null,
+      scheduleEnd: evaluation.scheduleEnd ?? null,
+      scheduleGraceMinutes: evaluation.scheduleGraceMinutes ?? null,
+      weeklyPatternApplied: evaluation.weeklyPatternApplied ?? false,
+      weeklyPatternWindows: evaluation.weeklyPatternWindows ?? null,
+      weeklyPatternPresence: evaluation.weeklyPatternPresence ?? [],
+      weeklyExclusionApplied: evaluation.weeklyExclusionApplied ?? null,
+      weeklyExclusionMode: weeklyExclusion?.mode ?? null,
+      weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
+      weeklyExclusionId: weeklyExclusion?.id ?? null,
+      identityStatus: internalEmployeeId ? "matched" : "unmatched",
+    };
+  });
+
+  const perEmployee = summarizePerEmployee(evaluatedPerDay, {
+    manualMappingTokens,
+    employeeSchedulePresence: schedulePresence,
+  });
+
+  return {
+    perDay: evaluatedPerDay,
+    perEmployee,
+    manualMappings: Array.from(manualMappingTokens),
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const json = await req.json();
     const { entries } = Payload.parse(json);
 
-    if (!entries.length) {
-      return NextResponse.json({ perDay: [], perEmployee: [] });
-    }
+    const result = await evaluateAttendance(entries);
 
-    const bioIds = Array.from(new Set(entries.map((row) => row.employeeId)));
-
-    const candidates: { id: string; employeeNo: string | null }[] = [];
-    const CHUNK_SIZE = 200;
-    for (let i = 0; i < bioIds.length; i += CHUNK_SIZE) {
-      const slice = bioIds.slice(i, i + CHUNK_SIZE);
-      const orConditions = slice.map((id) => ({ employeeNo: { startsWith: id } }));
-      if (!orConditions.length) continue;
-      const batch = await prisma.employee.findMany({
-        where: { OR: orConditions },
-        select: { id: true, employeeNo: true },
-      });
-      candidates.push(...batch);
-    }
-
-    const bioToInternal = new Map<string, string>();
-    for (const candidate of candidates) {
-      const token = firstEmployeeNoToken(candidate.employeeNo);
-      if (token && !bioToInternal.has(token)) {
-        bioToInternal.set(token, candidate.id);
-      }
-    }
-
-    const sortedDates = entries
-      .map((row) => row.dateISO)
-      .sort((a, b) => a.localeCompare(b));
-    const firstDate = sortedDates[0];
-    const lastDate = sortedDates[sortedDates.length - 1];
-
-    const from = new Date(`${firstDate}T00:00:00.000Z`);
-    const to = new Date(`${lastDate}T23:59:59.999Z`);
-
-    const internalIds = Array.from(new Set(bioToInternal.values()));
-    const maps = await getScheduleMapsForMonth(internalIds, { from, to });
-
-    const evaluatedPerDay: EvaluatedDay[] = entries.map((row) => {
-      const internalEmployeeId = bioToInternal.get(row.employeeId) ?? null;
-      const scheduleRecord = resolveScheduleForDate(internalEmployeeId, row.dateISO, maps);
-      const normalized = normalizeSchedule(scheduleRecord);
-      const earliest = (row.earliest ?? null) as HHMM | null;
-      const latest = (row.latest ?? null) as HHMM | null;
-      const normalizedAllTimes = normalizePunchTimes(row.allTimes);
-
-      const weeklyExclusion = internalEmployeeId
-        ? findWeeklyExclusionForDate(
-            maps.weeklyExclusionsByEmployee.get(internalEmployeeId),
-            row.dateISO
-          )
-        : null;
-
-      const evaluation = evaluateDay({
-        dateISO: row.dateISO,
-        earliest,
-        latest,
-        allTimes: normalizedAllTimes,
-        schedule: normalized,
-        weeklyExclusion: weeklyExclusion
-          ? {
-              mode: weeklyExclusion.mode,
-              ignoreUntilMinutes: weeklyExclusion.ignoreUntilMinutes,
-            }
-          : null,
-      });
-
-      return {
-        employeeId: row.employeeId,
-        employeeName: row.employeeName,
-        resolvedEmployeeId: row.resolvedEmployeeId ?? null,
-        officeId: row.officeId ?? null,
-        officeName: row.officeName ?? null,
-        day: row.day,
-        earliest: row.earliest ?? null,
-        latest: row.latest ?? null,
-        allTimes: normalizedAllTimes,
-        dateISO: row.dateISO,
-        internalEmployeeId,
-        status: evaluation.status,
-        isLate: evaluation.isLate,
-        isUndertime: evaluation.isUndertime,
-        workedHHMM: evaluation.workedHHMM,
-        workedMinutes: evaluation.workedMinutes,
-        scheduleType: normalized.type,
-        scheduleSource: scheduleRecord.source,
-        punches: row.punches,
-        sourceFiles: row.sourceFiles,
-        employeeToken: row.employeeToken,
-        lateMinutes: evaluation.lateMinutes ?? null,
-        undertimeMinutes: evaluation.undertimeMinutes ?? null,
-        requiredMinutes: evaluation.requiredMinutes ?? null,
-        scheduleStart: evaluation.scheduleStart ?? null,
-        scheduleEnd: evaluation.scheduleEnd ?? null,
-        scheduleGraceMinutes: evaluation.scheduleGraceMinutes ?? null,
-        weeklyPatternApplied: evaluation.weeklyPatternApplied ?? false,
-        weeklyPatternWindows: evaluation.weeklyPatternWindows ?? null,
-        weeklyPatternPresence: evaluation.weeklyPatternPresence ?? [],
-        weeklyExclusionApplied: evaluation.weeklyExclusionApplied ?? null,
-        weeklyExclusionMode: weeklyExclusion?.mode ?? null,
-        weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
-        weeklyExclusionId: weeklyExclusion?.id ?? null,
-        identityStatus: internalEmployeeId ? "matched" : "unmatched",
-      };
-    });
-
-    const perEmployee = summarizePerEmployee(evaluatedPerDay);
-
-    return NextResponse.json({ perDay: evaluatedPerDay, perEmployee });
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Failed to evaluate attendance", error);
     if (error instanceof z.ZodError) {

@@ -13,6 +13,7 @@ import {
   UNASSIGNED_OFFICE_LABEL,
   UNKNOWN_OFFICE_LABEL,
   UNMATCHED_LABEL,
+  normalizeBiometricToken,
 } from "./biometricsShared";
 
 import type { DayEvaluationStatus } from "./evaluateDay";
@@ -120,6 +121,7 @@ export type PerEmployeeRow = {
   undertimeRate: number;
   scheduleTypes?: string[];
   scheduleSource?: string;
+  manualMapping?: boolean;
   totalLateMinutes: number;
   totalUndertimeMinutes: number;
   totalRequiredMinutes: number;
@@ -1076,15 +1078,6 @@ const statusPriority = {
   matched: 2,
 } as const;
 
-const resolveMatchStatus = (
-  status?: "matched" | "unmatched" | "ambiguous",
-  resolvedEmployeeId?: string | null
-): "matched" | "unmatched" | "solved" => {
-  if (resolvedEmployeeId && status !== "matched") return "solved";
-  if (status === "matched") return "matched";
-  return "unmatched";
-};
-
 const toMinute = (value: string | null | undefined): number | null => {
   if (!value) return null;
   const [hours, minutes] = value.split(":").map((part) => Number(part));
@@ -1171,6 +1164,11 @@ export const sortPerDayRows = <T extends {
   return [...rows].sort(comparePerDayRows);
 };
 
+export type SummarizePerEmployeeOptions = {
+  manualMappingTokens?: Iterable<string>;
+  employeeSchedulePresence?: Map<string, boolean>;
+};
+
 export function summarizePerEmployee(
   perDay: Array<
     Pick<
@@ -1198,8 +1196,18 @@ export function summarizePerEmployee(
       | "workedMinutes"
       | "weeklyPatternApplied"
     >
-  >
+  >,
+  options: SummarizePerEmployeeOptions = {}
 ): PerEmployeeRow[] {
+  const manualTokenSet = options.manualMappingTokens
+    ? (() => {
+        const tokens = Array.from(options.manualMappingTokens)
+          .map((token) => normalizeBiometricToken(token))
+          .filter((token): token is string => Boolean(token));
+        return tokens.length ? new Set(tokens) : null;
+      })()
+    : null;
+  const schedulePresence = options.employeeSchedulePresence ?? null;
   const map = new Map<string, AggregateRow>();
   for (const row of perDay) {
     const token = row.employeeToken || row.employeeId || row.employeeName;
@@ -1263,33 +1271,60 @@ export function summarizePerEmployee(
     if (row.scheduleSource) agg.scheduleSourceSet.add(row.scheduleSource);
   }
 
-  return Array.from(map.values()).map((entry) => ({
-    employeeId: entry.employeeId,
-    employeeToken: entry.employeeToken,
-    employeeName: entry.employeeName,
-    resolvedEmployeeId: entry.resolvedEmployeeId ?? null,
-    officeId: entry.officeId ?? null,
-    officeName: entry.officeName ?? null,
-    daysWithLogs: entry.daysWithLogs,
-    noPunchDays: entry.noPunchDays,
-    excusedDays: entry.excusedDays,
-    lateDays: entry.lateDays,
-    undertimeDays: entry.undertimeDays,
-    lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
-    undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
-    scheduleTypes: Array.from(entry.scheduleTypes).sort(),
-    scheduleSource: pickSource(Array.from(entry.scheduleSourceSet)),
-    totalLateMinutes: Math.round(entry.totalLateMinutes),
-    totalUndertimeMinutes: Math.round(entry.totalUndertimeMinutes),
-    totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
-    identityStatus: entry.identityStatus,
-    weeklyPatternDayCount: entry.weeklyPatternDays,
-  }));
+  return Array.from(map.values()).map((entry) => {
+    const normalizedToken = normalizeBiometricToken(entry.employeeToken);
+    const hasManualMapping =
+      manualTokenSet && normalizedToken ? manualTokenSet.has(normalizedToken) : false;
+    const hasSchedule =
+      entry.resolvedEmployeeId && schedulePresence
+        ? Boolean(schedulePresence.get(entry.resolvedEmployeeId))
+        : false;
+    const baseSource = pickSource(Array.from(entry.scheduleSourceSet));
+    const scheduleSource =
+      manualTokenSet !== null
+        ? !hasManualMapping
+          ? "No mapping"
+          : hasSchedule
+          ? "Work schedule"
+          : "Default"
+        : baseSource;
+
+    return {
+      employeeId: entry.employeeId,
+      employeeToken: entry.employeeToken,
+      employeeName: entry.employeeName,
+      resolvedEmployeeId: entry.resolvedEmployeeId ?? null,
+      officeId: entry.officeId ?? null,
+      officeName: entry.officeName ?? null,
+      daysWithLogs: entry.daysWithLogs,
+      noPunchDays: entry.noPunchDays,
+      excusedDays: entry.excusedDays,
+      lateDays: entry.lateDays,
+      undertimeDays: entry.undertimeDays,
+      lateRate: entry.daysWithLogs ? +((entry.lateDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
+      undertimeRate: entry.daysWithLogs ? +((entry.undertimeDays / entry.daysWithLogs) * 100).toFixed(1) : 0,
+      scheduleTypes: Array.from(entry.scheduleTypes).sort(),
+      scheduleSource,
+      manualMapping: manualTokenSet !== null ? hasManualMapping : undefined,
+      totalLateMinutes: Math.round(entry.totalLateMinutes),
+      totalUndertimeMinutes: Math.round(entry.totalUndertimeMinutes),
+      totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
+      identityStatus: entry.identityStatus,
+      weeklyPatternDayCount: entry.weeklyPatternDays,
+    } satisfies PerEmployeeRow;
+  });
 }
 
 type SummaryCellValue = string | number | Date | null;
 
 type SummaryRowValues = Record<SummaryColumnKey, SummaryCellValue>;
+
+type MatchStatusCode = "manual_solved" | "auto_matched" | "unmatched";
+
+type SummaryRowContext = {
+  manualResolvedTokens?: Set<string>;
+  manualMappingTokens?: Set<string>;
+};
 
 type SummaryTotals = Partial<Record<SummaryColumnKey, number | null>>;
 
@@ -1438,16 +1473,20 @@ const toScheduleLabel = (types: string[] | undefined | null) => {
     .join(", ");
 };
 
-const toMatchStatusLabel = (row: Pick<PerEmployeeRow, "identityStatus" | "resolvedEmployeeId">) => {
-  const status = resolveMatchStatus(row.identityStatus, row.resolvedEmployeeId);
-  switch (status) {
-    case "matched":
-      return "Matched";
-    case "solved":
-      return "Solved";
-    default:
-      return "Unmatched";
+const toMatchStatusLabel = (
+  row: Pick<PerEmployeeRow, "identityStatus" | "resolvedEmployeeId">,
+  code: MatchStatusCode
+) => {
+  if (code === "manual_solved") {
+    return "Solved";
   }
+  if (code === "unmatched") {
+    return row.identityStatus === "ambiguous" ? "Ambiguous" : "Unmatched";
+  }
+  if (row.identityStatus === "ambiguous") {
+    return "Ambiguous";
+  }
+  return "Matched";
 };
 
 const toLocalISO = (value: Date) => {
@@ -1491,17 +1530,34 @@ const ensureArray = <T,>(values: T[] | null | undefined): T[] => (Array.isArray(
 
 const computeSummaryRow = (
   row: PerEmployeeRow,
-  sourceFileCounts: Map<string, number>
+  sourceFileCounts: Map<string, number>,
+  context: SummaryRowContext
 ): SummaryRowValues => {
   const key = toEmployeeKey(row.employeeToken, row.employeeName);
-  const isUnmatched = row.identityStatus === "unmatched" && !row.resolvedEmployeeId;
-  const sourceLabel = isUnmatched ? "No mapping" : formatScheduleSource(row.scheduleSource) ?? "";
+  const normalizedToken = normalizeBiometricToken(
+    row.employeeToken || row.employeeId || row.employeeName
+  );
+  const manualResolved = context.manualResolvedTokens;
+  const manualMappings = context.manualMappingTokens;
+  const hasMapping =
+    manualMappings && normalizedToken ? manualMappings.has(normalizedToken) : row.manualMapping;
+  const matchStatusCode: MatchStatusCode = manualResolved?.has(normalizedToken)
+    ? "manual_solved"
+    : hasMapping === false
+    ? "unmatched"
+    : hasMapping === true
+    ? "auto_matched"
+    : row.identityStatus === "unmatched" && !row.resolvedEmployeeId
+    ? "unmatched"
+    : "auto_matched";
+  const sourceLabel = formatScheduleSource(row.scheduleSource) ?? "";
   return {
     employeeId: toDisplayEmployeeId(row) || null,
     employeeName: row.employeeName?.trim() ? row.employeeName : UNMATCHED_LABEL,
     office: toDisplayOffice(row, true),
     schedule: toScheduleLabel(row.scheduleTypes),
-    matchStatus: toMatchStatusLabel(row),
+    matchStatus: toMatchStatusLabel(row, matchStatusCode),
+    matchStatusCode,
     source: sourceLabel,
     days: row.daysWithLogs ?? 0,
     excusedDays: row.excusedDays ?? 0,
@@ -1922,7 +1978,8 @@ const buildFilename = (timestamp: Date) => {
 export function exportResultsToXlsx(
   perEmployee: PerEmployeeRow[],
   perDay: PerDayRow[],
-  options: BiometricsExportOptions
+  options: BiometricsExportOptions,
+  context: SummaryRowContext = {}
 ) {
   const selectedColumns = options.columns?.length
     ? options.columns.filter((key): key is SummaryColumnKey => key in SUMMARY_COLUMN_DEFINITION_MAP)
@@ -1930,7 +1987,12 @@ export function exportResultsToXlsx(
 
   const columnDefinitions = makeSummaryColumnDefinitions(selectedColumns);
   const sourceFileCounts = buildSourceFileCounts(perDay);
-  const summaryRows = perEmployee.map((row) => computeSummaryRow(row, sourceFileCounts));
+  const summaryRows = perEmployee.map((row) =>
+    computeSummaryRow(row, sourceFileCounts, {
+      manualResolvedTokens: context.manualResolvedTokens,
+      manualMappingTokens: context.manualMappingTokens,
+    })
+  );
   const totals = summarizeTotals(summaryRows);
 
   const summarySheet = buildSummarySheet(summaryRows, selectedColumns, columnDefinitions, totals);
