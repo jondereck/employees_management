@@ -17,6 +17,7 @@ export type SummaryColumnKey =
   | "source"
   | "head"
   | "days"
+  | "noPunchDays"
   | "excusedDays"
   | "lateDays"
   | "undertimeDays"
@@ -113,6 +114,15 @@ export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
     type: "number",
     width: "numeric",
     defaultSelected: true,
+  },
+  {
+    key: "noPunchDays",
+    label: "No-punch",
+    groupId: "attendance",
+    description: "Days without any punch (shown when the toggle is enabled).",
+    type: "number",
+    width: "numeric",
+    defaultSelected: false,
   },
   {
     key: "excusedDays",
