@@ -5,10 +5,6 @@ import { evaluateAttendanceEntries, type EvaluationEntry } from "@/lib/attendanc
 
 export const runtime = "nodejs";
 
-export const bodyParser = {
-  sizeLimit: "20mb",
-};
-
 const hhmmRegex = /^\d{1,2}:\d{2}$/;
 
 const Punch = z.object({
