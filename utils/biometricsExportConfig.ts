@@ -18,6 +18,7 @@ export type SummaryColumnKey =
   | "head"
   | "days"
   | "noPunchDays"
+  | "absences"
   | "excusedDays"
   | "lateDays"
   | "undertimeDays"
@@ -123,6 +124,15 @@ export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
     type: "number",
     width: "numeric",
     defaultSelected: false,
+  },
+  {
+    key: "absences",
+    label: "Absences",
+    groupId: "attendance",
+    description: "Scheduled days marked absent (no valid presence).",
+    type: "number",
+    width: "numeric",
+    defaultSelected: true,
   },
   {
     key: "excusedDays",

@@ -87,11 +87,14 @@ export type ParsedPerDayRow = {
 };
 
 export type PerDayRow = ParsedPerDayRow & {
-  status?: DayEvaluationStatus;
+  status?: DayEvaluationStatus | "Present" | "Absent";
+  evaluationStatus?: DayEvaluationStatus;
   isLate: boolean;
   isUndertime: boolean;
   workedHHMM?: string | null;
   workedMinutes?: number | null;
+  presenceMinutes?: number | null;
+  absent?: boolean;
   scheduleType?: string;
   scheduleSource?: string;
   lateMinutes?: number | null;
@@ -121,6 +124,7 @@ export type PerEmployeeRow = {
   officeName?: string | null;
   daysWithLogs: number;
   noPunchDays: number;
+  absences: number;
   lateDays: number;
   undertimeDays: number;
   lateRate: number;
@@ -1057,6 +1061,7 @@ type AggregateRow = {
   daysWithLogs: number;
   noPunchDays: number;
   excusedDays: number;
+  absences: number;
   lateDays: number;
   undertimeDays: number;
   totalLateMinutes: number;
@@ -1231,6 +1236,7 @@ export function summarizePerEmployee(
       | "officeId"
       | "officeName"
       | "status"
+      | "evaluationStatus"
       | "isHead"
       | "earliest"
       | "latest"
@@ -1246,6 +1252,7 @@ export function summarizePerEmployee(
       | "scheduleStart"
       | "scheduleGraceMinutes"
       | "workedMinutes"
+      | "absent"
       | "weeklyPatternApplied"
     >
   >,
@@ -1271,6 +1278,7 @@ export function summarizePerEmployee(
         daysWithLogs: 0,
         noPunchDays: 0,
         excusedDays: 0,
+        absences: 0,
         lateDays: 0,
         undertimeDays: 0,
         totalLateMinutes: 0,
@@ -1296,15 +1304,18 @@ export function summarizePerEmployee(
     if (statusPriority[identityStatus] > statusPriority[agg.identityStatus]) {
       agg.identityStatus = identityStatus;
     }
-    const status: DayEvaluationStatus = row.status
-      ? row.status
+
+    const evaluationStatus: DayEvaluationStatus = row.evaluationStatus
+      ? row.evaluationStatus
+      : row.status === "no_punch" || row.status === "excused" || row.status === "evaluated"
+      ? (row.status as DayEvaluationStatus)
       : row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0
       ? "evaluated"
       : "no_punch";
 
-    if (status === "no_punch") {
+    if (evaluationStatus === "no_punch") {
       agg.noPunchDays += 1;
-    } else if (status === "excused") {
+    } else if (evaluationStatus === "excused") {
       agg.excusedDays += 1;
     } else {
       agg.daysWithLogs += 1;
@@ -1318,6 +1329,9 @@ export function summarizePerEmployee(
       if (row.weeklyPatternApplied) {
         agg.weeklyPatternDays += 1;
       }
+    }
+    if (row.absent) {
+      agg.absences += 1;
     }
     if (row.scheduleType) agg.scheduleTypes.add(row.scheduleType);
     if (row.scheduleSource) agg.scheduleSourceSet.add(row.scheduleSource);
@@ -1334,6 +1348,7 @@ export function summarizePerEmployee(
     officeName: entry.officeName ?? null,
     daysWithLogs: entry.daysWithLogs,
     noPunchDays: entry.noPunchDays,
+    absences: entry.absences,
     excusedDays: entry.excusedDays,
     lateDays: entry.lateDays,
     undertimeDays: entry.undertimeDays,
@@ -1448,6 +1463,7 @@ const PER_DAY_COLUMNS: PerDayColumnDefinition[] = [
   { key: "scheduleType", label: "Schedule", type: "text", width: "schedule" },
   { key: "scheduleSource", label: "Schedule Source", type: "text", width: "schedule" },
   { key: "date", label: "Date", type: "date", width: "date" },
+  { key: "status", label: "Status", type: "text", width: "schedule" },
   { key: "earliest", label: "Earliest", type: "time", width: "time" },
   { key: "latest", label: "Latest", type: "time", width: "time" },
   { key: "workedMinutes", label: "Worked (min)", type: "minutes", width: "numeric" },
@@ -1456,7 +1472,6 @@ const PER_DAY_COLUMNS: PerDayColumnDefinition[] = [
   { key: "undertimeFlag", label: "Undertime?", type: "text", width: "numeric" },
   { key: "undertimeMinutes", label: "UT (min)", type: "minutes", width: "numeric" },
   { key: "requiredMinutes", label: "Required (min)", type: "minutes", width: "numeric" },
-  { key: "status", label: "Status", type: "text", width: "schedule" },
   { key: "weeklyPattern", label: "Weekly Pattern", type: "text", width: "schedule" },
   { key: "punches", label: "Punches", type: "punches", width: "punches" },
   { key: "sourceFiles", label: "Source Files", type: "punches", width: "punches" },
@@ -1582,6 +1597,7 @@ const computeSummaryRow = (
     head: row.isHead == null ? null : row.isHead ? "Yes" : "No",
     days: row.daysWithLogs ?? 0,
     noPunchDays: row.noPunchDays ?? 0,
+    absences: row.absences ?? 0,
     excusedDays: row.excusedDays ?? 0,
     lateDays: row.lateDays ?? 0,
     undertimeDays: row.undertimeDays ?? 0,
@@ -1600,6 +1616,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
   let totalDays = 0;
   let totalLateDays = 0;
   let totalNoPunchDays = 0;
+  let totalAbsences = 0;
   let totalExcusedDays = 0;
   let totalUndertimeDays = 0;
   let totalLateMinutes = 0;
@@ -1609,6 +1626,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
   for (const row of rows) {
     totalDays += Number(row.days ?? 0);
     totalNoPunchDays += Number(row.noPunchDays ?? 0);
+    totalAbsences += Number(row.absences ?? 0);
     totalExcusedDays += Number(row.excusedDays ?? 0);
     totalLateDays += Number(row.lateDays ?? 0);
     totalUndertimeDays += Number(row.undertimeDays ?? 0);
@@ -1619,6 +1637,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
 
   totals.days = totalDays;
   totals.noPunchDays = totalNoPunchDays;
+  totals.absences = totalAbsences;
   totals.lateDays = totalLateDays;
   totals.excusedDays = totalExcusedDays;
   totals.undertimeDays = totalUndertimeDays;
@@ -1826,8 +1845,16 @@ const buildPerDaySheet = (rows: PerDayRow[]) => {
   const header = PER_DAY_COLUMNS.map((column) => column.label);
   const worksheet = XLSX.utils.aoa_to_sheet([header]);
 
-  const dataRows = rows.map((row) =>
-    PER_DAY_COLUMNS.map((column) => {
+  const dataRows = rows.map((row) => {
+    const evaluationStatus: DayEvaluationStatus = row.evaluationStatus
+      ? row.evaluationStatus
+      : row.status === "no_punch" || row.status === "excused" || row.status === "evaluated"
+      ? (row.status as DayEvaluationStatus)
+      : row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0
+      ? "evaluated"
+      : "no_punch";
+
+    return PER_DAY_COLUMNS.map((column) => {
       switch (column.key) {
         case "employeeId": {
           const employeeNo = firstEmployeeNoToken(row.employeeNo);
@@ -1852,6 +1879,8 @@ const buildPerDaySheet = (rows: PerDayRow[]) => {
           return formatScheduleSource(row.scheduleSource) ?? "";
         case "date":
           return toExcelDateNumber(row.dateISO);
+        case "status":
+          return row.absent ? "Absent" : "Present";
         case "earliest":
           return toExcelTimeNumber(row.earliest ?? null);
         case "latest":
@@ -1859,34 +1888,36 @@ const buildPerDaySheet = (rows: PerDayRow[]) => {
         case "workedMinutes":
           return row.workedMinutes ?? null;
         case "lateFlag": {
-          if (row.status === "no_punch") return "No punches";
-          if (row.status === "excused") return "Excused";
+          if (evaluationStatus === "no_punch") return "No punches";
+          if (evaluationStatus === "excused") return "Excused";
           return row.isLate ? "Yes" : "No";
         }
         case "lateMinutes":
           return resolveLateMinutes(row) ?? null;
         case "undertimeFlag": {
-          if (row.status === "no_punch") return "No punches";
-          if (row.status === "excused") return "Excused";
+          if (evaluationStatus === "no_punch") return "No punches";
+          if (evaluationStatus === "excused") return "Excused";
           return row.isUndertime ? "Yes" : "No";
         }
         case "undertimeMinutes":
           return resolveUndertimeMinutes(row) ?? null;
         case "requiredMinutes":
           return row.requiredMinutes ?? null;
-        case "status":
-          return row.status ? row.status.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "";
         case "weeklyPattern":
           return row.weeklyPatternApplied ? "Applied" : "—";
         case "punches":
-          return row.allTimes?.length ? row.allTimes.join(", ") : row.status === "no_punch" ? "No punches" : "";
+          return row.allTimes?.length
+            ? row.allTimes.join(", ")
+            : evaluationStatus === "no_punch"
+            ? "No punches"
+            : "";
         case "sourceFiles":
           return row.sourceFiles?.length ? row.sourceFiles.join(", ") : "";
         default:
           return "";
       }
-    })
-  );
+    });
+  });
 
   if (dataRows.length) {
     XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: "A2" });
