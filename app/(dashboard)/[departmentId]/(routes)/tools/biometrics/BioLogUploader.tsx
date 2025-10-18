@@ -72,6 +72,7 @@ import {
   type WorkbookParserType,
   type UnmatchedIdentityWarningDetail,
 } from "@/utils/parseBioAttendance";
+import type { DayEvaluationStatus } from "@/utils/evaluateDay";
 import {
   EXPORT_COLUMNS_STORAGE_KEY,
   formatScheduleSource,
@@ -444,6 +445,8 @@ const getSummarySortValue = (row: PerEmployeeRow, field: SummarySortField): numb
       return row.daysWithLogs ?? 0;
     case "noPunch":
       return row.noPunchDays ?? 0;
+    case "absences":
+      return row.absences ?? 0;
     case "lateDays":
       return row.lateDays ?? 0;
     case "undertimeDays":
@@ -1884,12 +1887,14 @@ function BioLogUploaderContent() {
           return formatScheduleSource(row.scheduleSource);
         case "head":
           return row.isHead ? "Yes" : "No";
-        case "days":
-          return row.daysWithLogs;
-        case "noPunchDays":
-          return row.noPunchDays;
-        case "excusedDays":
-          return row.excusedDays;
+      case "days":
+        return row.daysWithLogs;
+      case "noPunchDays":
+        return row.noPunchDays;
+      case "absences":
+        return row.absences;
+      case "excusedDays":
+        return row.excusedDays;
         case "lateDays":
           return row.lateDays;
         case "undertimeDays":
@@ -3447,6 +3452,26 @@ function BioLogUploaderContent() {
                       </div>
                     </th>
                   ) : null}
+                  <th className="p-2 text-right">
+                    <div className="inline-flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("absences")}
+                        className="inline-flex items-center gap-1 font-semibold"
+                        aria-label="Sort by absences"
+                      >
+                        Absences
+                        <ArrowUpDown
+                          className={cn(
+                            "h-3.5 w-3.5 transition-transform",
+                            sortBy === "absences" ? "opacity-100" : "opacity-40",
+                            sortBy === "absences" && sortDir === "asc" ? "rotate-180" : undefined
+                          )}
+                        />
+                      </button>
+                      <ColumnFilterControl columnKey="absences" />
+                    </div>
+                  </th>
                   <th className="p-2 text-center">
                     <div className="inline-flex items-center justify-center gap-1">
                       <button
@@ -3763,6 +3788,7 @@ function BioLogUploaderContent() {
                   {showNoPunchColumn ? (
                     <td className="p-2 text-center">{row.noPunchDays}</td>
                   ) : null}
+                  <td className="p-2 text-right font-medium">{row.absences}</td>
                   <td className="p-2 text-center">{row.lateDays}</td>
                       <td className="p-2 text-center">{row.undertimeDays}</td>
                       <td className="p-2 text-center">
@@ -3872,8 +3898,14 @@ function BioLogUploaderContent() {
                 {pagedPerDay.map((row, index) => {
                   const weeklyWindowsLabel = formatTimelineLabel(row.weeklyPatternWindows ?? []);
                   const weeklyPresenceLabel = formatTimelineLabel(row.weeklyPatternPresence ?? []);
-                  const isNoPunch = row.status === "no_punch";
-                  const isExcused = row.status === "excused";
+                  const evaluationStatus = row.evaluationStatus ??
+                    (row.status === "no_punch" || row.status === "excused" || row.status === "evaluated"
+                      ? (row.status as DayEvaluationStatus)
+                      : row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0
+                      ? "evaluated"
+                      : "no_punch");
+                  const isNoPunch = evaluationStatus === "no_punch";
+                  const isExcused = evaluationStatus === "excused";
                   const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
                   const resolvedEmployeeId = row.resolvedEmployeeId?.trim();
                   const employeeNo = firstEmployeeNoToken(row.employeeNo);
@@ -3916,7 +3948,15 @@ function BioLogUploaderContent() {
                       <td className="p-2">{dateFormatter.format(toDate(row.dateISO))}</td>
                       <td className="p-2 text-center">{row.earliest ?? ""}</td>
                       <td className="p-2 text-center">{row.latest ?? ""}</td>
-                      <td className="p-2 text-center">{isExcused ? "—" : row.workedHHMM ?? ""}</td>
+                      <td className="p-2 text-center">
+                        {isExcused ? (
+                          "—"
+                        ) : row.absent ? (
+                          <span className="font-semibold text-destructive">Absent</span>
+                        ) : (
+                          row.workedHHMM ?? ""
+                        )}
+                      </td>
                       <td className="p-2">
                         {row.scheduleType ? (
                           <Badge variant="outline">{formatScheduleType(row.scheduleType)}</Badge>

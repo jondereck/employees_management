@@ -32,6 +32,7 @@ export type SummarySortField =
   | "schedule"
   | "days"
   | "noPunch"
+  | "absences"
   | "lateDays"
   | "undertimeDays"
   | "latePercent"
@@ -90,6 +91,7 @@ const isSortField = (value: unknown): value is SummarySortField =>
     value === "schedule" ||
     value === "days" ||
     value === "noPunch" ||
+    value === "absences" ||
     value === "lateDays" ||
     value === "undertimeDays" ||
     value === "latePercent" ||

@@ -21,6 +21,62 @@ import {
 } from "@/utils/parseBioAttendance";
 import { normalizeBiometricToken } from "@/utils/biometricsShared";
 
+const MINUTES_IN_DAY = 24 * 60;
+const MIN_PRESENCE_THRESHOLD = 5;
+
+const parseHHMM = (value: HHMM | string | null | undefined): number | null => {
+  if (!value) return null;
+  const [hoursStr, minutesStr] = value.split(":");
+  const hours = Number(hoursStr);
+  const minutes = Number(minutesStr);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+};
+
+const computeShiftPresenceMinutes = (
+  schedule: { shiftStart: HHMM; shiftEnd: HHMM; breakMinutes?: number | null },
+  earliest: HHMM | null,
+  latest: HHMM | null,
+  times: HHMM[]
+): number => {
+  const shiftStart = parseHHMM(schedule.shiftStart);
+  let shiftEnd = parseHHMM(schedule.shiftEnd);
+  if (shiftStart == null || shiftEnd == null) return 0;
+
+  const isOvernight = shiftEnd <= shiftStart;
+  if (isOvernight) {
+    shiftEnd += MINUTES_IN_DAY;
+  }
+
+  const firstCandidate = earliest ?? (times.length ? times[0] : null);
+  const lastCandidate = latest ?? (times.length ? times[times.length - 1] : null);
+  if (!firstCandidate || !lastCandidate) return 0;
+
+  let start = parseHHMM(firstCandidate);
+  let end = parseHHMM(lastCandidate);
+  if (start == null || end == null) return 0;
+
+  if (end < start) {
+    end += MINUTES_IN_DAY;
+  }
+  if (isOvernight && start < shiftStart) {
+    start += MINUTES_IN_DAY;
+    if (end <= start) {
+      end += MINUTES_IN_DAY;
+    }
+  }
+
+  const clampedStart = Math.max(start, shiftStart);
+  const clampedEnd = Math.min(end, shiftEnd);
+  if (clampedEnd <= clampedStart) {
+    return 0;
+  }
+
+  const presence = clampedEnd - clampedStart;
+  const breakMinutes = schedule.breakMinutes ?? 0;
+  return Math.max(0, presence - breakMinutes);
+};
+
 export type EvaluationEntry = {
   employeeId: string;
   employeeName: string;
@@ -252,6 +308,24 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
     const officeId = details?.officeId ?? row.officeId ?? null;
     const officeName = details?.officeName ?? row.officeName ?? null;
 
+    const exception = internalEmployeeId
+      ? maps.exceptionsByEmployeeDate.get(`${internalEmployeeId}::${row.dateISO}`) ?? null
+      : null;
+    const exceptionInfo = exception as { type?: string | null; code?: string | null } | null;
+    let presenceMinutes = evaluation.workedMinutes ?? 0;
+    if (normalized.type === "SHIFT") {
+      presenceMinutes = computeShiftPresenceMinutes(normalized, earliest, latest, normalizedAllTimes);
+    }
+    const clampedPresence = Math.max(0, presenceMinutes);
+    const requiredMinutes = evaluation.requiredMinutes ?? 0;
+    const isScheduled = requiredMinutes > 0;
+    const isExcused =
+      (exceptionInfo?.type ?? null) === "HOLIDAY" ||
+      ["OB", "CTO", "LEAVE"].includes((exceptionInfo?.code ?? "").toUpperCase());
+    const isZeroPresence = clampedPresence <= MIN_PRESENCE_THRESHOLD;
+    const absent = isScheduled && !isExcused && isZeroPresence;
+    const statusLabel = absent ? "Absent" : "Present";
+
     const perDay: PerDayRow = {
       employeeId: row.employeeId,
       employeeName: row.employeeName,
@@ -269,11 +343,14 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       punches: row.punches,
       sourceFiles: row.sourceFiles,
       composedFromDayOnly: row.composedFromDayOnly ?? false,
-      status: evaluation.status as DayEvaluationStatus,
+      status: statusLabel,
+      evaluationStatus: evaluation.status as DayEvaluationStatus,
       isLate: evaluation.isLate,
       isUndertime: evaluation.isUndertime,
       workedHHMM: evaluation.workedHHMM,
       workedMinutes: evaluation.workedMinutes,
+      presenceMinutes: clampedPresence,
+      absent,
       scheduleType: normalized.type,
       scheduleSource: scheduleRecord.source,
       lateMinutes: evaluation.lateMinutes ?? null,
