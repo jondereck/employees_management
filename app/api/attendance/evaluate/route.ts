@@ -3,6 +3,12 @@ import { z } from "zod";
 
 import { evaluateAttendanceEntries, type EvaluationEntry } from "@/lib/attendance/evaluateEntries";
 
+export const runtime = "nodejs";
+
+export const bodyParser = {
+  sizeLimit: "20mb",
+};
+
 const hhmmRegex = /^\d{1,2}:\d{2}$/;
 
 const Punch = z.object({
