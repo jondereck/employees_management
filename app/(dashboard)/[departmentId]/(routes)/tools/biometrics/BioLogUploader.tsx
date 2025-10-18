@@ -138,6 +138,21 @@ type NumberColumnFilterState = {
 
 type ColumnFilterState = TextColumnFilterState | NumberColumnFilterState;
 
+type ColumnFilterControlProps = {
+  columnKey: SummaryColumnKey;
+  columnFilters: Partial<Record<SummaryColumnKey, ColumnFilterState>>;
+  setColumnFilters: React.Dispatch<
+    React.SetStateAction<Partial<Record<SummaryColumnKey, ColumnFilterState>>>
+  >;
+  clearColumnFilter: (key: SummaryColumnKey) => void;
+  filterRowsByColumnFilters: (
+    rows: PerEmployeeRow[],
+    filters: Partial<Record<SummaryColumnKey, ColumnFilterState>>
+  ) => PerEmployeeRow[];
+  filteredPerEmployee: PerEmployeeRow[];
+  getSummaryValue: (row: PerEmployeeRow, key: SummaryColumnKey) => string | number | null;
+};
+
 const COLUMN_FILTER_OPERATORS: ColumnFilterOperator[] = ["=", ">", ">=", "<", "<="];
 
 const TEXT_FILTER_KEYS = new Set<SummaryColumnKey>(
@@ -1967,7 +1982,7 @@ function BioLogUploaderContent() {
     [getSummaryValue]
   );
 
-  const applyColumnFilters = useCallback(
+const applyColumnFilters = useCallback(
     (rows: PerEmployeeRow[]) => filterRowsByColumnFilters(rows, columnFilters),
     [columnFilters, filterRowsByColumnFilters]
   );
@@ -1979,6 +1994,24 @@ function BioLogUploaderContent() {
       return rest;
     });
   }, []);
+
+  const columnFilterControlProps = useMemo(
+    () => ({
+      columnFilters,
+      setColumnFilters,
+      clearColumnFilter,
+      filterRowsByColumnFilters,
+      filteredPerEmployee,
+      getSummaryValue,
+    }),
+    [
+      columnFilters,
+      clearColumnFilter,
+      filterRowsByColumnFilters,
+      filteredPerEmployee,
+      getSummaryValue,
+    ]
+  );
 
   const searchedPerEmployee = useMemo(() => {
     if (!filteredPerEmployee.length) return filteredPerEmployee;
@@ -2003,226 +2036,6 @@ function BioLogUploaderContent() {
     metricMode === "minutes" ? "lateMinutes" : "latePercent";
   const undertimeMetricColumnKey: SummaryColumnKey =
     metricMode === "minutes" ? "undertimeMinutes" : "undertimePercent";
-
-  const ColumnFilterControl = ({ columnKey }: { columnKey: SummaryColumnKey }) => {
-    const definition = SUMMARY_COLUMN_DEFINITION_MAP[columnKey];
-    const filterState = columnFilters[columnKey];
-    let options: Array<{ value: string; count: number }> = [];
-    if (TEXT_FILTER_KEYS.has(columnKey)) {
-      const filtersWithoutCurrent: Partial<Record<SummaryColumnKey, ColumnFilterState>> = {
-        ...columnFilters,
-      };
-      delete filtersWithoutCurrent[columnKey];
-      const scopedRows = filterRowsByColumnFilters(filteredPerEmployee, filtersWithoutCurrent);
-      const counts = new Map<string, number>();
-      for (const row of scopedRows) {
-        const raw = getSummaryValue(row, columnKey);
-        const textValue = normalizeFilterText(raw);
-        counts.set(textValue, (counts.get(textValue) ?? 0) + 1);
-      }
-      options = Array.from(counts.entries())
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) => a.value.localeCompare(b.value));
-    }
-    const [open, setOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState("");
-
-    useEffect(() => {
-      if (!open) {
-        setSearchTerm("");
-      }
-    }, [open]);
-
-    const isNumeric = definition ? NUMERIC_FILTER_TYPES.has(definition.type) : false;
-    const isActive = filterState
-      ? filterState.kind === "text" || (filterState.kind === "number" && filterState.value.trim().length > 0)
-      : false;
-
-    const triggerClass = cn(
-      "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-accent",
-      isActive ? "text-primary" : "text-muted-foreground"
-    );
-
-    const allValues = options.map((option) => option.value);
-    const selectedValues =
-      filterState?.kind === "text" ? filterState.values : allValues;
-    const selectedSet = new Set(selectedValues);
-    const normalizedQuery = searchTerm.trim().toLowerCase();
-    const filteredOptions = normalizedQuery.length
-      ? options.filter((option) => option.value.toLowerCase().includes(normalizedQuery))
-      : options;
-
-    if (isNumeric) {
-      const numberFilter: NumberColumnFilterState =
-        filterState?.kind === "number"
-          ? filterState
-          : { kind: "number", operator: COLUMN_FILTER_OPERATORS[0], value: "" };
-
-      const handleOperatorChange = (operator: ColumnFilterOperator) => {
-        setColumnFilters((prev) => ({
-          ...prev,
-          [columnKey]: {
-            kind: "number",
-            operator,
-            value:
-              prev[columnKey]?.kind === "number" ? prev[columnKey].value : numberFilter.value,
-          },
-        }));
-      };
-
-      const handleValueChange = (value: string) => {
-        setColumnFilters((prev) => ({
-          ...prev,
-          [columnKey]: {
-            kind: "number",
-            operator:
-              prev[columnKey]?.kind === "number"
-                ? prev[columnKey].operator
-                : numberFilter.operator,
-            value,
-          },
-        }));
-      };
-
-      return (
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <button type="button" className={triggerClass} aria-label={`Filter ${definition?.label ?? "column"}`}>
-              <FilterIcon className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-56 space-y-3 p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Filter {definition?.label ?? "column"}</p>
-              {filterState ? (
-                <Button variant="ghost" size="sm" onClick={() => clearColumnFilter(columnKey)}>
-                  Clear
-                </Button>
-              ) : null}
-            </div>
-            <Select
-              value={numberFilter.operator}
-              onValueChange={(op) => handleOperatorChange(op as ColumnFilterOperator)}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Operator" />
-              </SelectTrigger>
-              <SelectContent>
-                {COLUMN_FILTER_OPERATORS.map((operator) => (
-                  <SelectItem key={operator} value={operator}>
-                    {operator}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              type="number"
-              value={numberFilter.value}
-              onChange={(event) => handleValueChange(event.target.value)}
-              placeholder="Value"
-              className="h-9"
-            />
-            <div className="text-xs text-muted-foreground">
-              Rows match when the column value {numberFilter.operator} {numberFilter.value || "…"}.
-            </div>
-          </PopoverContent>
-        </Popover>
-      );
-    }
-
-    const toggleValue = (value: string) => {
-      setColumnFilters((prev) => {
-        const base = options.map((option) => option.value);
-        const current =
-          prev[columnKey]?.kind === "text" ? prev[columnKey].values : base;
-        const nextSet = new Set(current);
-        if (nextSet.has(value)) {
-          nextSet.delete(value);
-        } else {
-          nextSet.add(value);
-        }
-        const nextValues = base.filter((item) => nextSet.has(item));
-        if (nextValues.length === base.length) {
-          const { [columnKey]: _removed, ...rest } = prev;
-          return rest;
-        }
-        return {
-          ...prev,
-          [columnKey]: { kind: "text", values: nextValues },
-        };
-      });
-    };
-
-    const handleSelectAll = () => {
-      clearColumnFilter(columnKey);
-    };
-
-    const handleSelectNone = () => {
-      setColumnFilters((prev) => ({
-        ...prev,
-        [columnKey]: { kind: "text", values: [] },
-      }));
-    };
-
-    return (
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button type="button" className={triggerClass} aria-label={`Filter ${definition?.label ?? "column"}`}>
-            <FilterIcon className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 space-y-3 p-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">Filter {definition?.label ?? "column"}</p>
-            {filterState?.kind === "text" ? (
-              <Button variant="ghost" size="sm" onClick={() => clearColumnFilter(columnKey)}>
-                Clear
-              </Button>
-            ) : null}
-          </div>
-          <Input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search values"
-            className="h-9"
-          />
-          <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
-            {filteredOptions.length ? (
-              filteredOptions.map((option) => {
-                const checked = selectedSet.has(option.value);
-                return (
-                  <label
-                    key={option.value}
-                    className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted"
-                  >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => toggleValue(option.value)}
-                      className="h-4 w-4"
-                    />
-                    <span className="flex-1 truncate" title={option.value}>
-                      {option.value}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{option.count}</span>
-                  </label>
-                );
-              })
-            ) : (
-              <p className="py-8 text-center text-xs text-muted-foreground">No matching values.</p>
-            )}
-          </div>
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <Button type="button" variant="ghost" size="sm" onClick={handleSelectAll}>
-              Select all
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={handleSelectNone}>
-              Select none
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
-    );
-  };
 
   const filteredPerDayPreview = useMemo(() => {
     if (!perDay) return [] as PerDayRow[];
@@ -3398,25 +3211,25 @@ function BioLogUploaderContent() {
                   <th className="p-2 text-left">
                     <div className="flex items-center gap-1">
                       <span>Employee No</span>
-                      <ColumnFilterControl columnKey="employeeId" />
+                      <ColumnFilterControl columnKey="employeeId" {...columnFilterControlProps} />
                     </div>
                   </th>
                   <th className="p-2 text-left">
                     <div className="flex items-center gap-1">
                       <span>Name</span>
-                      <ColumnFilterControl columnKey="employeeName" />
+                      <ColumnFilterControl columnKey="employeeName" {...columnFilterControlProps} />
                     </div>
                   </th>
                   <th className="p-2 text-left">
                     <div className="flex items-center gap-1">
                       <span>Office</span>
-                      <ColumnFilterControl columnKey="office" />
+                      <ColumnFilterControl columnKey="office" {...columnFilterControlProps} />
                     </div>
                   </th>
                   <th className="p-2 text-left">
                     <div className="flex items-center gap-1">
                       <span>Schedule</span>
-                      <ColumnFilterControl columnKey="schedule" />
+                      <ColumnFilterControl columnKey="schedule" {...columnFilterControlProps} />
                     </div>
                   </th>
                   <th className="p-2 text-center">
@@ -3436,14 +3249,14 @@ function BioLogUploaderContent() {
                           )}
                         />
                       </button>
-                      <ColumnFilterControl columnKey="days" />
+                      <ColumnFilterControl columnKey="days" {...columnFilterControlProps} />
                     </div>
                   </th>
                   {showNoPunchColumn ? (
                     <th className="p-2 text-center">
                       <div className="inline-flex items-center justify-center gap-1">
                         <span>No-punch</span>
-                        <ColumnFilterControl columnKey="noPunchDays" />
+                        <ColumnFilterControl columnKey="noPunchDays" {...columnFilterControlProps} />
                       </div>
                     </th>
                   ) : null}
@@ -3464,7 +3277,7 @@ function BioLogUploaderContent() {
                           )}
                         />
                       </button>
-                      <ColumnFilterControl columnKey="lateDays" />
+                      <ColumnFilterControl columnKey="lateDays" {...columnFilterControlProps} />
                     </div>
                   </th>
                   <th className="p-2 text-center">
@@ -3484,7 +3297,7 @@ function BioLogUploaderContent() {
                           )}
                         />
                       </button>
-                      <ColumnFilterControl columnKey="undertimeDays" />
+                      <ColumnFilterControl columnKey="undertimeDays" {...columnFilterControlProps} />
                     </div>
                   </th>
                   <th
@@ -3522,7 +3335,7 @@ function BioLogUploaderContent() {
                           )}
                         />
                       </button>
-                      <ColumnFilterControl columnKey={lateMetricColumnKey} />
+                      <ColumnFilterControl columnKey={lateMetricColumnKey} {...columnFilterControlProps} />
                       {metricMode === "minutes" ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -3578,7 +3391,7 @@ function BioLogUploaderContent() {
                           )}
                         />
                       </button>
-                      <ColumnFilterControl columnKey={undertimeMetricColumnKey} />
+                      <ColumnFilterControl columnKey={undertimeMetricColumnKey} {...columnFilterControlProps} />
                       {metricMode === "minutes" ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -4054,3 +3867,232 @@ export default function BioLogUploader() {
     </SummaryFiltersProvider>
   );
 }
+
+const ColumnFilterControl = React.memo(
+  ({
+    columnKey,
+    columnFilters,
+    setColumnFilters,
+    clearColumnFilter,
+    filterRowsByColumnFilters,
+    filteredPerEmployee,
+    getSummaryValue,
+  }: ColumnFilterControlProps) => {
+    const definition = SUMMARY_COLUMN_DEFINITION_MAP[columnKey];
+    const filterState = columnFilters[columnKey];
+    const [open, setOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
+
+    useEffect(() => {
+      if (!open) {
+        setSearchTerm("");
+      }
+    }, [open]);
+
+    const options = useMemo(() => {
+      if (!TEXT_FILTER_KEYS.has(columnKey)) return [] as Array<{ value: string; count: number }>;
+      const filtersWithoutCurrent: Partial<Record<SummaryColumnKey, ColumnFilterState>> = {
+        ...columnFilters,
+      };
+      delete filtersWithoutCurrent[columnKey];
+      const scopedRows = filterRowsByColumnFilters(filteredPerEmployee, filtersWithoutCurrent);
+      const counts = new Map<string, number>();
+      for (const row of scopedRows) {
+        const raw = getSummaryValue(row, columnKey);
+        const textValue = normalizeFilterText(raw);
+        counts.set(textValue, (counts.get(textValue) ?? 0) + 1);
+      }
+      return Array.from(counts.entries())
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => a.value.localeCompare(b.value));
+    }, [columnFilters, columnKey, filterRowsByColumnFilters, filteredPerEmployee, getSummaryValue]);
+
+    const isNumeric = definition ? NUMERIC_FILTER_TYPES.has(definition.type) : false;
+    const isActive = filterState
+      ? filterState.kind === "text" || (filterState.kind === "number" && filterState.value.trim().length > 0)
+      : false;
+
+    const triggerClass = cn(
+      "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-accent",
+      isActive ? "text-primary" : "text-muted-foreground"
+    );
+
+    const allValues = options.map((option) => option.value);
+    const selectedValues = filterState?.kind === "text" ? filterState.values : allValues;
+    const selectedSet = new Set(selectedValues);
+    const normalizedQuery = searchTerm.trim().toLowerCase();
+    const filteredOptions = normalizedQuery.length
+      ? options.filter((option) => option.value.toLowerCase().includes(normalizedQuery))
+      : options;
+
+    if (isNumeric) {
+      const numberFilter: NumberColumnFilterState =
+        filterState?.kind === "number"
+          ? filterState
+          : { kind: "number", operator: COLUMN_FILTER_OPERATORS[0], value: "" };
+
+      const handleOperatorChange = (operator: ColumnFilterOperator) => {
+        setColumnFilters((prev) => ({
+          ...prev,
+          [columnKey]: {
+            kind: "number",
+            operator,
+            value: prev[columnKey]?.kind === "number" ? prev[columnKey].value : numberFilter.value,
+          },
+        }));
+      };
+
+      const handleValueChange = (value: string) => {
+        setColumnFilters((prev) => ({
+          ...prev,
+          [columnKey]: {
+            kind: "number",
+            operator:
+              prev[columnKey]?.kind === "number"
+                ? prev[columnKey].operator
+                : numberFilter.operator,
+            value,
+          },
+        }));
+      };
+
+      return (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button type="button" className={triggerClass} aria-label={`Filter ${definition?.label ?? "column"}`}>
+              <FilterIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-56 space-y-3 p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Filter {definition?.label ?? "column"}</p>
+              {filterState ? (
+                <Button variant="ghost" size="sm" onClick={() => clearColumnFilter(columnKey)}>
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+            <Select
+              value={numberFilter.operator}
+              onValueChange={(op) => handleOperatorChange(op as ColumnFilterOperator)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Operator" />
+              </SelectTrigger>
+              <SelectContent>
+                {COLUMN_FILTER_OPERATORS.map((operator) => (
+                  <SelectItem key={operator} value={operator}>
+                    {operator}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              value={numberFilter.value}
+              onChange={(event) => handleValueChange(event.target.value)}
+              placeholder="Value"
+              className="h-9"
+            />
+            <div className="text-xs text-muted-foreground">
+              Rows match when the column value {numberFilter.operator} {numberFilter.value || "…"}.
+            </div>
+          </PopoverContent>
+        </Popover>
+      );
+    }
+
+    const toggleValue = (value: string) => {
+      setColumnFilters((prev) => {
+        const base = options.map((option) => option.value);
+        const current = prev[columnKey]?.kind === "text" ? prev[columnKey].values : base;
+        const nextSet = new Set(current);
+        if (nextSet.has(value)) {
+          nextSet.delete(value);
+        } else {
+          nextSet.add(value);
+        }
+        const nextValues = base.filter((item) => nextSet.has(item));
+        if (nextValues.length === base.length) {
+          const { [columnKey]: _removed, ...rest } = prev;
+          return rest;
+        }
+        return {
+          ...prev,
+          [columnKey]: { kind: "text", values: nextValues },
+        };
+      });
+    };
+
+    const handleSelectAll = () => {
+      clearColumnFilter(columnKey);
+    };
+
+    const handleSelectNone = () => {
+      setColumnFilters((prev) => ({
+        ...prev,
+        [columnKey]: { kind: "text", values: [] },
+      }));
+    };
+
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button type="button" className={triggerClass} aria-label={`Filter ${definition?.label ?? "column"}`}>
+            <FilterIcon className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 space-y-3 p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Filter {definition?.label ?? "column"}</p>
+            {filterState?.kind === "text" ? (
+              <Button variant="ghost" size="sm" onClick={() => clearColumnFilter(columnKey)}>
+                Clear
+              </Button>
+            ) : null}
+          </div>
+          <Input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search values"
+            className="h-9"
+          />
+          <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+            {filteredOptions.length ? (
+              filteredOptions.map((option) => {
+                const checked = selectedSet.has(option.value);
+                return (
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleValue(option.value)}
+                      className="h-4 w-4"
+                    />
+                    <span className="flex-1 truncate" title={option.value}>
+                      {option.value}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{option.count}</span>
+                  </label>
+                );
+              })
+            ) : (
+              <p className="py-8 text-center text-xs text-muted-foreground">No matching values.</p>
+            )}
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <Button type="button" variant="ghost" size="sm" onClick={handleSelectAll}>
+              Select all
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={handleSelectNone}>
+              Select none
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  }
+);
+ColumnFilterControl.displayName = "ColumnFilterControl";
