@@ -27,6 +27,7 @@ import * as XLSX from "xlsx";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -118,6 +119,37 @@ const APP_VERSION =
 const formatTimelineLabel = (segments: { start: string; end: string }[]) => {
   if (!segments.length) return "none";
   return segments.map((segment) => `${segment.start}–${segment.end}`).join(", ");
+};
+
+type ColumnFilterOperator = "=" | ">" | ">=" | "<" | "<=";
+
+type TextColumnFilterState = {
+  kind: "text";
+  values: string[];
+};
+
+type NumberColumnFilterState = {
+  kind: "number";
+  operator: ColumnFilterOperator;
+  value: string;
+};
+
+type ColumnFilterState = TextColumnFilterState | NumberColumnFilterState;
+
+const COLUMN_FILTER_OPERATORS: ColumnFilterOperator[] = ["=", ">", ">=", "<", "<="];
+
+const TEXT_FILTER_KEYS = new Set<SummaryColumnKey>(
+  SUMMARY_COLUMN_DEFINITIONS.filter((definition) => definition.type === "text" || definition.type === "date").map(
+    (definition) => definition.key
+  )
+);
+
+const NUMERIC_FILTER_TYPES = new Set(["number", "minutes", "percent"]);
+
+const normalizeFilterText = (value: unknown): string => {
+  if (value == null) return "—";
+  const stringValue = typeof value === "string" ? value.trim() : String(value);
+  return stringValue.length ? stringValue : "—";
 };
 
 type WeeklyPatternTimelineProps = {
@@ -917,15 +949,9 @@ export default function BioLogUploader() {
     initialColumnSettings.selected
   );
   const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
-  const [columnFilterOpen, setColumnFilterOpen] = useState(false);
-  const [columnFilter, setColumnFilter] = useState<
-    | {
-        key: SummaryColumnKey;
-        op: "contains" | "=" | ">" | ">=" | "<" | "<=";
-        value: string;
-      }
-    | null
-  >(null);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<SummaryColumnKey, ColumnFilterState>>>(
+    {}
+  );
   const manualResolvedRef = useRef<Set<string>>(new Set());
   const manualResolvedTokens = useMemo(() => Array.from(manualResolved), [manualResolved]);
   useEffect(() => {
@@ -1797,47 +1823,79 @@ export default function BioLogUploader() {
     []
   );
 
-  const applyColumnFilter = useCallback(
-    (rows: PerEmployeeRow[]) => {
-      if (!columnFilter) return rows;
-      const def = SUMMARY_COLUMN_DEFINITION_MAP[columnFilter.key];
-      if (!def) return rows;
-      const isNumeric = def.type === "number" || def.type === "minutes" || def.type === "percent";
-      const valueRaw = columnFilter.value ?? "";
-      const valueNum = Number(valueRaw);
-      const valueStr = valueRaw.toLowerCase();
+  const filterRowsByColumnFilters = useCallback(
+    (
+      rows: PerEmployeeRow[],
+      filters: Partial<Record<SummaryColumnKey, ColumnFilterState>>
+    ) => {
+      const entries = Object.entries(filters).filter(([, value]) => value) as Array<
+        [SummaryColumnKey, ColumnFilterState]
+      >;
+      if (!entries.length) return rows;
       return rows.filter((row) => {
-        const v = getSummaryValue(row, columnFilter.key);
-        if (v == null) return false;
-        if (isNumeric) {
-          const n = typeof v === "number" ? v : Number(v);
-          if (Number.isNaN(n) || Number.isNaN(valueNum)) return false;
-          switch (columnFilter.op) {
-            case "=":
-              return n === valueNum;
-            case ">":
-              return n > valueNum;
-            case ">=":
-              return n >= valueNum;
-            case "<":
-              return n < valueNum;
-            case "<=":
-              return n <= valueNum;
-            default:
+        for (const [key, filter] of entries) {
+          const value = getSummaryValue(row, key);
+          if (filter.kind === "text") {
+            const textValue = normalizeFilterText(value);
+            if (!filter.values.includes(textValue)) {
               return false;
+            }
+          } else if (filter.kind === "number") {
+            if (!filter.value.trim()) {
+              continue;
+            }
+            const target = Number(filter.value);
+            if (Number.isNaN(target)) {
+              continue;
+            }
+            const numericValue = typeof value === "number" ? value : Number(value);
+            if (Number.isNaN(numericValue)) {
+              return false;
+            }
+            switch (filter.operator) {
+              case "=":
+                if (numericValue !== target) return false;
+                break;
+              case ">":
+                if (!(numericValue > target)) return false;
+                break;
+              case ">=":
+                if (!(numericValue >= target)) return false;
+                break;
+              case "<":
+                if (!(numericValue < target)) return false;
+                break;
+              case "<=":
+                if (!(numericValue <= target)) return false;
+                break;
+              default:
+                break;
+            }
           }
         }
-        const s = String(v).toLowerCase();
-        return columnFilter.op === "=" ? s === valueStr : s.includes(valueStr);
+        return true;
       });
     },
-    [columnFilter, getSummaryValue]
+    [getSummaryValue]
   );
+
+  const applyColumnFilters = useCallback(
+    (rows: PerEmployeeRow[]) => filterRowsByColumnFilters(rows, columnFilters),
+    [columnFilters, filterRowsByColumnFilters]
+  );
+
+  const clearColumnFilter = useCallback((key: SummaryColumnKey) => {
+    setColumnFilters((prev) => {
+      if (!(key in prev)) return prev;
+      const { [key]: _removed, ...rest } = prev;
+      return rest;
+    });
+  }, []);
 
   const searchedPerEmployee = useMemo(() => {
     if (!filteredPerEmployee.length) return filteredPerEmployee;
+    const base = applyColumnFilters(filteredPerEmployee);
     const query = employeeSearch.trim().toLowerCase();
-    const base = applyColumnFilter(filteredPerEmployee);
     if (!query) return base;
     return base.filter((row) => {
       const name = row.employeeName?.toLowerCase() ?? "";
@@ -1851,7 +1909,232 @@ export default function BioLogUploader() {
         token.includes(query)
       );
     });
-  }, [applyColumnFilter, employeeSearch, filteredPerEmployee]);
+  }, [applyColumnFilters, employeeSearch, filteredPerEmployee]);
+
+  const lateMetricColumnKey: SummaryColumnKey =
+    metricMode === "minutes" ? "lateMinutes" : "latePercent";
+  const undertimeMetricColumnKey: SummaryColumnKey =
+    metricMode === "minutes" ? "undertimeMinutes" : "undertimePercent";
+
+  const ColumnFilterControl = ({ columnKey }: { columnKey: SummaryColumnKey }) => {
+    const definition = SUMMARY_COLUMN_DEFINITION_MAP[columnKey];
+    const filterState = columnFilters[columnKey];
+    let options: Array<{ value: string; count: number }> = [];
+    if (TEXT_FILTER_KEYS.has(columnKey)) {
+      const filtersWithoutCurrent: Partial<Record<SummaryColumnKey, ColumnFilterState>> = {
+        ...columnFilters,
+      };
+      delete filtersWithoutCurrent[columnKey];
+      const scopedRows = filterRowsByColumnFilters(filteredPerEmployee, filtersWithoutCurrent);
+      const counts = new Map<string, number>();
+      for (const row of scopedRows) {
+        const raw = getSummaryValue(row, columnKey);
+        const textValue = normalizeFilterText(raw);
+        counts.set(textValue, (counts.get(textValue) ?? 0) + 1);
+      }
+      options = Array.from(counts.entries())
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => a.value.localeCompare(b.value));
+    }
+    const [open, setOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
+
+    useEffect(() => {
+      if (!open) {
+        setSearchTerm("");
+      }
+    }, [open]);
+
+    const isNumeric = definition ? NUMERIC_FILTER_TYPES.has(definition.type) : false;
+    const isActive = filterState
+      ? filterState.kind === "text" || (filterState.kind === "number" && filterState.value.trim().length > 0)
+      : false;
+
+    const triggerClass = cn(
+      "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-accent",
+      isActive ? "text-primary" : "text-muted-foreground"
+    );
+
+    const allValues = options.map((option) => option.value);
+    const selectedValues =
+      filterState?.kind === "text" ? filterState.values : allValues;
+    const selectedSet = new Set(selectedValues);
+    const normalizedQuery = searchTerm.trim().toLowerCase();
+    const filteredOptions = normalizedQuery.length
+      ? options.filter((option) => option.value.toLowerCase().includes(normalizedQuery))
+      : options;
+
+    if (isNumeric) {
+      const numberFilter: NumberColumnFilterState =
+        filterState?.kind === "number"
+          ? filterState
+          : { kind: "number", operator: COLUMN_FILTER_OPERATORS[0], value: "" };
+
+      const handleOperatorChange = (operator: ColumnFilterOperator) => {
+        setColumnFilters((prev) => ({
+          ...prev,
+          [columnKey]: {
+            kind: "number",
+            operator,
+            value:
+              prev[columnKey]?.kind === "number" ? prev[columnKey].value : numberFilter.value,
+          },
+        }));
+      };
+
+      const handleValueChange = (value: string) => {
+        setColumnFilters((prev) => ({
+          ...prev,
+          [columnKey]: {
+            kind: "number",
+            operator:
+              prev[columnKey]?.kind === "number"
+                ? prev[columnKey].operator
+                : numberFilter.operator,
+            value,
+          },
+        }));
+      };
+
+      return (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button type="button" className={triggerClass} aria-label={`Filter ${definition?.label ?? "column"}`}>
+              <FilterIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-56 space-y-3 p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Filter {definition?.label ?? "column"}</p>
+              {filterState ? (
+                <Button variant="ghost" size="sm" onClick={() => clearColumnFilter(columnKey)}>
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+            <Select
+              value={numberFilter.operator}
+              onValueChange={(op) => handleOperatorChange(op as ColumnFilterOperator)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Operator" />
+              </SelectTrigger>
+              <SelectContent>
+                {COLUMN_FILTER_OPERATORS.map((operator) => (
+                  <SelectItem key={operator} value={operator}>
+                    {operator}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              value={numberFilter.value}
+              onChange={(event) => handleValueChange(event.target.value)}
+              placeholder="Value"
+              className="h-9"
+            />
+            <div className="text-xs text-muted-foreground">
+              Rows match when the column value {numberFilter.operator} {numberFilter.value || "…"}.
+            </div>
+          </PopoverContent>
+        </Popover>
+      );
+    }
+
+    const toggleValue = (value: string) => {
+      setColumnFilters((prev) => {
+        const base = options.map((option) => option.value);
+        const current =
+          prev[columnKey]?.kind === "text" ? prev[columnKey].values : base;
+        const nextSet = new Set(current);
+        if (nextSet.has(value)) {
+          nextSet.delete(value);
+        } else {
+          nextSet.add(value);
+        }
+        const nextValues = base.filter((item) => nextSet.has(item));
+        if (nextValues.length === base.length) {
+          const { [columnKey]: _removed, ...rest } = prev;
+          return rest;
+        }
+        return {
+          ...prev,
+          [columnKey]: { kind: "text", values: nextValues },
+        };
+      });
+    };
+
+    const handleSelectAll = () => {
+      clearColumnFilter(columnKey);
+    };
+
+    const handleSelectNone = () => {
+      setColumnFilters((prev) => ({
+        ...prev,
+        [columnKey]: { kind: "text", values: [] },
+      }));
+    };
+
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button type="button" className={triggerClass} aria-label={`Filter ${definition?.label ?? "column"}`}>
+            <FilterIcon className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 space-y-3 p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Filter {definition?.label ?? "column"}</p>
+            {filterState?.kind === "text" ? (
+              <Button variant="ghost" size="sm" onClick={() => clearColumnFilter(columnKey)}>
+                Clear
+              </Button>
+            ) : null}
+          </div>
+          <Input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search values"
+            className="h-9"
+          />
+          <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+            {filteredOptions.length ? (
+              filteredOptions.map((option) => {
+                const checked = selectedSet.has(option.value);
+                return (
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleValue(option.value)}
+                      className="h-4 w-4"
+                    />
+                    <span className="flex-1 truncate" title={option.value}>
+                      {option.value}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{option.count}</span>
+                  </label>
+                );
+              })
+            ) : (
+              <p className="py-8 text-center text-xs text-muted-foreground">No matching values.</p>
+            )}
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <Button type="button" variant="ghost" size="sm" onClick={handleSelectAll}>
+              Select all
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={handleSelectNone}>
+              Select none
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
 
   const filteredPerDayPreview = useMemo(() => {
     if (!perDay) return [] as PerDayRow[];
@@ -3004,77 +3287,6 @@ export default function BioLogUploader() {
                 >
                   Download Results (Excel)
                 </Button>
-                <Popover open={columnFilterOpen} onOpenChange={setColumnFilterOpen}>
-                  <PopoverTrigger asChild>
-                    <Button type="button" variant="outline">
-                      <FilterIcon className="mr-2 h-4 w-4" aria-hidden="true" /> Filter
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-80 p-3">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">Filter by column</p>
-                        {columnFilter ? (
-                          <Button variant="ghost" size="sm" onClick={() => setColumnFilter(null)}>
-                            Clear
-                          </Button>
-                        ) : null}
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <Select
-                          value={columnFilter?.key ?? undefined}
-                          onValueChange={(key) =>
-                            setColumnFilter((prev) => ({ key: key as SummaryColumnKey, op: prev?.op ?? "contains", value: prev?.value ?? "" }))
-                          }
-                        >
-                          <SelectTrigger className="col-span-2 h-9">
-                            <SelectValue placeholder="Column" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SUMMARY_COLUMN_DEFINITIONS.map((def) => (
-                              <SelectItem key={def.key} value={def.key}>
-                                {def.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={columnFilter?.op ?? undefined}
-                          onValueChange={(op) =>
-                            setColumnFilter((prev) => (prev ? { ...prev, op: op as any } : null))
-                          }
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Op" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="contains">contains</SelectItem>
-                            <SelectItem value="=">=</SelectItem>
-                            <SelectItem value=">">&gt;</SelectItem>
-                            <SelectItem value=">=">&gt;=</SelectItem>
-                            <SelectItem value="<">&lt;</SelectItem>
-                            <SelectItem value="<=">&lt;=</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          className="col-span-3 h-9"
-                          placeholder="Value"
-                          value={columnFilter?.value ?? ""}
-                          onChange={(e) =>
-                            setColumnFilter((prev) =>
-                              prev
-                                ? { ...prev, value: e.target.value }
-                                : { key: "employeeName", op: "contains", value: e.target.value }
-                            )
-                          }
-                        />
-                        <div className="col-span-3 text-xs text-muted-foreground">
-                          Tip: For numeric columns, use =, &gt;, &gt;=, &lt;, &lt;=. For text, use contains or =.
-                        </div>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
               </div>
             </div>
             <SummaryFiltersBar officeOptions={officeOptions} scheduleOptions={scheduleTypeOptions} />
@@ -3083,61 +3295,97 @@ export default function BioLogUploader() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="p-2 text-left">Employee No</th>
-                  <th className="p-2 text-left">Name</th>
-                  <th className="p-2 text-left">Office</th>
-                  <th className="p-2 text-left">Schedule</th>
-                  <th className="p-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleSort("days")}
-                      className="inline-flex items-center gap-1 font-semibold"
-                      aria-label="Sort by evaluated days"
-                    >
-                      Days
-                      <ArrowUpDown
-                        className={cn(
-                          "h-3.5 w-3.5 transition-transform",
-                          sortBy === "days" ? "opacity-100" : "opacity-40",
-                          sortBy === "days" && sortDir === "asc" ? "rotate-180" : undefined
-                        )}
-                      />
-                    </button>
+                  <th className="p-2 text-left">
+                    <div className="flex items-center gap-1">
+                      <span>Employee No</span>
+                      <ColumnFilterControl columnKey="employeeId" />
+                    </div>
                   </th>
-                  {showNoPunchColumn ? <th className="p-2 text-center">No-punch</th> : null}
-                  <th className="p-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleSort("lateDays")}
-                      className="inline-flex items-center gap-1 font-semibold"
-                      aria-label="Sort by late days"
-                    >
-                      Late
-                      <ArrowUpDown
-                        className={cn(
-                          "h-3.5 w-3.5 transition-transform",
-                          sortBy === "lateDays" ? "opacity-100" : "opacity-40",
-                          sortBy === "lateDays" && sortDir === "asc" ? "rotate-180" : undefined
-                        )}
-                      />
-                    </button>
+                  <th className="p-2 text-left">
+                    <div className="flex items-center gap-1">
+                      <span>Name</span>
+                      <ColumnFilterControl columnKey="employeeName" />
+                    </div>
+                  </th>
+                  <th className="p-2 text-left">
+                    <div className="flex items-center gap-1">
+                      <span>Office</span>
+                      <ColumnFilterControl columnKey="office" />
+                    </div>
+                  </th>
+                  <th className="p-2 text-left">
+                    <div className="flex items-center gap-1">
+                      <span>Schedule</span>
+                      <ColumnFilterControl columnKey="schedule" />
+                    </div>
                   </th>
                   <th className="p-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleSort("undertimeDays")}
-                      className="inline-flex items-center gap-1 font-semibold"
-                      aria-label="Sort by undertime days"
-                    >
-                      Undertime
-                      <ArrowUpDown
-                        className={cn(
-                          "h-3.5 w-3.5 transition-transform",
-                          sortBy === "undertimeDays" ? "opacity-100" : "opacity-40",
-                          sortBy === "undertimeDays" && sortDir === "asc" ? "rotate-180" : undefined
-                        )}
-                      />
-                    </button>
+                    <div className="inline-flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("days")}
+                        className="inline-flex items-center gap-1 font-semibold"
+                        aria-label="Sort by evaluated days"
+                      >
+                        Days
+                        <ArrowUpDown
+                          className={cn(
+                            "h-3.5 w-3.5 transition-transform",
+                            sortBy === "days" ? "opacity-100" : "opacity-40",
+                            sortBy === "days" && sortDir === "asc" ? "rotate-180" : undefined
+                          )}
+                        />
+                      </button>
+                      <ColumnFilterControl columnKey="days" />
+                    </div>
+                  </th>
+                  {showNoPunchColumn ? (
+                    <th className="p-2 text-center">
+                      <div className="inline-flex items-center justify-center gap-1">
+                        <span>No-punch</span>
+                        <ColumnFilterControl columnKey="noPunchDays" />
+                      </div>
+                    </th>
+                  ) : null}
+                  <th className="p-2 text-center">
+                    <div className="inline-flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("lateDays")}
+                        className="inline-flex items-center gap-1 font-semibold"
+                        aria-label="Sort by late days"
+                      >
+                        Late
+                        <ArrowUpDown
+                          className={cn(
+                            "h-3.5 w-3.5 transition-transform",
+                            sortBy === "lateDays" ? "opacity-100" : "opacity-40",
+                            sortBy === "lateDays" && sortDir === "asc" ? "rotate-180" : undefined
+                          )}
+                        />
+                      </button>
+                      <ColumnFilterControl columnKey="lateDays" />
+                    </div>
+                  </th>
+                  <th className="p-2 text-center">
+                    <div className="inline-flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("undertimeDays")}
+                        className="inline-flex items-center gap-1 font-semibold"
+                        aria-label="Sort by undertime days"
+                      >
+                        Undertime
+                        <ArrowUpDown
+                          className={cn(
+                            "h-3.5 w-3.5 transition-transform",
+                            sortBy === "undertimeDays" ? "opacity-100" : "opacity-40",
+                            sortBy === "undertimeDays" && sortDir === "asc" ? "rotate-180" : undefined
+                          )}
+                        />
+                      </button>
+                      <ColumnFilterControl columnKey="undertimeDays" />
+                    </div>
                   </th>
                   <th
                     className="p-2 text-center"
@@ -3174,6 +3422,7 @@ export default function BioLogUploader() {
                           )}
                         />
                       </button>
+                      <ColumnFilterControl columnKey={lateMetricColumnKey} />
                       {metricMode === "minutes" ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -3229,6 +3478,7 @@ export default function BioLogUploader() {
                           )}
                         />
                       </button>
+                      <ColumnFilterControl columnKey={undertimeMetricColumnKey} />
                       {metricMode === "minutes" ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
