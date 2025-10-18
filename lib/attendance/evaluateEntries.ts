@@ -22,8 +22,6 @@ import {
 import { normalizeBiometricToken } from "@/utils/biometricsShared";
 
 const MINUTES_IN_DAY = 24 * 60;
-const MIN_PRESENCE_THRESHOLD = 5;
-
 const parseHHMM = (value: HHMM | string | null | undefined): number | null => {
   if (!value) return null;
   const [hoursStr, minutesStr] = value.split(":");
@@ -322,8 +320,8 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
     const isExcused =
       (exceptionInfo?.type ?? null) === "HOLIDAY" ||
       ["OB", "CTO", "LEAVE"].includes((exceptionInfo?.code ?? "").toUpperCase());
-    const isZeroPresence = clampedPresence <= MIN_PRESENCE_THRESHOLD;
-    const absent = isScheduled && !isExcused && isZeroPresence;
+    const hasAnyPunches = row.punches.length > 0;
+    const absent = isScheduled && !isExcused && !hasAnyPunches;
     const statusLabel = absent ? "Absent" : "Present";
 
     const perDay: PerDayRow = {
