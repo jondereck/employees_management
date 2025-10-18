@@ -13,6 +13,7 @@ import {
   ArrowUpDown,
   CheckCircle2,
   Columns,
+  Filter as FilterIcon,
   FileDown,
   Info,
   Loader2,
@@ -28,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -102,6 +104,7 @@ import {
   type InsightsSettings,
   type MetricMode,
 } from "./insights-types";
+import { Switch } from "@/components/ui/switch";
 
 const PAGE_SIZE = 25;
 
@@ -914,6 +917,15 @@ export default function BioLogUploader() {
     initialColumnSettings.selected
   );
   const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
+  const [columnFilterOpen, setColumnFilterOpen] = useState(false);
+  const [columnFilter, setColumnFilter] = useState<
+    | {
+        key: SummaryColumnKey;
+        op: "contains" | "=" | ">" | ">=" | "<" | "<=";
+        value: string;
+      }
+    | null
+  >(null);
   const manualResolvedRef = useRef<Set<string>>(new Set());
   const manualResolvedTokens = useMemo(() => Array.from(manualResolved), [manualResolved]);
   useEffect(() => {
@@ -1735,11 +1747,99 @@ export default function BioLogUploader() {
     showUnmatched,
   ]);
 
+  // Column filter helpers (placed before usage)
+  const getSummaryValue = useCallback(
+    (row: PerEmployeeRow, key: SummaryColumnKey): string | number | null => {
+      switch (key) {
+        case "employeeId": {
+          const no = firstEmployeeNoToken(row.employeeNo);
+          return (no && no.length ? no : row.employeeToken || row.employeeId || "").toString();
+        }
+        case "employeeName":
+          return row.employeeName ?? "";
+        case "office":
+          return row.officeName ?? (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL);
+        case "schedule":
+          return (row.scheduleTypes ?? []).join(", ");
+        case "matchStatus": {
+          const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
+          if (isUnmatched) return UNMATCHED_LABEL;
+          return row.resolvedEmployeeId ? "Resolved" : "Matched";
+        }
+        case "source":
+          return formatScheduleSource(row.scheduleSource);
+        case "head":
+          return row.isHead ? "Yes" : "No";
+        case "days":
+          return row.daysWithLogs;
+        case "noPunchDays":
+          return row.noPunchDays;
+        case "excusedDays":
+          return row.excusedDays;
+        case "lateDays":
+          return row.lateDays;
+        case "undertimeDays":
+          return row.undertimeDays;
+        case "latePercent":
+          return Math.round((row.lateRate ?? 0) * 10000) / 100;
+        case "undertimePercent":
+          return Math.round((row.undertimeRate ?? 0) * 10000) / 100;
+        case "lateMinutes":
+          return row.totalLateMinutes ?? 0;
+        case "undertimeMinutes":
+          return row.totalUndertimeMinutes ?? 0;
+        case "resolvedEmployeeId":
+          return row.resolvedEmployeeId ?? "";
+        default:
+          return null;
+      }
+    },
+    []
+  );
+
+  const applyColumnFilter = useCallback(
+    (rows: PerEmployeeRow[]) => {
+      if (!columnFilter) return rows;
+      const def = SUMMARY_COLUMN_DEFINITION_MAP[columnFilter.key];
+      if (!def) return rows;
+      const isNumeric = def.type === "number" || def.type === "minutes" || def.type === "percent";
+      const valueRaw = columnFilter.value ?? "";
+      const valueNum = Number(valueRaw);
+      const valueStr = valueRaw.toLowerCase();
+      return rows.filter((row) => {
+        const v = getSummaryValue(row, columnFilter.key);
+        if (v == null) return false;
+        if (isNumeric) {
+          const n = typeof v === "number" ? v : Number(v);
+          if (Number.isNaN(n) || Number.isNaN(valueNum)) return false;
+          switch (columnFilter.op) {
+            case "=":
+              return n === valueNum;
+            case ">":
+              return n > valueNum;
+            case ">=":
+              return n >= valueNum;
+            case "<":
+              return n < valueNum;
+            case "<=":
+              return n <= valueNum;
+            default:
+              return false;
+          }
+        }
+        const s = String(v).toLowerCase();
+        return columnFilter.op === "=" ? s === valueStr : s.includes(valueStr);
+      });
+    },
+    [columnFilter, getSummaryValue]
+  );
+
   const searchedPerEmployee = useMemo(() => {
     if (!filteredPerEmployee.length) return filteredPerEmployee;
     const query = employeeSearch.trim().toLowerCase();
-    if (!query) return filteredPerEmployee;
-    return filteredPerEmployee.filter((row) => {
+    const base = applyColumnFilter(filteredPerEmployee);
+    if (!query) return base;
+    return base.filter((row) => {
       const name = row.employeeName?.toLowerCase() ?? "";
       const id = row.employeeId?.toLowerCase() ?? "";
       const employeeNo = firstEmployeeNoToken(row.employeeNo)?.toLowerCase() ?? "";
@@ -1751,7 +1851,7 @@ export default function BioLogUploader() {
         token.includes(query)
       );
     });
-  }, [employeeSearch, filteredPerEmployee]);
+  }, [applyColumnFilter, employeeSearch, filteredPerEmployee]);
 
   const filteredPerDayPreview = useMemo(() => {
     if (!perDay) return [] as PerDayRow[];
@@ -2186,6 +2286,8 @@ export default function BioLogUploader() {
     },
     [togglePrimarySort]
   );
+
+  
 
   const handleFiles = useCallback(
     (fileList: FileList | null) => {
@@ -2902,6 +3004,77 @@ export default function BioLogUploader() {
                 >
                   Download Results (Excel)
                 </Button>
+                <Popover open={columnFilterOpen} onOpenChange={setColumnFilterOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline">
+                      <FilterIcon className="mr-2 h-4 w-4" aria-hidden="true" /> Filter
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-80 p-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">Filter by column</p>
+                        {columnFilter ? (
+                          <Button variant="ghost" size="sm" onClick={() => setColumnFilter(null)}>
+                            Clear
+                          </Button>
+                        ) : null}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Select
+                          value={columnFilter?.key ?? undefined}
+                          onValueChange={(key) =>
+                            setColumnFilter((prev) => ({ key: key as SummaryColumnKey, op: prev?.op ?? "contains", value: prev?.value ?? "" }))
+                          }
+                        >
+                          <SelectTrigger className="col-span-2 h-9">
+                            <SelectValue placeholder="Column" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SUMMARY_COLUMN_DEFINITIONS.map((def) => (
+                              <SelectItem key={def.key} value={def.key}>
+                                {def.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={columnFilter?.op ?? undefined}
+                          onValueChange={(op) =>
+                            setColumnFilter((prev) => (prev ? { ...prev, op: op as any } : null))
+                          }
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Op" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="contains">contains</SelectItem>
+                            <SelectItem value="=">=</SelectItem>
+                            <SelectItem value=">">&gt;</SelectItem>
+                            <SelectItem value=">=">&gt;=</SelectItem>
+                            <SelectItem value="<">&lt;</SelectItem>
+                            <SelectItem value="<=">&lt;=</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          className="col-span-3 h-9"
+                          placeholder="Value"
+                          value={columnFilter?.value ?? ""}
+                          onChange={(e) =>
+                            setColumnFilter((prev) =>
+                              prev
+                                ? { ...prev, value: e.target.value }
+                                : { key: "employeeName", op: "contains", value: e.target.value }
+                            )
+                          }
+                        />
+                        <div className="col-span-3 text-xs text-muted-foreground">
+                          Tip: For numeric columns, use =, &gt;, &gt;=, &lt;, &lt;=. For text, use contains or =.
+                        </div>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
             <SummaryFiltersBar officeOptions={officeOptions} scheduleOptions={scheduleTypeOptions} />

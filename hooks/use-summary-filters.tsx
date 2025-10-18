@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { MetricMode } from "@/app/(dashboard)/[departmentId]/(routes)/tools/biometrics/insights-types";
@@ -252,7 +252,8 @@ export type UseSummaryFilters = {
   togglePrimarySort: (field: SummarySortField) => void;
 };
 
-export const useSummaryFilters = (): UseSummaryFilters => {
+// Internal implementation used by the Provider and as a fallback when no Provider is mounted
+const useSummaryFiltersInternal = (): UseSummaryFilters => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -521,4 +522,18 @@ export const useSummaryFilters = (): UseSummaryFilters => {
     setSort,
     togglePrimarySort,
   };
+};
+
+// Context + Provider so consumers can share a single memoized value tree-wide
+const SummaryFiltersContext = createContext<UseSummaryFilters | null>(null);
+
+export const SummaryFiltersProvider = ({ children }: { children: ReactNode }) => {
+  const value = useSummaryFiltersInternal();
+  return <SummaryFiltersContext.Provider value={value}>{children}</SummaryFiltersContext.Provider>;
+};
+
+// Public hook: use context if available, otherwise compute locally (backward compatible)
+export const useSummaryFilters = (): UseSummaryFilters => {
+  const ctx = useContext(SummaryFiltersContext);
+  return ctx ?? useSummaryFiltersInternal();
 };

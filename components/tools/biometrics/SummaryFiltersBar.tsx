@@ -77,6 +77,7 @@ const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: Summar
     setSearch,
     setHeads,
     toggleOffice,
+    setOffices,
     clearOffices,
     toggleSchedule,
     clearSchedules,
@@ -173,13 +174,24 @@ const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: Summar
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-72 p-3">
-          <div className="flex items-center justify-between pb-2">
+          <div className="flex items-center justify-between gap-2 pb-2">
             <p className="text-sm font-medium">Filter by office</p>
-            {filters.offices.length ? (
-              <Button variant="ghost" size="sm" onClick={clearOffices}>
-                Clear
-              </Button>
-            ) : null}
+            <div className="flex items-center gap-1">
+              {filters.offices.length ? (
+                <Button variant="ghost" size="sm" onClick={clearOffices}>
+                  Clear
+                </Button>
+              ) : null}
+              {filters.offices.length < officeOptions.length ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOffices(officeOptions.map((o) => o.key))}
+                >
+                  Select all
+                </Button>
+              ) : null}
+            </div>
           </div>
           <Command shouldFilter>
             <CommandInput placeholder="Search offices…" aria-label="Search offices" />
