@@ -49,6 +49,8 @@ import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import { cn } from "@/lib/utils";
 import SummaryFiltersBar from "@/components/tools/biometrics/SummaryFiltersBar";
 import {
+  DEFAULT_SUMMARY_FILTERS,
+  SummaryFiltersProvider,
   useSummaryFilters,
   type HeadsFilterValue,
   type SummarySortField,
@@ -871,7 +873,7 @@ const formatDateRange = (range: MergeResult["dateRange"]) => {
   return start === end ? start : `${start} – ${end}`;
 };
 
-export default function BioLogUploader() {
+function BioLogUploaderContent() {
   const { toast } = useToast();
   const params = useParams<{ departmentId?: string }>();
   const rawDepartmentId = params?.departmentId;
@@ -916,8 +918,20 @@ export default function BioLogUploader() {
     unmatched: 0,
   });
   const [identityMap, setIdentityMap] = useState<Map<string, IdentityRecord>>(() => new Map());
-  const { filters, setOffices, clearOffices, setSchedules, clearSchedules, setSort, togglePrimarySort } =
-    useSummaryFilters();
+  const {
+    filters,
+    setSearch,
+    setHeads,
+    setOffices,
+    clearOffices,
+    setSchedules,
+    clearSchedules,
+    setShowUnmatched,
+    setShowNoPunch,
+    setMetricMode,
+    setSort,
+    togglePrimarySort,
+  } = useSummaryFilters();
   const {
     offices: selectedOffices,
     schedules: selectedScheduleTypes,
@@ -952,6 +966,80 @@ export default function BioLogUploader() {
   const [columnFilters, setColumnFilters] = useState<Partial<Record<SummaryColumnKey, ColumnFilterState>>>(
     {}
   );
+  const hasActiveColumnFilters = useMemo(
+    () => Object.keys(columnFilters).length > 0,
+    [columnFilters]
+  );
+  useEffect(() => {
+    setColumnFilters((prev) => {
+      let changed = false;
+      const next: Partial<Record<SummaryColumnKey, ColumnFilterState>> = { ...prev };
+      const migrateKey = (
+        fromKey: SummaryColumnKey,
+        toKey: SummaryColumnKey
+      ) => {
+        if (fromKey in next && !(toKey in next)) {
+          next[toKey] = next[fromKey];
+          delete next[fromKey];
+          changed = true;
+        } else if (fromKey in next && toKey in next) {
+          delete next[fromKey];
+          changed = true;
+        }
+      };
+      if (metricMode === "minutes") {
+        migrateKey("latePercent", "lateMinutes");
+        migrateKey("undertimePercent", "undertimeMinutes");
+      } else {
+        migrateKey("lateMinutes", "latePercent");
+        migrateKey("undertimeMinutes", "undertimePercent");
+      }
+      return changed ? next : prev;
+    });
+  }, [metricMode]);
+  const hasActiveSummaryFilters = useMemo(() => {
+    return (
+      filters.search.trim().length > 0 ||
+      filters.heads !== DEFAULT_SUMMARY_FILTERS.heads ||
+      filters.offices.length > 0 ||
+      filters.schedules.length > 0 ||
+      filters.showUnmatched !== DEFAULT_SUMMARY_FILTERS.showUnmatched ||
+      filters.showNoPunch !== DEFAULT_SUMMARY_FILTERS.showNoPunch ||
+      filters.metricMode !== DEFAULT_SUMMARY_FILTERS.metricMode ||
+      filters.sortBy !== DEFAULT_SUMMARY_FILTERS.sortBy ||
+      filters.sortDir !== DEFAULT_SUMMARY_FILTERS.sortDir ||
+      filters.secondarySortBy !== DEFAULT_SUMMARY_FILTERS.secondarySortBy ||
+      filters.secondarySortDir !== DEFAULT_SUMMARY_FILTERS.secondarySortDir
+    );
+  }, [filters]);
+  const hasAnyFilters = hasActiveSummaryFilters || hasActiveColumnFilters;
+
+  const handleClearAllFilters = useCallback(() => {
+    setColumnFilters({});
+    setSearch(DEFAULT_SUMMARY_FILTERS.search);
+    setHeads(DEFAULT_SUMMARY_FILTERS.heads);
+    clearOffices();
+    clearSchedules();
+    setShowUnmatched(DEFAULT_SUMMARY_FILTERS.showUnmatched);
+    setShowNoPunch(DEFAULT_SUMMARY_FILTERS.showNoPunch);
+    setMetricMode(DEFAULT_SUMMARY_FILTERS.metricMode);
+    setSort({
+      sortBy: DEFAULT_SUMMARY_FILTERS.sortBy,
+      sortDir: DEFAULT_SUMMARY_FILTERS.sortDir,
+      secondarySortBy: DEFAULT_SUMMARY_FILTERS.secondarySortBy,
+      secondarySortDir: DEFAULT_SUMMARY_FILTERS.secondarySortDir,
+    });
+  }, [
+    clearOffices,
+    clearSchedules,
+    setColumnFilters,
+    setHeads,
+    setMetricMode,
+    setSearch,
+    setShowNoPunch,
+    setShowUnmatched,
+    setSort,
+  ]);
   const manualResolvedRef = useRef<Set<string>>(new Set());
   const manualResolvedTokens = useMemo(() => Array.from(manualResolved), [manualResolved]);
   useEffect(() => {
@@ -3287,6 +3375,18 @@ export default function BioLogUploader() {
                 >
                   Download Results (Excel)
                 </Button>
+                {hasAnyFilters ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="inline-flex items-center gap-1"
+                    onClick={handleClearAllFilters}
+                  >
+                    <XCircle className="h-4 w-4" aria-hidden="true" />
+                    Clear filters
+                  </Button>
+                ) : null}
               </div>
             </div>
             <SummaryFiltersBar officeOptions={officeOptions} scheduleOptions={scheduleTypeOptions} />
@@ -3944,5 +4044,13 @@ export default function BioLogUploader() {
         onResolve={handleResolveSubmit}
       />
     </TooltipProvider>
+  );
+}
+
+export default function BioLogUploader() {
+  return (
+    <SummaryFiltersProvider>
+      <BioLogUploaderContent />
+    </SummaryFiltersProvider>
   );
 }

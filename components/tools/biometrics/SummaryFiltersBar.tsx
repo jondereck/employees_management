@@ -1,14 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import {
-  ArrowUpDown,
-  Check,
-  Filter,
-  Layers,
-  Search as SearchIcon,
-  SlidersHorizontal,
-} from "lucide-react";
+import { ArrowUpDown, Check, Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -30,8 +23,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
 import {
@@ -87,14 +80,10 @@ const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: Summar
     setSort,
   } = useSummaryFilters();
 
-  const [officeOpen, setOfficeOpen] = useState(false);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const officeSelectedSet = useMemo(() => new Set(filters.offices), [filters.offices]);
   const scheduleSelectedSet = useMemo(() => new Set(filters.schedules), [filters.schedules]);
-
-  const officeLabel = filters.offices.length ? `Offices (${filters.offices.length})` : "Offices";
-  const scheduleLabel = filters.schedules.length ? `Schedules (${filters.schedules.length})` : "Schedules";
 
   const sortSummary = useMemo(() => {
     const primary = `${SORT_FIELD_LABELS[filters.sortBy]} (${filters.sortDir === "asc" ? "A→Z" : "High→Low"})`;
@@ -112,6 +101,30 @@ const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: Summar
       setHeads("all");
     }
   };
+
+  const headStatusLabel = useMemo(() => {
+    switch (filters.heads) {
+      case "heads":
+        return "Heads only";
+      case "nonHeads":
+        return "Exclude heads";
+      default:
+        return "All";
+    }
+  }, [filters.heads]);
+
+  const { filtersActive, filtersActiveCount } = useMemo(() => {
+    let count = 0;
+    if (filters.heads !== "all") count += 1;
+    if (filters.showNoPunch) count += 1;
+    if (filters.showUnmatched) count += 1;
+    if (filters.offices.length) count += 1;
+    if (filters.schedules.length) count += 1;
+    return {
+      filtersActive: count > 0,
+      filtersActiveCount: count,
+    };
+  }, [filters.heads, filters.offices.length, filters.schedules.length, filters.showNoPunch, filters.showUnmatched]);
 
   const handlePrimaryFieldChange = (value: SummarySortField) => {
     setSort({ sortBy: value });
@@ -147,186 +160,149 @@ const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: Summar
         />
       </div>
 
-      <ToggleGroup
-        type="single"
-        value={filters.heads}
-        onValueChange={handleHeadsChange}
-        className="rounded-md border bg-background p-0.5"
-        aria-label="Filter by head status"
-        size="sm"
-      >
-        <ToggleGroupItem value="all" className="px-2 py-1 text-xs">
-          All
-        </ToggleGroupItem>
-        <ToggleGroupItem value="heads" className="px-2 py-1 text-xs">
-          Heads only
-        </ToggleGroupItem>
-        <ToggleGroupItem value="nonHeads" className="px-2 py-1 text-xs">
-          Exclude heads
-        </ToggleGroupItem>
-      </ToggleGroup>
-
-      <Popover open={officeOpen} onOpenChange={setOfficeOpen}>
+      <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" size="sm" className="inline-flex items-center gap-2">
-            <Filter className="h-4 w-4" aria-hidden="true" />
-            {officeLabel}
+          <Button
+            type="button"
+            variant={filtersActive ? "default" : "outline"}
+            size="sm"
+            className="inline-flex items-center gap-2"
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            Filters
+            {filtersActive ? (
+              <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-background/60 px-1 text-xs font-semibold">
+                {filtersActiveCount}
+              </span>
+            ) : null}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 p-3">
-          <div className="flex items-center justify-between gap-2 pb-2">
-            <p className="text-sm font-medium">Filter by office</p>
-            <div className="flex items-center gap-1">
-              {filters.offices.length ? (
-                <Button variant="ghost" size="sm" onClick={clearOffices}>
-                  Clear
-                </Button>
-              ) : null}
-              {filters.offices.length < officeOptions.length ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setOffices(officeOptions.map((o) => o.key))}
-                >
-                  Select all
-                </Button>
-              ) : null}
+        <PopoverContent align="start" className="w-[320px] space-y-4 p-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Head status</p>
+            <Select value={filters.heads} onValueChange={handleHeadsChange}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Head filter" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="heads">Heads only</SelectItem>
+                <SelectItem value="nonHeads">Exclude heads</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Currently: {headStatusLabel}</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="filters-show-unmatched" className="text-sm">
+                Show unmatched
+              </Label>
+              <Switch
+                id="filters-show-unmatched"
+                checked={filters.showUnmatched}
+                onCheckedChange={(checked) => setShowUnmatched(Boolean(checked))}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="filters-show-nopunch" className="text-sm">
+                Show no-punch column
+              </Label>
+              <Switch
+                id="filters-show-nopunch"
+                checked={filters.showNoPunch}
+                onCheckedChange={(checked) => setShowNoPunch(Boolean(checked))}
+              />
             </div>
           </div>
-          <Command shouldFilter>
-            <CommandInput placeholder="Search offices…" aria-label="Search offices" />
-            <CommandList className="max-h-60">
-              <CommandEmpty>No offices found.</CommandEmpty>
-              <CommandGroup heading="Offices">
-                {officeOptions.map((option) => {
-                  const checked = officeSelectedSet.has(option.key);
-                  return (
-                    <CommandItem
-                      key={option.key}
-                      onSelect={() => toggleOffice(option.key)}
-                      className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm"
-                      aria-selected={checked}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "flex h-4 w-4 items-center justify-center rounded border",
-                            checked
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-input bg-background"
-                          )}
-                        >
-                          {checked ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
-                        </span>
-                        <span className="truncate">{option.label}</span>
-                      </span>
-                      <span className="text-xs text-muted-foreground">{option.count.toLocaleString()}</span>
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
 
-      <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
-        <PopoverTrigger asChild>
-          <Button type="button" variant="outline" size="sm" className="inline-flex items-center gap-2">
-            <Layers className="h-4 w-4" aria-hidden="true" />
-            {scheduleLabel}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-64 p-3">
-          <div className="flex items-center justify-between pb-2">
-            <p className="text-sm font-medium">Schedule types</p>
-            {filters.schedules.length ? (
-              <Button variant="ghost" size="sm" onClick={clearSchedules}>
-                Clear
-              </Button>
-            ) : null}
-          </div>
-          <Command shouldFilter>
-            <CommandInput placeholder="Search schedules…" aria-label="Search schedules" />
-            <CommandList className="max-h-56">
-              <CommandEmpty>No schedules found.</CommandEmpty>
-              <CommandGroup heading="Schedules">
-                {scheduleOptions.map((option) => {
-                  const checked = scheduleSelectedSet.has(option);
-                  return (
-                    <CommandItem
-                      key={option}
-                      onSelect={() => toggleSchedule(option)}
-                      className="flex items-center gap-2 px-2 py-1.5 text-sm"
-                      aria-selected={checked}
-                    >
-                      <span
-                        className={cn(
-                          "flex h-4 w-4 items-center justify-center rounded border",
-                          checked
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-input bg-background"
-                        )}
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">Offices</p>
+              <div className="flex items-center gap-1">
+                {filters.offices.length ? (
+                  <Button variant="ghost" size="sm" onClick={clearOffices}>
+                    Clear
+                  </Button>
+                ) : null}
+                {filters.offices.length < officeOptions.length ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setOffices(officeOptions.map((o) => o.key))}
+                  >
+                    Select all
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <Command shouldFilter>
+              <CommandInput placeholder="Search offices…" aria-label="Search offices" />
+              <CommandList className="max-h-48">
+                <CommandEmpty>No offices found.</CommandEmpty>
+                <CommandGroup heading="Offices">
+                  {officeOptions.map((option) => {
+                    const checked = officeSelectedSet.has(option.key);
+                    return (
+                      <CommandItem
+                        key={option.key}
+                        onSelect={() => toggleOffice(option.key)}
+                        className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm"
+                        aria-selected={checked}
                       >
-                        {checked ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
-                      </span>
-                      <span className="truncate">{option}</span>
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-            </CommandList>
-          </Command>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "flex h-4 w-4 items-center justify-center rounded border",
+                              checked
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-input bg-background"
+                            )}
+                          >
+                            {checked ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
+                          </span>
+                          <span className="truncate">{option.label}</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">{option.count.toLocaleString()}</span>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Metric mode</p>
+            <div className="inline-flex overflow-hidden rounded-md border">
+              <Button
+                type="button"
+                variant={filters.metricMode === "days" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none"
+                aria-pressed={filters.metricMode === "days"}
+                onClick={() => setMetricMode("days")}
+              >
+                Days %
+              </Button>
+              <Button
+                type="button"
+                variant={filters.metricMode === "minutes" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none"
+                aria-pressed={filters.metricMode === "minutes"}
+                onClick={() => setMetricMode("minutes")}
+              >
+                Minutes
+              </Button>
+            </div>
+          </div>
         </PopoverContent>
       </Popover>
-
-      <div className="flex items-center gap-2">
-        <Switch
-          id="summary-show-unmatched"
-          checked={filters.showUnmatched}
-          onCheckedChange={(checked) => setShowUnmatched(Boolean(checked))}
-        />
-        <Label htmlFor="summary-show-unmatched" className="text-sm text-muted-foreground">
-          Show unmatched
-        </Label>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Switch
-          id="summary-show-no-punch"
-          checked={filters.showNoPunch}
-          onCheckedChange={(checked) => setShowNoPunch(Boolean(checked))}
-        />
-        <Label htmlFor="summary-show-no-punch" className="text-sm text-muted-foreground">
-          Show no-punch column
-        </Label>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <SlidersHorizontal className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <div className="inline-flex overflow-hidden rounded-md border">
-          <Button
-            type="button"
-            variant={filters.metricMode === "days" ? "default" : "ghost"}
-            size="sm"
-            className="rounded-none"
-            aria-pressed={filters.metricMode === "days"}
-            onClick={() => setMetricMode("days")}
-          >
-            Days %
-          </Button>
-          <Button
-            type="button"
-            variant={filters.metricMode === "minutes" ? "default" : "ghost"}
-            size="sm"
-            className="rounded-none"
-            aria-pressed={filters.metricMode === "minutes"}
-            onClick={() => setMetricMode("minutes")}
-          >
-            Minutes
-          </Button>
-        </div>
-      </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
