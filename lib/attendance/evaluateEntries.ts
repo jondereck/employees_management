@@ -20,6 +20,61 @@ import {
   type PerEmployeeRow,
 } from "@/utils/parseBioAttendance";
 import { normalizeBiometricToken } from "@/utils/biometricsShared";
+import type { ManualExclusion } from "@/types/manual-exclusion";
+
+const MINUTES_IN_DAY = 24 * 60;
+const parseHHMM = (value: HHMM | string | null | undefined): number | null => {
+  if (!value) return null;
+  const [hoursStr, minutesStr] = value.split(":");
+  const hours = Number(hoursStr);
+  const minutes = Number(minutesStr);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+};
+
+const computeShiftPresenceMinutes = (
+  schedule: { shiftStart: HHMM; shiftEnd: HHMM; breakMinutes?: number | null },
+  earliest: HHMM | null,
+  latest: HHMM | null,
+  times: HHMM[]
+): number => {
+  const shiftStart = parseHHMM(schedule.shiftStart);
+  let shiftEnd = parseHHMM(schedule.shiftEnd);
+  if (shiftStart == null || shiftEnd == null) return 0;
+
+  const isOvernight = shiftEnd <= shiftStart;
+  if (isOvernight) {
+    shiftEnd += MINUTES_IN_DAY;
+  }
+
+  const firstCandidate = earliest ?? (times.length ? times[0] : null);
+  const lastCandidate = latest ?? (times.length ? times[times.length - 1] : null);
+  if (!firstCandidate || !lastCandidate) return 0;
+
+  let start = parseHHMM(firstCandidate);
+  let end = parseHHMM(lastCandidate);
+  if (start == null || end == null) return 0;
+
+  if (end < start) {
+    end += MINUTES_IN_DAY;
+  }
+  if (isOvernight && start < shiftStart) {
+    start += MINUTES_IN_DAY;
+    if (end <= start) {
+      end += MINUTES_IN_DAY;
+    }
+  }
+
+  const clampedStart = Math.max(start, shiftStart);
+  const clampedEnd = Math.min(end, shiftEnd);
+  if (clampedEnd <= clampedStart) {
+    return 0;
+  }
+
+  const presence = clampedEnd - clampedStart;
+  const breakMinutes = schedule.breakMinutes ?? 0;
+  return Math.max(0, presence - breakMinutes);
+};
 
 export type EvaluationEntry = {
   employeeId: string;
@@ -41,6 +96,134 @@ export type EvaluationEntry = {
 export type EvaluationResult = {
   perDay: PerDayRow[];
   perEmployee: PerEmployeeRow[];
+};
+
+type ManualScopePriority = "employees" | "offices" | "all";
+
+const MANUAL_SCOPE_PRIORITY: Record<ManualScopePriority, number> = {
+  employees: 3,
+  offices: 2,
+  all: 1,
+};
+
+const isManualScope = (value: string | undefined | null): value is string =>
+  typeof value === "string" && value.length > 0;
+
+const normalizeManualExclusions = (exclusions: ManualExclusion[] | undefined | null) => {
+  if (!Array.isArray(exclusions)) return [] as ManualExclusion[];
+  const cleaned: ManualExclusion[] = [];
+  for (const exclusion of exclusions) {
+    if (!exclusion || typeof exclusion !== "object") continue;
+    const { id, dates, scope } = exclusion;
+    if (typeof id !== "string" || !id) continue;
+    if (scope !== "all" && scope !== "offices" && scope !== "employees") continue;
+    const validDates = Array.isArray(dates)
+      ? Array.from(
+          new Set(
+            dates
+              .filter((date): date is string => typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date))
+              .sort((a, b) => a.localeCompare(b))
+          )
+        )
+      : [];
+    if (!validDates.length) continue;
+    const officeIds = Array.isArray(exclusion.officeIds)
+      ? Array.from(
+          new Set(
+            exclusion.officeIds.filter((value): value is string => typeof value === "string" && value.length > 0)
+          )
+        )
+      : undefined;
+    const employeeIds = Array.isArray(exclusion.employeeIds)
+      ? Array.from(
+          new Set(
+            exclusion.employeeIds.filter((value): value is string => typeof value === "string" && value.length > 0)
+          )
+        )
+      : undefined;
+    const reason = exclusion.reason;
+    if (
+      reason !== "SUSPENSION" &&
+      reason !== "OFFICE_CLOSURE" &&
+      reason !== "CALAMITY" &&
+      reason !== "TRAINING" &&
+      reason !== "LEAVE" &&
+      reason !== "LOCAL_HOLIDAY" &&
+      reason !== "OTHER"
+    ) {
+      continue;
+    }
+    const note = typeof exclusion.note === "string" && exclusion.note.trim().length ? exclusion.note.trim() : undefined;
+    cleaned.push({
+      id,
+      dates: validDates,
+      scope,
+      officeIds,
+      employeeIds,
+      reason,
+      note,
+    });
+  }
+  return cleaned;
+};
+
+const isManuallyExcused = (
+  dateIso: string,
+  employee: { id?: string | null; officeId?: string | null },
+  exclusions: ManualExclusion[]
+): ManualExclusion | undefined => {
+  let match: { exclusion: ManualExclusion; priority: number } | null = null;
+  const employeeId = isManualScope(employee.id) ? employee.id : null;
+  const officeId = isManualScope(employee.officeId) ? employee.officeId : null;
+  for (const exclusion of exclusions) {
+    if (!exclusion.dates.includes(dateIso)) continue;
+    if (exclusion.scope === "employees") {
+      if (!employeeId) continue;
+      if (!exclusion.employeeIds?.includes(employeeId)) continue;
+      const priority = MANUAL_SCOPE_PRIORITY.employees;
+      if (!match || priority > match.priority) {
+        match = { exclusion, priority };
+      }
+      continue;
+    }
+    if (exclusion.scope === "offices") {
+      if (!officeId) continue;
+      if (!exclusion.officeIds?.includes(officeId)) continue;
+      const priority = MANUAL_SCOPE_PRIORITY.offices;
+      if (!match || priority > match.priority) {
+        match = { exclusion, priority };
+      }
+      continue;
+    }
+    if (exclusion.scope === "all") {
+      const priority = MANUAL_SCOPE_PRIORITY.all;
+      if (!match || priority > match.priority) {
+        match = { exclusion, priority };
+      }
+    }
+  }
+  return match?.exclusion;
+};
+
+const toTitleCase = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const formatManualLabel = (manual: ManualExclusion): string => {
+  if (manual.reason === "LOCAL_HOLIDAY") {
+    const detail = manual.note && manual.note.length ? ` (${manual.note})` : "";
+    return `Local Holiday${detail}`;
+  }
+  if (manual.reason === "LEAVE") {
+    return manual.note && manual.note.length ? `Leave - ${manual.note}` : "Leave";
+  }
+  const base = toTitleCase(manual.reason);
+  if (manual.note && manual.note.length) {
+    return `${base} - ${manual.note}`;
+  }
+  return base;
 };
 
 const identityMapModel = (prisma as typeof prisma & {
@@ -130,10 +313,15 @@ const buildMappingByToken = (
   return mapping;
 };
 
-export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Promise<EvaluationResult> {
+export async function evaluateAttendanceEntries(
+  entries: EvaluationEntry[],
+  options?: { manualExclusions?: ManualExclusion[] }
+): Promise<EvaluationResult> {
   if (!entries.length) {
     return { perDay: [], perEmployee: [] };
   }
+
+  const manualExclusions = normalizeManualExclusions(options?.manualExclusions);
 
   const bioIds = Array.from(new Set(entries.map((row) => row.employeeId)));
   const candidates: { id: string; employeeNo: string | null }[] = [];
@@ -252,6 +440,68 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
     const officeId = details?.officeId ?? row.officeId ?? null;
     const officeName = details?.officeName ?? row.officeName ?? null;
 
+    const exception = internalEmployeeId
+      ? maps.exceptionsByEmployeeDate.get(`${internalEmployeeId}::${row.dateISO}`) ?? null
+      : null;
+    const exceptionInfo = exception as { type?: string | null; code?: string | null } | null;
+    let presenceMinutes = evaluation.workedMinutes ?? 0;
+    if (normalized.type === "SHIFT") {
+      presenceMinutes = computeShiftPresenceMinutes(normalized, earliest, latest, normalizedAllTimes);
+    }
+    const clampedPresence = Math.max(0, presenceMinutes);
+    const scheduleSource = normalized.source ?? scheduleRecord.source ?? "DEFAULT";
+    const isDefaultSchedule = scheduleSource === "DEFAULT" || scheduleSource === "NOMAPPING";
+    const isFallbackFixedSchedule = isDefaultSchedule && normalized.type === "FIXED";
+    const dayOfWeek = new Date(`${row.dateISO}T00:00:00Z`).getUTCDay();
+    const isDefaultWorkday = dayOfWeek >= 1 && dayOfWeek <= 5;
+
+    let requiredMinutes = evaluation.requiredMinutes ?? 0;
+    let isLate = evaluation.isLate;
+    let isUndertime = evaluation.isUndertime;
+    let lateMinutesValue: number | null = evaluation.lateMinutes ?? null;
+    let undertimeMinutesValue: number | null = evaluation.undertimeMinutes ?? null;
+
+    if (isFallbackFixedSchedule && !isDefaultWorkday) {
+      requiredMinutes = 0;
+      isLate = false;
+      isUndertime = false;
+      lateMinutesValue = null;
+      undertimeMinutesValue = null;
+    }
+
+    const manualExclusion = isManuallyExcused(
+      row.dateISO,
+      { id: resolvedEmployeeId, officeId },
+      manualExclusions
+    );
+    const nationalHoliday = (exceptionInfo?.type ?? null) === "HOLIDAY";
+    const excused = Boolean(manualExclusion) || nationalHoliday;
+
+    if (excused) {
+      isLate = false;
+      isUndertime = false;
+      lateMinutesValue = 0;
+      undertimeMinutesValue = 0;
+    }
+
+    const isScheduled = requiredMinutes > 0;
+    const hasAnyPunches = row.punches.length > 0;
+    const absent = excused ? false : isScheduled && !hasAnyPunches;
+
+    let statusLabel: string;
+    if (excused) {
+      if (manualExclusion) {
+        const label = formatManualLabel(manualExclusion);
+        statusLabel = `Excused - ${label}`;
+      } else {
+        statusLabel = "Holiday";
+      }
+    } else {
+      statusLabel = absent ? "Absent" : "Present";
+    }
+
+    const evaluationStatus: DayEvaluationStatus = excused ? "excused" : (evaluation.status as DayEvaluationStatus);
+
     const perDay: PerDayRow = {
       employeeId: row.employeeId,
       employeeName: row.employeeName,
@@ -269,16 +519,19 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       punches: row.punches,
       sourceFiles: row.sourceFiles,
       composedFromDayOnly: row.composedFromDayOnly ?? false,
-      status: evaluation.status as DayEvaluationStatus,
-      isLate: evaluation.isLate,
-      isUndertime: evaluation.isUndertime,
+      status: statusLabel,
+      evaluationStatus,
+      isLate,
+      isUndertime,
       workedHHMM: evaluation.workedHHMM,
       workedMinutes: evaluation.workedMinutes,
+      presenceMinutes: clampedPresence,
+      absent,
       scheduleType: normalized.type,
       scheduleSource: scheduleRecord.source,
-      lateMinutes: evaluation.lateMinutes ?? null,
-      undertimeMinutes: evaluation.undertimeMinutes ?? null,
-      requiredMinutes: evaluation.requiredMinutes ?? null,
+      lateMinutes: lateMinutesValue,
+      undertimeMinutes: undertimeMinutesValue,
+      requiredMinutes: requiredMinutes ?? null,
       scheduleStart: evaluation.scheduleStart ?? null,
       scheduleEnd: evaluation.scheduleEnd ?? null,
       scheduleGraceMinutes: evaluation.scheduleGraceMinutes ?? null,
