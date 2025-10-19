@@ -317,6 +317,7 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
     const clampedPresence = Math.max(0, presenceMinutes);
     const scheduleSource = normalized.source ?? scheduleRecord.source ?? "DEFAULT";
     const isDefaultSchedule = scheduleSource === "DEFAULT" || scheduleSource === "NOMAPPING";
+    const isFallbackFixedSchedule = isDefaultSchedule && normalized.type === "FIXED";
     const dayOfWeek = new Date(`${row.dateISO}T00:00:00Z`).getUTCDay();
     const isDefaultWorkday = dayOfWeek >= 1 && dayOfWeek <= 5;
 
@@ -326,7 +327,7 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
     let lateMinutesValue = evaluation.lateMinutes ?? null;
     let undertimeMinutesValue = evaluation.undertimeMinutes ?? null;
 
-    if (isDefaultSchedule && !isDefaultWorkday) {
+    if (isFallbackFixedSchedule && !isDefaultWorkday) {
       requiredMinutes = 0;
       isLate = false;
       isUndertime = false;
