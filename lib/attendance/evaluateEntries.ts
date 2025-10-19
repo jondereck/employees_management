@@ -316,7 +316,9 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
     }
     const clampedPresence = Math.max(0, presenceMinutes);
     const requiredMinutes = evaluation.requiredMinutes ?? 0;
-    const isScheduled = requiredMinutes > 0;
+    const scheduleSource = normalized.source ?? scheduleRecord.source ?? "DEFAULT";
+    const isWorkScheduleSource = scheduleSource === "WORKSCHEDULE" || scheduleSource === "EXCEPTION";
+    const isScheduled = isWorkScheduleSource && requiredMinutes > 0;
     const isExcused =
       (exceptionInfo?.type ?? null) === "HOLIDAY" ||
       ["OB", "CTO", "LEAVE"].includes((exceptionInfo?.code ?? "").toUpperCase());
