@@ -46,7 +46,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -58,6 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import Modal from "@/components/ui/modal";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -421,14 +421,14 @@ const ManualExclusionDialog = ({
     : "No employees selected";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{initial ? "Edit manual exclusion" : "Add manual exclusion"}</DialogTitle>
-          <DialogDescription>
-            Mark specific dates as excused so they are excluded from late, undertime, and absence calculations.
-          </DialogDescription>
-        </DialogHeader>
+    <Modal
+      isOpen={open}
+      onClose={() => onOpenChange(false)}
+      title={initial ? "Edit manual exclusion" : "Add manual exclusion"}
+      description="Mark specific dates as excused so they are excluded from late, undertime, and absence calculations."
+      contentClassName="max-w-xl"
+    >
+      <>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label className="text-sm font-medium">Dates</Label>
@@ -437,6 +437,8 @@ const ManualExclusionDialog = ({
               selected={dateRange}
               onSelect={setDateRange}
               numberOfMonths={1}
+              initialFocus
+              className="rounded-xl border bg-card p-3 shadow-sm w-full"
             />
             <p className="text-xs text-muted-foreground">
               {selectedDates.length ? `${selectedDates.length} day${selectedDates.length === 1 ? "" : "s"}: ${selectedDatesLabel}` : "Select a single day or range."}
@@ -602,16 +604,16 @@ const ManualExclusionDialog = ({
             />
           </div>
         </div>
-        <DialogFooter className="mt-4">
+        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={saveDisabled}>
-            Save exclusion
+            {initial ? "Save changes" : "Add exclusion"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </>
+    </Modal>
   );
 };
 
