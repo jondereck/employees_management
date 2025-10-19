@@ -41,6 +41,7 @@ const SORT_FIELD_LABELS: Record<SummarySortField, string> = {
   schedule: "Schedule",
   days: "Days",
   noPunch: "No-punch",
+  absences: "Absences",
   lateDays: "Late days",
   undertimeDays: "UT days",
   latePercent: "Late %",

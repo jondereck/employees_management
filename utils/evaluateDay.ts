@@ -198,24 +198,9 @@ export function evaluateDay(input: DayEvalInput) {
   let weeklyPatternPresence: { start: HHMM; end: HHMM }[] = [];
   let status: DayEvaluationStatus = "evaluated";
 
-  if (!normalizedTimes.length && e == null && l == null) {
-    return {
-      status: "no_punch" as DayEvaluationStatus,
-      workedMinutes: 0,
-      workedHHMM: minToHHMM(0),
-      isLate: false,
-      isUndertime: false,
-      lateMinutes: 0,
-      undertimeMinutes: 0,
-      requiredMinutes: null,
-      scheduleStart: null,
-      scheduleEnd: null,
-      scheduleGraceMinutes: null,
-      weeklyPatternApplied: false,
-      weeklyPatternWindows: null,
-      weeklyPatternPresence: [],
-      weeklyExclusionApplied,
-    };
+  const noPunchInput = !normalizedTimes.length && e == null && l == null;
+  if (noPunchInput) {
+    status = "no_punch";
   }
 
   switch (input.schedule.type) {
@@ -416,6 +401,14 @@ export function evaluateDay(input: DayEvalInput) {
       undertimeMinutes = Math.max(0, planned - worked);
       break;
     }
+  }
+
+  if (status === "no_punch") {
+    isLate = false;
+    isUndertime = false;
+    lateMinutes = 0;
+    undertimeMinutes = 0;
+    worked = 0;
   }
 
   return {
