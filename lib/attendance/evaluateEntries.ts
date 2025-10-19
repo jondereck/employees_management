@@ -20,6 +20,7 @@ import {
   type PerEmployeeRow,
 } from "@/utils/parseBioAttendance";
 import { normalizeBiometricToken } from "@/utils/biometricsShared";
+import type { ManualExclusion } from "@/types/manual-exclusion";
 
 const MINUTES_IN_DAY = 24 * 60;
 const parseHHMM = (value: HHMM | string | null | undefined): number | null => {
@@ -95,6 +96,134 @@ export type EvaluationEntry = {
 export type EvaluationResult = {
   perDay: PerDayRow[];
   perEmployee: PerEmployeeRow[];
+};
+
+type ManualScopePriority = "employees" | "offices" | "all";
+
+const MANUAL_SCOPE_PRIORITY: Record<ManualScopePriority, number> = {
+  employees: 3,
+  offices: 2,
+  all: 1,
+};
+
+const isManualScope = (value: string | undefined | null): value is string =>
+  typeof value === "string" && value.length > 0;
+
+const normalizeManualExclusions = (exclusions: ManualExclusion[] | undefined | null) => {
+  if (!Array.isArray(exclusions)) return [] as ManualExclusion[];
+  const cleaned: ManualExclusion[] = [];
+  for (const exclusion of exclusions) {
+    if (!exclusion || typeof exclusion !== "object") continue;
+    const { id, dates, scope } = exclusion;
+    if (typeof id !== "string" || !id) continue;
+    if (scope !== "all" && scope !== "offices" && scope !== "employees") continue;
+    const validDates = Array.isArray(dates)
+      ? Array.from(
+          new Set(
+            dates
+              .filter((date): date is string => typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date))
+              .sort((a, b) => a.localeCompare(b))
+          )
+        )
+      : [];
+    if (!validDates.length) continue;
+    const officeIds = Array.isArray(exclusion.officeIds)
+      ? Array.from(
+          new Set(
+            exclusion.officeIds.filter((value): value is string => typeof value === "string" && value.length > 0)
+          )
+        )
+      : undefined;
+    const employeeIds = Array.isArray(exclusion.employeeIds)
+      ? Array.from(
+          new Set(
+            exclusion.employeeIds.filter((value): value is string => typeof value === "string" && value.length > 0)
+          )
+        )
+      : undefined;
+    const reason = exclusion.reason;
+    if (
+      reason !== "SUSPENSION" &&
+      reason !== "OFFICE_CLOSURE" &&
+      reason !== "CALAMITY" &&
+      reason !== "TRAINING" &&
+      reason !== "LEAVE" &&
+      reason !== "LOCAL_HOLIDAY" &&
+      reason !== "OTHER"
+    ) {
+      continue;
+    }
+    const note = typeof exclusion.note === "string" && exclusion.note.trim().length ? exclusion.note.trim() : undefined;
+    cleaned.push({
+      id,
+      dates: validDates,
+      scope,
+      officeIds,
+      employeeIds,
+      reason,
+      note,
+    });
+  }
+  return cleaned;
+};
+
+const isManuallyExcused = (
+  dateIso: string,
+  employee: { id?: string | null; officeId?: string | null },
+  exclusions: ManualExclusion[]
+): ManualExclusion | undefined => {
+  let match: { exclusion: ManualExclusion; priority: number } | null = null;
+  const employeeId = isManualScope(employee.id) ? employee.id : null;
+  const officeId = isManualScope(employee.officeId) ? employee.officeId : null;
+  for (const exclusion of exclusions) {
+    if (!exclusion.dates.includes(dateIso)) continue;
+    if (exclusion.scope === "employees") {
+      if (!employeeId) continue;
+      if (!exclusion.employeeIds?.includes(employeeId)) continue;
+      const priority = MANUAL_SCOPE_PRIORITY.employees;
+      if (!match || priority > match.priority) {
+        match = { exclusion, priority };
+      }
+      continue;
+    }
+    if (exclusion.scope === "offices") {
+      if (!officeId) continue;
+      if (!exclusion.officeIds?.includes(officeId)) continue;
+      const priority = MANUAL_SCOPE_PRIORITY.offices;
+      if (!match || priority > match.priority) {
+        match = { exclusion, priority };
+      }
+      continue;
+    }
+    if (exclusion.scope === "all") {
+      const priority = MANUAL_SCOPE_PRIORITY.all;
+      if (!match || priority > match.priority) {
+        match = { exclusion, priority };
+      }
+    }
+  }
+  return match?.exclusion;
+};
+
+const toTitleCase = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const formatManualLabel = (manual: ManualExclusion): string => {
+  if (manual.reason === "LOCAL_HOLIDAY") {
+    const detail = manual.note && manual.note.length ? ` (${manual.note})` : "";
+    return `Local Holiday${detail}`;
+  }
+  if (manual.reason === "LEAVE") {
+    return manual.note && manual.note.length ? `Leave - ${manual.note}` : "Leave";
+  }
+  const base = toTitleCase(manual.reason);
+  if (manual.note && manual.note.length) {
+    return `${base} - ${manual.note}`;
+  }
+  return base;
 };
 
 const identityMapModel = (prisma as typeof prisma & {
@@ -184,10 +313,15 @@ const buildMappingByToken = (
   return mapping;
 };
 
-export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Promise<EvaluationResult> {
+export async function evaluateAttendanceEntries(
+  entries: EvaluationEntry[],
+  options?: { manualExclusions?: ManualExclusion[] }
+): Promise<EvaluationResult> {
   if (!entries.length) {
     return { perDay: [], perEmployee: [] };
   }
+
+  const manualExclusions = normalizeManualExclusions(options?.manualExclusions);
 
   const bioIds = Array.from(new Set(entries.map((row) => row.employeeId)));
   const candidates: { id: string; employeeNo: string | null }[] = [];
@@ -335,13 +469,38 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       undertimeMinutesValue = null;
     }
 
+    const manualExclusion = isManuallyExcused(
+      row.dateISO,
+      { id: resolvedEmployeeId, officeId },
+      manualExclusions
+    );
+    const nationalHoliday = (exceptionInfo?.type ?? null) === "HOLIDAY";
+    const excused = Boolean(manualExclusion) || nationalHoliday;
+
+    if (excused) {
+      isLate = false;
+      isUndertime = false;
+      lateMinutesValue = 0;
+      undertimeMinutesValue = 0;
+    }
+
     const isScheduled = requiredMinutes > 0;
-    const isExcused =
-      (exceptionInfo?.type ?? null) === "HOLIDAY" ||
-      ["OB", "CTO", "LEAVE"].includes((exceptionInfo?.code ?? "").toUpperCase());
     const hasAnyPunches = row.punches.length > 0;
-    const absent = isScheduled && !isExcused && !hasAnyPunches;
-    const statusLabel = absent ? "Absent" : "Present";
+    const absent = excused ? false : isScheduled && !hasAnyPunches;
+
+    let statusLabel: string;
+    if (excused) {
+      if (manualExclusion) {
+        const label = formatManualLabel(manualExclusion);
+        statusLabel = `Excused - ${label}`;
+      } else {
+        statusLabel = "Holiday";
+      }
+    } else {
+      statusLabel = absent ? "Absent" : "Present";
+    }
+
+    const evaluationStatus: DayEvaluationStatus = excused ? "excused" : (evaluation.status as DayEvaluationStatus);
 
     const perDay: PerDayRow = {
       employeeId: row.employeeId,
@@ -361,7 +520,7 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       sourceFiles: row.sourceFiles,
       composedFromDayOnly: row.composedFromDayOnly ?? false,
       status: statusLabel,
-      evaluationStatus: evaluation.status as DayEvaluationStatus,
+      evaluationStatus,
       isLate,
       isUndertime,
       workedHHMM: evaluation.workedHHMM,

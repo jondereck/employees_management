@@ -12,11 +12,15 @@ import {
   AlertCircle,
   ArrowUpDown,
   CheckCircle2,
+  Check,
   Columns,
   Filter as FilterIcon,
   FileDown,
   Info,
   Loader2,
+  Pencil,
+  Plus,
+  Trash2,
   UploadCloud,
   X,
   XCircle,
@@ -28,8 +32,24 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
@@ -38,6 +58,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -45,6 +66,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
+import { Calendar } from "@/components/ui/calendar";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import { cn } from "@/lib/utils";
 import SummaryFiltersBar from "@/components/tools/biometrics/SummaryFiltersBar";
@@ -82,6 +104,8 @@ import {
   UNMATCHED_LABEL,
   normalizeBiometricToken,
 } from "@/utils/biometricsShared";
+import type { ManualExclusion, ManualExclusionReason, ManualExclusionScope } from "@/types/manual-exclusion";
+import type { DateRange } from "react-day-picker";
 import {
   ALL_SUMMARY_COLUMN_KEYS,
   DEFAULT_SUMMARY_COLUMN_ORDER,
@@ -113,6 +137,7 @@ import { Switch } from "@/components/ui/switch";
 const PAGE_SIZE = 25;
 
 const MINUTES_IN_DAY = 24 * 60;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const APP_VERSION =
   process.env.NEXT_PUBLIC_APP_VERSION ??
@@ -205,6 +230,373 @@ const WeeklyPatternTimeline = ({ applied, windows, presence }: WeeklyPatternTime
         Weekly pattern windows: {windowsLabel}. Presence within windows: {presenceLabel}.
       </span>
     </div>
+  );
+};
+
+type ManualDialogOfficeOption = { id: string; name: string };
+type ManualDialogEmployeeOption = { id: string; display: string; name: string };
+
+type ManualExclusionDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (draft: Omit<ManualExclusion, "id">) => void;
+  initial?: ManualExclusion | null;
+  offices: ManualDialogOfficeOption[];
+  employees: ManualDialogEmployeeOption[];
+  activePeriodLabel: string | null;
+  activePeriod?: { year: number; month: number } | null;
+};
+
+const ManualExclusionDialog = ({
+  open,
+  onOpenChange,
+  onSubmit,
+  initial,
+  offices,
+  employees,
+  activePeriodLabel,
+  activePeriod,
+}: ManualExclusionDialogProps) => {
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(
+    initial ? toDateRangeFromDates(initial.dates) : undefined
+  );
+  const [scope, setScope] = useState<ManualExclusionScope>(initial?.scope ?? "all");
+  const [selectedOffices, setSelectedOffices] = useState<string[]>(initial?.officeIds ?? []);
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>(initial?.employeeIds ?? []);
+  const [reason, setReason] = useState<ManualExclusionReason>(initial?.reason ?? "LEAVE");
+  const [note, setNote] = useState<string>(initial?.note ?? "");
+  const [officePopoverOpen, setOfficePopoverOpen] = useState(false);
+  const [employeePopoverOpen, setEmployeePopoverOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setDateRange(initial ? toDateRangeFromDates(initial.dates) : undefined);
+    setScope(initial?.scope ?? "all");
+    setSelectedOffices(initial?.officeIds ?? []);
+    setSelectedEmployees(initial?.employeeIds ?? []);
+    setReason(initial?.reason ?? "LEAVE");
+    setNote(initial?.note ?? "");
+  }, [initial, open]);
+
+  const officeNameMap = useMemo(() => new Map(offices.map((office) => [office.id, office.name])), [offices]);
+  const officeOrder = useMemo(
+    () => new Map(offices.map((office, index) => [office.id, index])),
+    [offices]
+  );
+  const employeeLabelMap = useMemo(
+    () => new Map(employees.map((employee) => [employee.id, employee.display])),
+    [employees]
+  );
+  const employeeOrder = useMemo(
+    () => new Map(employees.map((employee, index) => [employee.id, index])),
+    [employees]
+  );
+
+  const selectedDates = useMemo(() => expandDatesFromRange(dateRange), [dateRange]);
+  const selectedDatesLabel = useMemo(
+    () => (selectedDates.length ? formatManualDateSummary(selectedDates) : "Select a date"),
+    [selectedDates]
+  );
+
+  const outOfPeriodCount = useMemo(() => {
+    if (!activePeriod) return 0;
+    const prefix = `${activePeriod.year}-${pad2(activePeriod.month)}`;
+    return selectedDates.filter((date) => !date.startsWith(prefix)).length;
+  }, [activePeriod, selectedDates]);
+
+  const leaveSelectValue = useMemo(() => {
+    if (reason !== "LEAVE") return "none";
+    if (!note) return "none";
+    const match = LEAVE_NOTE_OPTIONS.find((option) => option === note);
+    return match ?? "custom";
+  }, [note, reason]);
+
+  const notePlaceholder = useMemo(() => {
+    if (reason === "LEAVE") return "Optional details (e.g., Sick Leave)";
+    if (reason === "LOCAL_HOLIDAY") return "Optional locality (e.g., Lingayen Charter Day)";
+    return "Optional note";
+  }, [reason]);
+
+  const toggleOffice = (id: string) => {
+    setSelectedOffices((prev) => {
+      const set = new Set(prev);
+      if (set.has(id)) {
+        set.delete(id);
+      } else {
+        set.add(id);
+      }
+      return Array.from(set).sort((a, b) => {
+        const aOrder = officeOrder.get(a) ?? Number.MAX_SAFE_INTEGER;
+        const bOrder = officeOrder.get(b) ?? Number.MAX_SAFE_INTEGER;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return a.localeCompare(b);
+      });
+    });
+  };
+
+  const toggleEmployee = (id: string) => {
+    setSelectedEmployees((prev) => {
+      const set = new Set(prev);
+      if (set.has(id)) {
+        set.delete(id);
+      } else {
+        set.add(id);
+      }
+      return Array.from(set).sort((a, b) => {
+        const aOrder = employeeOrder.get(a) ?? Number.MAX_SAFE_INTEGER;
+        const bOrder = employeeOrder.get(b) ?? Number.MAX_SAFE_INTEGER;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return a.localeCompare(b);
+      });
+    });
+  };
+
+  const handleScopeChange = (value: ManualExclusionScope) => {
+    setScope(value);
+    if (value !== "offices") {
+      setSelectedOffices([]);
+    }
+    if (value !== "employees") {
+      setSelectedEmployees([]);
+    }
+  };
+
+  const handleLeaveSubtypeChange = (value: string) => {
+    if (value === "none") {
+      setNote("");
+    } else if (value !== "custom") {
+      setNote(value);
+    }
+  };
+
+  const handleSubmit = () => {
+    const uniqueDates = Array.from(new Set(selectedDates)).sort((a, b) => a.localeCompare(b));
+    if (!uniqueDates.length) return;
+    if (scope === "offices" && !selectedOffices.length) return;
+    if (scope === "employees" && !selectedEmployees.length) return;
+    const payload: Omit<ManualExclusion, "id"> = {
+      dates: uniqueDates,
+      scope,
+      reason,
+      note: note.trim().length ? note.trim() : undefined,
+    };
+    if (scope === "offices") {
+      payload.officeIds = selectedOffices.slice();
+    }
+    if (scope === "employees") {
+      payload.employeeIds = selectedEmployees.slice();
+    }
+    onSubmit(payload);
+    onOpenChange(false);
+  };
+
+  const saveDisabled =
+    !selectedDates.length ||
+    (scope === "offices" && !selectedOffices.length) ||
+    (scope === "employees" && !selectedEmployees.length);
+
+  const activeScopeLabel = scope === "all"
+    ? "All employees"
+    : scope === "offices"
+    ? selectedOffices.length
+      ? `${selectedOffices.length} office${selectedOffices.length === 1 ? "" : "s"} selected`
+      : "No offices selected"
+    : selectedEmployees.length
+    ? `${selectedEmployees.length} employee${selectedEmployees.length === 1 ? "" : "s"} selected`
+    : "No employees selected";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{initial ? "Edit manual exclusion" : "Add manual exclusion"}</DialogTitle>
+          <DialogDescription>
+            Mark specific dates as excused so they are excluded from late, undertime, and absence calculations.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Dates</Label>
+            <Calendar
+              mode="range"
+              selected={dateRange}
+              onSelect={setDateRange}
+              numberOfMonths={1}
+            />
+            <p className="text-xs text-muted-foreground">
+              {selectedDates.length ? `${selectedDates.length} day${selectedDates.length === 1 ? "" : "s"}: ${selectedDatesLabel}` : "Select a single day or range."}
+            </p>
+            {outOfPeriodCount > 0 && activePeriodLabel ? (
+              <p className="text-xs text-amber-600">
+                {outOfPeriodCount} date{outOfPeriodCount === 1 ? "" : "s"} outside {activePeriodLabel} will be ignored for this period.
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="manual-exclusion-scope" className="text-sm font-medium">
+              Scope
+            </Label>
+            <Select value={scope} onValueChange={(value) => handleScopeChange(value as ManualExclusionScope)}>
+              <SelectTrigger id="manual-exclusion-scope" className="h-9">
+                <SelectValue placeholder="Select scope" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All employees</SelectItem>
+                <SelectItem value="offices">Specific offices</SelectItem>
+                <SelectItem value="employees">Specific employees</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{activeScopeLabel}</p>
+            {scope === "offices" ? (
+              <div className="space-y-1">
+                <Popover open={officePopoverOpen} onOpenChange={setOfficePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full justify-between">
+                      <span>
+                        {selectedOffices.length
+                          ? `${selectedOffices.length} office${selectedOffices.length === 1 ? "" : "s"} selected`
+                          : "Select offices"}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search offices" />
+                      <CommandList>
+                        <CommandEmpty>No offices found.</CommandEmpty>
+                        <CommandGroup>
+                          {offices.map((office) => {
+                            const selected = selectedOffices.includes(office.id);
+                            return (
+                              <CommandItem
+                                key={office.id}
+                                value={office.id}
+                                onSelect={(value) => {
+                                  toggleOffice(value);
+                                }}
+                                className="flex items-center gap-2"
+                              >
+                                <Check className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")} />
+                                <span>{office.name}</span>
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {selectedOffices.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedOffices
+                      .map((id) => officeNameMap.get(id) ?? id)
+                      .join(", ")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {scope === "employees" ? (
+              <div className="space-y-1">
+                <Popover open={employeePopoverOpen} onOpenChange={setEmployeePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full justify-between">
+                      <span>
+                        {selectedEmployees.length
+                          ? `${selectedEmployees.length} employee${selectedEmployees.length === 1 ? "" : "s"} selected`
+                          : "Select employees"}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search employees" />
+                      <CommandList>
+                        <CommandEmpty>No employees found.</CommandEmpty>
+                        <CommandGroup>
+                          {employees.map((employee) => {
+                            const selected = selectedEmployees.includes(employee.id);
+                            return (
+                              <CommandItem
+                                key={employee.id}
+                                value={employee.id}
+                                onSelect={(value) => {
+                                  toggleEmployee(value);
+                                }}
+                                className="flex items-center gap-2"
+                              >
+                                <Check className={cn("h-4 w-4", selected ? "opacity-100" : "opacity-0")} />
+                                <span>{employee.display}</span>
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {selectedEmployees.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedEmployees
+                      .map((id) => employeeLabelMap.get(id) ?? id)
+                      .join(", ")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="manual-exclusion-reason" className="text-sm font-medium">
+              Reason
+            </Label>
+            <Select
+              value={reason}
+              onValueChange={(value) => setReason(value as ManualExclusionReason)}
+            >
+              <SelectTrigger id="manual-exclusion-reason" className="h-9">
+                <SelectValue placeholder="Select reason" />
+              </SelectTrigger>
+              <SelectContent>
+                {MANUAL_REASON_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {reason === "LEAVE" ? (
+              <Select value={leaveSelectValue} onValueChange={handleLeaveSubtypeChange}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Leave subtype" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No subtype</SelectItem>
+                  {LEAVE_NOTE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">Custom (use note)</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
+            <Textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder={notePlaceholder}
+              rows={3}
+            />
+          </div>
+        </div>
+        <DialogFooter className="mt-4">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={saveDisabled}>
+            Save exclusion
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -307,6 +699,214 @@ const timeout = <T,>(promise: Promise<T>, ms = 15_000) =>
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
 
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const MANUAL_REASON_OPTIONS: { value: ManualExclusionReason; label: string }[] = [
+  { value: "SUSPENSION", label: "Suspension" },
+  { value: "OFFICE_CLOSURE", label: "Office closure" },
+  { value: "CALAMITY", label: "Calamity" },
+  { value: "TRAINING", label: "Training" },
+  { value: "LEAVE", label: "Leave" },
+  { value: "LOCAL_HOLIDAY", label: "Local holiday" },
+  { value: "OTHER", label: "Other" },
+];
+
+const LEAVE_NOTE_OPTIONS = [
+  "Sick Leave",
+  "Vacation Leave",
+  "Emergency Leave",
+  "Maternity Leave",
+  "Paternity Leave",
+  "Bereavement Leave",
+  "Solo Parent Leave",
+  "Special Leave",
+];
+
+const manualMonthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
+const manualDayFormatter = new Intl.DateTimeFormat("en-US", { day: "numeric" });
+const manualFullFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+
+const normalizeManualNote = (note: unknown): string | undefined => {
+  if (typeof note !== "string") return undefined;
+  const trimmed = note.trim();
+  return trimmed.length ? trimmed : undefined;
+};
+
+const toUtcDateFromIso = (iso: string): Date | null => {
+  if (typeof iso !== "string" || !ISO_DATE_REGEX.test(iso)) return null;
+  const [yearStr, monthStr, dayStr] = iso.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  return new Date(Date.UTC(year, month - 1, day, 12));
+};
+
+const expandDatesFromRange = (range: DateRange | undefined): string[] => {
+  if (!range?.from) return [];
+  const fromTime = Date.UTC(range.from.getFullYear(), range.from.getMonth(), range.from.getDate());
+  const toDate = range.to ?? range.from;
+  const toTime = Date.UTC(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+  const start = Math.min(fromTime, toTime);
+  const end = Math.max(fromTime, toTime);
+  const dates: string[] = [];
+  for (let time = start; time <= end; time += MS_PER_DAY) {
+    const date = new Date(time);
+    const iso = `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+    dates.push(iso);
+  }
+  return dates;
+};
+
+const toDateRangeFromDates = (dates: string[]): DateRange | undefined => {
+  if (!dates.length) return undefined;
+  const parsed = dates
+    .map((iso) => toUtcDateFromIso(iso))
+    .filter((date): date is Date => date instanceof Date)
+    .sort((a, b) => a.getTime() - b.getTime());
+  if (!parsed.length) return undefined;
+  const first = parsed[0];
+  const last = parsed[parsed.length - 1];
+  return {
+    from: new Date(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate()),
+    to: new Date(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate()),
+  };
+};
+
+const formatManualDateSegment = (start: Date, end: Date) => {
+  if (start.getTime() === end.getTime()) {
+    return manualFullFormatter.format(start);
+  }
+  const sameMonth =
+    start.getUTCFullYear() === end.getUTCFullYear() && start.getUTCMonth() === end.getUTCMonth();
+  if (sameMonth) {
+    return `${manualMonthFormatter.format(start)} ${manualDayFormatter.format(start)}–${manualDayFormatter.format(end)}`;
+  }
+  return `${manualFullFormatter.format(start)} – ${manualFullFormatter.format(end)}`;
+};
+
+const formatManualDateSummary = (dates: string[]): string => {
+  if (!dates.length) return "";
+  const parsed = dates
+    .map((iso) => ({ iso, date: toUtcDateFromIso(iso) }))
+    .filter((entry): entry is { iso: string; date: Date } => entry.date instanceof Date)
+    .sort((a, b) => a.iso.localeCompare(b.iso));
+  if (!parsed.length) return "";
+  const segments: Array<{ start: Date; end: Date }> = [];
+  let currentStart = parsed[0].date;
+  let currentEnd = parsed[0].date;
+  for (let index = 1; index < parsed.length; index += 1) {
+    const current = parsed[index].date;
+    const previous = parsed[index - 1].date;
+    const diff = current.getTime() - previous.getTime();
+    if (diff === 0) {
+      continue;
+    }
+    if (diff === MS_PER_DAY) {
+      currentEnd = current;
+      continue;
+    }
+    segments.push({ start: currentStart, end: currentEnd });
+    currentStart = current;
+    currentEnd = current;
+  }
+  segments.push({ start: currentStart, end: currentEnd });
+  return segments.map((segment) => formatManualDateSegment(segment.start, segment.end)).join(", ");
+};
+
+const formatManualReasonLabel = (reason: ManualExclusionReason, note?: string | null) => {
+  const normalizedNote = note && note.trim().length ? note.trim() : undefined;
+  if (reason === "LOCAL_HOLIDAY") {
+    return normalizedNote ? `Local Holiday (${normalizedNote})` : "Local Holiday";
+  }
+  if (reason === "LEAVE") {
+    return normalizedNote ? `Leave - ${normalizedNote}` : "Leave";
+  }
+  const base = reason
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return normalizedNote ? `${base} - ${normalizedNote}` : base;
+};
+
+const isValidManualScope = (value: unknown): value is ManualExclusionScope =>
+  value === "all" || value === "offices" || value === "employees";
+
+const isValidManualReason = (value: unknown): value is ManualExclusionReason =>
+  value === "SUSPENSION" ||
+  value === "OFFICE_CLOSURE" ||
+  value === "CALAMITY" ||
+  value === "TRAINING" ||
+  value === "LEAVE" ||
+  value === "LOCAL_HOLIDAY" ||
+  value === "OTHER";
+
+const sanitizeManualIds = (values: unknown): string[] | undefined => {
+  if (!Array.isArray(values)) return undefined;
+  const unique = Array.from(
+    new Set(
+      values.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    )
+  ).map((value) => value.trim());
+  return unique.length ? unique : undefined;
+};
+
+const sortManualExclusions = (values: ManualExclusion[]): ManualExclusion[] =>
+  [...values].sort((a, b) => {
+    const aDate = a.dates[0] ?? "";
+    const bDate = b.dates[0] ?? "";
+    const diff = aDate.localeCompare(bDate);
+    if (diff !== 0) return diff;
+    return a.id.localeCompare(b.id);
+  });
+
+const sanitizeManualExclusions = (value: unknown): ManualExclusion[] => {
+  if (!Array.isArray(value)) return [];
+  const sanitized: ManualExclusion[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = typeof (entry as ManualExclusion).id === "string" ? (entry as ManualExclusion).id : null;
+    if (!id) continue;
+    const scope = (entry as ManualExclusion).scope;
+    if (!isValidManualScope(scope)) continue;
+    const reason = (entry as ManualExclusion).reason;
+    if (!isValidManualReason(reason)) continue;
+    const rawDates = Array.isArray((entry as ManualExclusion).dates)
+      ? (entry as ManualExclusion).dates
+      : [];
+    const dates = Array.from(
+      new Set(
+        rawDates
+          .filter((date): date is string => typeof date === "string" && ISO_DATE_REGEX.test(date))
+          .sort((a, b) => a.localeCompare(b))
+      )
+    );
+    if (!dates.length) continue;
+    const officeIds = scope === "offices" ? sanitizeManualIds((entry as ManualExclusion).officeIds) : undefined;
+    if (scope === "offices" && !officeIds?.length) continue;
+    const employeeIds = scope === "employees" ? sanitizeManualIds((entry as ManualExclusion).employeeIds) : undefined;
+    if (scope === "employees" && !employeeIds?.length) continue;
+    const note = normalizeManualNote((entry as ManualExclusion).note);
+    sanitized.push({
+      id,
+      scope,
+      reason,
+      dates,
+      officeIds,
+      employeeIds,
+      note,
+    });
+  }
+  return sortManualExclusions(sanitized);
+};
+
+const generateManualExclusionId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
 const MANUAL_STORAGE_KEY = "biometrics-uploader-period";
 
 const manualMonthOptions = [
@@ -365,14 +965,31 @@ const composeManualDate = (year: number, month: number, day: number): string | n
   return `${year}-${pad2(month)}-${pad2(day)}`;
 };
 
-const makeEvaluationPayloadKey = (manualKey: string, rows: ParsedPerDayRow[]) =>
-  `${manualKey}:${rows.length}:${rows
+const makeEvaluationPayloadKey = (
+  manualKey: string,
+  rows: ParsedPerDayRow[],
+  manualExclusions: ManualExclusion[] | null | undefined
+) => {
+  const manualFragment = manualExclusions && manualExclusions.length
+    ? manualExclusions
+        .map((exclusion) => {
+          const dates = exclusion.dates.join(",");
+          const offices = (exclusion.officeIds ?? []).join(",");
+          const employees = (exclusion.employeeIds ?? []).join(",");
+          const note = exclusion.note ?? "";
+          return `${exclusion.id}:${exclusion.reason}:${exclusion.scope}:${dates}:${offices}:${employees}:${note}`;
+        })
+        .join("|")
+    : "none";
+  const rowFragment = rows
     .map((row) => {
       const officeKey = row.officeId ?? row.officeName ?? "";
       const token = row.employeeToken ?? row.employeeId ?? row.employeeName ?? "";
       return `${token}:${row.dateISO}:${row.allTimes.join("|")}:${row.employeeName}:${officeKey}`;
     })
-    .join("#")}`;
+    .join("#");
+  return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}`;
+};
 
 const getNormalizedTokenForRow = (row: {
   employeeToken?: string | null;
@@ -914,6 +1531,10 @@ function BioLogUploaderContent() {
   const [manualMonth, setManualMonth] = useState<string>("");
   const [manualYear, setManualYear] = useState<string>("");
   const [manualPeriodHydrated, setManualPeriodHydrated] = useState(false);
+  const [manualExclusions, setManualExclusions] = useState<ManualExclusion[]>([]);
+  const [manualExclusionsHydrated, setManualExclusionsHydrated] = useState(false);
+  const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [manualDialogEditing, setManualDialogEditing] = useState<ManualExclusion | null>(null);
   const [identityState, setIdentityState] = useState<IdentityStatus>({
     status: "idle",
     total: 0,
@@ -1043,6 +1664,59 @@ function BioLogUploaderContent() {
     setShowUnmatched,
     setSort,
   ]);
+  const handleManualDialogOpenChange = useCallback((open: boolean) => {
+    setManualDialogOpen(open);
+    if (!open) {
+      setManualDialogEditing(null);
+    }
+  }, []);
+
+  const handleAddManualExclusion = useCallback(() => {
+    setManualDialogEditing(null);
+    setManualDialogOpen(true);
+  }, []);
+
+  const handleEditManualExclusion = useCallback((exclusion: ManualExclusion) => {
+    setManualDialogEditing(exclusion);
+    setManualDialogOpen(true);
+  }, []);
+
+  const handleRemoveManualExclusion = useCallback((id: string) => {
+    setManualExclusions((prev) => prev.filter((entry) => entry.id !== id));
+  }, []);
+
+  const handleManualDialogSubmit = useCallback(
+    (draft: Omit<ManualExclusion, "id">) => {
+      setManualExclusions((prev) => {
+        const normalized: Omit<ManualExclusion, "id"> = {
+          ...draft,
+          dates: Array.from(new Set(draft.dates)).sort((a, b) => a.localeCompare(b)),
+          note: draft.note && draft.note.trim().length ? draft.note.trim() : undefined,
+          officeIds:
+            draft.scope === "offices" && draft.officeIds?.length ? [...draft.officeIds] : undefined,
+          employeeIds:
+            draft.scope === "employees" && draft.employeeIds?.length
+              ? [...draft.employeeIds]
+              : undefined,
+        };
+        if (manualDialogEditing) {
+          return sortManualExclusions(
+            prev.map((entry) =>
+              entry.id === manualDialogEditing.id
+                ? { ...manualDialogEditing, ...normalized, id: manualDialogEditing.id }
+                : entry
+            )
+          );
+        }
+        const newEntry: ManualExclusion = {
+          ...normalized,
+          id: generateManualExclusionId(),
+        };
+        return sortManualExclusions([...prev, newEntry]);
+      });
+    },
+    [manualDialogEditing]
+  );
   const manualResolvedRef = useRef<Set<string>>(new Set());
   const manualResolvedTokens = useMemo(() => Array.from(manualResolved), [manualResolved]);
   useEffect(() => {
@@ -1574,6 +2248,96 @@ function BioLogUploaderContent() {
     return { year, month };
   }, [filteredPerDayRows, manualPeriodSelection, manualSelectionValid, useManualPeriod]);
 
+  const manualActivePeriodLabel = useMemo(() => {
+    if (!activePeriod) return null;
+    return manualPeriodFormatter.format(
+      new Date(Date.UTC(activePeriod.year, activePeriod.month - 1, 1))
+    );
+  }, [activePeriod]);
+
+  const manualExclusionStorageKey = useMemo(() => {
+    if (!activePeriod) return null;
+    return `hrps.biometrics.manualExclusions.${activePeriod.year}-${pad2(activePeriod.month)}`;
+  }, [activePeriod]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!manualExclusionStorageKey) {
+      setManualExclusions([]);
+      setManualExclusionsHydrated(true);
+      return;
+    }
+    setManualExclusionsHydrated(false);
+    try {
+      const raw = window.localStorage.getItem(manualExclusionStorageKey);
+      if (!raw) {
+        setManualExclusions([]);
+      } else {
+        const parsed = JSON.parse(raw);
+        const sanitized = sanitizeManualExclusions(parsed);
+        setManualExclusions(sanitized);
+      }
+    } catch (error) {
+      console.warn("Failed to load manual exclusions", error);
+      setManualExclusions([]);
+    } finally {
+      setManualExclusionsHydrated(true);
+    }
+  }, [manualExclusionStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!manualExclusionStorageKey || !manualExclusionsHydrated) return;
+    try {
+      if (!manualExclusions.length) {
+        window.localStorage.removeItem(manualExclusionStorageKey);
+      } else {
+        window.localStorage.setItem(manualExclusionStorageKey, JSON.stringify(manualExclusions));
+      }
+    } catch (error) {
+      console.warn("Failed to persist manual exclusions", error);
+    }
+  }, [manualExclusionStorageKey, manualExclusions, manualExclusionsHydrated]);
+
+  const manualExclusionContext = useMemo(() => {
+    if (!manualExclusions.length) {
+      return {
+        applicable: [] as ManualExclusion[],
+        outOfPeriodCounts: new Map<string, number>(),
+        totalOutOfPeriod: 0,
+      };
+    }
+    if (!activePeriod) {
+      return {
+        applicable: manualExclusions.map((exclusion) => ({ ...exclusion })),
+        outOfPeriodCounts: new Map<string, number>(),
+        totalOutOfPeriod: 0,
+      };
+    }
+    const prefix = `${activePeriod.year}-${pad2(activePeriod.month)}`;
+    const outOfPeriodCounts = new Map<string, number>();
+    const applicable: ManualExclusion[] = [];
+    for (const exclusion of manualExclusions) {
+      const inPeriod = exclusion.dates.filter((date) => date.startsWith(prefix));
+      const outCount = exclusion.dates.length - inPeriod.length;
+      if (outCount > 0) {
+        outOfPeriodCounts.set(exclusion.id, outCount);
+      }
+      if (inPeriod.length) {
+        applicable.push({ ...exclusion, dates: inPeriod });
+      }
+    }
+    const totalOutOfPeriod = Array.from(outOfPeriodCounts.values()).reduce(
+      (sum, value) => sum + value,
+      0
+    );
+    return { applicable, outOfPeriodCounts, totalOutOfPeriod };
+  }, [activePeriod, manualExclusions]);
+
+  const manualApplicableCount = manualExclusionContext.applicable.length;
+  const manualOutOfPeriodMap = manualExclusionContext.outOfPeriodCounts;
+  const manualOutOfPeriodTotal = manualExclusionContext.totalOutOfPeriod;
+
   const manualResolvedStorageKey = useMemo(() => {
     if (!departmentId || !activePeriod) return null;
     return `hrps:manual-resolved:${departmentId}:${activePeriod.year}-${pad2(activePeriod.month)}`;
@@ -1687,6 +2451,8 @@ function BioLogUploaderContent() {
       return;
     }
 
+    if (!manualExclusionsHydrated) return;
+
     const manualKey = manualPeriodSelection
       ? `${manualPeriodSelection.year}-${pad2(manualPeriodSelection.month)}`
       : "auto";
@@ -1703,7 +2469,8 @@ function BioLogUploaderContent() {
       return;
     }
 
-    const payloadKey = makeEvaluationPayloadKey(manualKey, filteredPerDayRows);
+    const manualPayload = manualExclusionContext.applicable;
+    const payloadKey = makeEvaluationPayloadKey(manualKey, filteredPerDayRows, manualPayload);
     if (payloadKey === lastEvaluatedKey.current) return;
 
     const controller = new AbortController();
@@ -1727,6 +2494,7 @@ function BioLogUploaderContent() {
             sourceFiles: row.sourceFiles,
             composedFromDayOnly: row.composedFromDayOnly,
           })),
+          manualExclusions: manualPayload,
         };
 
         const response = await timeout(
@@ -1783,6 +2551,8 @@ function BioLogUploaderContent() {
     filteredPerDayRows,
     hasPendingParses,
     identityReady,
+    manualExclusionContext,
+    manualExclusionsHydrated,
     manualPeriodSelection,
     manualSelectionValid,
     mergeResult,
@@ -1828,6 +2598,52 @@ function BioLogUploaderContent() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [dedupedPerEmployee]);
+
+  const manualOfficeOptions = useMemo<ManualDialogOfficeOption[]>(() => {
+    if (!dedupedPerEmployee.length) return [];
+    const map = new Map<string, string>();
+    for (const row of dedupedPerEmployee) {
+      const id = row.officeId?.trim();
+      if (!id) continue;
+      if (map.has(id)) continue;
+      const label = row.officeName?.trim();
+      map.set(id, label && label.length ? label : UNASSIGNED_OFFICE_LABEL);
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [dedupedPerEmployee]);
+
+  const manualEmployeeOptions = useMemo<ManualDialogEmployeeOption[]>(() => {
+    if (!dedupedPerEmployee.length) return [];
+    const map = new Map<string, { name: string; display: string }>();
+    for (const row of dedupedPerEmployee) {
+      const id = row.resolvedEmployeeId?.trim();
+      if (!id || map.has(id)) continue;
+      const employeeNo = firstEmployeeNoToken(row.employeeNo);
+      const baseName = row.employeeName?.trim()?.length
+        ? row.employeeName.trim()
+        : row.employeeToken?.trim()?.length
+        ? row.employeeToken.trim()
+        : row.employeeId?.trim()?.length
+        ? row.employeeId.trim()
+        : "Unnamed employee";
+      const display = employeeNo && employeeNo.length ? `${baseName} (${employeeNo})` : baseName;
+      map.set(id, { name: baseName, display });
+    }
+    return Array.from(map.entries())
+      .map(([id, value]) => ({ id, name: value.name, display: value.display }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [dedupedPerEmployee]);
+
+  const manualOfficeNameMap = useMemo(
+    () => new Map(manualOfficeOptions.map((option) => [option.id, option.name])),
+    [manualOfficeOptions]
+  );
+  const manualEmployeeLabelMap = useMemo(
+    () => new Map(manualEmployeeOptions.map((option) => [option.id, option.display])),
+    [manualEmployeeOptions]
+  );
 
   const filteredPerEmployee = useMemo(() => {
     if (!dedupedPerEmployee.length) return [] as PerEmployeeRow[];
@@ -2385,8 +3201,23 @@ function BioLogUploaderContent() {
           ? `${manualPeriodSelection.year}-${pad2(manualPeriodSelection.month)}`
           : "auto";
 
+      if (!manualExclusionsHydrated) {
+        toast({
+          title: "Manual exclusions loading",
+          description: "Manual exclusions are still loading. Please try again shortly.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const manualPayload = manualExclusionContext.applicable;
+
       if (!relevantRows.length) {
-        lastEvaluatedKey.current = makeEvaluationPayloadKey(manualKey, filteredPerDayRows);
+        lastEvaluatedKey.current = makeEvaluationPayloadKey(
+          manualKey,
+          filteredPerDayRows,
+          manualPayload
+        );
         return;
       }
 
@@ -2421,7 +3252,7 @@ function BioLogUploaderContent() {
         fetch("/api/biometrics/re-enrich", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ entries }),
+          body: JSON.stringify({ entries, manualExclusions: manualPayload }),
         }),
         15_000
       );
@@ -2469,7 +3300,11 @@ function BioLogUploaderContent() {
           isHead,
         };
       });
-      lastEvaluatedKey.current = makeEvaluationPayloadKey(manualKey, updatedFilteredRows);
+      lastEvaluatedKey.current = makeEvaluationPayloadKey(
+        manualKey,
+        updatedFilteredRows,
+        manualPayload
+      );
 
       const hasResolvedEmployee = payload.perEmployee.some((row) => row.resolvedEmployeeId);
       if (!hasResolvedEmployee) {
@@ -2478,10 +3313,13 @@ function BioLogUploaderContent() {
     },
     [
       filteredPerDayRows,
+      manualExclusionContext,
+      manualExclusionsHydrated,
       manualPeriodSelection,
       removeManualResolved,
       setPerDay,
       setPerEmployee,
+      toast,
       useManualPeriod,
     ]
   );
@@ -3027,6 +3865,105 @@ function BioLogUploaderContent() {
         {manualPeriodError ? (
           <p className="text-xs font-medium text-destructive">{manualPeriodError}</p>
         ) : null}
+        <div className="mt-4 space-y-3 rounded-lg border border-dashed border-muted-foreground/40 bg-background/60 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Manual exclusions</p>
+              <p className="text-xs text-muted-foreground">
+                Excuse specific dates from late, undertime, and absence calculations for this period.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleAddManualExclusion}
+              disabled={!manualExclusionsHydrated || !activePeriod}
+            >
+              <Plus className="mr-2 h-4 w-4" /> Add exclusion
+            </Button>
+          </div>
+          {!manualExclusionsHydrated ? (
+            <p className="text-xs text-muted-foreground">Loading manual exclusions…</p>
+          ) : manualExclusions.length ? (
+            <ul className="space-y-2">
+              {manualExclusions.map((exclusion) => {
+                const dateLabel = formatManualDateSummary(exclusion.dates);
+                const reasonLabel = formatManualReasonLabel(exclusion.reason, exclusion.note);
+                const officeNames = (exclusion.officeIds ?? []).map(
+                  (id) => manualOfficeNameMap.get(id) ?? id
+                );
+                const employeeNames = (exclusion.employeeIds ?? []).map(
+                  (id) => manualEmployeeLabelMap.get(id) ?? id
+                );
+                const scopeLabel =
+                  exclusion.scope === "all"
+                    ? "All employees"
+                    : exclusion.scope === "offices"
+                    ? `Offices (${officeNames.length})`
+                    : `Employees (${employeeNames.length})`;
+                const scopeDetails = exclusion.scope === "offices" ? officeNames : employeeNames;
+                const outOfPeriod = manualOutOfPeriodMap.get(exclusion.id) ?? 0;
+                return (
+                  <li
+                    key={exclusion.id}
+                    className="flex flex-wrap items-start justify-between gap-3 rounded border border-border/60 bg-muted/30 px-3 py-2"
+                  >
+                    <div className="text-sm">
+                      <p className="font-medium">{dateLabel || "—"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {reasonLabel}
+                        {" "}•{" "}
+                        {scopeDetails.length ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                {scopeLabel}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              {scopeDetails.join(", ")}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          scopeLabel
+                        )}
+                        {outOfPeriod > 0 ? ` • ${outOfPeriod} out of period` : null}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleEditManualExclusion(exclusion)}
+                      >
+                        <Pencil className="mr-1 h-4 w-4" /> Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleRemoveManualExclusion(exclusion.id)}
+                      >
+                        <Trash2 className="mr-1 h-4 w-4" /> Remove
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">No manual exclusions for this period.</p>
+          )}
+          {manualOutOfPeriodTotal > 0 && manualActivePeriodLabel ? (
+            <p className="text-xs text-amber-600">
+              {manualOutOfPeriodTotal} date{manualOutOfPeriodTotal === 1 ? "" : "s"} outside {manualActivePeriodLabel}{" "}
+              will be ignored during evaluation.
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <div
@@ -3344,6 +4281,14 @@ function BioLogUploaderContent() {
               ) : null}
             </div>
           )}
+          {manualApplicableCount > 0 ? (
+            <Badge
+              variant="outline"
+              className="border-amber-500/60 bg-amber-500/10 text-amber-800"
+            >
+              Manual exclusions active ({manualApplicableCount})
+            </Badge>
+          ) : null}
           <InsightsPanel
             collapsed={insightsCollapsed}
             onCollapsedChange={setInsightsCollapsed}
@@ -3883,6 +4828,7 @@ function BioLogUploaderContent() {
                   <th className="p-2 text-left">Name</th>
                   <th className="p-2 text-left">Office</th>
                   <th className="p-2 text-left">Date</th>
+                  <th className="p-2 text-left">Status</th>
                   <th className="p-2 text-center">Earliest</th>
                   <th className="p-2 text-center">Latest</th>
                   <th className="p-2 text-center">Worked</th>
@@ -3921,6 +4867,14 @@ function BioLogUploaderContent() {
                     : tokenDisplay || "—";
                   const showTokenTooltip =
                     isUnmatched && Boolean(row.employeeToken || row.employeeId);
+                  const statusLabel =
+                    typeof row.status === "string" && row.status.length
+                      ? row.status
+                      : isExcused
+                      ? "Excused"
+                      : row.absent
+                      ? "Absent"
+                      : "Present";
                   return (
                     <tr
                       key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`}
@@ -3946,6 +4900,17 @@ function BioLogUploaderContent() {
                           (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL)}
                       </td>
                       <td className="p-2">{dateFormatter.format(toDate(row.dateISO))}</td>
+                      <td className="p-2">
+                        {isExcused ? (
+                          <Badge variant="outline" className="bg-muted/60 text-muted-foreground">
+                            {statusLabel}
+                          </Badge>
+                        ) : row.absent ? (
+                          <span className="font-semibold text-destructive">{statusLabel}</span>
+                        ) : (
+                          statusLabel
+                        )}
+                      </td>
                       <td className="p-2 text-center">{row.earliest ?? ""}</td>
                       <td className="p-2 text-center">{row.latest ?? ""}</td>
                       <td className="p-2 text-center">
@@ -3999,9 +4964,9 @@ function BioLogUploaderContent() {
                               No punches
                             </Badge>
                           ) : isExcused ? (
-                            <Badge variant="outline" className="bg-muted/60 text-muted-foreground">
-                              Excused — punches not evaluated
-                            </Badge>
+                          <Badge variant="outline" className="bg-muted/60 text-muted-foreground">
+                            {statusLabel}
+                          </Badge>
                           ) : row.allTimes.length ? (
                             <p>{row.allTimes.join(", ")}</p>
                           ) : null}
@@ -4064,6 +5029,16 @@ function BioLogUploaderContent() {
         </div>
       )}
       </div>
+      <ManualExclusionDialog
+        open={manualDialogOpen}
+        onOpenChange={handleManualDialogOpenChange}
+        onSubmit={handleManualDialogSubmit}
+        initial={manualDialogEditing}
+        offices={manualOfficeOptions}
+        employees={manualEmployeeOptions}
+        activePeriodLabel={manualActivePeriodLabel}
+        activePeriod={activePeriod}
+      />
       <SummaryColumnSelector
         open={columnSelectorOpen}
         onOpenChange={setColumnSelectorOpen}

@@ -87,7 +87,7 @@ export type ParsedPerDayRow = {
 };
 
 export type PerDayRow = ParsedPerDayRow & {
-  status?: DayEvaluationStatus | "Present" | "Absent";
+  status?: DayEvaluationStatus | string;
   evaluationStatus?: DayEvaluationStatus;
   isLate: boolean;
   isUndertime: boolean;
@@ -1879,8 +1879,13 @@ const buildPerDaySheet = (rows: PerDayRow[]) => {
           return formatScheduleSource(row.scheduleSource) ?? "";
         case "date":
           return toExcelDateNumber(row.dateISO);
-        case "status":
+        case "status": {
+          if (typeof row.status === "string" && row.status.length) {
+            return row.status;
+          }
+          if (evaluationStatus === "excused") return "Excused";
           return row.absent ? "Absent" : "Present";
+        }
         case "earliest":
           return toExcelTimeNumber(row.earliest ?? null);
         case "latest":
