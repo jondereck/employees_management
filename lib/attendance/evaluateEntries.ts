@@ -458,8 +458,8 @@ export async function evaluateAttendanceEntries(
     let requiredMinutes = evaluation.requiredMinutes ?? 0;
     let isLate = evaluation.isLate;
     let isUndertime = evaluation.isUndertime;
-    let lateMinutesValue = evaluation.lateMinutes ?? null;
-    let undertimeMinutesValue = evaluation.undertimeMinutes ?? null;
+    let lateMinutesValue: number | null = evaluation.lateMinutes ?? null;
+    let undertimeMinutesValue: number | null = evaluation.undertimeMinutes ?? null;
 
     if (isFallbackFixedSchedule && !isDefaultWorkday) {
       requiredMinutes = 0;
