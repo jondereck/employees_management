@@ -4227,7 +4227,7 @@ const applyColumnFilters = useCallback(
                           )}
                         />
                       </button>
-                      <ColumnFilterControl columnKey="absences" />
+                      <ColumnFilterControl columnKey="absences" {...columnFilterControlProps} />
                     </div>
                   </th>
                   <th className="p-2 text-center">
