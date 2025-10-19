@@ -315,8 +315,25 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       presenceMinutes = computeShiftPresenceMinutes(normalized, earliest, latest, normalizedAllTimes);
     }
     const clampedPresence = Math.max(0, presenceMinutes);
-    const requiredMinutes = evaluation.requiredMinutes ?? 0;
     const scheduleSource = normalized.source ?? scheduleRecord.source ?? "DEFAULT";
+    const isDefaultSchedule = scheduleSource === "DEFAULT" || scheduleSource === "NOMAPPING";
+    const dayOfWeek = new Date(`${row.dateISO}T00:00:00Z`).getUTCDay();
+    const isDefaultWorkday = dayOfWeek >= 1 && dayOfWeek <= 5;
+
+    let requiredMinutes = evaluation.requiredMinutes ?? 0;
+    let isLate = evaluation.isLate;
+    let isUndertime = evaluation.isUndertime;
+    let lateMinutesValue = evaluation.lateMinutes ?? null;
+    let undertimeMinutesValue = evaluation.undertimeMinutes ?? null;
+
+    if (isDefaultSchedule && !isDefaultWorkday) {
+      requiredMinutes = 0;
+      isLate = false;
+      isUndertime = false;
+      lateMinutesValue = null;
+      undertimeMinutesValue = null;
+    }
+
     const isScheduled = requiredMinutes > 0;
     const isExcused =
       (exceptionInfo?.type ?? null) === "HOLIDAY" ||
@@ -344,17 +361,17 @@ export async function evaluateAttendanceEntries(entries: EvaluationEntry[]): Pro
       composedFromDayOnly: row.composedFromDayOnly ?? false,
       status: statusLabel,
       evaluationStatus: evaluation.status as DayEvaluationStatus,
-      isLate: evaluation.isLate,
-      isUndertime: evaluation.isUndertime,
+      isLate,
+      isUndertime,
       workedHHMM: evaluation.workedHHMM,
       workedMinutes: evaluation.workedMinutes,
       presenceMinutes: clampedPresence,
       absent,
       scheduleType: normalized.type,
       scheduleSource: scheduleRecord.source,
-      lateMinutes: evaluation.lateMinutes ?? null,
-      undertimeMinutes: evaluation.undertimeMinutes ?? null,
-      requiredMinutes: evaluation.requiredMinutes ?? null,
+      lateMinutes: lateMinutesValue,
+      undertimeMinutes: undertimeMinutesValue,
+      requiredMinutes: requiredMinutes ?? null,
       scheduleStart: evaluation.scheduleStart ?? null,
       scheduleEnd: evaluation.scheduleEnd ?? null,
       scheduleGraceMinutes: evaluation.scheduleGraceMinutes ?? null,
