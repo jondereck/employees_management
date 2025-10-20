@@ -66,7 +66,7 @@ type DownloadExcelParams = {
   officesSelection?: string[];
   officeMetadata?: Record<string, { name: string; bioIndexCode?: string | null }>;
   sortLevels?: SortLevel[];
-  sheetMode?: 'perOffice' | 'merged';
+  sheetMode?: 'perOffice' | 'merged' | 'plain';
   filterGroupMode?: 'office' | 'bioIndex';
 };
 
@@ -737,7 +737,11 @@ export async function generateExcelFile({
 
   const workbook = XLSX.utils.book_new();
   const takenSheetNames = new Set<string>();
-  const resolvedSheetMode = sheetMode === 'merged' ? 'merged' : 'perOffice';
+  const resolvedSheetMode = sheetMode === 'merged'
+    ? 'merged'
+    : sheetMode === 'plain'
+      ? 'plain'
+      : 'perOffice';
   const mode: GroupMode = filterGroupMode === 'bioIndex' ? 'bioIndex' : 'office';
 
   const dedupeOfficeKeys = (keys: string[]) => {
@@ -860,6 +864,24 @@ export async function generateExcelFile({
     const sheetName = uniqueSheetName(sanitizeSheetName(mergedSheetLabel), takenSheetNames);
     debugRowShape(numberedMergedRows, `sheet ${sheetName}`);
     const worksheet = buildMergedWorksheet(groups);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  } else if (resolvedSheetMode === 'plain') {
+    const sortedRows = sortRows(filteredRowsBySelection, effectiveSortLevels);
+    const rowsForWs = withNoColumn
+      ? sortedRows.map((row: any, idx) => ({ ...row, __rowNumber: idx + 1, __no__: idx + 1 }))
+      : sortedRows;
+
+    let sheetTitle = 'Employees';
+    if (selectionCount === 1) {
+      const singleKey = keysToProcess[0];
+      const groupRows = partitioned[singleKey] ?? [];
+      const { title } = resolveGroupMetadata(singleKey, groupRows);
+      if (title) sheetTitle = title;
+    }
+
+    const sheetName = uniqueSheetName(sanitizeSheetName(sheetTitle), takenSheetNames);
+    debugRowShape(rowsForWs, `sheet ${sheetName}`);
+    const worksheet = buildWorksheet(rowsForWs, { includeTitle: false });
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
   } else {
     for (const key of keysToProcess) {

@@ -37,7 +37,7 @@ export type ExportTemplate = {
   sheetName?: string;
   templateVersion?: number;
   officesSelection?: string[];
-  sheetMode?: 'perOffice' | 'merged';
+  sheetMode?: 'perOffice' | 'merged' | 'plain';
   sortLevels?: SortLevel[];
   filterGroupMode?: 'office' | 'bioIndex';
     __version__?: number;
@@ -46,7 +46,7 @@ export type ExportTemplate = {
 export type ExportTemplateV2 = ExportTemplate & {
   templateVersion: 2;
   officesSelection: string[];
-  sheetMode: 'perOffice' | 'merged';
+  sheetMode: 'perOffice' | 'merged' | 'plain';
   sortLevels: SortLevel[];
   filterGroupMode: 'office' | 'bioIndex';
 };

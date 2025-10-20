@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Tab } from "@headlessui/react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -10,9 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-// ⬇️ toggle UI (shadcn)
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 
 type GalleryImage = {
   id: string;
@@ -35,16 +32,6 @@ const Gallery = ({ images, employeeId, employeeNo, gender }: GalleryProps) => {
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
-
-  // ✅ NEW: user-controlled toggle (persisted)
-  const [removeBgEnabled, setRemoveBgEnabled] = useState<boolean>(false);
-  useEffect(() => {
-    const saved = localStorage.getItem("gallery:remove-bg");
-    if (saved != null) setRemoveBgEnabled(saved === "1");
-  }, []);
-  useEffect(() => {
-    localStorage.setItem("gallery:remove-bg", removeBgEnabled ? "1" : "0");
-  }, [removeBgEnabled]);
 
   // ---- placeholder logic
   const placeholderSrc =
@@ -105,45 +92,18 @@ const Gallery = ({ images, employeeId, employeeNo, gender }: GalleryProps) => {
     return `${sanitizeBase(base)}.${ext}`;
   };
 
-  // ===== remove.bg =====
-  const removeBackground = async (imageUrl: string): Promise<string | null> => {
-    const formData = new FormData();
-    formData.append("image_url", imageUrl);
-    formData.append("size", "auto");
-    try {
-      const response = await fetch("https://api.remove.bg/v1.0/removebg", {
-        method: "POST",
-        headers: { "X-Api-Key": "PmgVbDF3vspFvkXAtsqKEUjz" }, // consider moving to env
-        body: formData,
-      });
-      if (!response.ok) return null;
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
-    } catch {
-      return null;
-    }
-  };
-
-  // ✅ NEW: single processor that respects the toggle and falls back to raw
-  const getProcessUrl = async (imageUrl: string) => {
-    if (!removeBgEnabled) return { url: imageUrl, removed: false };
-    const removed = await removeBackground(imageUrl);
-    if (removed) return { url: removed, removed: true };
-    return { url: imageUrl, removed: false };
-  };
-
   const handleDownload = async (image: GalleryImage) => {
     if (isPlaceholder(image)) return;
     setLoadingAction({ id: image.id, type: "download" });
     try {
-      const { url: outUrl, removed } = await getProcessUrl(image.url);
-      const res = await fetch(outUrl);
+      const res = await fetch(image.url);
+      if (!res.ok) throw new Error("fetch failed");
       const blob = await res.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = buildFilename(image, "png"); // ensure .png when bg-removed
+      a.download = buildFilename(image);
       a.click();
-      toast.success(removed ? "Downloaded (background removed)" : "Downloaded original image");
+      toast.success("Downloaded image.");
     } catch {
       toast.error("Failed to download image.");
     } finally {
@@ -151,46 +111,38 @@ const Gallery = ({ images, employeeId, employeeNo, gender }: GalleryProps) => {
     }
   };
 
- // 2) Replace handleCopy with this (robust copy with fallbacks):
-const handleCopy = async (image: GalleryImage) => {
-  if (isPlaceholder(image)) return;
-  setLoadingAction({ id: image.id, type: "copy" });
+  const handleCopy = async (image: GalleryImage) => {
+    if (isPlaceholder(image)) return;
+    setLoadingAction({ id: image.id, type: "copy" });
 
-  try {
-    const { url: outUrl } = await getProcessUrl(image.url); // respects your toggle
-    const res = await fetch(outUrl);
-    if (!res.ok) throw new Error("fetch failed");
-    const blob = await res.blob();
+    try {
+      const res = await fetch(image.url);
+      if (!res.ok) throw new Error("fetch failed");
+      const blob = await res.blob();
 
-    // Prefer native image copy (Chromium/Edge)
-    if (navigator.clipboard && "write" in navigator.clipboard && "ClipboardItem" in window) {
-      const item = new ClipboardItem({ [blob.type || "image/png"]: blob });
-      await (navigator.clipboard as any).write([item]);
-      toast.success("Image copied to clipboard.");
-    } else {
-      // Fallback: copy URL (works everywhere)
-      await navigator.clipboard.writeText(outUrl);
-      toast.success("Copied image link (clipboard image not supported on this browser).");
+      if (navigator.clipboard && "write" in navigator.clipboard && "ClipboardItem" in window) {
+        const item = new ClipboardItem({ [blob.type || "image/png"]: blob });
+        await (navigator.clipboard as any).write([item]);
+        toast.success("Image copied to clipboard.");
+      } else {
+        await navigator.clipboard.writeText(image.url);
+        toast.success("Copied image link to clipboard.");
+      }
+    } catch {
+      toast.error("Failed to copy image.");
+    } finally {
+      setLoadingAction(null);
     }
-  } catch (e) {
-    toast.error("Failed to copy image.");
-  } finally {
-    setLoadingAction(null);
-  }
-};
+  };
 
+  const photoBackground: CSSProperties = {
+    backgroundImage: "url('/bday_bg.png')",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+  };
 
   return (
     <>
-      {/* 🔘 Small toggle row */}
-      <div className="mb-3 flex items-center justify-end gap-2">
-        <Label htmlFor="remove-bg" className="text-sm">Remove background</Label>
-        <Switch
-          id="remove-bg"
-          checked={removeBgEnabled}
-          onCheckedChange={setRemoveBgEnabled}
-        />
-      </div>
 
       <Tab.Group
         as="div"
@@ -233,7 +185,10 @@ const handleCopy = async (image: GalleryImage) => {
         <Tab.Panels className="w-full p-4">
           {displayImages.map((image, idx) => (
             <Tab.Panel key={image.id}>
-              <div className="relative mx-auto w-full max-w-sm aspect-square overflow-hidden rounded-lg border bg-gray-100">
+              <div
+                className="relative mx-auto w-full max-w-sm aspect-square overflow-hidden rounded-lg border bg-gray-100"
+                style={!isPlaceholder(image) ? photoBackground : undefined}
+              >
                 {!isPlaceholder(image) && (
                   <button
                     type="button"
@@ -280,7 +235,7 @@ const handleCopy = async (image: GalleryImage) => {
                       onClick={() => handleDownload(image)}
                       className="text-sm px-3 py-1 rounded-md shadow flex items-center gap-1"
                       disabled={loadingAction?.id === image.id && loadingAction.type === "download"}
-                      title={removeBgEnabled ? "Download (remove bg)" : "Download original"}
+                      title="Download image"
                     >
                       {loadingAction?.id === image.id && loadingAction.type === "download"
                         ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -292,7 +247,7 @@ const handleCopy = async (image: GalleryImage) => {
                       onClick={() => handleCopy(image)}
                       className="text-sm px-3 py-1 rounded-md shadow flex items-center gap-1"
                       disabled={loadingAction?.id === image.id && loadingAction.type === "copy"}
-                      title={removeBgEnabled ? "Copy (remove bg)" : "Copy original"}
+                      title="Copy image"
                     >
                       {loadingAction?.id === image.id && loadingAction.type === "copy"
                         ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -326,17 +281,12 @@ const handleCopy = async (image: GalleryImage) => {
           </DialogHeader>
 
           {/* Mirror the toggle inside the dialog too */}
-          <div className="px-4 pb-2 flex items-center justify-end gap-2">
-            <Label htmlFor="remove-bg-dialog" className="text-sm">Remove background</Label>
-            <Switch
-              id="remove-bg-dialog"
-              checked={removeBgEnabled}
-              onCheckedChange={setRemoveBgEnabled}
-            />
-          </div>
 
           <div className="relative w-full">
-            <div className="relative mx-auto w-full aspect-[4/3] bg-black">
+            <div
+              className="relative mx-auto w-full aspect-[4/3] bg-black"
+              style={photoBackground}
+            >
               {activeImage && !isPlaceholder(activeImage) && (
                 <Image src={activeImage.url} alt="Full preview" fill className="object-contain" sizes="100vw" priority />
               )}
@@ -350,7 +300,7 @@ const handleCopy = async (image: GalleryImage) => {
                   variant="outline"
                   onClick={() => handleCopy(activeImage)}
                   disabled={loadingAction?.id === activeImage.id && loadingAction.type === "copy"}
-                  title={removeBgEnabled ? "Copy (remove bg)" : "Copy original"}
+                  title="Copy image"
                 >
                   {loadingAction?.id === activeImage.id && loadingAction.type === "copy"
                     ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -360,7 +310,7 @@ const handleCopy = async (image: GalleryImage) => {
                 <Button
                   onClick={() => handleDownload(activeImage)}
                   disabled={loadingAction?.id === activeImage.id && loadingAction.type === "download"}
-                  title={removeBgEnabled ? "Download (remove bg)" : "Download original"}
+                  title="Download image"
                 >
                   {loadingAction?.id === activeImage.id && loadingAction.type === "download"
                     ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -377,3 +327,4 @@ const handleCopy = async (image: GalleryImage) => {
 };
 
 export default Gallery;
+
