@@ -1,11 +1,6 @@
 "use client";
 
-<<<<<<< ours
-import { useEffect, useState } from "react";
-
-import type { ManualExclusion } from "@/types/autoDtr";
-=======
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { useParams } from "next/navigation";
 import type { DayContentProps } from "react-day-picker";
@@ -34,16 +29,11 @@ import {
 import type { ManualExclusion, ManualExclusionReason } from "@/types/autoDtr";
 
 export type HolidayHint = { date: string; name?: string };
->>>>>>> theirs
 
 export type PeriodStepState = {
   month: number;
   year: number;
-<<<<<<< ours
-  holidays: string[];
-=======
   holidays: HolidayHint[];
->>>>>>> theirs
   manualExclusions: ManualExclusion[];
 };
 
@@ -68,12 +58,8 @@ const MONTH_OPTIONS = [
   "December",
 ];
 
-<<<<<<< ours
-const storageKeyFor = (year: number, month: number) => `hrps.autoDtr.exclusions.${year}-${String(month).padStart(2, "0")}`;
-=======
 const storageKeyFor = (year: number, month: number) =>
   `hrps.autoDtr.exclusions.${year}-${String(month).padStart(2, "0")}`;
->>>>>>> theirs
 
 type ManualDraft = Omit<ManualExclusion, "id">;
 
@@ -83,9 +69,6 @@ const createDraft = (): ManualDraft => ({
   reason: "LEAVE",
 });
 
-<<<<<<< ours
-export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps) {
-=======
 type OfficeOption = { id: string; name: string };
 type EmployeeOption = { id: string; label: string };
 
@@ -119,20 +102,22 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
       ? rawDepartmentId[0] ?? ""
       : "";
 
->>>>>>> theirs
   const [manualHydratedKey, setManualHydratedKey] = useState<string | null>(null);
   const [manualDraft, setManualDraft] = useState<ManualDraft>(createDraft);
   const [dateInput, setDateInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
-<<<<<<< ours
-=======
   const [officeOptions, setOfficeOptions] = useState<OfficeOption[]>([]);
   const [employeeOptions, setEmployeeOptions] = useState<EmployeeOption[]>([]);
   const [officePopoverOpen, setOfficePopoverOpen] = useState(false);
   const [employeePopoverOpen, setEmployeePopoverOpen] = useState(false);
   const [loadingOffices, setLoadingOffices] = useState(false);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
->>>>>>> theirs
+  const onChangeRef = useRef(onChange);
+  const lastHolidayFetchKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -163,23 +148,54 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
     }
   }, [manualHydratedKey, value.manualExclusions, value.month, value.year]);
 
-<<<<<<< ours
-  const handleAddManual = () => {
-    const dates = dateInput
-      .split(",")
-      .map((token) => token.trim())
-      .filter((token) => /^\d{4}-\d{2}-\d{2}$/.test(token));
-    if (!dates.length) return;
-    const entry: ManualExclusion = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      dates,
-      scope: manualDraft.scope,
-      officeIds: manualDraft.officeIds,
-      employeeIds: manualDraft.employeeIds,
-      reason: manualDraft.reason,
-      note: noteInput || manualDraft.note,
+  useEffect(() => {
+    if (!departmentId) return;
+    const fetchKey = `${departmentId}-${value.year}-${value.month}`;
+    if (lastHolidayFetchKeyRef.current === fetchKey) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    const loadHolidays = async () => {
+      try {
+        const searchParams = new URLSearchParams({
+          year: String(value.year ?? ""),
+          month: String(value.month ?? ""),
+        });
+        const response = await fetch(`/api/${departmentId}/holidays?${searchParams.toString()}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(response.statusText);
+        const data = (await response.json()) as unknown;
+        if (cancelled) return;
+        const next: HolidayHint[] = Array.isArray(data)
+          ? data
+              .map((entry) => {
+                if (!entry || typeof entry !== "object") return null;
+                const date = typeof (entry as { date?: unknown }).date === "string" ? (entry as { date: string }).date : null;
+                if (!date) return null;
+                const name = typeof (entry as { name?: unknown }).name === "string" ? (entry as { name: string }).name : undefined;
+                return { date, name };
+              })
+              .filter(Boolean) as HolidayHint[]
+          : [];
+        const currentKey = JSON.stringify(value.holidays.map((item) => `${item.date}::${item.name ?? ""}`));
+        const nextKey = JSON.stringify(next.map((item) => `${item.date}::${item.name ?? ""}`));
+        if (currentKey !== nextKey) {
+          onChangeRef.current({ holidays: next });
+        }
+        lastHolidayFetchKeyRef.current = fetchKey;
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("Failed to load holidays", error);
+        }
+      }
     };
-=======
+    loadHolidays();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [departmentId, value.holidays, value.month, value.year]);
+
   useEffect(() => {
     if (!departmentId) return;
     let cancelled = false;
@@ -532,12 +548,13 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
   );
 
   const renderDayContent = useCallback(
-    ({ date, children }: DayContentProps) => {
+    ({ date }: DayContentProps) => {
       const key = format(date, "yyyy-MM-dd");
       const info = dayInfoMap.get(key);
-      const content = (
-        <div className="relative flex h-full w-full items-center justify-center">
-          {children}
+      const baseContent = (
+        <div className="relative flex h-full w-full items-center justify-center text-sm font-medium">
+          <span aria-hidden>{format(date, "d")}</span>
+          <span className="sr-only">{format(date, "PPP")}</span>
           {info?.holiday ? <span className="absolute bottom-1 left-1 h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
           {info?.manual?.length ? (
             <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-amber-500" />
@@ -545,12 +562,12 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
         </div>
       );
       if (!info) {
-        return content;
+        return baseContent;
       }
       const manualLabels = info.manual.map((entry, index) => ({ id: `${entry.id}-${index}`, label: formatManualLabel(entry) }));
       return (
         <Tooltip delayDuration={100} key={key}>
-          <TooltipTrigger asChild>{content}</TooltipTrigger>
+          <TooltipTrigger asChild>{baseContent}</TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs space-y-1 text-xs">
             {info.holiday ? <p className="font-medium text-emerald-600">{info.holiday}</p> : null}
             {manualLabels.map((item) => (
@@ -595,24 +612,18 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
     if (manualDraft.scope === "employees") {
       entry.employeeIds = Array.from(new Set(manualDraft.employeeIds ?? []));
     }
->>>>>>> theirs
     onChange({ manualExclusions: [...value.manualExclusions, entry] });
     setManualDraft(createDraft());
     setDateInput("");
     setNoteInput("");
-<<<<<<< ours
-=======
     setOfficePopoverOpen(false);
     setEmployeePopoverOpen(false);
->>>>>>> theirs
   };
 
   const handleRemoveManual = (id: string) => {
     onChange({ manualExclusions: value.manualExclusions.filter((entry) => entry.id !== id) });
   };
 
-<<<<<<< ours
-=======
   const selectedOfficeNames = useMemo(
     () => (manualDraft.officeIds ?? []).map((id) => officeNameMap.get(id) ?? id),
     [manualDraft.officeIds, officeNameMap]
@@ -623,7 +634,6 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
     [employeeLabelMap, manualDraft.employeeIds]
   );
 
->>>>>>> theirs
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
@@ -654,194 +664,132 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
         </label>
       </div>
 
-      <div className="rounded-lg border p-4">
-<<<<<<< ours
-=======
-        <div className="flex flex-col gap-2">
-          <div>
-            <h2 className="text-base font-semibold">Calendar overview</h2>
-            <p className="text-xs text-muted-foreground">
-              Holidays and manual exclusions for the selected month appear below. Click a date to toggle it in the form.
-            </p>
-          </div>
-          <TooltipProvider>
-            <Calendar
-              month={calendarMonth}
-              onMonthChange={handleCalendarMonthChange}
-              selected={draftSelectedDates}
-              onDayClick={handleCalendarDayClick}
-              modifiers={calendarModifiers}
-              modifiersClassNames={{
-                manual: "border border-amber-400 bg-amber-50 text-amber-900",
-                holiday: "border border-emerald-400 bg-emerald-50 text-emerald-900",
-                manualHoliday: "border border-sky-400 bg-sky-50 text-sky-900",
-              }}
-              components={{ DayContent: renderDayContent }}
-            />
-          </TooltipProvider>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" /> Holiday
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-amber-500" /> Manual exclusion
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-sky-500" /> Holiday + manual
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-lg border p-4">
->>>>>>> theirs
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold">Manual exclusions</h2>
-            <p className="text-xs text-muted-foreground">
-<<<<<<< ours
-              Excuse dates from DTR computation. Enter dates as comma-separated yyyy-mm-dd values.
-=======
-              Excuse dates from DTR computation. Toggle days in the calendar or enter them manually below.
->>>>>>> theirs
-            </p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-lg border p-4">
+          <div className="flex flex-col gap-2">
+            <div>
+              <h2 className="text-base font-semibold">Calendar overview</h2>
+              <p className="text-xs text-muted-foreground">
+                Holidays and manual exclusions for the selected month appear below. Click a date to toggle it in the form.
+              </p>
+            </div>
+            <TooltipProvider>
+              <Calendar
+                month={calendarMonth}
+                onMonthChange={handleCalendarMonthChange}
+                selected={draftSelectedDates}
+                onDayClick={handleCalendarDayClick}
+                modifiers={calendarModifiers}
+                modifiersClassNames={{
+                  manual: "border border-amber-400 bg-amber-50 text-amber-900",
+                  holiday: "border border-emerald-400 bg-emerald-50 text-emerald-900",
+                  manualHoliday: "border border-sky-400 bg-sky-50 text-sky-900",
+                }}
+                components={{ DayContent: renderDayContent }}
+              />
+            </TooltipProvider>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" /> Holiday
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-amber-500" /> Manual exclusion
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-sky-500" /> Holiday + manual
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <label className="flex flex-col gap-2 text-xs">
-            <span className="font-medium uppercase text-muted-foreground">Dates</span>
-            <input
-              value={dateInput}
-              onChange={(event) => setDateInput(event.target.value)}
-              placeholder="2024-04-01, 2024-04-02"
-              className="rounded-md border px-3 py-2"
-            />
-<<<<<<< ours
-=======
-            <span className="text-[10px] text-muted-foreground">
-              {validDateTokens.length} selected date{validDateTokens.length === 1 ? "" : "s"}
-            </span>
->>>>>>> theirs
-          </label>
-          <label className="flex flex-col gap-2 text-xs">
-            <span className="font-medium uppercase text-muted-foreground">Scope</span>
-            <select
-              value={manualDraft.scope}
-<<<<<<< ours
-              onChange={(event) =>
-                setManualDraft((prev) => ({
-                  ...prev,
-                  scope: event.target.value as ManualExclusion["scope"],
-                }))
-              }
-              className="rounded-md border px-3 py-2"
-            >
-              <option value="all">All employees</option>
-              <option value="offices">Offices (IDs)</option>
-              <option value="employees">Employees (IDs)</option>
-=======
-              onChange={(event) => handleScopeChange(event.target.value as ManualExclusion["scope"])}
-              className="rounded-md border px-3 py-2"
-            >
-              <option value="all">All employees</option>
-              <option value="offices">Specific offices</option>
-              <option value="employees">Specific employees</option>
->>>>>>> theirs
-            </select>
-          </label>
-          <label className="flex flex-col gap-2 text-xs">
-            <span className="font-medium uppercase text-muted-foreground">Reason</span>
-            <select
-              value={manualDraft.reason}
-              onChange={(event) =>
-                setManualDraft((prev) => ({
-                  ...prev,
-                  reason: event.target.value as ManualExclusion["reason"],
-                }))
-              }
-              className="rounded-md border px-3 py-2"
-            >
-              <option value="SUSPENSION">Suspension</option>
-              <option value="OFFICE_CLOSURE">Office closure</option>
-              <option value="CALAMITY">Calamity</option>
-              <option value="TRAINING">Training</option>
-              <option value="LEAVE">Leave</option>
-              <option value="LOCAL_HOLIDAY">Local holiday</option>
-              <option value="OTHER">Other</option>
-            </select>
-          </label>
-        </div>
+        <div className="rounded-lg border p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold">Manual exclusions</h2>
+              <p className="text-xs text-muted-foreground">
+                Excuse dates from DTR computation. Toggle days in the calendar or enter them manually below.
+              </p>
+            </div>
+          </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {manualDraft.scope === "offices" ? (
-<<<<<<< ours
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
             <label className="flex flex-col gap-2 text-xs">
-              <span className="font-medium uppercase text-muted-foreground">Office IDs</span>
+              <span className="font-medium uppercase text-muted-foreground">Dates</span>
               <input
-                value={(manualDraft.officeIds ?? []).join(", ")}
+                value={dateInput}
+                onChange={(event) => setDateInput(event.target.value)}
+                placeholder="2024-04-01, 2024-04-02"
+                className="rounded-md border px-3 py-2"
+              />
+              <span className="text-[10px] text-muted-foreground">
+                {validDateTokens.length} selected date{validDateTokens.length === 1 ? "" : "s"}
+              </span>
+            </label>
+            <label className="flex flex-col gap-2 text-xs">
+              <span className="font-medium uppercase text-muted-foreground">Scope</span>
+              <select
+                value={manualDraft.scope}
+                onChange={(event) => handleScopeChange(event.target.value as ManualExclusion["scope"])}
+                className="rounded-md border px-3 py-2"
+              >
+                <option value="all">All employees</option>
+                <option value="offices">Specific offices</option>
+                <option value="employees">Specific employees</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-xs">
+              <span className="font-medium uppercase text-muted-foreground">Reason</span>
+              <select
+                value={manualDraft.reason}
                 onChange={(event) =>
                   setManualDraft((prev) => ({
                     ...prev,
-                    officeIds: event.target.value
-                      .split(",")
-                      .map((token) => token.trim())
-                      .filter(Boolean),
+                    reason: event.target.value as ManualExclusion["reason"],
                   }))
                 }
-                placeholder="office-1, office-2"
                 className="rounded-md border px-3 py-2"
-              />
+              >
+                <option value="SUSPENSION">Suspension</option>
+                <option value="OFFICE_CLOSURE">Office closure</option>
+                <option value="CALAMITY">Calamity</option>
+                <option value="TRAINING">Training</option>
+                <option value="LEAVE">Leave</option>
+                <option value="LOCAL_HOLIDAY">Local holiday</option>
+                <option value="OTHER">Other</option>
+              </select>
             </label>
-          ) : null}
+          </div>
 
-          {manualDraft.scope === "employees" ? (
-            <label className="flex flex-col gap-2 text-xs">
-              <span className="font-medium uppercase text-muted-foreground">Employee IDs</span>
-              <input
-                value={(manualDraft.employeeIds ?? []).join(", ")}
-                onChange={(event) =>
-                  setManualDraft((prev) => ({
-                    ...prev,
-                    employeeIds: event.target.value
-                      .split(",")
-                      .map((token) => token.trim())
-                      .filter(Boolean),
-                  }))
-                }
-                placeholder="emp-1, emp-2"
-                className="rounded-md border px-3 py-2"
-              />
-            </label>
-=======
-            <div className="flex flex-col gap-2 text-xs">
-              <span className="font-medium uppercase text-muted-foreground">Offices</span>
-              <Popover open={officePopoverOpen} onOpenChange={setOfficePopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button type="button" variant="outline" className="justify-between">
-                    <span>
-                      {manualDraft.officeIds?.length
-                        ? `${manualDraft.officeIds.length} selected`
-                        : loadingOffices
-                        ? "Loading offices..."
-                        : "Select offices"}
-                    </span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[280px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search offices" />
-                    <CommandList>
-                      <CommandEmpty>No offices found.</CommandEmpty>
-                      <CommandGroup>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {manualDraft.scope === "offices" ? (
+              <div className="flex flex-col gap-2 text-xs">
+                <span className="font-medium uppercase text-muted-foreground">Offices</span>
+                <Popover open={officePopoverOpen} onOpenChange={setOfficePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="justify-between">
+                      <span>
+                        {manualDraft.officeIds?.length
+                          ? `${manualDraft.officeIds.length} selected`
+                          : loadingOffices
+                          ? "Loading offices..."
+                          : "Select offices"}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search offices" />
+                      <CommandList>
+                        <CommandEmpty>No offices found.</CommandEmpty>
+                        <CommandGroup>
                         {officeOptions.map((office) => {
                           const selected = manualDraft.officeIds?.includes(office.id) ?? false;
                           return (
                             <CommandItem
                               key={office.id}
-                              value={office.id}
-                              onSelect={(value) => {
-                                toggleOffice(value);
+                              value={`${office.name} ${office.id}`}
+                              onSelect={() => {
+                                toggleOffice(office.id);
                               }}
                               className="flex items-center gap-2"
                             >
@@ -850,46 +798,46 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
                             </CommandItem>
                           );
                         })}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              {selectedOfficeNames.length ? (
-                <span className="text-[10px] text-muted-foreground">{selectedOfficeNames.join(", ")}</span>
-              ) : null}
-            </div>
-          ) : null}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {selectedOfficeNames.length ? (
+                  <span className="text-[10px] text-muted-foreground">{selectedOfficeNames.join(", ")}</span>
+                ) : null}
+              </div>
+            ) : null}
 
-          {manualDraft.scope === "employees" ? (
-            <div className="flex flex-col gap-2 text-xs">
-              <span className="font-medium uppercase text-muted-foreground">Employees</span>
-              <Popover open={employeePopoverOpen} onOpenChange={setEmployeePopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button type="button" variant="outline" className="justify-between">
-                    <span>
-                      {manualDraft.employeeIds?.length
-                        ? `${manualDraft.employeeIds.length} selected`
-                        : loadingEmployees
-                        ? "Loading employees..."
-                        : "Select employees"}
-                    </span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[320px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search employees" />
-                    <CommandList>
-                      <CommandEmpty>No employees found.</CommandEmpty>
-                      <CommandGroup>
+            {manualDraft.scope === "employees" ? (
+              <div className="flex flex-col gap-2 text-xs">
+                <span className="font-medium uppercase text-muted-foreground">Employees</span>
+                <Popover open={employeePopoverOpen} onOpenChange={setEmployeePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="justify-between">
+                      <span>
+                        {manualDraft.employeeIds?.length
+                          ? `${manualDraft.employeeIds.length} selected`
+                          : loadingEmployees
+                          ? "Loading employees..."
+                          : "Select employees"}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[320px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search employees" />
+                      <CommandList>
+                        <CommandEmpty>No employees found.</CommandEmpty>
+                        <CommandGroup>
                         {employeeOptions.map((employee) => {
                           const selected = manualDraft.employeeIds?.includes(employee.id) ?? false;
                           return (
                             <CommandItem
                               key={employee.id}
-                              value={employee.id}
-                              onSelect={(value) => {
-                                toggleEmployee(value);
+                              value={`${employee.label} ${employee.id}`}
+                              onSelect={() => {
+                                toggleEmployee(employee.id);
                               }}
                               className="flex items-center gap-2"
                             >
@@ -898,112 +846,72 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
                             </CommandItem>
                           );
                         })}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              {selectedEmployeeLabels.length ? (
-                <span className="text-[10px] text-muted-foreground">{selectedEmployeeLabels.join(", ")}</span>
-              ) : null}
-            </div>
->>>>>>> theirs
-          ) : null}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {selectedEmployeeLabels.length ? (
+                  <span className="text-[10px] text-muted-foreground">{selectedEmployeeLabels.join(", ")}</span>
+                ) : null}
+              </div>
+            ) : null}
 
-          <label className="flex flex-col gap-2 text-xs">
-            <span className="font-medium uppercase text-muted-foreground">Note</span>
-            <input
-              value={noteInput}
-              onChange={(event) => setNoteInput(event.target.value)}
-              placeholder="Optional note"
-              className="rounded-md border px-3 py-2"
-            />
-          </label>
-        </div>
+            <label className="flex flex-col gap-2 text-xs">
+              <span className="font-medium uppercase text-muted-foreground">Note</span>
+              <input
+                value={noteInput}
+                onChange={(event) => setNoteInput(event.target.value)}
+                placeholder="Optional note"
+                className="rounded-md border px-3 py-2"
+              />
+            </label>
+          </div>
 
-        <div className="mt-4 flex justify-end">
-<<<<<<< ours
-          <button
-            type="button"
-            className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50"
-            onClick={handleAddManual}
-            disabled={!dateInput.trim()}
-          >
-            Add exclusion
-          </button>
-        </div>
+          <div className="mt-4 flex justify-end">
+            <Button type="button" onClick={handleAddManual} disabled={!canAddManual}>
+              Add exclusion
+            </Button>
+          </div>
 
-        {value.manualExclusions.length ? (
-          <ul className="mt-6 space-y-3">
-            {value.manualExclusions.map((entry) => (
-              <li key={entry.id} className="rounded-md border bg-muted/40 p-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{entry.reason}</p>
-                    <p className="text-xs text-muted-foreground">{entry.dates.join(", ")}</p>
-                    {entry.note ? <p className="text-xs text-muted-foreground">{entry.note}</p> : null}
-                  </div>
-                  <button
-                    type="button"
-                    className="text-xs text-destructive"
-                    onClick={() => handleRemoveManual(entry.id)}
-                  >
-                    Remove
-                  </button>
-=======
-          <Button type="button" onClick={handleAddManual} disabled={!canAddManual}>
-            Add exclusion
-          </Button>
-        </div>
-
-        {manualList.length ? (
-          <ul className="mt-6 space-y-3">
-            {manualList.map(({ entry, reasonLabel, scopeLabel, note, dates }) => (
-              <li key={entry.id} className="rounded-md border bg-muted/40 p-3 text-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">{reasonLabel}</Badge>
-                      <span className="text-xs text-muted-foreground">{dates.join(", ")}</span>
+          {manualList.length ? (
+            <ul className="mt-6 space-y-3">
+              {manualList.map(({ entry, reasonLabel, scopeLabel, note, dates }) => (
+                <li key={entry.id} className="rounded-md border bg-muted/40 p-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary">{reasonLabel}</Badge>
+                        <span className="text-xs text-muted-foreground">{dates.join(", ")}</span>
+                      </div>
+                      {scopeLabel ? (
+                        <p className="text-xs text-muted-foreground">{scopeLabel}</p>
+                      ) : null}
+                      {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
                     </div>
-                    {scopeLabel ? (
-                      <p className="text-xs text-muted-foreground">{scopeLabel}</p>
-                    ) : null}
-                    {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive"
+                      onClick={() => handleRemoveManual(entry.id)}
+                    >
+                      Remove
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive"
-                    onClick={() => handleRemoveManual(entry.id)}
-                  >
-                    Remove
-                  </Button>
->>>>>>> theirs
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-6 text-sm text-muted-foreground">No manual exclusions added.</p>
-        )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-6 text-sm text-muted-foreground">No manual exclusions added.</p>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-end">
-<<<<<<< ours
-        <button
-          type="button"
-          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
-          onClick={onNext}
-        >
-          Continue to uploads
-        </button>
-=======
         <Button type="button" className="px-4" onClick={onNext}>
           Continue to uploads
         </Button>
->>>>>>> theirs
       </div>
     </div>
   );

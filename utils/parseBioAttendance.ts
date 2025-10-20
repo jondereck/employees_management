@@ -236,7 +236,7 @@ const isHeaderRow = (row: unknown[]): boolean => {
   return c1 === "1" && c2 === "2" && c3 === "3";
 };
 
-const GRID_SHEET_NAME_PATTERN = /(att\.?\s*log report|attendance record report)/i;
+const GRID_SHEET_NAME_PATTERN = /(att\.?\s*log report|attendance record report|attendance report)/i;
 const GRID_HEADER_SCAN_LIMIT = 20;
 const GRID_MIN_DAY_RUN = 20;
 
@@ -647,7 +647,7 @@ export function parseBioAttendance(
     if (!sheet) continue;
     const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
 
-    const gridDetection = isGridSheetName(sheetName) ? detectGridHeaderRow(rows) : null;
+    const gridDetection = detectGridHeaderRow(rows);
     if (gridDetection) {
       parserTypes.add("grid-report");
       const { year, month, hints } = detectMonthContext(rows, gridDetection.headerRowIndex);
@@ -902,7 +902,7 @@ export function detectWorkbookParsers(input: ArrayBuffer | WorkBook): WorkbookPa
     if (!sheet) continue;
     const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
 
-    if (isGridSheetName(sheetName) && detectGridHeaderRow(rows)) {
+    if (detectGridHeaderRow(rows)) {
       parserTypes.add("grid-report");
     }
 
