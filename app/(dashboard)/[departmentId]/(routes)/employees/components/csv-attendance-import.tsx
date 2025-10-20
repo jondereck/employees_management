@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import * as XLSX from "xlsx-js-style";
 import { toast } from "sonner";
 import { Loader2, X } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useParams } from "next/navigation";
 
 import { parseIdFromText } from "@/lib/parseEmployeeIdFromText";
 
@@ -49,6 +51,32 @@ type Mapping = {
 };
 
 type ParsedRow = Record<string, string>;
+type CategoryKey = "E" | "P" | "CT_COS" | "C" | "JO";
+type OfficeSummaryRow = {
+  office: string;
+  counts: Record<CategoryKey, number>;
+  total: number;
+  attendance: Record<CategoryKey, number>;
+  attendanceTotal: number;
+};
+
+const CATEGORY_ORDER: CategoryKey[] = ["E", "P", "CT_COS", "C", "JO"];
+const CATEGORY_LABEL: Record<CategoryKey, string> = {
+  E: "E",
+  P: "P",
+  CT_COS: "CT/COS",
+  C: "C",
+  JO: "JO",
+};
+
+const createEmptyCounts = (): Record<CategoryKey, number> =>
+  CATEGORY_ORDER.reduce(
+    (acc, key) => {
+      acc[key] = 0;
+      return acc;
+    },
+    {} as Record<CategoryKey, number>
+  );
 
 export default function CsvAttendanceImport() {
   const [headers, setHeaders] = useState<string[]>([]);
@@ -68,6 +96,35 @@ export default function CsvAttendanceImport() {
 
   const [mappingByFile, setMappingByFile] = useState<MappingByFile>({});
   const [mapTarget, setMapTarget] = useState<string>(MAP_ALL); // which file you're editing
+  const [officeSummary, setOfficeSummary] = useState<OfficeSummaryRow[]>([]);
+  const [activeTab, setActiveTab] = useState<"preview" | "summary">("preview");
+
+  const params = useParams<{ departmentId: string }>();
+  const departmentId =
+    typeof params?.departmentId === "string" ? params.departmentId : "";
+
+  const summaryTotals = useMemo(() => {
+    const totalCounts = createEmptyCounts();
+    const attendanceCounts = createEmptyCounts();
+    let total = 0;
+    let attendanceTotal = 0;
+
+    for (const row of officeSummary) {
+      CATEGORY_ORDER.forEach((cat) => {
+        totalCounts[cat] += row.counts[cat];
+        attendanceCounts[cat] += row.attendance[cat];
+      });
+      total += row.total;
+      attendanceTotal += row.attendanceTotal;
+    }
+
+    return {
+      counts: totalCounts,
+      attendance: attendanceCounts,
+      total,
+      attendanceTotal,
+    };
+  }, [officeSummary]);
 
 
 
@@ -82,7 +139,7 @@ export default function CsvAttendanceImport() {
     const list = Array.from(e.target.files || []);
     if (!list.length) return;
 
-    const t = toast.loading("Parsing CSV files…");
+    const t = toast.loading("Parsing CSV files...");
     setIsParsing(true);
     try {
       const parsed = await Promise.all(list.map(parseCsv));
@@ -115,6 +172,8 @@ export default function CsvAttendanceImport() {
     setMapping({});
     setPreview([]);
     setFilesInfo([]);
+    setOfficeSummary([]);
+    setActiveTab("preview");
     toast.message("File cleared");
   }
   function safeRegex(s?: string): RegExp | undefined {
@@ -153,6 +212,10 @@ export default function CsvAttendanceImport() {
 
 
   async function resolvePreview() {
+    if (!departmentId) {
+      toast.error("Missing department context");
+      return;
+    }
 
     const filesMissingId = filesInfo.filter(f => {
       const m = mappingByFile[f.name] || mapping;
@@ -162,13 +225,20 @@ export default function CsvAttendanceImport() {
       toast.warning(`No ID mapping for: ${filesMissingId.map(f => f.name).join(", ")}`);
     }
     const payloadRows = buildPayload();
-    const t = toast.loading("Resolving employees…");
+    const t = toast.loading("Resolving employees...");
     setIsPreviewing(true);
+    setOfficeSummary([]);
+    setActiveTab("preview");
     try {
       const res = await fetch("/api/import/attendance/resolve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idType, rows: payloadRows, regex: regex || undefined }),
+        body: JSON.stringify({
+          departmentId,
+          idType,
+          rows: payloadRows,
+          regex: regex || undefined,
+        }),
       });
       const json = await res.json();
       if (json.ok) {
@@ -186,17 +256,17 @@ export default function CsvAttendanceImport() {
         }
 
         setPreview(rowsOut);
+        setOfficeSummary((json.officeSummary ?? []) as OfficeSummaryRow[]);
 
         const matched = rowsOut.filter((r: any) => r.idMatched).length;
-        const removed = (json.rows.length - rowsOut.length);
+        const removed = json.rows.length - rowsOut.length;
         toast.success(
-          `Preview ready — ${matched}/${rowsOut.length} matched${dedup && removed > 0 ? `, removed ${removed} duplicate(s)` : ""}`,
+          `Preview ready - ${matched}/${rowsOut.length} matched${dedup && removed > 0 ? `, removed ${removed} duplicate(s)` : ""}`,
           { id: t }
         );
       } else {
         toast.error(json.error || "Failed to resolve", { id: t });
       }
-
     } catch (e) {
       toast.error("Network error while resolving", { id: t });
     } finally {
@@ -222,7 +292,7 @@ export default function CsvAttendanceImport() {
   function exportExcel() {
     if (!preview.length || isExporting) return;
     setIsExporting(true);
-    const t = toast.loading("Exporting Excel…");
+    const t = toast.loading("Exporting Excel...");
 
     try {
       const rows = preview.map((r) => ({
@@ -357,6 +427,130 @@ export default function CsvAttendanceImport() {
 
       XLSX.utils.book_append_sheet(wb, ws2, "Daily Summary");
     }
+    if (officeSummary.length) {
+      const OFFICE_HEADERS = [
+        "Office",
+        "E",
+        "P",
+        "CT/COS",
+        "C",
+        "JO",
+        "Total",
+        "Attended E",
+        "Attended P",
+        "Attended CT/COS",
+        "Attended C",
+        "Attended JO",
+        "Attendance Total",
+        "Variance",
+      ] as const;
+
+      const officeRows = officeSummary.map((row) => ({
+        Office: row.office,
+        E: row.counts.E,
+        P: row.counts.P,
+        "CT/COS": row.counts.CT_COS,
+        C: row.counts.C,
+        JO: row.counts.JO,
+        Total: row.total,
+        "Attended E": row.attendance.E,
+        "Attended P": row.attendance.P,
+        "Attended CT/COS": row.attendance.CT_COS,
+        "Attended C": row.attendance.C,
+        "Attended JO": row.attendance.JO,
+        "Attendance Total": row.attendanceTotal,
+        Variance: row.total - row.attendanceTotal,
+      }));
+
+      officeRows.push({
+        Office: "Grand total",
+        E: summaryTotals.counts.E,
+        P: summaryTotals.counts.P,
+        "CT/COS": summaryTotals.counts.CT_COS,
+        C: summaryTotals.counts.C,
+        JO: summaryTotals.counts.JO,
+        Total: summaryTotals.total,
+        "Attended E": summaryTotals.attendance.E,
+        "Attended P": summaryTotals.attendance.P,
+        "Attended CT/COS": summaryTotals.attendance.CT_COS,
+        "Attended C": summaryTotals.attendance.C,
+        "Attended JO": summaryTotals.attendance.JO,
+        "Attendance Total": summaryTotals.attendanceTotal,
+        Variance: summaryTotals.total - summaryTotals.attendanceTotal,
+      });
+
+      const ws3 = XLSX.utils.aoa_to_sheet([OFFICE_HEADERS as unknown as string[]]);
+      XLSX.utils.sheet_add_json(ws3, officeRows, {
+        origin: "A2",
+        skipHeader: true,
+        header: OFFICE_HEADERS as unknown as string[],
+      });
+
+      (ws3 as any)["!cols"] = [
+        { wch: 32 },
+        { wch: 8 },
+        { wch: 8 },
+        { wch: 10 },
+        { wch: 8 },
+        { wch: 8 },
+        { wch: 10 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 18 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 18 },
+        { wch: 10 },
+      ];
+      (ws3 as any)["!autofilter"] = { ref: "A1:N1" };
+      (ws3 as any)["!freeze"] = { ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft", state: "frozen" };
+
+      const hdr3 = Array.from({ length: OFFICE_HEADERS.length }, (_, i) => XLSX.utils.encode_cell({ r: 0, c: i }));
+      for (const addr of hdr3) {
+        const cell: any = (ws3 as any)[addr];
+        cell.s = {
+          font: { bold: true, color: { rgb: "1F2937" } },
+          alignment: { horizontal: "center", vertical: "center", wrapText: true },
+          fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } },
+          border: {
+            top: { style: "thin", color: { rgb: "D1D5DB" } },
+            bottom: { style: "thin", color: { rgb: "D1D5DB" } },
+            left: { style: "thin", color: { rgb: "D1D5DB" } },
+            right: { style: "thin", color: { rgb: "D1D5DB" } },
+          },
+        };
+      }
+      (ws3 as any)["!rows"] = [{ hpt: 24 }];
+
+      const ref3 = ws3["!ref"] as string;
+      if (ref3) {
+        const rg3 = XLSX.utils.decode_range(ref3);
+        for (let R = 1; R <= rg3.e.r; R++) {
+          const zebra = R % 2 === 1;
+          for (let C = 0; C <= rg3.e.c; C++) {
+            const addr = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell: any = (ws3 as any)[addr];
+            if (!cell) continue;
+            cell.s = {
+              alignment: { vertical: "center" },
+              border: {
+                top: { style: "hair", color: { rgb: "E5E7EB" } },
+                bottom: { style: "hair", color: { rgb: "E5E7EB" } },
+                left: { style: "hair", color: { rgb: "E5E7EB" } },
+                right: { style: "hair", color: { rgb: "E5E7EB" } },
+              },
+              ...(zebra ? { fill: { patternType: "solid", fgColor: { rgb: "FAFAFA" } } } : {}),
+            };
+            if (C >= 1) {
+              cell.s.alignment = { ...(cell.s.alignment || {}), horizontal: "right" };
+            }
+          }
+        }
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws3, "Office Summary");
+    }
+
       XLSX.writeFile(wb, `Attendance_${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true });
 
       toast.success("Excel saved", { id: t });
@@ -392,6 +586,8 @@ export default function CsvAttendanceImport() {
     setMapping(guessMappingFromHeaders(unionHeaders)); // ALL scope guess once
     setFileName(next.map(f => f.name).join(", "));
     setPreview([]);
+    setOfficeSummary([]);
+    setActiveTab("preview");
   }
 
 
@@ -417,7 +613,7 @@ export default function CsvAttendanceImport() {
       const src = prev[from] || {};
       return { ...prev, [to]: { ...src } };
     });
-    toast.success(`Copied mapping: ${from} → ${to}`);
+    toast.success(`Copied mapping: ${from} -> ${to}`);
   }
 type Acc = { name: string; office: string; empNo: string; minutes: number[] };
 
@@ -497,7 +693,7 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
           <span className="text-sm font-medium">Copy mapping</span>
           <Select onValueChange={(from: any) => copyMapping(from, mapTarget)} disabled={mapTarget === MAP_ALL}>
             <SelectTrigger className="w-[240px]">
-              <SelectValue placeholder="From file…" />
+              <SelectValue placeholder="From file..." />
             </SelectTrigger>
             <SelectContent>
               {filesInfo
@@ -674,40 +870,140 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
 
           <div className="flex gap-3">
             <Button onClick={resolvePreview} disabled={!headers.length || isPreviewing || isParsing}>
-              {isPreviewing ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Previewing…</>) : "Preview"}
+              {isPreviewing ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Previewing...</>) : "Preview"}
             </Button>
             <Button variant="outline" onClick={exportExcel} disabled={!preview.length || isExporting}>
-              {isExporting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting…</>) : "Export to Excel"}
+              {isExporting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</>) : "Export to Excel"}
             </Button>
           </div>
 
           {!!preview.length && (
-            <div className="mt-4 border rounded-md overflow-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-muted">
-                  <tr>
-                    {["Date", "Time", "Employee No", "Name", "Office", "Matched"].map(h => (
-                      <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.slice(0, 50).map((r, i) => (
-                    <tr key={i} className="border-t">
-                      <td className="px-3 py-1">{r.date}</td>
-                      <td className="px-3 py-1">{r.time}</td>
-                      <td className="px-3 py-1">{toDisplayEmployeeNo(r.employeeNo)}</td>
-                      <td className="px-3 py-1">{r.name}</td>
-                      <td className="px-3 py-1">{r.office}</td>
-
-                      <td className="px-3 py-1">{r.idMatched ? "✅" : "❌"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="px-3 py-2 text-xs text-muted-foreground">Showing first 50 rows.</div>
-            </div>
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => setActiveTab(value as "preview" | "summary")}
+              className="mt-4"
+            >
+              <TabsList>
+                <TabsTrigger value="preview">Preview{preview.length ? ` (${preview.length.toLocaleString()})` : ""}</TabsTrigger>
+                <TabsTrigger value="summary" disabled={!officeSummary.length}>
+                  Office Summary{officeSummary.length ? ` (${officeSummary.length})` : ""}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="preview" className="mt-3">
+                <div className="border rounded-md overflow-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-muted">
+                      <tr>
+                        {['Date', 'Time', 'Employee No', 'Name', 'Office', 'Matched'].map((h) => (
+                          <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.slice(0, 50).map((r, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="px-3 py-1">{r.date}</td>
+                          <td className="px-3 py-1">{r.time}</td>
+                          <td className="px-3 py-1">{toDisplayEmployeeNo(r.employeeNo)}</td>
+                          <td className="px-3 py-1">{r.name}</td>
+                          <td className="px-3 py-1">{r.office}</td>
+                          <td className="px-3 py-1">{r.idMatched ? 'Yes' : 'No'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="px-3 py-2 text-xs text-muted-foreground">Showing first 50 rows.</div>
+                </div>
+              </TabsContent>
+              <TabsContent value="summary" className="mt-3">
+                {officeSummary.length ? (
+                  <div className="border rounded-md overflow-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Office</th>
+                          {CATEGORY_ORDER.map((cat) => (
+                            <th key={`head-all-${cat}`} className="px-3 py-2 text-right font-medium">
+                              {CATEGORY_LABEL[cat]}
+                            </th>
+                          ))}
+                          <th className="px-3 py-2 text-right font-medium">Total</th>
+                          {CATEGORY_ORDER.map((cat) => (
+                            <th key={`head-att-${cat}`} className="px-3 py-2 text-right font-medium">
+                              {`Attended ${CATEGORY_LABEL[cat]}`}
+                            </th>
+                          ))}
+                          <th className="px-3 py-2 text-right font-medium">Attendance Total</th>
+                          <th className="px-3 py-2 text-right font-medium">Variance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {officeSummary.map((row) => (
+                          <tr key={row.office} className="border-t">
+                            <td className="px-3 py-1 font-medium">{row.office}</td>
+                            {CATEGORY_ORDER.map((cat) => (
+                              <td
+                                key={`${row.office}-${cat}-total`}
+                                className="px-3 py-1 text-right"
+                              >
+                                {row.counts[cat].toLocaleString()}
+                              </td>
+                            ))}
+                            <td className="px-3 py-1 text-right font-medium">
+                              {row.total.toLocaleString()}
+                            </td>
+                            {CATEGORY_ORDER.map((cat) => (
+                              <td
+                                key={`${row.office}-${cat}-att`}
+                                className="px-3 py-1 text-right text-emerald-600"
+                              >
+                                {row.attendance[cat].toLocaleString()}
+                              </td>
+                            ))}
+                            <td className="px-3 py-1 text-right text-emerald-600 font-medium">
+                              {row.attendanceTotal.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-1 text-right">
+                              {(row.total - row.attendanceTotal).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t font-semibold bg-muted/60">
+                          <td className="px-3 py-2">Grand total</td>
+                          {CATEGORY_ORDER.map((cat) => (
+                            <td key={`grand-${cat}`} className="px-3 py-2 text-right">
+                              {summaryTotals.counts[cat].toLocaleString()}
+                            </td>
+                          ))}
+                          <td className="px-3 py-2 text-right">
+                            {summaryTotals.total.toLocaleString()}
+                          </td>
+                          {CATEGORY_ORDER.map((cat) => (
+                            <td key={`grand-att-${cat}`} className="px-3 py-2 text-right text-emerald-700">
+                              {summaryTotals.attendance[cat].toLocaleString()}
+                            </td>
+                          ))}
+                          <td className="px-3 py-2 text-right text-emerald-700">
+                            {summaryTotals.attendanceTotal.toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {(summaryTotals.total - summaryTotals.attendanceTotal).toLocaleString()}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="border rounded-md px-3 py-4 text-sm text-muted-foreground bg-muted/50">
+                    No office summary available.
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           )}
+
         </CardContent>
       </Card>
     </div>
