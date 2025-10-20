@@ -1385,6 +1385,97 @@ const SUMMARY_SHEET_NAME = "Summary";
 const PER_DAY_SHEET_NAME = "PerDay";
 const METADATA_SHEET_NAME = "Metadata";
 
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+const ensureDate = (input?: Date | string | number) => {
+  if (!input) return new Date();
+  const candidate = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(candidate.getTime())) {
+    return new Date();
+  }
+  return candidate;
+};
+
+const fmtTs = (input?: Date | string | number) => {
+  const date = ensureDate(input);
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  return {
+    file: `${year}${month}${day}-${hours}${minutes}${seconds}`,
+    display: `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`,
+  };
+};
+
+type ExportPeriod = { month: number; year: number } | null | undefined;
+
+const periodLabel = (period: ExportPeriod) => {
+  if (!period) {
+    return { text: "—", ym: "0000-00" };
+  }
+  const { month, year } = period;
+  if (!Number.isFinite(month) || !Number.isFinite(year)) {
+    return { text: "—", ym: "0000-00" };
+  }
+  if (month < 1 || month > 12) {
+    return { text: "—", ym: `${year}-${pad(Math.max(1, Math.min(12, month || 1)))}` };
+  }
+  return {
+    text: `${MONTHS[month - 1]} ${year}`,
+    ym: `${year}-${pad(month)}`,
+  };
+};
+
+type TimestampInfo = ReturnType<typeof fmtTs>;
+
+const TABLE_HEADER_OFFSET = 4;
+
+const buildSheet = (
+  dataAoA: any[][],
+  title: string,
+  period: ExportPeriod,
+  timestamp: TimestampInfo = fmtTs()
+) => {
+  const { display } = timestamp;
+  const { text } = periodLabel(period);
+  const header = [[title], [`Period: ${text}`], [`Generated at: ${display}`], [""]];
+  const worksheet = XLSX.utils.aoa_to_sheet([...header, ...dataAoA]);
+
+  const colCount = dataAoA.reduce((max, row) => Math.max(max, row.length), 1);
+  (worksheet["!merges"] ||= []).push({ s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } });
+  if (worksheet["A1"]) {
+    worksheet["A1"].s = {
+      font: { bold: true, sz: 14 },
+      alignment: { horizontal: "center" },
+    } as any;
+  }
+  if (worksheet["A2"]) {
+    worksheet["A2"].s = { font: { bold: true } } as any;
+  }
+
+  worksheet["!freeze"] = { xSplit: 0, ySplit: TABLE_HEADER_OFFSET } as any;
+
+  return worksheet;
+};
+
 const WIDTH_LIMITS: Record<string, { min: number; max: number } | number> = {
   id: { min: 14, max: 22 },
   office: { min: 14, max: 22 },
@@ -1417,6 +1508,7 @@ export type BiometricsExportOptions = {
   filters: BiometricsExportFilters;
   metadata: BiometricsExportMetadata;
   fileName?: string;
+  period?: { month: number; year: number } | null;
   manualResolvedTokens?: string[];
 };
 
@@ -1685,9 +1777,13 @@ const computeDisplayLength = (
   return String(value).length;
 };
 
-const applyHeaderStyles = (sheet: XLSX.WorkSheet, headerLength: number) => {
+const applyHeaderStyles = (
+  sheet: XLSX.WorkSheet,
+  headerLength: number,
+  rowOffset = 0
+) => {
   for (let columnIndex = 0; columnIndex < headerLength; columnIndex += 1) {
-    const address = XLSX.utils.encode_cell({ r: 0, c: columnIndex });
+    const address = XLSX.utils.encode_cell({ r: rowOffset, c: columnIndex });
     const cell = sheet[address] as XLSX.CellObject & { s?: any };
     if (!cell) continue;
     cell.s = {
@@ -1714,13 +1810,14 @@ const applyDataStyles = (
   columns: StyleColumnContext[],
   dataRowStart: number,
   totalsRowIndex: number | null,
-  zebraStart = 1
+  zebraStart?: number
 ) => {
   if (!sheet["!ref"]) return;
   const range = XLSX.utils.decode_range(sheet["!ref"] as string);
+  const zebraOrigin = zebraStart ?? dataRowStart;
   for (let rowIndex = dataRowStart; rowIndex <= range.e.r; rowIndex += 1) {
     const isTotalsRow = totalsRowIndex != null && rowIndex === totalsRowIndex;
-    const zebra = (rowIndex - zebraStart) % 2 === 0;
+    const zebra = (rowIndex - zebraOrigin) % 2 === 0;
     for (let columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
       const address = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
       const cell = sheet[address] as XLSX.CellObject & { s?: any };
@@ -1784,17 +1881,14 @@ const buildSummarySheet = (
   rows: SummaryRowValues[],
   columns: SummaryColumnKey[],
   definitions: Map<SummaryColumnKey, SummaryColumnContext>,
-  totals: SummaryTotals
+  totals: SummaryTotals,
+  period: ExportPeriod,
+  timestamp: TimestampInfo
 ) => {
   const headerLabels = columns.map(
     (key) => definitions.get(key)?.definition?.label ?? SUMMARY_COLUMN_DEFINITION_MAP[key]?.label ?? key
   );
-  const worksheet = XLSX.utils.aoa_to_sheet([headerLabels]);
   const dataRows = rows.map((row) => columns.map((key) => row[key] ?? null));
-  if (dataRows.length) {
-    XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: "A2" });
-  }
-
   const totalsRow: SummaryCellValue[] = columns.map((key, index) => {
     const context = definitions.get(key);
     if (index === 0) return "Totals";
@@ -1802,8 +1896,8 @@ const buildSummarySheet = (
     return totals[key] ?? null;
   });
 
-  const totalsRowIndex = dataRows.length + 1;
-  XLSX.utils.sheet_add_aoa(worksheet, [totalsRow], { origin: { r: totalsRowIndex, c: 0 } });
+  const dataAoA = [headerLabels, ...dataRows, totalsRow];
+  const worksheet = buildSheet(dataAoA, "Per-Employee Summary", period, timestamp);
 
   const columnContexts: StyleColumnContext[] = columns.map((key) => ({
     type: definitions.get(key)?.type,
@@ -1823,27 +1917,31 @@ const buildSummarySheet = (
   });
 
   (worksheet as any)["!cols"] = columnWidths;
-  (worksheet as any)["!freeze"] = {
-    ySplit: 1,
-    xSplit: 0,
-    topLeftCell: "A2",
-    activePane: "bottomLeft",
-    state: "frozen",
-  };
 
-  if (worksheet["!ref"]) {
-    (worksheet as any)["!autofilter"] = { ref: worksheet["!ref"] };
+  const headerRowIndex = TABLE_HEADER_OFFSET;
+  const firstDataRowIndex = headerRowIndex + 1;
+  const totalsRowIndex = firstDataRowIndex + dataRows.length;
+
+  if (headerLabels.length) {
+    const filterRange = XLSX.utils.encode_range({
+      s: { r: headerRowIndex, c: 0 },
+      e: { r: totalsRowIndex, c: headerLabels.length - 1 },
+    });
+    (worksheet as any)["!autofilter"] = { ref: filterRange };
   }
 
-  applyHeaderStyles(worksheet, columns.length);
-  applyDataStyles(worksheet, columnContexts, 1, totalsRowIndex, 1);
+  applyHeaderStyles(worksheet, columns.length, headerRowIndex);
+  applyDataStyles(worksheet, columnContexts, firstDataRowIndex, totalsRowIndex, firstDataRowIndex);
 
   return worksheet;
 };
 
-const buildPerDaySheet = (rows: PerDayRow[]) => {
+const buildPerDaySheet = (
+  rows: PerDayRow[],
+  period: ExportPeriod,
+  timestamp: TimestampInfo
+) => {
   const header = PER_DAY_COLUMNS.map((column) => column.label);
-  const worksheet = XLSX.utils.aoa_to_sheet([header]);
 
   const dataRows = rows.map((row) => {
     const evaluationStatus: DayEvaluationStatus = row.evaluationStatus
@@ -1924,9 +2022,8 @@ const buildPerDaySheet = (rows: PerDayRow[]) => {
     });
   });
 
-  if (dataRows.length) {
-    XLSX.utils.sheet_add_aoa(worksheet, dataRows, { origin: "A2" });
-  }
+  const dataAoA = [header, ...dataRows];
+  const worksheet = buildSheet(dataAoA, "Per-Day Detail", period, timestamp);
 
   const columnWidths = PER_DAY_COLUMNS.map((column, columnIndex) => {
     const type = column.type;
@@ -1954,13 +2051,29 @@ const buildPerDaySheet = (rows: PerDayRow[]) => {
     width: column.width,
     type: column.type,
   }));
-  applyHeaderStyles(worksheet, PER_DAY_COLUMNS.length);
-  applyDataStyles(worksheet, columnContexts, 1, null, 1);
+  const headerRowIndex = TABLE_HEADER_OFFSET;
+  const firstDataRowIndex = headerRowIndex + 1;
+  const lastRowIndex = dataRows.length ? firstDataRowIndex + dataRows.length - 1 : headerRowIndex;
+
+  if (header.length) {
+    const filterRange = XLSX.utils.encode_range({
+      s: { r: headerRowIndex, c: 0 },
+      e: { r: Math.max(lastRowIndex, headerRowIndex), c: header.length - 1 },
+    });
+    (worksheet as any)["!autofilter"] = { ref: filterRange };
+  }
+
+  applyHeaderStyles(worksheet, PER_DAY_COLUMNS.length, headerRowIndex);
+  applyDataStyles(worksheet, columnContexts, firstDataRowIndex, null, firstDataRowIndex);
 
   return worksheet;
 };
 
-const buildMetadataSheet = (options: BiometricsExportOptions) => {
+const buildMetadataSheet = (
+  options: BiometricsExportOptions,
+  period: ExportPeriod,
+  timestamp: TimestampInfo
+) => {
   const { metadata, filters } = options;
   const rows: Array<[string, string]> = [
     ["Exported At", toLocalISO(metadata.exportTime)],
@@ -1982,20 +2095,25 @@ const buildMetadataSheet = (options: BiometricsExportOptions) => {
     ["App version", metadata.appVersion || "—"],
   ];
 
-  const worksheet = XLSX.utils.aoa_to_sheet([["Field", "Value"], ...rows]);
-  applyHeaderStyles(worksheet, 2);
+  const dataAoA: any[][] = [["Field", "Value"], ...rows];
+  const worksheet = buildSheet(dataAoA, "Export Metadata", period, timestamp);
+
+  const headerRowIndex = TABLE_HEADER_OFFSET;
+  const firstDataRowIndex = headerRowIndex + 1;
+
+  (worksheet as any)["!cols"] = [{ wch: 26 }, { wch: 60 }];
+
+  applyHeaderStyles(worksheet, 2, headerRowIndex);
   applyDataStyles(
     worksheet,
     [
       { width: "schedule", type: "text" },
       { width: "punches", type: "text" },
     ],
-    1,
+    firstDataRowIndex,
     null,
-    1
+    firstDataRowIndex
   );
-
-  (worksheet as any)["!cols"] = [{ wch: 26 }, { wch: 60 }];
 
   return worksheet;
 };
@@ -2032,15 +2150,6 @@ const makeSummaryColumnDefinitions = (columns: SummaryColumnKey[]) => {
   return map;
 };
 
-const buildFilename = (timestamp: Date) => {
-  const year = timestamp.getFullYear();
-  const month = `${timestamp.getMonth() + 1}`.padStart(2, "0");
-  const day = `${timestamp.getDate()}`.padStart(2, "0");
-  const hours = `${timestamp.getHours()}`.padStart(2, "0");
-  const minutes = `${timestamp.getMinutes()}`.padStart(2, "0");
-  return `Biometrics_Summary_${year}${month}${day}_${hours}${minutes}.xlsx`;
-};
-
 export function exportResultsToXlsx(
   perEmployee: PerEmployeeRow[],
   perDay: PerDayRow[],
@@ -2062,15 +2171,27 @@ export function exportResultsToXlsx(
   );
   const totals = summarizeTotals(summaryRows);
 
-  const summarySheet = buildSummarySheet(summaryRows, selectedColumns, columnDefinitions, totals);
-  const perDaySheet = buildPerDaySheet(sortPerDayRows([...perDay]));
-  const metadataSheet = buildMetadataSheet(options);
+  const period = options.period ?? null;
+  const timestampInfo = fmtTs(options.metadata.exportTime);
+  const summarySheet = buildSummarySheet(
+    summaryRows,
+    selectedColumns,
+    columnDefinitions,
+    totals,
+    period,
+    timestampInfo
+  );
+  const perDaySheet = buildPerDaySheet(sortPerDayRows([...perDay]), period, timestampInfo);
+  const metadataSheet = buildMetadataSheet(options, period, timestampInfo);
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, summarySheet, SUMMARY_SHEET_NAME);
   XLSX.utils.book_append_sheet(workbook, perDaySheet, PER_DAY_SHEET_NAME);
   XLSX.utils.book_append_sheet(workbook, metadataSheet, METADATA_SHEET_NAME);
 
-  const filename = options.fileName ?? buildFilename(options.metadata.exportTime);
+  const { file } = timestampInfo;
+  const { ym } = periodLabel(period);
+  const defaultFileName = `HRPS_Attendance_${ym}_${file}.xlsx`;
+  const filename = options.fileName ?? defaultFileName;
   XLSX.writeFile(workbook, filename, { compression: true });
 }
