@@ -1400,6 +1400,21 @@ const MONTHS = [
   "Dec",
 ];
 
+const MONTH_FULL_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 const pad = (value: number) => String(value).padStart(2, "0");
 
 const ensureDate = (input?: Date | string | number) => {
@@ -1429,18 +1444,28 @@ type ExportPeriod = { month: number; year: number } | null | undefined;
 
 const periodLabel = (period: ExportPeriod) => {
   if (!period) {
-    return { text: "—", ym: "0000-00" };
+    return { text: "—", ym: "0000-00", fileSegment: "Attendance_Summary" };
   }
   const { month, year } = period;
   if (!Number.isFinite(month) || !Number.isFinite(year)) {
-    return { text: "—", ym: "0000-00" };
+    return { text: "—", ym: "0000-00", fileSegment: "Attendance_Summary" };
   }
   if (month < 1 || month > 12) {
-    return { text: "—", ym: `${year}-${pad(Math.max(1, Math.min(12, month || 1)))}` };
+    const clampedMonth = Math.max(1, Math.min(12, month || 1));
+    return {
+      text: "—",
+      ym: `${year}-${pad(clampedMonth)}`,
+      fileSegment: "Attendance_Summary",
+    };
   }
+
+  const shortLabel = MONTHS[month - 1];
+  const longLabel = MONTH_FULL_NAMES[month - 1];
+  const ym = `${year}-${pad(month)}`;
   return {
-    text: `${MONTHS[month - 1]} ${year}`,
-    ym: `${year}-${pad(month)}`,
+    text: `${shortLabel} ${year}`,
+    ym,
+    fileSegment: `${longLabel}_${year}_Monthly_Summary`,
   };
 };
 
@@ -2190,8 +2215,9 @@ export function exportResultsToXlsx(
   XLSX.utils.book_append_sheet(workbook, metadataSheet, METADATA_SHEET_NAME);
 
   const { file } = timestampInfo;
-  const { ym } = periodLabel(period);
-  const defaultFileName = `HRPS_Attendance_${ym}_${file}.xlsx`;
+  const { fileSegment } = periodLabel(period);
+  const sanitizedSegment = fileSegment.replace(/\s+/g, "_");
+  const defaultFileName = `HRPS_${sanitizedSegment}_${file}.xlsx`;
   const filename = options.fileName ?? defaultFileName;
   XLSX.writeFile(workbook, filename, { compression: true });
 }
