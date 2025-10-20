@@ -21,7 +21,10 @@ function Calendar({
   classNames,
   showOutsideDays = true,
   clearButtonLabel = "Clear",
-  onClear, ...props }: CalendarProps) {
+  onClear,
+  components: userComponents,
+  ...props
+}: CalendarProps) {
   return (
     <div className="realative">
 
@@ -91,6 +94,7 @@ function Calendar({
           },
           IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
           IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
+          ...(userComponents ?? {}),
         }}
         {...props}
       />
