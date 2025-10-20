@@ -1,6 +1,10 @@
 "use client";
 
+<<<<<<< HEAD
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+=======
+import { useCallback, useEffect, useMemo, useState } from "react";
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
 import { format, parseISO } from "date-fns";
 import { useParams } from "next/navigation";
 import type { DayContentProps } from "react-day-picker";
@@ -112,12 +116,15 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
   const [employeePopoverOpen, setEmployeePopoverOpen] = useState(false);
   const [loadingOffices, setLoadingOffices] = useState(false);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
+<<<<<<< HEAD
   const onChangeRef = useRef(onChange);
   const lastHolidayFetchKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+=======
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -150,6 +157,7 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
 
   useEffect(() => {
     if (!departmentId) return;
+<<<<<<< HEAD
     const fetchKey = `${departmentId}-${value.year}-${value.month}`;
     if (lastHolidayFetchKeyRef.current === fetchKey) return;
     let cancelled = false;
@@ -198,6 +206,8 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
 
   useEffect(() => {
     if (!departmentId) return;
+=======
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
     let cancelled = false;
     const loadOffices = async () => {
       setLoadingOffices(true);
@@ -548,6 +558,7 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
   );
 
   const renderDayContent = useCallback(
+<<<<<<< HEAD
     ({ date }: DayContentProps) => {
       const key = format(date, "yyyy-MM-dd");
       const info = dayInfoMap.get(key);
@@ -555,6 +566,14 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
         <div className="relative flex h-full w-full items-center justify-center text-sm font-medium">
           <span aria-hidden>{format(date, "d")}</span>
           <span className="sr-only">{format(date, "PPP")}</span>
+=======
+    ({ date, children }: DayContentProps) => {
+      const key = format(date, "yyyy-MM-dd");
+      const info = dayInfoMap.get(key);
+      const content = (
+        <div className="relative flex h-full w-full items-center justify-center">
+          {children}
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
           {info?.holiday ? <span className="absolute bottom-1 left-1 h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
           {info?.manual?.length ? (
             <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-amber-500" />
@@ -562,12 +581,20 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
         </div>
       );
       if (!info) {
+<<<<<<< HEAD
         return baseContent;
+=======
+        return content;
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
       }
       const manualLabels = info.manual.map((entry, index) => ({ id: `${entry.id}-${index}`, label: formatManualLabel(entry) }));
       return (
         <Tooltip delayDuration={100} key={key}>
+<<<<<<< HEAD
           <TooltipTrigger asChild>{baseContent}</TooltipTrigger>
+=======
+          <TooltipTrigger asChild>{content}</TooltipTrigger>
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
           <TooltipContent side="top" className="max-w-xs space-y-1 text-xs">
             {info.holiday ? <p className="font-medium text-emerald-600">{info.holiday}</p> : null}
             {manualLabels.map((item) => (
@@ -664,6 +691,7 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
         </label>
       </div>
 
+<<<<<<< HEAD
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border p-4">
           <div className="flex flex-col gap-2">
@@ -782,14 +810,139 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
                       <CommandList>
                         <CommandEmpty>No offices found.</CommandEmpty>
                         <CommandGroup>
+=======
+      <div className="rounded-lg border p-4">
+        <div className="flex flex-col gap-2">
+          <div>
+            <h2 className="text-base font-semibold">Calendar overview</h2>
+            <p className="text-xs text-muted-foreground">
+              Holidays and manual exclusions for the selected month appear below. Click a date to toggle it in the form.
+            </p>
+          </div>
+          <TooltipProvider>
+            <Calendar
+              month={calendarMonth}
+              onMonthChange={handleCalendarMonthChange}
+              selected={draftSelectedDates}
+              onDayClick={handleCalendarDayClick}
+              modifiers={calendarModifiers}
+              modifiersClassNames={{
+                manual: "border border-amber-400 bg-amber-50 text-amber-900",
+                holiday: "border border-emerald-400 bg-emerald-50 text-emerald-900",
+                manualHoliday: "border border-sky-400 bg-sky-50 text-sky-900",
+              }}
+              components={{ DayContent: renderDayContent }}
+            />
+          </TooltipProvider>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" /> Holiday
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-amber-500" /> Manual exclusion
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-sky-500" /> Holiday + manual
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold">Manual exclusions</h2>
+            <p className="text-xs text-muted-foreground">
+              Excuse dates from DTR computation. Toggle days in the calendar or enter them manually below.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <label className="flex flex-col gap-2 text-xs">
+            <span className="font-medium uppercase text-muted-foreground">Dates</span>
+            <input
+              value={dateInput}
+              onChange={(event) => setDateInput(event.target.value)}
+              placeholder="2024-04-01, 2024-04-02"
+              className="rounded-md border px-3 py-2"
+            />
+            <span className="text-[10px] text-muted-foreground">
+              {validDateTokens.length} selected date{validDateTokens.length === 1 ? "" : "s"}
+            </span>
+          </label>
+          <label className="flex flex-col gap-2 text-xs">
+            <span className="font-medium uppercase text-muted-foreground">Scope</span>
+            <select
+              value={manualDraft.scope}
+              onChange={(event) => handleScopeChange(event.target.value as ManualExclusion["scope"])}
+              className="rounded-md border px-3 py-2"
+            >
+              <option value="all">All employees</option>
+              <option value="offices">Specific offices</option>
+              <option value="employees">Specific employees</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-2 text-xs">
+            <span className="font-medium uppercase text-muted-foreground">Reason</span>
+            <select
+              value={manualDraft.reason}
+              onChange={(event) =>
+                setManualDraft((prev) => ({
+                  ...prev,
+                  reason: event.target.value as ManualExclusion["reason"],
+                }))
+              }
+              className="rounded-md border px-3 py-2"
+            >
+              <option value="SUSPENSION">Suspension</option>
+              <option value="OFFICE_CLOSURE">Office closure</option>
+              <option value="CALAMITY">Calamity</option>
+              <option value="TRAINING">Training</option>
+              <option value="LEAVE">Leave</option>
+              <option value="LOCAL_HOLIDAY">Local holiday</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {manualDraft.scope === "offices" ? (
+            <div className="flex flex-col gap-2 text-xs">
+              <span className="font-medium uppercase text-muted-foreground">Offices</span>
+              <Popover open={officePopoverOpen} onOpenChange={setOfficePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="outline" className="justify-between">
+                    <span>
+                      {manualDraft.officeIds?.length
+                        ? `${manualDraft.officeIds.length} selected`
+                        : loadingOffices
+                        ? "Loading offices..."
+                        : "Select offices"}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search offices" />
+                    <CommandList>
+                      <CommandEmpty>No offices found.</CommandEmpty>
+                      <CommandGroup>
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
                         {officeOptions.map((office) => {
                           const selected = manualDraft.officeIds?.includes(office.id) ?? false;
                           return (
                             <CommandItem
                               key={office.id}
+<<<<<<< HEAD
                               value={`${office.name} ${office.id}`}
                               onSelect={() => {
                                 toggleOffice(office.id);
+=======
+                              value={office.id}
+                              onSelect={(value) => {
+                                toggleOffice(value);
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
                               }}
                               className="flex items-center gap-2"
                             >
@@ -798,6 +951,7 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
                             </CommandItem>
                           );
                         })}
+<<<<<<< HEAD
                         </CommandGroup>
                       </CommandList>
                     </Command>
@@ -867,6 +1021,66 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
               />
             </label>
           </div>
+=======
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedOfficeNames.length ? (
+                <span className="text-[10px] text-muted-foreground">{selectedOfficeNames.join(", ")}</span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {manualDraft.scope === "employees" ? (
+            <div className="flex flex-col gap-2 text-xs">
+              <span className="font-medium uppercase text-muted-foreground">Employees</span>
+              <Popover open={employeePopoverOpen} onOpenChange={setEmployeePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="outline" className="justify-between">
+                    <span>
+                      {manualDraft.employeeIds?.length
+                        ? `${manualDraft.employeeIds.length} selected`
+                        : loadingEmployees
+                        ? "Loading employees..."
+                        : "Select employees"}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[320px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search employees" />
+                    <CommandList>
+                      <CommandEmpty>No employees found.</CommandEmpty>
+                      <CommandGroup>
+                        {employeeOptions.map((employee) => {
+                          const selected = manualDraft.employeeIds?.includes(employee.id) ?? false;
+                          return (
+                            <CommandItem
+                              key={employee.id}
+                              value={employee.id}
+                              onSelect={(value) => {
+                                toggleEmployee(value);
+                              }}
+                              className="flex items-center gap-2"
+                            >
+                              <Check className={selected ? "h-4 w-4 opacity-100" : "h-4 w-4 opacity-0"} />
+                              <span>{employee.label}</span>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedEmployeeLabels.length ? (
+                <span className="text-[10px] text-muted-foreground">{selectedEmployeeLabels.join(", ")}</span>
+              ) : null}
+            </div>
+          ) : null}
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
 
           <div className="mt-4 flex justify-end">
             <Button type="button" onClick={handleAddManual} disabled={!canAddManual}>
@@ -874,6 +1088,7 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
             </Button>
           </div>
 
+<<<<<<< HEAD
           {manualList.length ? (
             <ul className="mt-6 space-y-3">
               {manualList.map(({ entry, reasonLabel, scopeLabel, note, dates }) => (
@@ -906,6 +1121,45 @@ export default function StepPeriod({ value, onChange, onNext }: StepPeriodProps)
             <p className="mt-6 text-sm text-muted-foreground">No manual exclusions added.</p>
           )}
         </div>
+=======
+        <div className="mt-4 flex justify-end">
+          <Button type="button" onClick={handleAddManual} disabled={!canAddManual}>
+            Add exclusion
+          </Button>
+        </div>
+
+        {manualList.length ? (
+          <ul className="mt-6 space-y-3">
+            {manualList.map(({ entry, reasonLabel, scopeLabel, note, dates }) => (
+              <li key={entry.id} className="rounded-md border bg-muted/40 p-3 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">{reasonLabel}</Badge>
+                      <span className="text-xs text-muted-foreground">{dates.join(", ")}</span>
+                    </div>
+                    {scopeLabel ? (
+                      <p className="text-xs text-muted-foreground">{scopeLabel}</p>
+                    ) : null}
+                    {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                    onClick={() => handleRemoveManual(entry.id)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-6 text-sm text-muted-foreground">No manual exclusions added.</p>
+        )}
+>>>>>>> fc1a4fbb5df17a0a3bdc400dddb2ca00b9f9841c
       </div>
 
       <div className="flex justify-end">
