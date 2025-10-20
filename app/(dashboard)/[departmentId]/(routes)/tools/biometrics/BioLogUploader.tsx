@@ -3533,6 +3533,7 @@ const applyColumnFilters = useCallback(
           columnLabels,
           appVersion: APP_VERSION,
         },
+        period: activePeriod ?? null,
         manualResolvedTokens: manualResolvedTokens,
       });
       toast({
@@ -3557,6 +3558,7 @@ const applyColumnFilters = useCallback(
     manualSelectionValid,
     manualResolvedTokens,
     metricMode,
+    activePeriod,
     perDay,
     selectedOffices,
     showNoPunchColumn,
