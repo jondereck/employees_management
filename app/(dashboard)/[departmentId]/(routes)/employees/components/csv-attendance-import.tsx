@@ -8,11 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import * as XLSX from "xlsx-js-style";
 import { toast } from "sonner";
-import { Loader2, X } from "lucide-react";
+import { Loader2, UploadCloud, X } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useParams } from "next/navigation";
 
 import { parseIdFromText } from "@/lib/parseEmployeeIdFromText";
+import { cn } from "@/lib/utils";
 
 
 type MappingByFile = Record<string, Mapping>;
@@ -98,6 +99,7 @@ export default function CsvAttendanceImport() {
   const [mapTarget, setMapTarget] = useState<string>(MAP_ALL); // which file you're editing
   const [officeSummary, setOfficeSummary] = useState<OfficeSummaryRow[]>([]);
   const [activeTab, setActiveTab] = useState<"preview" | "summary">("preview");
+  const [isDragging, setIsDragging] = useState(false);
 
   const params = useParams<{ departmentId: string }>();
   const departmentId =
@@ -135,16 +137,25 @@ export default function CsvAttendanceImport() {
     return digitsOnly;
   }
 
-  async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const list = Array.from(e.target.files || []);
-    if (!list.length) return;
+  async function processFileList(list: File[]) {
+    setOfficeSummary([]);
+    setActiveTab("preview");
+
+    const csvFiles = list.filter((file) => {
+      const lower = file.name.toLowerCase();
+      return file.type === "text/csv" || lower.endsWith(".csv");
+    });
+
+    if (!csvFiles.length) {
+      toast.error("No CSV files detected in selection");
+      return;
+    }
 
     const t = toast.loading("Parsing CSV files...");
     setIsParsing(true);
     try {
-      const parsed = await Promise.all(list.map(parseCsv));
+      const parsed = await Promise.all(csvFiles.map(parseCsv));
 
-      // merge with existing by filename (replace same name)
       const byName = new Map<string, ParsedFile>();
       for (const f of filesInfo) byName.set(f.name, f);
       for (const p of parsed) byName.set(p.name, p);
@@ -153,14 +164,21 @@ export default function CsvAttendanceImport() {
       setFilesInfo(next);
       recomputeFromFiles(next);
 
-      toast.success(`Added ${parsed.reduce((s, p) => s + p.count, 0).toLocaleString()} rows from ${parsed.length} file(s)`, { id: t });
+      const rowsAdded = parsed.reduce((sum, file) => sum + file.count, 0);
+      toast.success(`Added ${rowsAdded.toLocaleString()} rows from ${parsed.length} file(s)`, { id: t });
     } catch (err) {
       console.error(err);
       toast.error("Failed to parse one or more files", { id: t });
     } finally {
       setIsParsing(false);
-      if (fileRef.current) fileRef.current.value = ""; // allow re-pick same files
+      if (fileRef.current) fileRef.current.value = "";
     }
+  }
+
+  async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const list = Array.from(e.target.files || []);
+    if (!list.length) return;
+    await processFileList(list);
   }
 
 
@@ -180,6 +198,27 @@ export default function CsvAttendanceImport() {
     if (!s?.trim()) return undefined;
     try { return new RegExp(s, "i"); } catch { return undefined; }
   }
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (isParsing) return;
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    const related = event.relatedTarget as Node | null;
+    if (related && event.currentTarget.contains(related)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (isParsing) return;
+    setIsDragging(false);
+    const list = Array.from(event.dataTransfer.files || []);
+    if (!list.length) return;
+    void processFileList(list);
+  };
 
   function buildPayload() {
     const customRe = safeRegex(regex);
@@ -739,7 +778,38 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
               className="sr-only"
             />
 
-            {/* Faux picker */}
+            <div
+              className={cn(
+                "flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-8 text-center transition",
+                isDragging ? "border-primary bg-primary/10" : "border-muted-foreground/30 bg-muted/10",
+                (isParsing || isPreviewing) ? "pointer-events-none opacity-60" : "cursor-pointer"
+              )}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => {
+                if (isParsing || isPreviewing) return;
+                fileRef.current?.click();
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if ((event.key === "Enter" || event.key === " ") && !isParsing && !isPreviewing) {
+                  event.preventDefault();
+                  fileRef.current?.click();
+                }
+              }}
+            >
+              <UploadCloud className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+              <p className="mt-2 text-sm font-medium">Drag & drop attendance CSV files here</p>
+              <p className="text-xs text-muted-foreground">or click to choose files</p>
+              {filesInfo.length > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {`${filesInfo.length} file${filesInfo.length > 1 ? "s" : ""} selected`}
+                </p>
+              )}
+            </div>
+
             <div className="flex items-center gap-2">
               <Button
                 type="button"
