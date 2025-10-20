@@ -10,6 +10,7 @@ const UUID_STR =
 
 
 const BodySchema = z.object({
+  departmentId: z.string().min(1, "departmentId is required"),
   idType: z.enum(["employeeId", "employeeNo"]).default("employeeId"),
   // rows come from the client after CSV+mapping
   rows: z.array(z.object({
@@ -26,6 +27,41 @@ const BodySchema = z.object({
 
 
 const PH_TZ = "Asia/Manila";
+
+const CATEGORY_KEYS = ["E", "P", "CT_COS", "C", "JO"] as const;
+type CategoryKey = typeof CATEGORY_KEYS[number];
+
+const OFFICE_UNKNOWN = "Unassigned / No Office";
+
+function mapEmployeeTypeToCategory(name?: string | null): CategoryKey {
+  const normalized = (name || "").toLowerCase();
+  if (normalized.includes("elective")) return "E";
+  if (normalized.includes("job order") || normalized.includes("job-order") || normalized.includes("joborder") || normalized === "jo") {
+    return "JO";
+  }
+  if (normalized.includes("casual") || normalized.includes("temporary")) return "C";
+  if (
+    normalized.includes("co-term") ||
+    normalized.includes("coterminous") ||
+    normalized.includes("co-terminous") ||
+    normalized.includes("contract of service") ||
+    normalized.includes("contractual") ||
+    normalized.includes("cos")
+  ) {
+    return "CT_COS";
+  }
+  if (normalized.includes("permanent") || normalized.includes("regular")) return "P";
+  return "P";
+}
+
+function createEmptyCounts(): Record<CategoryKey, number> {
+  return { E: 0, P: 0, CT_COS: 0, C: 0, JO: 0 };
+}
+
+function normalizeOfficeName(name?: string | null): string {
+  const trimmed = name?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : OFFICE_UNKNOWN;
+}
 
 // Try multiple patterns (US/EU/ISO), with/without seconds, 12h/24h
 const CANDIDATE_PATTERNS = [
@@ -118,7 +154,7 @@ function normalizeDateString(input?: string): string {
     const d = parse(s, p, new Date());
     if (isValid(d)) return format(d, "yyyy-MM-dd");
   }
-  return s; // give up—return raw
+  return s; // give up-return raw
 }
 
 function normalizeTimeString(input?: string): string {
@@ -147,10 +183,10 @@ function normalizeTimeString(input?: string): string {
   return s; // fallback
 }
 
-// Prefer Date+Time → Timestamp. Only convert when timestamp has an explicit TZ.
+// Prefer Date+Time -> Timestamp. Only convert when timestamp has an explicit TZ.
 // Otherwise, treat as Manila wall-clock and DON'T convert.
 function toDateTime(date?: string, time?: string, timestamp?: string) {
-  // Case A: separate Date + Time provided → normalize as strings, no Date()
+  // Case A: separate Date + Time provided -> normalize as strings, no Date()
   if (date && time) {
     const dateStr = normalizeDateString(date);
     const timeStr = normalizeTimeString(time);
@@ -161,7 +197,7 @@ function toDateTime(date?: string, time?: string, timestamp?: string) {
   if (timestamp) {
     const ts = timestamp.trim();
 
-    // If the timestamp includes TZ info → parse then convert to Manila consistently
+    // If the timestamp includes TZ info -> parse then convert to Manila consistently
     if (hasExplicitTZ(ts)) {
       const d = parseWithPatterns(ts);
       if (d && isValid(d)) {
@@ -187,7 +223,7 @@ function toDateTime(date?: string, time?: string, timestamp?: string) {
       };
     }
 
-    // Try looser patterns: let’s separate date + time substrings when obvious
+    // Try looser patterns: let's separate date + time substrings when obvious
     const dateOnly = normalizeDateString(ts);
     if (dateOnly !== ts) return { dateStr: dateOnly, timeStr: "", iso: "" };
   }
@@ -245,28 +281,38 @@ export async function POST(req: Request) {
     if (ids.length) {
       if (body.idType === "employeeId") {
         employees = await prismadb.employee.findMany({
-          where: { id: { in: ids } },
+          where: {
+            id: { in: ids },
+            departmentId: body.departmentId,
+          },
           select: {
             id: true,
             firstName: true,
-            middleName: true,   // <-- add
+            middleName: true,
             lastName: true,
-            suffix: true,       // <-- add
+            suffix: true,
             position: true,
             offices: { select: { name: true } },
             employeeNo: true,
+            employeeType: { select: { name: true } },
           },
         });
       } else {
         employees = await prismadb.employee.findMany({
-          where: { employeeNo: { in: ids } },
+          where: {
+            employeeNo: { in: ids },
+            departmentId: body.departmentId,
+          },
           select: {
             id: true,
             firstName: true,
+            middleName: true,
             lastName: true,
+            suffix: true,
             position: true,
             offices: { select: { name: true } },
             employeeNo: true,
+            employeeType: { select: { name: true } },
           },
         });
       }
@@ -303,6 +349,7 @@ export async function POST(req: Request) {
         middleInitial,      // <-- "D." style
         suffix,
         office: e?.offices?.name ?? "",
+        employeeTypeName: e?.employeeType?.name ?? "",
         position: e?.position ?? "",
         date: r.dt.dateStr,
         time: r.dt.timeStr,
@@ -312,14 +359,73 @@ export async function POST(req: Request) {
       };
     });
 
+    type OfficeSummaryEntry = {
+      office: string;
+      counts: Record<CategoryKey, number>;
+      total: number;
+      attendance: Record<CategoryKey, number>;
+      attendanceTotal: number;
+    };
+
+    const officeSummaryMap = new Map<string, OfficeSummaryEntry>();
+    const ensureOfficeEntry = (office: string): OfficeSummaryEntry => {
+      const key = normalizeOfficeName(office);
+      let entry = officeSummaryMap.get(key);
+      if (!entry) {
+        entry = {
+          office: key,
+          counts: createEmptyCounts(),
+          total: 0,
+          attendance: createEmptyCounts(),
+          attendanceTotal: 0,
+        };
+        officeSummaryMap.set(key, entry);
+      }
+      return entry;
+    };
+
+    const roster = await prismadb.employee.findMany({
+      where: {
+        departmentId: body.departmentId,
+        isArchived: false,
+      },
+      select: {
+        employeeType: { select: { name: true } },
+        offices: { select: { name: true } },
+      },
+    });
+
+    for (const employee of roster) {
+      const officeName = normalizeOfficeName(employee.offices?.name);
+      const entry = ensureOfficeEntry(officeName);
+      const category = mapEmployeeTypeToCategory(employee.employeeType?.name);
+      entry.counts[category] += 1;
+      entry.total += 1;
+    }
+
+    for (const row of out) {
+      if (!row.idMatched) continue;
+      const officeName = normalizeOfficeName(row.office);
+      const entry = ensureOfficeEntry(officeName);
+      const category = mapEmployeeTypeToCategory(row.employeeTypeName);
+      entry.attendance[category] += 1;
+      entry.attendanceTotal += 1;
+    }
+
+    const officeSummary = Array.from(officeSummaryMap.values()).sort((a, b) =>
+      a.office.localeCompare(b.office)
+    );
+
     return NextResponse.json({
       ok: true,
       rows: out,
+      officeSummary,
+      categories: CATEGORY_KEYS,
       debug: {
         idType: body.idType,
         idsRequested: ids.length,
         idsFound: employees.length,
-        sampleMissing, // <— check these in the response
+        sampleMissing, // <- check these in the response
         dbUrlHost: process.env.DATABASE_URL?.split("@")[1]?.split("/")[0], // quick hint which DB you're on
       },
     });

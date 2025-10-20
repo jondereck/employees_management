@@ -78,6 +78,18 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       active: pathname === `/${departmentId}/birthdays`,
     },
     {
+      href: `/${departmentId}/anniversaries`,
+      label: "Anniversaries",
+      description: "Celebrate milestone years of service and loyalty.",
+      active: pathname === `/${departmentId}/anniversaries`,
+    },
+    {
+      href: `/${departmentId}/retirements`,
+      label: "Retirements",
+      description: "Track employees approaching mandatory retirement age.",
+      active: pathname === `/${departmentId}/retirements`,
+    },
+    {
       href: `/${departmentId}/view`,
       label: "View Employee",
       description: "See the roster of department employees.",

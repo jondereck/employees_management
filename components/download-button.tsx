@@ -65,6 +65,8 @@ const MODAL_WIDTH_CLASSES: Record<ModalSize, string> = {
   xl: 'w-[min(1200px,calc(100vw-64px))]',
 };
 
+type SheetMode = 'perOffice' | 'merged' | 'plain';
+
 const TAB_KEY_TO_VALUE: Record<ExportTabKey, string> = {
   filter: 'filters',
   columns: 'columns_path',
@@ -247,10 +249,11 @@ export default function DownloadStyledExcel() {
     }
   }, [filterGroupMode]);
 
-  const [sheetMode, setSheetMode] = useState<'perOffice' | 'merged'>(() => {
+  const [sheetMode, setSheetMode] = useState<SheetMode>(() => {
     if (typeof window === 'undefined') return 'perOffice';
     const stored = localStorage.getItem('export.sheetMode');
-    return stored === 'merged' ? 'merged' : 'perOffice';
+    if (stored === 'merged' || stored === 'plain') return stored;
+    return 'perOffice';
   });
 
   const [modalSize, setModalSize] = useState<ModalSize>(() => {
@@ -402,7 +405,12 @@ export default function DownloadStyledExcel() {
             .filter((id: string): boolean => id.length > 0)
         : [];
 
-    const sheetModeValue: 'perOffice' | 'merged' = tpl?.sheetMode === 'merged' ? 'merged' : 'perOffice';
+    const sheetModeValue: SheetMode =
+      tpl?.sheetMode === 'merged'
+        ? 'merged'
+        : tpl?.sheetMode === 'plain'
+          ? 'plain'
+          : 'perOffice';
 
     const rawLevels: unknown[] = Array.isArray(tpl?.sortLevels) ? (tpl.sortLevels as unknown[]) : [];
 
@@ -1377,6 +1385,10 @@ export default function DownloadStyledExcel() {
         const datePart = now.toISOString().slice(0, 10);
         const timePart = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
         base = makeSafeFilename(`Employees_MergedOffices_${datePart}_${timePart}`);
+      } else if (sheetMode === 'plain') {
+        const now = new Date();
+        const datePart = now.toISOString().slice(0, 10);
+        base = makeSafeFilename(`Employees_Plain_${datePart}`);
       } else {
         base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
         if (officesSelection.length === 1) {
@@ -1554,7 +1566,7 @@ export default function DownloadStyledExcel() {
         onClose={() => setModalOpen(false)}
         hideDefaultHeader
         contentClassName={cn(
-          'z-[90] flex max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-visible sm:max-w-none gap-0 p-0 flex-col',
+          'z-[160] flex max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-visible sm:max-w-none gap-0 p-0 flex-col',
           MODAL_WIDTH_CLASSES[modalSize]
         )}
         bodyClassName="flex h-full min-h-0 flex-col overflow-visible scrollbar-gutter-stable"
@@ -2342,7 +2354,22 @@ export default function DownloadStyledExcel() {
                         </div>
 
                         <div className="border-t border-gray-200 pt-3">
-                          <span className="text-sm font-medium">Sheet mode</span>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium">Sheet mode</span>
+                            <button
+                              type="button"
+                              onClick={() => setSheetMode('plain')}
+                              className="text-xs text-blue-600 hover:underline disabled:text-muted-foreground disabled:cursor-default"
+                              disabled={sheetMode === 'plain'}
+                            >
+                              Clear selection
+                            </button>
+                          </div>
+                          {sheetMode === 'plain' ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Export as a single plain sheet without office headers.
+                            </p>
+                          ) : null}
                           <div className="mt-2 space-y-2 text-sm">
                             <label className="flex items-center gap-2">
                               <input

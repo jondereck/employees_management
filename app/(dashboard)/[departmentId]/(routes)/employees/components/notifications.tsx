@@ -16,15 +16,11 @@ import {
 } from "@/components/ui/tabs"
 import Modal from "@/components/ui/modal";
 import NotificationBell from "./notification-bell";
-import { addOneDay, getFormattedDate, getSortedMilestones, getSortedRetirees, isNextYearAnniversary, isRetirementNextYear, sortByMonthDay } from "@/utils/notification-utils";
-import Link from "next/link";
 import usePreviewModal from "../../(frontend)/view/hooks/use-preview-modal";
 import { EmployeesColumn } from "./columns";
 import { Button } from "@/components/ui/button";
 import { TodaysBirthdays } from "./notification/today-birthdays";
 import { UpcomingBirthdays } from "./notification/upcoming-birthday";
-import { Retirements } from "./notification/retirements";
-import { Anniversaries } from "./notification/anniversaries";
 
 import { useApprovalToast } from "@/hooks/use-approval-toast";
 import { useParams, usePathname } from "next/navigation";
@@ -55,7 +51,6 @@ const Notifications = ({ data }: NotificationsProps) => {
         : pathname?.match(/^\/([^/]+)/)?.[1] ?? "";
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isAnniversaryModalOpen, setIsAnniversaryModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   const { hasApprovalDot, markApprovalsSeen } = useApprovalsIndicator();
@@ -78,25 +73,7 @@ const Notifications = ({ data }: NotificationsProps) => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const handleViewAllClick = () => setIsAnniversaryModalOpen((prev) => !prev);
   const closeModal = () => setIsModalOpen(false);
-
-  // ----- Birthdays / Retirements / Anniversaries (unchanged) -----
-  const currentYear = today.getFullYear();
-
-  const retireesThisYear = data.filter((emp) => {
-    if (emp.isArchived) return false;
-    const birthDate = new Date(emp.birthday);
-    const age = currentYear - birthDate.getFullYear();
-    return age === 65;
-  });
-
-  const milestoneAnniversaries = data.filter((emp) => {
-    if (emp.isArchived) return false;
-    const hireDate = new Date(emp.dateHired);
-    const years = currentYear - hireDate.getFullYear();
-    return [10, 15, 20, 25, 30, 35, 40].includes(years);
-  });
 
   const celebrantsToday = useMemo(() => {
     const todayMonthDay = `${today.getMonth() + 1}-${today.getDate()}`;
@@ -243,13 +220,13 @@ const Notifications = ({ data }: NotificationsProps) => {
 
           <Modal
             title="Notifications"
-            description="Live approvals, birthdays, retirements, anniversaries"
+            description="Live approvals and birthdays"
             isOpen={isModalOpen}
             onClose={() => { setIsModalOpen(false); markApprovalsSeen(); }}
           >
             <div className="w-full">
-              <Tabs defaultValue="approvals" className="w-full">
-                <TabsList className="grid grid-cols-4">
+              <Tabs defaultValue="approvals" className="w-full" onValueChange={handleTabChange}>
+                <TabsList className="grid grid-cols-2">
                   <TabsTrigger value="approvals">Approvals</TabsTrigger>
                   <TabsTrigger value="birthdays" className="relative">
                     Birthdays
@@ -257,8 +234,8 @@ const Notifications = ({ data }: NotificationsProps) => {
                       <span className="ml-1 inline-block h-2 w-2 rounded-full bg-red-500" />
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="retirement">Retirements</TabsTrigger>
-                  <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
+
+
                 </TabsList>
 
                 <TabsContent value="approvals">
@@ -291,75 +268,6 @@ const Notifications = ({ data }: NotificationsProps) => {
                     />
                   </div>
                 </TabsContent>
-                <div>
-                  {/* Retirees Tab */}
-                  <TabsContent value="retirement">
-                    {retireesThisYear.length > 0 ? (
-                      <Retirements retirees={retireesThisYear} />
-                    ) : (
-                      <p className="text-sm text-gray-500 text-center">No retirees this year</p>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="anniversaries">
-                    {milestoneAnniversaries && milestoneAnniversaries.length > 0 ? (
-                      <>
-                        <Anniversaries milestoneAnniversaries={milestoneAnniversaries} limit={5} />
-                        {/* Toggle Button */}
-                        {milestoneAnniversaries.length > 5 && (
-                          <div className="mt-4 text-center">
-                            <Button
-                              variant='outline'
-                              className="text-xs font-semibold text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50"
-                              onClick={handleViewAllClick}
-                            >
-                              {isAnniversaryModalOpen ? 'Show Less' : 'View All'}
-                            </Button>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-sm text-gray-500 text-center">No milestone anniversaries</p>
-                    )}
-                  </TabsContent>
-                  {/* Fullscreen Modal for Anniversaries */}
-                  <Modal
-                    title="All Milestone Anniversaries"
-                    description="Here are all employees celebrating milestone years of service."
-                    isOpen={isAnniversaryModalOpen}
-                    onClose={() => setIsAnniversaryModalOpen(false)}
-                  >
-                    <div className="space-y-2 max-h-[70vh] overflow-y-auto">
-                      {getSortedMilestones(milestoneAnniversaries).map((emp, index) => {
-                        const hireDate = new Date(emp.dateHired);
-                        const years = currentYear - hireDate.getFullYear();
-                        const formatted = hireDate.toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        });
-
-                        return (
-                          <div
-                            key={index}
-                            className="flex items-center justify-between p-2 border-b border-gray-200"
-                          >
-                            <span
-                              className={`text-sm font-medium ${isNextYearAnniversary(emp.dateHired) ? "text-green-600" : "text-gray-800"
-                                }`}
-                            >
-                              {emp.firstName} {emp.lastName}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {years} years on {formatted}
-                            </span>
-                          </div>
-                        );
-                      })}
-
-                    </div>
-                  </Modal>
-
-                </div>
               </Tabs>
             </div>
 
@@ -373,7 +281,7 @@ const Notifications = ({ data }: NotificationsProps) => {
           </PopoverTrigger>
           <PopoverContent className="w-96 p-0" align="end">
              <Tabs defaultValue="approvals" className="w-full" onValueChange={handleTabChange}>
-              <TabsList className="grid grid-cols-4">
+              <TabsList className="grid grid-cols-2">
                 <TabsTrigger value="approvals">Approvals</TabsTrigger>
                 <TabsTrigger value="birthdays" className="relative">
                   Birthdays
@@ -381,8 +289,6 @@ const Notifications = ({ data }: NotificationsProps) => {
                     <span className="ml-1 inline-block h-2 w-2 rounded-full bg-red-500" />
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="retirement">Retirements</TabsTrigger>
-                <TabsTrigger value="anniversaries">Anniversaries</TabsTrigger>
               </TabsList>
               <TabsContent value="approvals">
                 <ApprovalsRealtimeTab departmentId={departmentId} />
@@ -417,135 +323,6 @@ const Notifications = ({ data }: NotificationsProps) => {
 
               </TabsContent>
 
-              <div>
-
-                {/* Retirees Tab */}
-                <TabsContent value="retirement">
-                  {retireesThisYear.length > 0 ? (
-                    <>
-                      <ul className="space-y-2">
-                        {getSortedRetirees(retireesThisYear).map((emp, index) => {
-                          const birthDate = new Date(emp.birthday);
-                          const formatted = birthDate.toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          });
-
-                          return (
-                            <li
-                              key={index}
-                              className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
-                            >
-                              <span
-                                className={`text-sm font-medium ${isRetirementNextYear(emp.birthday) ? "text-green-600" : "text-gray-800"
-                                  }`}
-                              >
-                                {emp.firstName} {emp.lastName}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                Turns 65 on {formatted}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center">No retirees this year</p>
-                  )}
-                </TabsContent>
-
-                {/* Anniversaries Tab */}
-                <TabsContent value="anniversaries">
-                  {milestoneAnniversaries ? (
-                    <>
-                      <ul className="space-y-2">
-                        {(isAnniversaryModalOpen
-                          ? getSortedMilestones(milestoneAnniversaries)
-                          : getSortedMilestones(milestoneAnniversaries).slice(0, 5)
-                        )
-
-                          .map((emp, index) => {
-                            const hireDate = new Date(emp.dateHired);
-                            const years = currentYear - hireDate.getFullYear();
-                            const formatted = hireDate.toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                            });
-                            return (
-                              <li
-                                key={index}
-                                className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
-                              >
-                                <span
-                                  className={`text-sm font-medium ${isNextYearAnniversary(emp.dateHired) ? "text-green-600" : "text-gray-800"
-                                    }`}
-                                >
-                                  {emp.firstName} {emp.lastName}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  {years} years on {formatted}
-                                </span>
-                              </li>
-                            );
-                          })}
-                      </ul>
-
-                      {/* Toggle Button */}
-                      {milestoneAnniversaries.length > 5 && (
-                        <div className="mt-4 text-center">
-                          <button
-                            className="text-xs font-semibold text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50"
-                            onClick={handleViewAllClick}
-                          >
-                            {isAnniversaryModalOpen ? 'Show Less' : 'View All'}
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center">No milestone anniversaries</p>
-                  )}
-                </TabsContent>
-
-                {/* Fullscreen Modal for Anniversaries */}
-                <Modal
-                  title="All Milestone Anniversaries"
-                  description="Here are all employees celebrating milestone years of service."
-                  isOpen={isAnniversaryModalOpen}
-                  onClose={() => setIsAnniversaryModalOpen(false)}
-                >
-                  <div className="space-y-2 max-h-[70vh] overflow-y-auto">
-                    {getSortedMilestones(milestoneAnniversaries).map((emp, index) => {
-                      const hireDate = new Date(emp.dateHired);
-                      const years = currentYear - hireDate.getFullYear();
-                      const formatted = hireDate.toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      });
-
-                      return (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-2 border-b border-gray-200"
-                        >
-                          <span
-                            className={`text-sm font-medium ${isNextYearAnniversary(emp.dateHired) ? "text-green-600" : "text-gray-800"
-                              }`}
-                          >
-                            {emp.firstName} {emp.lastName}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {years} years on {formatted}
-                          </span>
-                        </div>
-                      );
-                    })}
-
-                  </div>
-                </Modal>
-
-              </div>
             </Tabs>
           </PopoverContent>
 
