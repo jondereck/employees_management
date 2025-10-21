@@ -61,13 +61,25 @@ export default function TemplatePickerBar({
   builtinIds = ["hr-core", "plantilla", "payroll", "gov-ids"],
 }: Props) {
   const selected = useMemo(() => templates.find((tpl) => tpl.id === value), [templates, value]);
-  const sortedTemplates = useMemo(
-    () =>
-      [...templates].sort((a, b) =>
-        (a.name ?? "").localeCompare(b.name ?? "", undefined, { sensitivity: "base" })
-      ),
-    [templates]
-  );
+  const sortedTemplates = useMemo(() => {
+    const builtinSet = new Set(builtinIds);
+    const builtinTemplates: Template[] = [];
+    const customTemplates: Template[] = [];
+
+    for (const tpl of templates) {
+      if (builtinSet.has(tpl.id)) {
+        builtinTemplates.push(tpl);
+      } else {
+        customTemplates.push(tpl);
+      }
+    }
+
+    customTemplates.sort((a, b) =>
+      (a.name ?? "").localeCompare(b.name ?? "", undefined, { sensitivity: "base" })
+    );
+
+    return [...builtinTemplates, ...customTemplates];
+  }, [templates, builtinIds]);
   const isDeletable = selected && !builtinIds.includes(selected.id);
   const isBuiltIn = value ? isBuiltInTemplateId(value) : false;
 
@@ -106,7 +118,7 @@ export default function TemplatePickerBar({
             <DropdownMenuContent
               align="start"
               sideOffset={4}
-              className="w-[280px] max-h-64 overflow-y-auto"
+              className="w-[280px] max-h-80 overflow-y-auto"
             >
               <DropdownMenuLabel className="sticky top-0 z-10 bg-popover">Templates</DropdownMenuLabel>
               <DropdownMenuRadioGroup
@@ -215,7 +227,7 @@ export default function TemplatePickerBar({
               </TooltipContent>
             </Tooltip>
 
-            {/* Optional â€œclear allâ€ action */}
+            {/* Optional "clear all" action */}
             {/* <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -240,7 +252,7 @@ export default function TemplatePickerBar({
         </div>
       </TooltipProvider>
 
-      <Dialog modal={false} open={renameOpen} onOpenChange={setRenameOpen}>
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="sm:max-w-md" style={{ zIndex: 240 }}>
           <DialogHeader>
             <DialogTitle>Rename template</DialogTitle>
@@ -268,5 +280,3 @@ export default function TemplatePickerBar({
     </div>
   );
 }
-
-

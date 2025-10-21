@@ -125,7 +125,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
 
       <nav
         className={cn(
-          "flex items-center gap-4 text-sm text-muted-foreground",
+          "flex w-full items-center gap-3 overflow-x-auto whitespace-nowrap px-1 text-sm text-muted-foreground",
           className
         )}
         {...props}
@@ -136,7 +136,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
             type="button"
             onClick={() => handleNavClick(href)}
             className={cn(
-              "inline-flex items-center border-b-2 px-3 py-2 transition-colors duration-300",
+              "inline-flex flex-shrink-0 items-center border-b-2 px-3 py-2 transition-colors duration-300",
               active
                 ? "border-green-600 text-green-700 font-semibold"
                 : "border-transparent hover:border-green-400 hover:text-green-600"
@@ -152,13 +152,14 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
           quickLinks={quickLinks}
           activeRoute={activeEmployeesRoute}
           onNavigate={handleNavClick}
+          className="flex-shrink-0"
         />
 
         <button
           type="button"
           onClick={() => handleNavClick(`/${departmentId}/tools`)}
           className={cn(
-            "inline-flex items-center border-b-2 px-3 py-2 text-base transition-colors duration-300",
+            "inline-flex flex-shrink-0 items-center border-b-2 px-3 py-2 text-base transition-colors duration-300",
             toolsSectionActive
               ? "border-green-600 text-green-700 font-semibold"
               : "border-transparent hover:border-green-400 hover:text-green-600"
@@ -172,7 +173,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
           type="button"
           onClick={() => handleNavClick(`/${departmentId}/settings`)}
           className={cn(
-            "inline-flex items-center border-b-2 px-3 py-2 text-base transition-colors duration-300",
+            "inline-flex flex-shrink-0 items-center border-b-2 px-3 py-2 text-base transition-colors duration-300",
             pathname === `/${departmentId}/settings`
               ? "border-green-600 text-green-700 font-semibold"
               : "border-transparent hover:border-green-400 hover:text-green-600"

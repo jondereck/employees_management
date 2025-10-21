@@ -18,9 +18,16 @@ type EmployeesMenuProps = {
   quickLinks: EmployeesMenuLink[];
   activeRoute?: EmployeesMenuLink;
   onNavigate: (href: string) => void;
+  className?: string;
 };
 
-export function EmployeesMenu({ manageRoute, quickLinks, activeRoute, onNavigate }: EmployeesMenuProps) {
+export function EmployeesMenu({
+  manageRoute,
+  quickLinks,
+  activeRoute,
+  onNavigate,
+  className,
+}: EmployeesMenuProps) {
   const [open, setOpen] = React.useState(false);
 
   const handleNavigate = React.useCallback(
@@ -40,10 +47,11 @@ export function EmployeesMenu({ manageRoute, quickLinks, activeRoute, onNavigate
         <button
           type="button"
           className={cn(
-            "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors duration-300",
+            "inline-flex flex-shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors duration-300",
             activeRoute
               ? "border-green-600 text-green-700"
-              : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600"
+              : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600",
+            className
           )}
           aria-haspopup="menu"
           aria-expanded={open}

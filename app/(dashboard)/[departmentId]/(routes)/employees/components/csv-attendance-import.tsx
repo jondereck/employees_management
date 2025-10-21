@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import * as XLSX from "xlsx-js-style";
 import { toast } from "sonner";
-import { Loader2, UploadCloud, X } from "lucide-react";
+import { Loader2, UploadCloud, X, Check, Undo2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useParams } from "next/navigation";
 
@@ -70,6 +70,48 @@ const CATEGORY_LABEL: Record<CategoryKey, string> = {
   JO: "JO",
 };
 
+const OFFICE_UNKNOWN = "Unassigned / No Office";
+
+const normalizeOfficeName = (name?: string | null) => {
+  const trimmed = name?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : OFFICE_UNKNOWN;
+};
+
+const mapEmployeeTypeToCategory = (name?: string | null): CategoryKey => {
+  const normalized = (name || "").toLowerCase();
+  if (normalized.includes("elective")) return "E";
+  if (
+    normalized.includes("job order") ||
+    normalized.includes("job-order") ||
+    normalized.includes("joborder") ||
+    normalized === "jo"
+  ) {
+    return "JO";
+  }
+  if (normalized.includes("casual") || normalized.includes("temporary")) return "C";
+  if (
+    normalized.includes("co-term") ||
+    normalized.includes("coterminous") ||
+    normalized.includes("co-terminous") ||
+    normalized.includes("contract of service") ||
+    normalized.includes("contractual") ||
+    normalized.includes("cos")
+  ) {
+    return "CT_COS";
+  }
+  if (normalized.includes("permanent") || normalized.includes("regular")) return "P";
+  return "P";
+};
+
+type AbsentEmployee = {
+  employeeId: string;
+  employeeNo: string;
+  name: string;
+  office: string;
+  employeeTypeName: string;
+  position?: string;
+};
+
 const createEmptyCounts = (): Record<CategoryKey, number> =>
   CATEGORY_ORDER.reduce(
     (acc, key) => {
@@ -98,7 +140,9 @@ export default function CsvAttendanceImport() {
   const [mappingByFile, setMappingByFile] = useState<MappingByFile>({});
   const [mapTarget, setMapTarget] = useState<string>(MAP_ALL); // which file you're editing
   const [officeSummary, setOfficeSummary] = useState<OfficeSummaryRow[]>([]);
-  const [activeTab, setActiveTab] = useState<"preview" | "summary">("preview");
+  const [absentEmployees, setAbsentEmployees] = useState<AbsentEmployee[]>([]);
+  const [manuallyCheckedAbsentees, setManuallyCheckedAbsentees] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState<"preview" | "summary" | "absentees">("preview");
   const [isDragging, setIsDragging] = useState(false);
 
   const params = useParams<{ departmentId: string }>();
@@ -128,6 +172,26 @@ export default function CsvAttendanceImport() {
     };
   }, [officeSummary]);
 
+  const getAbsentKey = (emp: AbsentEmployee) =>
+    emp.employeeId && emp.employeeId.length ? emp.employeeId : `empno:${emp.employeeNo}`;
+
+  const pendingAbsentees = useMemo(
+    () =>
+      absentEmployees.filter((emp) => {
+        const key = getAbsentKey(emp);
+        return !manuallyCheckedAbsentees[key];
+      }),
+    [absentEmployees, manuallyCheckedAbsentees]
+  );
+
+  const manuallyMarkedAbsentees = useMemo(
+    () =>
+      absentEmployees.filter((emp) => {
+        const key = getAbsentKey(emp);
+        return !!manuallyCheckedAbsentees[key];
+      }),
+    [absentEmployees, manuallyCheckedAbsentees]
+  );
 
 
   function toDisplayEmployeeNo(val?: string) {
@@ -139,6 +203,8 @@ export default function CsvAttendanceImport() {
 
   async function processFileList(list: File[]) {
     setOfficeSummary([]);
+    setAbsentEmployees([]);
+    setManuallyCheckedAbsentees({});
     setActiveTab("preview");
 
     const csvFiles = list.filter((file) => {
@@ -267,6 +333,8 @@ export default function CsvAttendanceImport() {
     const t = toast.loading("Resolving employees...");
     setIsPreviewing(true);
     setOfficeSummary([]);
+    setAbsentEmployees([]);
+    setManuallyCheckedAbsentees({});
     setActiveTab("preview");
     try {
       const res = await fetch("/api/import/attendance/resolve", {
@@ -296,6 +364,8 @@ export default function CsvAttendanceImport() {
 
         setPreview(rowsOut);
         setOfficeSummary((json.officeSummary ?? []) as OfficeSummaryRow[]);
+        setAbsentEmployees((json.absentEmployees ?? []) as AbsentEmployee[]);
+        setManuallyCheckedAbsentees({});
 
         const matched = rowsOut.filter((r: any) => r.idMatched).length;
         const removed = json.rows.length - rowsOut.length;
@@ -590,6 +660,84 @@ export default function CsvAttendanceImport() {
       XLSX.utils.book_append_sheet(wb, ws3, "Office Summary");
     }
 
+    if (pendingAbsentees.length) {
+      const ABSENT_HEADERS = ["Employee No", "Name", "Office", "Employee Type"] as const;
+      const absentRows = pendingAbsentees.map((emp) => ({
+        "Employee No": toDisplayEmployeeNo(emp.employeeNo),
+        Name: emp.name,
+        Office: normalizeOfficeName(emp.office),
+        "Employee Type": emp.employeeTypeName || "-",
+      }));
+
+      const ws4 = XLSX.utils.aoa_to_sheet([ABSENT_HEADERS as unknown as string[]]);
+      XLSX.utils.sheet_add_json(ws4, absentRows, {
+        origin: "A2",
+        skipHeader: true,
+        header: ABSENT_HEADERS as unknown as string[],
+      });
+
+      (ws4 as any)["!cols"] = [
+        { wch: 14 },
+        { wch: 32 },
+        { wch: 36 },
+        { wch: 22 },
+      ];
+      (ws4 as any)["!autofilter"] = { ref: "A1:D1" };
+      (ws4 as any)["!freeze"] = {
+        ySplit: 1,
+        topLeftCell: "A2",
+        activePane: "bottomLeft",
+        state: "frozen",
+      };
+
+      const headerCells = ABSENT_HEADERS.map((_, i) =>
+        XLSX.utils.encode_cell({ r: 0, c: i })
+      );
+      for (const addr of headerCells) {
+        const cell: any = (ws4 as any)[addr];
+        cell.s = {
+          font: { bold: true, color: { rgb: "1F2937" } },
+          alignment: { horizontal: "center", vertical: "center", wrapText: true },
+          fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } },
+          border: {
+            top: { style: "thin", color: { rgb: "D1D5DB" } },
+            bottom: { style: "thin", color: { rgb: "D1D5DB" } },
+            left: { style: "thin", color: { rgb: "D1D5DB" } },
+            right: { style: "thin", color: { rgb: "D1D5DB" } },
+          },
+        };
+      }
+      (ws4 as any)["!rows"] = [{ hpt: 24 }];
+
+      const range = ws4["!ref"] as string | undefined;
+      if (range) {
+        const decoded = XLSX.utils.decode_range(range);
+        for (let R = 1; R <= decoded.e.r; R++) {
+          const zebra = R % 2 === 1;
+          for (let C = 0; C <= decoded.e.c; C++) {
+            const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell: any = (ws4 as any)[cellAddr];
+            if (!cell) continue;
+            cell.s = {
+              alignment: { vertical: "center" },
+              border: {
+                top: { style: "hair", color: { rgb: "E5E7EB" } },
+                bottom: { style: "hair", color: { rgb: "E5E7EB" } },
+                left: { style: "hair", color: { rgb: "E5E7EB" } },
+                right: { style: "hair", color: { rgb: "E5E7EB" } },
+              },
+              ...(zebra ? { fill: { patternType: "solid", fgColor: { rgb: "FAFAFA" } } } : {}),
+            };
+            if (C === 0 || C === 3) {
+              cell.s.alignment = { ...(cell.s.alignment || {}), horizontal: "center" };
+            }
+          }
+        }
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws4, "Flag Ceremony");
+    }
+
       XLSX.writeFile(wb, `Attendance_${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true });
 
       toast.success("Excel saved", { id: t });
@@ -626,6 +774,8 @@ export default function CsvAttendanceImport() {
     setFileName(next.map(f => f.name).join(", "));
     setPreview([]);
     setOfficeSummary([]);
+    setAbsentEmployees([]);
+    setManuallyCheckedAbsentees({});
     setActiveTab("preview");
   }
 
@@ -634,6 +784,70 @@ export default function CsvAttendanceImport() {
     if (mapTarget === MAP_ALL) return headers;
     const f = filesInfo.find(x => x.name === mapTarget);
     return f?.headers ?? headers;
+  }
+
+  function adjustOfficeSummaryForManual(emp: AbsentEmployee, delta: 1 | -1) {
+    if (!delta) return;
+    const officeName = normalizeOfficeName(emp.office);
+    const category = mapEmployeeTypeToCategory(emp.employeeTypeName);
+
+    setOfficeSummary((prev) => {
+      let found = false;
+      const updated = prev.map((row) => {
+        if (normalizeOfficeName(row.office) !== officeName) return row;
+        found = true;
+        const current = row.attendance[category];
+        const maxForCategory = row.counts[category];
+        const nextValue = Math.max(0, Math.min(maxForCategory, current + delta));
+        const appliedDelta = nextValue - current;
+        if (appliedDelta === 0) return row;
+        const nextTotal = Math.max(
+          0,
+          Math.min(row.total, row.attendanceTotal + appliedDelta)
+        );
+        return {
+          ...row,
+          attendance: {
+            ...row.attendance,
+            [category]: nextValue,
+          },
+          attendanceTotal: nextTotal,
+        };
+      });
+
+      if (!found && delta > 0) {
+        const counts = createEmptyCounts();
+        const attendance = createEmptyCounts();
+        counts[category] = delta;
+        attendance[category] = delta;
+        updated.push({
+          office: officeName,
+          counts,
+          total: delta,
+          attendance,
+          attendanceTotal: delta,
+        });
+      }
+
+      return updated;
+    });
+  }
+
+  function toggleManualAttendance(emp: AbsentEmployee) {
+    const key = getAbsentKey(emp);
+    const currentlyMarked = !!manuallyCheckedAbsentees[key];
+
+    setManuallyCheckedAbsentees((prev) => {
+      const next = { ...prev };
+      if (currentlyMarked) {
+        delete next[key];
+      } else {
+        next[key] = true;
+      }
+      return next;
+    });
+
+    adjustOfficeSummaryForManual(emp, currentlyMarked ? -1 : 1);
   }
 
   function updateMapField(field: keyof Mapping, v?: string) {
@@ -950,13 +1164,18 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
           {!!preview.length && (
             <Tabs
               value={activeTab}
-              onValueChange={(value) => setActiveTab(value as "preview" | "summary")}
+              onValueChange={(value) =>
+                setActiveTab(value as "preview" | "summary" | "absentees")
+              }
               className="mt-4"
             >
               <TabsList>
                 <TabsTrigger value="preview">Preview{preview.length ? ` (${preview.length.toLocaleString()})` : ""}</TabsTrigger>
                 <TabsTrigger value="summary" disabled={!officeSummary.length}>
                   Office Summary{officeSummary.length ? ` (${officeSummary.length})` : ""}
+                </TabsTrigger>
+                <TabsTrigger value="absentees" disabled={!absentEmployees.length}>
+                  Manual Check{pendingAbsentees.length ? ` (${pendingAbsentees.length})` : ""}
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="preview" className="mt-3">
@@ -1069,6 +1288,103 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
                   <div className="border rounded-md px-3 py-4 text-sm text-muted-foreground bg-muted/50">
                     No office summary available.
                   </div>
+                )}
+              </TabsContent>
+              <TabsContent value="absentees" className="mt-3 space-y-4">
+                {!absentEmployees.length ? (
+                  <div className="border rounded-md px-3 py-4 text-sm text-muted-foreground bg-muted/50">
+                    Everyone in the roster already has a recorded scan for the selected files.
+                  </div>
+                ) : (
+                  <>
+                    {manuallyMarkedAbsentees.length > 0 && (
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        {manuallyMarkedAbsentees.length} employee
+                        {manuallyMarkedAbsentees.length > 1 ? "s" : ""} manually marked as present.
+                        Office totals above reflect these adjustments.
+                      </div>
+                    )}
+
+                    {pendingAbsentees.length ? (
+                      <div className="border rounded-md overflow-auto">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-muted">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium">Employee No</th>
+                              <th className="px-3 py-2 text-left font-medium">Name</th>
+                              <th className="px-3 py-2 text-left font-medium">Office</th>
+                              <th className="px-3 py-2 text-left font-medium">Employee Type</th>
+                              <th className="px-3 py-2 text-right font-medium">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pendingAbsentees.map((emp) => (
+                              <tr key={getAbsentKey(emp)} className="border-t">
+                                <td className="px-3 py-1">{toDisplayEmployeeNo(emp.employeeNo)}</td>
+                                <td className="px-3 py-1">{emp.name}</td>
+                                <td className="px-3 py-1">{normalizeOfficeName(emp.office)}</td>
+                                <td className="px-3 py-1">{emp.employeeTypeName || "-"}</td>
+                                <td className="px-3 py-1 text-right">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => toggleManualAttendance(emp)}
+                                    className="inline-flex items-center gap-1"
+                                  >
+                                    <Check className="h-4 w-4" />
+                                    Mark Present
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="border rounded-md px-3 py-4 text-sm text-muted-foreground bg-muted/50">
+                        All flagged employees have been manually marked as present.
+                      </div>
+                    )}
+
+                    {manuallyMarkedAbsentees.length > 0 && (
+                      <div className="border rounded-md overflow-auto">
+                        <div className="border-b px-3 py-2 text-sm font-medium">
+                          Manually marked as present
+                        </div>
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-muted">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium">Employee No</th>
+                              <th className="px-3 py-2 text-left font-medium">Name</th>
+                              <th className="px-3 py-2 text-left font-medium">Office</th>
+                              <th className="px-3 py-2 text-left font-medium">Employee Type</th>
+                              <th className="px-3 py-2 text-right font-medium">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {manuallyMarkedAbsentees.map((emp) => (
+                              <tr key={`marked-${getAbsentKey(emp)}`} className="border-t">
+                                <td className="px-3 py-1">{toDisplayEmployeeNo(emp.employeeNo)}</td>
+                                <td className="px-3 py-1">{emp.name}</td>
+                                <td className="px-3 py-1">{normalizeOfficeName(emp.office)}</td>
+                                <td className="px-3 py-1">{emp.employeeTypeName || "-"}</td>
+                                <td className="px-3 py-1 text-right">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => toggleManualAttendance(emp)}
+                                    className="inline-flex items-center gap-1"
+                                  >
+                                    <Undo2 className="h-4 w-4" />
+                                    Undo
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 )}
               </TabsContent>
             </Tabs>

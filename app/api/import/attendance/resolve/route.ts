@@ -63,6 +63,33 @@ function normalizeOfficeName(name?: string | null): string {
   return trimmed && trimmed.length > 0 ? trimmed : OFFICE_UNKNOWN;
 }
 
+function buildDisplayName(person?: {
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+  suffix?: string | null;
+}): string {
+  if (!person) return "(Unmatched)";
+  const lastName = person.lastName?.trim() ?? "";
+  const firstName = person.firstName?.trim() ?? "";
+  const middleInitial =
+    person.middleName && person.middleName.trim()
+      ? `${person.middleName.trim()[0].toUpperCase()}.`
+      : "";
+  const suffix = person.suffix?.trim() ?? "";
+
+  const parts = [
+    lastName,
+    lastName && firstName ? ", " : "",
+    firstName,
+    middleInitial ? ` ${middleInitial}` : "",
+    suffix ? ` ${suffix}` : "",
+  ];
+
+  const display = parts.join("").trim();
+  return display.length ? display : "(Unnamed)";
+}
+
 // Try multiple patterns (US/EU/ISO), with/without seconds, 12h/24h
 const CANDIDATE_PATTERNS = [
   "yyyy-MM-dd'T'HH:mm:ssXXX",
@@ -330,24 +357,17 @@ export async function POST(req: Request) {
     const out = prepared.map((r) => {
       const e = map.get(r.id);
 
-      const middleInitial =
-        e?.middleName && e.middleName.trim()
-          ? `${e.middleName.trim()[0].toUpperCase()}.`
-          : "";
-
-      const suffix = e?.suffix?.trim() ?? "";
-
-      // Keep your combined Name as-is but enhanced (optional)
-      const displayName = e
-        ? `${e.lastName}, ${e.firstName}${middleInitial ? " " + middleInitial : ""}${suffix ? " " + suffix : ""}`
-        : "(Unmatched)";
+      const displayName = e ? buildDisplayName(e) : "(Unmatched)";
 
       return {
         employeeId: e?.id ?? "",
         employeeNo: e?.employeeNo ?? "",
         name: displayName,
-        middleInitial,      // <-- "D." style
-        suffix,
+        middleInitial:
+          e?.middleName && e.middleName.trim()
+            ? `${e.middleName.trim()[0].toUpperCase()}.`
+            : "",
+        suffix: e?.suffix?.trim() ?? "",
         office: e?.offices?.name ?? "",
         employeeTypeName: e?.employeeType?.name ?? "",
         position: e?.position ?? "",
@@ -390,6 +410,13 @@ export async function POST(req: Request) {
         isArchived: false,
       },
       select: {
+        id: true,
+        employeeNo: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        suffix: true,
+        position: true,
         employeeType: { select: { name: true } },
         offices: { select: { name: true } },
       },
@@ -403,6 +430,8 @@ export async function POST(req: Request) {
       entry.total += 1;
     }
 
+    const presentKeySet = new Set<string>();
+
     for (const row of out) {
       if (!row.idMatched) continue;
       const officeName = normalizeOfficeName(row.office);
@@ -410,16 +439,52 @@ export async function POST(req: Request) {
       const category = mapEmployeeTypeToCategory(row.employeeTypeName);
       entry.attendance[category] += 1;
       entry.attendanceTotal += 1;
+
+      const presentKey =
+        body.idType === "employeeId"
+          ? row.employeeId
+          : row.employeeNo
+          ? String(row.employeeNo)
+          : "";
+      if (presentKey) {
+        presentKeySet.add(presentKey);
+      }
     }
 
     const officeSummary = Array.from(officeSummaryMap.values()).sort((a, b) =>
       a.office.localeCompare(b.office)
     );
 
+    const absentEmployees = roster
+      .filter((employee) => {
+        const keyValue =
+          body.idType === "employeeId"
+            ? employee.id
+            : employee.employeeNo
+            ? String(employee.employeeNo)
+            : "";
+        if (!keyValue) return false;
+        return !presentKeySet.has(keyValue);
+      })
+      .map((employee) => ({
+        employeeId: employee.id,
+        employeeNo: employee.employeeNo ?? "",
+        name: buildDisplayName(employee),
+        office: normalizeOfficeName(employee.offices?.name),
+        employeeTypeName: employee.employeeType?.name ?? "",
+        position: employee.position ?? "",
+      }))
+      .sort((a, b) => {
+        const officeCompare = a.office.localeCompare(b.office);
+        if (officeCompare !== 0) return officeCompare;
+        return a.name.localeCompare(b.name);
+      });
+
     return NextResponse.json({
       ok: true,
       rows: out,
       officeSummary,
+      absentEmployees,
       categories: CATEGORY_KEYS,
       debug: {
         idType: body.idType,
