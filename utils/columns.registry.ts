@@ -7,6 +7,7 @@ export type ColumnDefinition = {
 export const COLUMN_SEQUENCE = [
   'rowNumber',
   'employeeNo',
+  'prefix',
   'lastName',
   'firstName',
   'middleName',
@@ -51,6 +52,7 @@ export const COLUMN_SEQUENCE = [
 export const COLUMN_DEFS: Record<string, ColumnDefinition> = {
   rowNumber: { key: 'rowNumber', label: 'No. (row number)' },
   employeeNo: { key: 'employeeNo', label: 'Employee No' },
+  prefix: { key: 'prefix', label: 'Prefix' },
   lastName: { key: 'lastName', label: 'Last Name' },
   firstName: { key: 'firstName', label: 'First Name' },
   middleName: { key: 'middleName', label: 'M.I.' },
