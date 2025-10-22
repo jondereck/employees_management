@@ -1,9 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  TouchEvent as ReactTouchEvent,
+} from "react"
 import {
   ColumnDef,
   ColumnFiltersState,
+  Header,
   SortingState,
   VisibilityState,
   flexRender,
@@ -28,23 +35,47 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, GripVertical } 
 import { DataTableViewOptions } from "./column-toggle"
 import { usePersistentPagination } from "@/hooks/use-persistent-paginaton"
 import { cn } from "@/lib/utils"
+import {
+  DndContext,
+  DragCancelEvent,
+  DragEndEvent,
+  DragStartEvent,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core"
+import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
-const collectColumnIds = (columns: ColumnDef<any, any>[]): string[] => {
-  const ids: string[] = []
-  columns.forEach((col: any) => {
-    if (col?.columns?.length) {
-      ids.push(...collectColumnIds(col.columns))
-      return
-    }
-    const id =
-      (typeof col?.id === "string" && col.id) ??
-      (typeof col?.accessorKey === "string" && col.accessorKey) ??
-      (typeof col?.accessorKey === "number" && String(col.accessorKey)) ??
-      undefined
+class CtrlMouseSensor extends MouseSensor {
+  static activators = [
+    {
+      eventName: "onMouseDown" as const,
+      handler: ({ nativeEvent }: { nativeEvent: MouseEvent }) => nativeEvent.ctrlKey,
+    },
+  ]
+}
 
-    if (id) ids.push(id)
-  })
-  return ids
+class LongPressTouchSensor extends TouchSensor {
+  static activators = [
+    {
+      eventName: "onTouchStart" as const,
+      handler: () => true,
+    },
+  ]
+}
+
+const sanitizeColumnOrder = (order: string[] | null | undefined, reference: string[]): string[] => {
+  const preferred = Array.isArray(order) ? order : []
+  const filtered = preferred.filter((id) => reference.includes(id))
+  const missing = reference.filter((id) => !filtered.includes(id))
+  return [...filtered, ...missing]
+}
+
+const arraysEqual = (a: string[], b: string[]): boolean => {
+  if (a.length !== b.length) return false
+  return a.every((value, index) => value === b[index])
 }
 
 interface DataTableProps<TData, TValue> {
@@ -59,6 +90,7 @@ interface DataTableProps<TData, TValue> {
   /** sync page to URL (default true) */
   syncPageToUrl?: boolean
   enableColumnReorder?: boolean
+  columnOrderStorageKey?: string
 }
 
 export function DataTable<TData, TValue>({
@@ -68,6 +100,7 @@ export function DataTable<TData, TValue>({
   storageKey = "datatable_default",
   syncPageToUrl = true,
   enableColumnReorder = false,
+  columnOrderStorageKey,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -80,101 +113,71 @@ export function DataTable<TData, TValue>({
     syncToUrl: syncPageToUrl,
   })
 
-  const baseColumnIds = useMemo(() => collectColumnIds(columns), [columns])
-  const ORDER_STORAGE_KEY = `${storageKey}_column_order_v1`
+  const ORDER_STORAGE_KEY = columnOrderStorageKey ?? `${storageKey}_column_order_v1`
 
-  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
-    if (!enableColumnReorder) return baseColumnIds
-    if (typeof window === "undefined") return baseColumnIds
-    try {
-      const raw = window.localStorage.getItem(ORDER_STORAGE_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed) && parsed.every((id) => typeof id === "string")) {
-          return parsed
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to read column order from storage", error)
-    }
-    return baseColumnIds
-  })
+  const [columnOrder, setColumnOrder] = useState<string[]>([])
+  const [defaultColumnOrder, setDefaultColumnOrder] = useState<string[]>([])
+  const [initialOrderLoaded, setInitialOrderLoaded] = useState(false)
 
   const [draggingColumn, setDraggingColumn] = useState<string | null>(null)
-  const [dragIndicator, setDragIndicator] = useState<{ id: string; position: "left" | "right" } | null>(null)
-  const [reorderMode, setReorderMode] = useState(false)
-  const [armedColumn, setArmedColumn] = useState<string | null>(null)
-  const activationTimerRef = useRef<number | null>(null)
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false)
+  const [touchReorderActive, setTouchReorderActive] = useState(false)
 
-  const getWorkingOrder = useCallback(() => {
-    const orderFromState = columnOrder.length ? [...columnOrder] : []
-    if (orderFromState.length) return orderFromState
-    return [...baseColumnIds]
-  }, [columnOrder, baseColumnIds])
-
-  useEffect(() => {
-    if (!enableColumnReorder) return
-    setColumnOrder((prev) => {
-      const filtered = prev.filter((id) => baseColumnIds.includes(id))
-      const missing = baseColumnIds.filter((id) => !filtered.includes(id))
-      const next = [...filtered, ...missing]
-      const unchanged = next.length === prev.length && next.every((id, idx) => id === prev[idx])
-      return unchanged ? prev : next
+  const sensors = useSensors(
+    useSensor(CtrlMouseSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(LongPressTouchSensor, {
+      activationConstraint: { delay: 500, tolerance: 8 },
     })
-  }, [enableColumnReorder, baseColumnIds])
-
-  useEffect(() => {
-    if (!enableColumnReorder) return
-    if (typeof window === "undefined") return
-    if (!columnOrder.length) return
-    try {
-      window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(columnOrder))
-    } catch (error) {
-      console.warn("Failed to persist column order", error)
-    }
-  }, [columnOrder, enableColumnReorder, ORDER_STORAGE_KEY])
-
-  const clearActivationTimer = useCallback(() => {
-    if (activationTimerRef.current) {
-      window.clearTimeout(activationTimerRef.current)
-      activationTimerRef.current = null
-    }
-  }, [])
-
-  const handleHeaderMouseDown = useCallback(
-    (event: React.MouseEvent<HTMLTableCellElement>, columnId: string) => {
-      if (!enableColumnReorder) return
-      if (event.button === 2) {
-        event.preventDefault()
-        clearActivationTimer()
-        activationTimerRef.current = window.setTimeout(() => {
-          setReorderMode(true)
-          setArmedColumn(columnId)
-        }, 400)
-      }
-    },
-    [enableColumnReorder, clearActivationTimer]
   )
 
-  const handleHeaderMouseUp = useCallback(() => {
-    clearActivationTimer()
-  }, [clearActivationTimer])
+  const getWorkingOrder = useCallback(() => {
+    if (columnOrder.length) return [...columnOrder]
+    if (defaultColumnOrder.length) return [...defaultColumnOrder]
+    return []
+  }, [columnOrder, defaultColumnOrder])
 
-  const handleHeaderMouseLeave = useCallback(() => {
-    clearActivationTimer()
-  }, [clearActivationTimer])
+  useEffect(() => {
+    if (!enableColumnReorder) {
+      setIsCtrlPressed(false)
+      setTouchReorderActive(false)
+      return
+    }
 
-  const handleHeaderContextMenu = useCallback((event: React.MouseEvent) => {
-    if (enableColumnReorder) {
-      event.preventDefault()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Control") {
+        setIsCtrlPressed(true)
+      }
+    }
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Control") {
+        setIsCtrlPressed(false)
+      }
+    }
+
+    const handleWindowBlur = () => {
+      setIsCtrlPressed(false)
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    window.addEventListener("keyup", handleKeyUp)
+    window.addEventListener("blur", handleWindowBlur)
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener("keyup", handleKeyUp)
+      window.removeEventListener("blur", handleWindowBlur)
     }
   }, [enableColumnReorder])
 
   useEffect(() => {
-    return () => {
-      clearActivationTimer()
-    }
-  }, [clearActivationTimer])
+    if (!enableColumnReorder) return
+    setColumnOrder([])
+    setDefaultColumnOrder([])
+    setInitialOrderLoaded(false)
+  }, [enableColumnReorder])
 
   const table = useReactTable({
     data,
@@ -201,92 +204,110 @@ export function DataTable<TData, TValue>({
     autoResetAll: false,
   })
 
-  const handleDragStart = useCallback(
-    (event: React.DragEvent<HTMLElement>, columnId: string) => {
-      if (!enableColumnReorder || !reorderMode) {
-        event.preventDefault()
-        return
-      }
-      setDraggingColumn(columnId)
-      event.dataTransfer.effectAllowed = "move"
-      event.dataTransfer.setData("text/plain", columnId)
-    },
-    [enableColumnReorder, reorderMode]
-  )
+  useEffect(() => {
+    if (!enableColumnReorder) return
 
-  const handleDragOver = useCallback(
-    (event: React.DragEvent<HTMLTableCellElement>, targetId: string) => {
-      if (!enableColumnReorder) return
-      if (!draggingColumn || draggingColumn === targetId) return
-      const rect = event.currentTarget.getBoundingClientRect()
-      const midpoint = rect.left + rect.width / 2
-      const position: "left" | "right" = event.clientX < midpoint ? "left" : "right"
+    const referenceOrder = table.getAllLeafColumns().map((col) => col.id)
 
-      event.preventDefault()
-      event.dataTransfer.dropEffect = "move"
-      setDragIndicator((prev) => {
-        if (prev && prev.id === targetId && prev.position === position) return prev
-        return { id: targetId, position }
-      })
-    },
-    [enableColumnReorder, draggingColumn]
-  )
+    setDefaultColumnOrder((prev) => {
+      if (!prev.length) return referenceOrder
+      const next = sanitizeColumnOrder(prev, referenceOrder)
+      return arraysEqual(prev, next) ? prev : next
+    })
 
-  const handleDrop = useCallback(
-    (event: React.DragEvent<HTMLTableCellElement>, targetId: string) => {
-      if (!enableColumnReorder) return
-      event.preventDefault()
-      const sourceId = draggingColumn || event.dataTransfer.getData("text/plain")
-      const indicator = dragIndicator
-      if (!sourceId || !indicator) {
-        setDraggingColumn(null)
-        setDragIndicator(null)
-        return
+    if (!initialOrderLoaded) {
+      let storedOrder: string[] | null = null
+      if (typeof window !== "undefined") {
+        try {
+          const raw = window.localStorage.getItem(ORDER_STORAGE_KEY)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed) && parsed.every((id) => typeof id === "string")) {
+              storedOrder = parsed
+            }
+          }
+        } catch (error) {
+          console.warn("Failed to read column order from storage", error)
+        }
       }
 
-      const working = getWorkingOrder()
-      if (!working.includes(sourceId) || !working.includes(targetId)) {
-        setDraggingColumn(null)
-        setDragIndicator(null)
-        return
-      }
-
-      const next = working.filter((id) => id !== sourceId)
-      const targetIndex = next.findIndex((id) => id === targetId)
-      const insertIndex = indicator.position === "left" ? targetIndex : targetIndex + 1
-      if (targetIndex === -1) {
-        next.push(sourceId)
-      } else {
-        next.splice(insertIndex, 0, sourceId)
-      }
-
+      const next = sanitizeColumnOrder(storedOrder, referenceOrder)
       setColumnOrder(next)
-      setDraggingColumn(null)
-      setDragIndicator(null)
-      setReorderMode(false)
-      setArmedColumn(null)
-    },
-    [enableColumnReorder, draggingColumn, dragIndicator, getWorkingOrder]
-  )
+      setInitialOrderLoaded(true)
+      return
+    }
 
-  const handleDragEnd = useCallback(() => {
-    setDraggingColumn(null)
-    setDragIndicator(null)
-    setReorderMode(false)
-    setArmedColumn(null)
-  }, [])
+    setColumnOrder((prev) => {
+      const next = sanitizeColumnOrder(prev, referenceOrder)
+      return arraysEqual(prev, next) ? prev : next
+    })
+  }, [enableColumnReorder, table, columns, initialOrderLoaded, ORDER_STORAGE_KEY])
 
   useEffect(() => {
     if (!enableColumnReorder) return
-    const orderToApply = columnOrder.length ? columnOrder : baseColumnIds
+    const orderToApply = columnOrder.length ? columnOrder : defaultColumnOrder
+    if (!orderToApply.length) return
     table.setColumnOrder(orderToApply)
-  }, [table, columnOrder, baseColumnIds, enableColumnReorder])
+  }, [table, columnOrder, defaultColumnOrder, enableColumnReorder])
+
+  useEffect(() => {
+    if (!enableColumnReorder || !initialOrderLoaded) return
+    if (typeof window === "undefined") return
+    if (!columnOrder.length) return
+    try {
+      window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(columnOrder))
+    } catch (error) {
+      console.warn("Failed to persist column order", error)
+    }
+  }, [columnOrder, enableColumnReorder, ORDER_STORAGE_KEY, initialOrderLoaded])
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      if (!enableColumnReorder) return
+      const columnId = event.active.id as string
+      setDraggingColumn(columnId)
+      const activatorType = event.activatorEvent?.type ?? ""
+      if (activatorType.startsWith("touch")) {
+        setTouchReorderActive(true)
+      }
+    },
+    [enableColumnReorder]
+  )
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (!enableColumnReorder) return
+      const { active, over } = event
+      setDraggingColumn(null)
+      setTouchReorderActive(false)
+      if (!over || active.id === over.id) return
+
+      const working = getWorkingOrder()
+      const oldIndex = working.indexOf(active.id as string)
+      const newIndex = working.indexOf(over.id as string)
+      if (oldIndex === -1 || newIndex === -1) return
+
+      const next = arrayMove(working, oldIndex, newIndex)
+      setColumnOrder(next)
+    },
+    [enableColumnReorder, getWorkingOrder]
+  )
+
+  const handleDragCancel = useCallback(
+    (_event: DragCancelEvent) => {
+      if (!enableColumnReorder) return
+      setDraggingColumn(null)
+      setTouchReorderActive(false)
+    },
+    [enableColumnReorder]
+  )
 
   const hasCustomOrder = useMemo(() => {
     if (!enableColumnReorder) return false
-    if (columnOrder.length !== baseColumnIds.length) return true
-    return columnOrder.some((id, index) => id !== baseColumnIds[index])
-  }, [enableColumnReorder, columnOrder, baseColumnIds])
+    if (!defaultColumnOrder.length) return false
+    if (columnOrder.length !== defaultColumnOrder.length) return true
+    return columnOrder.some((id, index) => id !== defaultColumnOrder[index])
+  }, [enableColumnReorder, columnOrder, defaultColumnOrder])
 
   const columnVisibilityState = table.getState().columnVisibility
   const hasHiddenColumns = useMemo(() => {
@@ -296,13 +317,16 @@ export function DataTable<TData, TValue>({
 
   const canResetLayout = (enableColumnReorder && hasCustomOrder) || hasHiddenColumns
 
+  const reorderModeActive =
+    enableColumnReorder && (isCtrlPressed || touchReorderActive || draggingColumn !== null)
+
   const handleResetColumns = useCallback(() => {
     setDraggingColumn(null)
-    setDragIndicator(null)
-    setReorderMode(false)
-    setArmedColumn(null)
+    setTouchReorderActive(false)
     if (enableColumnReorder) {
-      setColumnOrder([...baseColumnIds])
+      if (defaultColumnOrder.length) {
+        setColumnOrder([...defaultColumnOrder])
+      }
       if (typeof window !== "undefined") {
         try {
           window.localStorage.removeItem(ORDER_STORAGE_KEY)
@@ -312,7 +336,7 @@ export function DataTable<TData, TValue>({
       }
     }
     table.resetColumnVisibility?.()
-  }, [enableColumnReorder, baseColumnIds, ORDER_STORAGE_KEY, table])
+  }, [enableColumnReorder, defaultColumnOrder, ORDER_STORAGE_KEY, table])
 
   return (
     <div className="space-y-4">
@@ -323,85 +347,87 @@ export function DataTable<TData, TValue>({
           canReset={canResetLayout}
         />
       </div>
+      {enableColumnReorder ? (
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs transition-colors",
+            reorderModeActive
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "border-border/50 bg-muted/40 text-muted-foreground"
+          )}
+        >
+          <span className="font-medium">
+            Hold Ctrl (⌃) or long-press the grip icon to reorder columns.
+          </span>
+          <span
+            className={cn(
+              "whitespace-nowrap font-medium",
+              reorderModeActive ? "text-primary" : "text-muted-foreground"
+            )}
+          >
+            {reorderModeActive ? "Reorder mode active" : "Reorder mode inactive"}
+          </span>
+        </div>
+      ) : null}
       <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow
-                key={headerGroup.id}
-                className={cn(
-                  enableColumnReorder &&
-                    draggingColumn &&
-                    "relative before:pointer-events-none before:absolute before:inset-0 before:rounded-md before:border before:border-dashed before:border-primary/40"
-                )}
+            {enableColumnReorder ? (
+              <DndContext
+                sensors={sensors}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
               >
-                {headerGroup.headers.map((header) => {
-                  const columnId = header.column.id
-                  const isDragSource = enableColumnReorder && draggingColumn === columnId
-                  const isDragTarget = enableColumnReorder && dragIndicator?.id === columnId && draggingColumn !== columnId
-                  const isDropAllowed =
-                    enableColumnReorder &&
-                    draggingColumn &&
-                    dragIndicator &&
-                    (dragIndicator.id !== draggingColumn ||
-                      dragIndicator.position === "left" ||
-                      dragIndicator.position === "right")
+                {table.getHeaderGroups().map((headerGroup) => {
+                  const sortableHeaders = headerGroup.headers.filter((header) => !header.isPlaceholder)
+                  const items = sortableHeaders.map((header) => header.column.id)
 
                   return (
-                    <TableHead
-                      key={header.id}
-                      draggable={enableColumnReorder}
-                      onDragStart={
-                        enableColumnReorder ? (event) => handleDragStart(event, columnId) : undefined
-                      }
-                      onDragOver={enableColumnReorder ? (event) => handleDragOver(event, columnId) : undefined}
-                      onDrop={enableColumnReorder ? (event) => handleDrop(event, columnId) : undefined}
-                      onDragLeave={undefined}
-                      onDragEnd={enableColumnReorder ? handleDragEnd : undefined}
-                      className={cn(
-                        enableColumnReorder && "relative cursor-grab transition-colors",
-                        isDragSource && "opacity-60 ring-2 ring-primary/60 shadow-sm",
-                        isDragTarget &&
-                          (isDropAllowed
-                            ? "bg-emerald-50 ring-2 ring-dashed ring-emerald-500"
-                            : "bg-red-50 ring-2 ring-dashed ring-red-400")
-                      )}
+                    <SortableContext
+                      key={headerGroup.id}
+                      items={items}
+                      strategy={horizontalListSortingStrategy}
                     >
-                      {header.isPlaceholder
-                        ? null
-                        : enableColumnReorder
-                        ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-muted-foreground">
-                                <GripVertical className="h-4 w-4" />
-                              </span>
-                              <div className="flex-1">
-                                {flexRender(header.column.columnDef.header, header.getContext())}
-                              </div>
-                              {isDragTarget && dragIndicator?.position === "left" && (
-                                <span
-                                  className={cn(
-                                    "pointer-events-none absolute inset-y-1 left-0 w-[3px] rounded",
-                                    isDropAllowed ? "bg-emerald-500" : "bg-red-400"
-                                  )}
-                                />
-                              )}
-                              {isDragTarget && dragIndicator?.position === "right" && (
-                                <span
-                                  className={cn(
-                                    "pointer-events-none absolute inset-y-1 right-0 w-[3px] rounded",
-                                    isDropAllowed ? "bg-emerald-500" : "bg-red-400"
-                                  )}
-                                />
-                              )}
-                            </div>
+                      <TableRow
+                        key={headerGroup.id}
+                        className={cn(
+                          reorderModeActive && "bg-primary/5 dark:bg-primary/10",
+                          draggingColumn && "relative"
+                        )}
+                      >
+                        {headerGroup.headers.map((header) =>
+                          header.isPlaceholder ? (
+                            <TableHead key={header.id} />
+                          ) : (
+                            <SortableColumnHeader
+                              key={header.id}
+                              header={header}
+                              enableColumnReorder={enableColumnReorder}
+                              reorderModeActive={reorderModeActive}
+                              draggingColumn={draggingColumn}
+                              isCtrlPressed={isCtrlPressed}
+                            />
                           )
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </TableHead>
+                        )}
+                      </TableRow>
+                    </SortableContext>
                   )
                 })}
-              </TableRow>
-            ))}
+              </DndContext>
+            ) : (
+              table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))
+            )}
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
@@ -494,5 +520,129 @@ export function DataTable<TData, TValue>({
 
       {renderExtra && renderExtra(table)}
     </div>
+  )
+}
+
+type SortableColumnHeaderProps<TData, TValue> = {
+  header: Header<TData, TValue>
+  enableColumnReorder: boolean
+  reorderModeActive: boolean
+  draggingColumn: string | null
+  isCtrlPressed: boolean
+}
+
+type HandleListeners = {
+  onMouseDown?: (event: ReactMouseEvent<HTMLButtonElement>) => void
+  onMouseUp?: (event: ReactMouseEvent<HTMLButtonElement>) => void
+  onMouseMove?: (event: ReactMouseEvent<HTMLButtonElement>) => void
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void
+  onKeyUp?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void
+  onTouchStart?: (event: ReactTouchEvent<HTMLButtonElement>) => void
+  onTouchMove?: (event: ReactTouchEvent<HTMLButtonElement>) => void
+  onTouchEnd?: (event: ReactTouchEvent<HTMLButtonElement>) => void
+  onTouchCancel?: (event: ReactTouchEvent<HTMLButtonElement>) => void
+}
+
+function SortableColumnHeader<TData, TValue>({
+  header,
+  enableColumnReorder,
+  reorderModeActive,
+  draggingColumn,
+  isCtrlPressed,
+}: SortableColumnHeaderProps<TData, TValue>) {
+  const columnId = header.column.id
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: columnId,
+    disabled: !enableColumnReorder,
+  })
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform ?? null),
+    transition,
+    zIndex: isDragging ? 5 : undefined,
+  }
+
+  const handleListeners = useMemo<HandleListeners>(() => {
+    if (!enableColumnReorder || !listeners) {
+      return {}
+    }
+
+    return {
+      onMouseDown: (event) => {
+        if (!event.ctrlKey) {
+          return
+        }
+        event.stopPropagation()
+        listeners.onMouseDown?.(event)
+      },
+      onMouseUp: listeners.onMouseUp,
+      onMouseMove: listeners.onMouseMove,
+      onKeyDown: listeners.onKeyDown,
+      onKeyUp: listeners.onKeyUp,
+      onTouchStart: (event) => {
+        event.stopPropagation()
+        listeners.onTouchStart?.(event)
+      },
+      onTouchMove: listeners.onTouchMove,
+      onTouchEnd: (event) => {
+        listeners.onTouchEnd?.(event)
+      },
+      onTouchCancel: (event) => {
+        listeners.onTouchCancel?.(event)
+      },
+    }
+  }, [enableColumnReorder, listeners])
+
+  const isActiveColumn = draggingColumn === columnId
+  const isHandleArmed = reorderModeActive || isCtrlPressed || isActiveColumn
+
+  return (
+    <TableHead
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        enableColumnReorder && "relative transition-colors",
+        reorderModeActive && "bg-primary/5",
+        isActiveColumn && "ring-2 ring-primary/50",
+        isDragging && "opacity-70"
+      )}
+    >
+      <div className="flex items-center gap-2">
+        {enableColumnReorder ? (
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            className={cn(
+              "inline-flex h-6 w-6 items-center justify-center rounded border border-dashed transition",
+              isHandleArmed
+                ? "cursor-grab border-primary/50 bg-primary/10 text-primary"
+                : "cursor-default border-transparent text-muted-foreground/50"
+            )}
+            aria-label="Reorder column"
+            title="Hold Ctrl or long-press to reorder"
+            {...attributes}
+            {...handleListeners}
+            onClick={(event) => {
+              if (isHandleArmed) {
+                event.stopPropagation()
+              }
+            }}
+          >
+            <GripVertical className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ) : null}
+        <div className="flex-1 truncate">
+          {flexRender(header.column.columnDef.header, header.getContext())}
+        </div>
+      </div>
+    </TableHead>
   )
 }

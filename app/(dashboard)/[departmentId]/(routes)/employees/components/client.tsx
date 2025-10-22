@@ -337,6 +337,7 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
               storageKey="employees_table_v1"   // 🔑 unique key per table
               syncPageToUrl={true}
               enableColumnReorder
+              columnOrderStorageKey="hrps.employees.columnOrder"
               renderExtra={(table) => <FloatingSelectionBar table={table} departmentId={departmentId}
               />
               }
