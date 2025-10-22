@@ -558,7 +558,7 @@ function SortableColumnHeader<TData, TValue>({
 
     return {
       onMouseDown: (event) => {
-        if (!event.ctrlKey) {
+        if (!isCtrlPressed && !reorderModeActive) {
           return
         }
         event.stopPropagation()
@@ -580,7 +580,7 @@ function SortableColumnHeader<TData, TValue>({
         listeners.onTouchCancel?.(event)
       },
     }
-  }, [enableColumnReorder, listeners])
+  }, [enableColumnReorder, listeners, isCtrlPressed, reorderModeActive])
 
   const isActiveColumn = draggingColumn === columnId
   const isHandleArmed = reorderModeActive || isCtrlPressed || isActiveColumn
