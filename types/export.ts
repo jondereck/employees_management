@@ -1,4 +1,5 @@
 import type { ExportTemplate } from '@/utils/export-templates';
+import type { HeadsMode } from '@/utils/download-excel';
 
 export type SortDir = "asc" | "desc";
 
@@ -13,4 +14,5 @@ export type ExportTemplateV2 = ExportTemplate & {
   sheetMode: "perOffice" | "merged" | "plain";
   sortLevels: SortLevel[];
   filterGroupMode: "office" | "bioIndex";
+  headsMode: HeadsMode;
 };

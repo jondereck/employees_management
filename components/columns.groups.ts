@@ -3,6 +3,7 @@ export const COLUMN_GROUPS = [
     key: "personal",
     title: "Personal Details",
     items: [
+      "prefix",
       "lastName",
       "firstName",
       "middleName",

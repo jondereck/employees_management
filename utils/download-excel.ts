@@ -23,6 +23,8 @@ export type Column = { name: string; key: string };
 
 export type IdColumnSource = 'uuid' | 'bio' | 'employeeNo';
 
+export type HeadsMode = 'all' | 'headsOnly';
+
 export type SortLevel = ExportSortLevel;
 
 
@@ -68,6 +70,7 @@ type DownloadExcelParams = {
   sortLevels?: SortLevel[];
   sheetMode?: 'perOffice' | 'merged' | 'plain';
   filterGroupMode?: 'office' | 'bioIndex';
+  headsMode?: HeadsMode;
 };
 
 function ts(v: any) {
@@ -91,6 +94,13 @@ function normalizeRowStringsNFC<T extends Record<string, any>>(row: T): T {
     else out[k] = v;
   }
   return out as T;
+}
+
+function applyHeadsFilter<T extends { isHead?: boolean }>(rows: T[], headsMode: HeadsMode): T[] {
+  if (headsMode === 'headsOnly') {
+    return rows.filter((row) => row.isHead === true);
+  }
+  return rows;
 }
 
 function toMiddleInitial(value: unknown): string {
@@ -187,12 +197,13 @@ export async function generateExcelFile({
   sortLevels,
   sheetMode,
   filterGroupMode,
+  headsMode = 'all',
 }: DownloadExcelParams): Promise<Blob> {
 
   const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
   const hiddenFields = [
     'departmentId', 'id', 'isFeatured', 'isAwardee',
-    'createdAt', 'updatedAt', 'employeeLink', 'prefix', 'region'
+    'createdAt', 'updatedAt', 'employeeLink', 'region'
   ];
 
   const response = await fetch('/api/backup-employee?' + new Date().getTime(), {
@@ -361,18 +372,13 @@ export async function generateExcelFile({
   }
 
   if (appointmentFilters !== 'all') {
-  const allowed = new Set(appointmentFilters.map(s => s.toLowerCase()));
-  filteredEmployees = filteredEmployees.filter((emp: any) =>
-    emp.employeeTypeId && allowed.has(String(emp.employeeTypeId).toLowerCase())
-  );
-}
-
-  if (appointmentFilters !== 'all') {
     const allowed = new Set(appointmentFilters.map(s => s.toLowerCase()));
     filteredEmployees = filteredEmployees.filter((emp: any) =>
       emp.employeeTypeId && allowed.has(String(emp.employeeTypeId).toLowerCase())
     );
   }
+
+  filteredEmployees = applyHeadsFilter(filteredEmployees, headsMode);
   const includeRowNumber = selectedKeys.includes('rowNumber');
 
   const visibleColumns = columnOrder
