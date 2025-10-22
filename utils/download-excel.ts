@@ -203,7 +203,7 @@ export async function generateExcelFile({
   const { officeMapping, eligibilityMapping, appointmentMapping } = mappings;
   const hiddenFields = [
     'departmentId', 'id', 'isFeatured', 'isAwardee',
-    'createdAt', 'updatedAt', 'employeeLink', 'prefix', 'region'
+    'createdAt', 'updatedAt', 'employeeLink', 'region'
   ];
 
   const response = await fetch('/api/backup-employee?' + new Date().getTime(), {
