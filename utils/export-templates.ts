@@ -1,5 +1,5 @@
 // utils/export-templates.ts
-import type { Column, IdColumnSource, PositionReplaceRule, SortLevel } from "@/utils/download-excel";
+import type { Column, HeadsMode, IdColumnSource, PositionReplaceRule, SortLevel } from "@/utils/download-excel";
 
 
 
@@ -40,6 +40,7 @@ export type ExportTemplate = {
   sheetMode?: 'perOffice' | 'merged' | 'plain';
   sortLevels?: SortLevel[];
   filterGroupMode?: 'office' | 'bioIndex';
+  headsMode?: HeadsMode;
     __version__?: number;
 };
 
@@ -49,6 +50,7 @@ export type ExportTemplateV2 = ExportTemplate & {
   sheetMode: 'perOffice' | 'merged' | 'plain';
   sortLevels: SortLevel[];
   filterGroupMode: 'office' | 'bioIndex';
+  headsMode: HeadsMode;
 };
 
 export const EXPORT_TEMPLATES: ExportTemplate[] = [
@@ -69,6 +71,7 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
     sheetMode: "perOffice",
     sortLevels: [],
     filterGroupMode: 'office',
+    headsMode: 'all',
   },
   {
     id: "plantilla",
@@ -88,6 +91,7 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
     sheetMode: "perOffice",
     sortLevels: [],
     filterGroupMode: 'office',
+    headsMode: 'all',
   },
 
   {
@@ -106,6 +110,7 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [
     sheetMode: "perOffice",
     sortLevels: [],
     filterGroupMode: 'office',
+    headsMode: 'all',
   },
 ];
 
