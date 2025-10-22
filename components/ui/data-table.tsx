@@ -66,9 +66,17 @@ class LongPressTouchSensor extends TouchSensor {
   ]
 }
 
+const LEGACY_COLUMN_ID_ALIASES: Record<string, string> = {
+  birthday_1: "age",
+  dateHired: "yearsOfService",
+}
+
 const sanitizeColumnOrder = (order: string[] | null | undefined, reference: string[]): string[] => {
   const preferred = Array.isArray(order) ? order : []
-  const filtered = preferred.filter((id) => reference.includes(id))
+  const normalized = preferred
+    .map((id) => LEGACY_COLUMN_ID_ALIASES[id] ?? id)
+    .filter((id, index, array) => array.indexOf(id) === index)
+  const filtered = normalized.filter((id) => reference.includes(id))
   const missing = reference.filter((id) => !filtered.includes(id))
   return [...filtered, ...missing]
 }

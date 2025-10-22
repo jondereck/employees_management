@@ -273,6 +273,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     }
   },
   {
+    id: "birthday",
     accessorKey: "birthday",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Birthday" />
@@ -284,6 +285,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   },
 
   {
+    id: "age",
     accessorKey: "birthday",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Age" />),
@@ -294,6 +296,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   },
 
   {
+    id: "yearsOfService",
     accessorKey: "dateHired",
     header: "Year(s)of Service ",
     cell: ({ row }) => (
