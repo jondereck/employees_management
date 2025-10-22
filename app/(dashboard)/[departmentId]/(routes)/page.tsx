@@ -11,6 +11,9 @@ import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { CardListClient } from "@/components/ui/card-list-client";
 import CameraScanner from "@/components/camera";
 import CameraScannerWrapper from "@/components/camera-scanner-wrapper";
+import { getMonthlyEmployeeActivity } from "@/actions/get-monthly-employee-activity";
+import { getHeadcountTrend } from "@/actions/get-headcount-trend";
+import HeadcountTrend from "@/components/headcount-trend";
 
 
 interface DashboardProps {
@@ -51,11 +54,14 @@ const DashboardPage = async ({ params }: DashboardProps) => {
   // 🧮 Fetch total employee count
   const totalEmployee = await getTotalEmployees(departmentId);
   const graphEmployee = await getGraph(departmentId);
+  const { currentCount: currentMonthActivity, previousCount: previousMonthActivity } =
+    await getMonthlyEmployeeActivity(departmentId);
+  const headcountTrend = await getHeadcountTrend(departmentId);
 
   // 🧠 Map employeeTypes and get totals
   const totals = await Promise.all(
     dynamicEmployeeTypes.map(async (employeeType: any) => {
-      const total = await getTotal(employeeType.id);
+      const total = await getTotal(employeeType.id, departmentId);
 
       const iconKey = iconNameMap[employeeType.name.trim()] || "Shield";
       const icon = iconMap[iconKey];
@@ -97,11 +103,13 @@ const DashboardPage = async ({ params }: DashboardProps) => {
               <CardTitle className="text-sm font-medium">Total Employees  </CardTitle>
               <Users />
             </CardHeader>
-            <CardContent >
-              <div className="flex items-center space-x-1">
-                <div className="text-2xl font-bold">{totalEmployee}  </div>
-                <ClientEmployeeChange departmentId={params.departmentId} currentTotal={totalEmployee} />
-              </div>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalEmployee}</div>
+              <ClientEmployeeChange
+                currentCount={currentMonthActivity}
+                previousCount={previousMonthActivity}
+                label="employees added or updated"
+              />
             </CardContent>
           </Card>
 
@@ -161,6 +169,14 @@ const DashboardPage = async ({ params }: DashboardProps) => {
           </CardHeader>
           <CardContent className="pl-2">
             <Overview data={graphEmployee} />
+          </CardContent>
+        </Card>
+        <Card className="col-span-4">
+          <CardHeader>
+            <CardTitle>Headcount Trend by Employee Type</CardTitle>
+          </CardHeader>
+          <CardContent className="pl-2">
+            <HeadcountTrend data={headcountTrend.data} series={headcountTrend.series} />
           </CardContent>
         </Card>
         <CameraScannerWrapper />

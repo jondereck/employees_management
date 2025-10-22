@@ -1,12 +1,13 @@
 import prismadb from "@/lib/prismadb"
 
-export const getTotal = async (employeeTypeId: string) => {
-   const totalPermanentEmployees  = await prismadb.employee.count({
+export const getTotal = async (employeeTypeId: string, departmentId: string) => {
+  const totalEmployees = await prismadb.employee.count({
     where: {
-      employeeTypeId: employeeTypeId,
-      isArchived: false
+      employeeTypeId,
+      departmentId,
+      isArchived: false,
     },
-   });
+  });
 
-   return totalPermanentEmployees
+  return totalEmployees;
 }

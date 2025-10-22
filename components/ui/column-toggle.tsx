@@ -9,16 +9,21 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "./dropdown-menu"
 
 interface DataTableViewOptionsProps<TData> {
   table: Table<TData>
+  onResetColumns?: () => void
+  canReset?: boolean
 }
 
 export function DataTableViewOptions<TData>({
   table,
+  onResetColumns,
+  canReset = true,
 }: DataTableViewOptionsProps<TData>) {
   return (
     <DropdownMenu>
@@ -26,13 +31,17 @@ export function DataTableViewOptions<TData>({
         <Button
           variant="outline"
           size="sm"
-          className="ml-4 "
+          className="ml-4"
         >
           <MixerHorizontalIcon className="mr-2 h-4 w-4" />
           View
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[150px]" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+      <DropdownMenuContent
+        align="end"
+        className="w-[200px]"
+        style={{ maxHeight: "320px", overflowY: "auto" }}
+      >
         <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {table
@@ -53,6 +62,17 @@ export function DataTableViewOptions<TData>({
               </DropdownMenuCheckboxItem>
             )
           })}
+        {onResetColumns && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={!canReset}
+              onSelect={() => onResetColumns()}
+            >
+              Reset column layout
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

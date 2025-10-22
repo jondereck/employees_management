@@ -336,6 +336,7 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
               employeeTypes={employeeTypes}
               storageKey="employees_table_v1"   // 🔑 unique key per table
               syncPageToUrl={true}
+              enableColumnReorder
               renderExtra={(table) => <FloatingSelectionBar table={table} departmentId={departmentId}
               />
               }
@@ -354,4 +355,5 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
 
   );
 }
+
 
