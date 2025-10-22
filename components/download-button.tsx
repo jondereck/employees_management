@@ -28,7 +28,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { Portal } from '@radix-ui/react-portal';
 import Modal from './ui/modal';
-import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab } from '@/utils/download-excel';
+import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, type HeadsMode } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -223,6 +223,8 @@ export default function DownloadStyledExcel() {
     const stored = localStorage.getItem('export.filterGroupMode');
     return stored === 'bioIndex' ? 'bioIndex' : 'office';
   });
+
+  const [headsMode, setHeadsMode] = useState<HeadsMode>('all');
 
   const officeMetadata = useMemo(() => {
     return officeOptions.reduce<Record<string, { name: string; bioIndexCode?: string | null }>>((acc, office) => {
@@ -425,6 +427,7 @@ export default function DownloadStyledExcel() {
       .slice(0, 3);
 
     const filterGroupModeValue: 'office' | 'bioIndex' = tpl?.filterGroupMode === 'bioIndex' ? 'bioIndex' : 'office';
+    const headsModeValue: HeadsMode = tpl?.headsMode === 'headsOnly' ? 'headsOnly' : 'all';
 
     const normalizedSelectedKeys = Array.isArray(tpl?.selectedKeys)
       ? tpl.selectedKeys.map((key: string) => normalizeColumnKey(String(key)))
@@ -438,6 +441,7 @@ export default function DownloadStyledExcel() {
       sheetMode: sheetModeValue,
       sortLevels,
       filterGroupMode: filterGroupModeValue,
+      headsMode: headsModeValue,
     };
   };
 
@@ -450,6 +454,7 @@ export default function DownloadStyledExcel() {
     setSelectedOffices(normalized.officesSelection);
     setSheetMode(normalized.sheetMode);
     setFilterGroupMode(normalized.filterGroupMode);
+    setHeadsMode(normalized.headsMode);
     if (normalized.sortLevels.length > 0) {
       const [first, ...rest] = normalized.sortLevels;
       setSortBy(first.field);
@@ -1376,6 +1381,7 @@ export default function DownloadStyledExcel() {
         sortLevels: combinedSortLevels,
         sheetMode,
         filterGroupMode,
+        headsMode,
 
       });
 
@@ -1476,6 +1482,7 @@ export default function DownloadStyledExcel() {
       sheetMode,
       sortLevels: combinedSortLevels,
       filterGroupMode,
+      headsMode,
       sheetName: 'Sheet1',
       paths: {
         imageBaseDir,
@@ -1595,6 +1602,7 @@ export default function DownloadStyledExcel() {
                         sheetMode,
                         sortLevels: combinedSortLevels,
                         filterGroupMode,
+                        headsMode,
                         sheetName: "Sheet1",
                         paths: {
                           imageBaseDir,
@@ -2239,6 +2247,34 @@ export default function DownloadStyledExcel() {
                                 <span>{label}</span>
                               </label>
                             ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-xs font-medium text-muted-foreground">Heads filter</div>
+                          <div className="mt-2 flex flex-wrap items-center gap-4 text-sm">
+                            <label htmlFor="heads-all" className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                id="heads-all"
+                                name="headsMode"
+                                value="all"
+                                checked={headsMode === 'all'}
+                                onChange={() => setHeadsMode('all')}
+                              />
+                              <span>All employees</span>
+                            </label>
+                            <label htmlFor="heads-only" className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                id="heads-only"
+                                name="headsMode"
+                                value="headsOnly"
+                                checked={headsMode === 'headsOnly'}
+                                onChange={() => setHeadsMode('headsOnly')}
+                              />
+                              <span>Heads only</span>
+                            </label>
                           </div>
                         </div>
 
