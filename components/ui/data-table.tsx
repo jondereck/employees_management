@@ -361,7 +361,7 @@ export function DataTable<TData, TValue>({
             "flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs transition-colors",
             reorderModeActive
               ? "border-emerald-300/70 bg-emerald-100 text-emerald-800 dark:border-emerald-500/60 dark:bg-emerald-900/20 dark:text-emerald-200"
-              : "border-destructive/50 bg-destructive/10 text-destructive dark:border-destructive/40 dark:bg-destructive/20 dark:text-destructive"
+              : "border-border bg-muted/40 text-muted-foreground dark:border-border dark:bg-muted/10"
           )}
         >
           <span className="font-medium">
@@ -370,13 +370,13 @@ export function DataTable<TData, TValue>({
           <span
             className={cn(
               "flex items-center gap-1 whitespace-nowrap font-semibold",
-              reorderModeActive ? "text-emerald-800 dark:text-emerald-200" : "text-destructive"
+              reorderModeActive ? "text-emerald-800 dark:text-emerald-200" : "text-muted-foreground"
             )}
           >
             <span
               className={cn(
                 "inline-flex h-2.5 w-2.5 rounded-full",
-                reorderModeActive ? "bg-emerald-500" : "bg-destructive"
+                reorderModeActive ? "bg-emerald-500" : "bg-muted-foreground/60 dark:bg-muted-foreground/50"
               )}
             />
             {reorderModeActive ? "Ready to drag" : "Hold to enable dragging"}
@@ -663,7 +663,7 @@ function SortableColumnHeader<TData, TValue>({
               "inline-flex h-6 w-6 items-center justify-center rounded border border-dashed transition",
               isHandleArmed
                 ? "cursor-grab border-emerald-400/70 bg-emerald-100 text-emerald-700 dark:border-emerald-500/70 dark:bg-emerald-900/20 dark:text-emerald-200"
-                : "cursor-not-allowed border-destructive/40 bg-destructive/10 text-destructive/70 dark:border-destructive/30 dark:bg-destructive/20 dark:text-destructive/80"
+                : "cursor-not-allowed border-border bg-muted/40 text-muted-foreground/80 dark:border-border dark:bg-muted/10 dark:text-muted-foreground/80"
             )}
             aria-label="Reorder column"
             title="Hold Ctrl or long-press to reorder"
