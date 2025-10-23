@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { toastProgress } from "@/lib/linear-progress";
-import { Download, Calendar, Settings2 } from "lucide-react";
+import { Download, Calendar, Settings2, Share2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import BirthdayGreetingCard from "./birthday-greetting-card";
@@ -153,6 +153,10 @@ function displayName(p: Person) {
 
 function fmtMonthDay(d: Date) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function titleCaseMonth(m: number) {
+  return new Date(2000, m).toLocaleDateString(undefined, { month: "long" });
 }
 
 async function waitForImg(img: HTMLImageElement, timeout = 8000) {
@@ -357,6 +361,8 @@ export default function BirthdayMonthClient({
   const month = Number.isFinite(Number(monthParam)) ? Number(monthParam) : initialMonth;
   const headsParam = searchParams.get("heads");
   const headsFilter: HeadsFilter = headsParam === "heads-only" ? "heads-only" : "all";
+  const facebookBusinessPageUrl =
+    process.env.NEXT_PUBLIC_FACEBOOK_BUSINESS_PAGE_URL ?? "https://www.facebook.com/share/1Auh25cDg4/";
 
   const updateSearchParam = useCallback(
     (key: string, value: string | null) => {
@@ -468,6 +474,22 @@ export default function BirthdayMonthClient({
     } as CSSProperties;
   }, [resolvedTheme]);
   const headerFontFamily = resolvedTheme?.fontFamily;
+  const shareableBoardUrl = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const params = new URLSearchParams();
+    params.set("month", String(month));
+    if (themeMode !== "auto") params.set("theme", themeMode);
+    if (exportSafe) params.set("exportSafe", "1");
+    if (headsFilter === "heads-only") params.set("heads", "heads-only");
+    const shareUrl = new URL(window.location.origin + pathname);
+    shareUrl.search = params.toString();
+    return shareUrl.toString();
+  }, [exportSafe, headsFilter, month, pathname, themeMode]);
+  const shareCaption = useMemo(() => {
+    const friendlyMonth = titleCaseMonth(month);
+    const themeLabel = resolvedTheme?.label ?? "Birthday Board";
+    return `Join us in celebrating our ${friendlyMonth} birthday celebrators with the ${themeLabel} theme!`;
+  }, [month, resolvedTheme]);
   const themeOptions = useMemo(() => {
     return birthdayThemeOrder.map((id) => {
       if (id === "auto") {
@@ -527,6 +549,34 @@ export default function BirthdayMonthClient({
     }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [router, pathname, searchParams]);
+  const handleShareToFacebook = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (!shareableBoardUrl) {
+      toast.error("Unable to prepare the share link. Please try again.");
+      return;
+    }
+
+    const shareDialogUrl = new URL("https://www.facebook.com/sharer/sharer.php");
+    shareDialogUrl.searchParams.set("u", shareableBoardUrl);
+    const captionSections = [shareCaption];
+    if (facebookBusinessPageUrl) {
+      captionSections.push(`See more updates on our Facebook page: ${facebookBusinessPageUrl}`);
+    }
+    shareDialogUrl.searchParams.set("quote", captionSections.join("\n\n"));
+
+    const width = 900;
+    const height = 700;
+    const left = window.screenX + Math.max((window.outerWidth - width) / 2, 0);
+    const top = window.screenY + Math.max((window.outerHeight - height) / 2, 0);
+    const popup = window.open(
+      shareDialogUrl.toString(),
+      "fbShareDialog",
+      `width=${width},height=${height},left=${left},top=${top},status=no,toolbar=no,menubar=no,location=no`
+    );
+    if (!popup) {
+      window.location.href = shareDialogUrl.toString();
+    }
+  }, [facebookBusinessPageUrl, shareCaption, shareableBoardUrl]);
 
 
 
@@ -861,6 +911,18 @@ export default function BirthdayMonthClient({
                 </div>
               </PopoverContent>
             </Popover>
+
+            <Button
+              onClick={handleShareToFacebook}
+              variant="outline"
+              size="sm"
+              data-hide-in-export
+              title="Share this board to the Facebook business page"
+              disabled={!shareableBoardUrl}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share
+            </Button>
 
             <Button
               onClick={() => doExport("fast-jpeg")}
