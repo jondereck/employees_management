@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -71,6 +71,8 @@ const LEGACY_COLUMN_ID_ALIASES: Record<string, string> = {
   dateHired: "yearsOfService",
 }
 
+const CTRL_LONG_PRESS_DELAY = 500
+
 const sanitizeColumnOrder = (order: string[] | null | undefined, reference: string[]): string[] => {
   const preferred = Array.isArray(order) ? order : []
   const normalized = preferred
@@ -128,8 +130,9 @@ export function DataTable<TData, TValue>({
   const [initialOrderLoaded, setInitialOrderLoaded] = useState(false)
 
   const [draggingColumn, setDraggingColumn] = useState<string | null>(null)
-  const [isCtrlPressed, setIsCtrlPressed] = useState(false)
+  const [isCtrlLongPressActive, setIsCtrlLongPressActive] = useState(false)
   const [touchReorderActive, setTouchReorderActive] = useState(false)
+  const ctrlLongPressTimeoutRef = useRef<number | null>(null)
 
   const sensors = useSensors(
     useSensor(CtrlMouseSensor, {
@@ -146,27 +149,42 @@ export function DataTable<TData, TValue>({
     return []
   }, [columnOrder, defaultColumnOrder])
 
+  const clearCtrlLongPressTimeout = useCallback(() => {
+    if (ctrlLongPressTimeoutRef.current !== null) {
+      window.clearTimeout(ctrlLongPressTimeoutRef.current)
+      ctrlLongPressTimeoutRef.current = null
+    }
+  }, [])
+
   useEffect(() => {
     if (!enableColumnReorder) {
-      setIsCtrlPressed(false)
+      setIsCtrlLongPressActive(false)
       setTouchReorderActive(false)
+      clearCtrlLongPressTimeout()
       return
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Control") {
-        setIsCtrlPressed(true)
+        if (ctrlLongPressTimeoutRef.current === null && !isCtrlLongPressActive) {
+          ctrlLongPressTimeoutRef.current = window.setTimeout(() => {
+            setIsCtrlLongPressActive(true)
+            ctrlLongPressTimeoutRef.current = null
+          }, CTRL_LONG_PRESS_DELAY)
+        }
       }
     }
 
     const handleKeyUp = (event: KeyboardEvent) => {
       if (event.key === "Control") {
-        setIsCtrlPressed(false)
+        clearCtrlLongPressTimeout()
+        setIsCtrlLongPressActive(false)
       }
     }
 
     const handleWindowBlur = () => {
-      setIsCtrlPressed(false)
+      clearCtrlLongPressTimeout()
+      setIsCtrlLongPressActive(false)
     }
 
     window.addEventListener("keydown", handleKeyDown)
@@ -177,8 +195,9 @@ export function DataTable<TData, TValue>({
       window.removeEventListener("keydown", handleKeyDown)
       window.removeEventListener("keyup", handleKeyUp)
       window.removeEventListener("blur", handleWindowBlur)
+      clearCtrlLongPressTimeout()
     }
-  }, [enableColumnReorder])
+  }, [clearCtrlLongPressTimeout, enableColumnReorder, isCtrlLongPressActive])
 
   useEffect(() => {
     if (!enableColumnReorder) return
@@ -349,7 +368,7 @@ export function DataTable<TData, TValue>({
   const canResetLayout = (enableColumnReorder && hasCustomOrder) || hasHiddenColumns
 
   const reorderModeActive =
-    enableColumnReorder && (isCtrlPressed || touchReorderActive || draggingColumn !== null)
+    enableColumnReorder && (isCtrlLongPressActive || touchReorderActive || draggingColumn !== null)
 
   const handleResetColumns = useCallback(() => {
     setDraggingColumn(null)
@@ -416,7 +435,6 @@ export function DataTable<TData, TValue>({
                               enableColumnReorder={enableColumnReorder}
                               reorderModeActive={reorderModeActive}
                               draggingColumn={draggingColumn}
-                              isCtrlPressed={isCtrlPressed}
                             />
                           )
                         )}
@@ -538,7 +556,6 @@ type SortableColumnHeaderProps<TData, TValue> = {
   enableColumnReorder: boolean
   reorderModeActive: boolean
   draggingColumn: string | null
-  isCtrlPressed: boolean
 }
 
 type HandleListeners = {
@@ -558,7 +575,6 @@ function SortableColumnHeader<TData, TValue>({
   enableColumnReorder,
   reorderModeActive,
   draggingColumn,
-  isCtrlPressed,
 }: SortableColumnHeaderProps<TData, TValue>) {
   const columnId = header.column.id
   const {
@@ -637,7 +653,8 @@ function SortableColumnHeader<TData, TValue>({
   }, [enableColumnReorder, listeners])
 
   const isActiveColumn = draggingColumn === columnId
-  const isHandleArmed = reorderModeActive || isCtrlPressed || isActiveColumn
+  const isHandleArmed = reorderModeActive || isActiveColumn
+  const showHandle = enableColumnReorder && (reorderModeActive || isActiveColumn)
 
   return (
     <TableHead
@@ -651,7 +668,7 @@ function SortableColumnHeader<TData, TValue>({
       )}
     >
       <div className="flex items-center gap-2">
-        {enableColumnReorder ? (
+        {showHandle ? (
           <button
             type="button"
             ref={setActivatorNodeRef}
@@ -662,7 +679,7 @@ function SortableColumnHeader<TData, TValue>({
                 : "cursor-not-allowed border-border bg-muted/40 text-muted-foreground/80 dark:border-border dark:bg-muted/10 dark:text-muted-foreground/80"
             )}
             aria-label="Reorder column"
-            title="Hold Ctrl or long-press to reorder"
+            title="Hold Ctrl until the handle appears, or long-press to reorder"
             {...attributes}
             {...handleListeners}
             onClick={(event) => {
