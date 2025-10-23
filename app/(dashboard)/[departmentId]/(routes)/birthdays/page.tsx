@@ -55,10 +55,10 @@ export default async function BirthdaysPage({
 
 
   const toMiddleInitial = (name?: string | null) => {
-  if (!name) return null;
-  const match = name.match(/[A-Za-z]/); // first alphabetic char
-  return match ? match[0].toUpperCase() /* + "." if you want a period */ : null;
-};
+    if (!name) return null;
+    const match = name.match(/[A-Za-z]/); // first alphabetic char
+    return match ? match[0].toUpperCase() /* + "." if you want a period */ : null;
+  };
   // Filter by month on app side (keeps portability across DBs)
   const people = employees
     .filter((e) => new Date(e.birthday).getMonth() === month)
