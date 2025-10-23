@@ -9,12 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider"
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { toastProgress } from "@/lib/linear-progress";
 import { Download, Calendar, Settings2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 
 import BirthdayGreetingCard from "./birthday-greetting-card";
 import {
@@ -437,9 +437,21 @@ export default function BirthdayMonthClient({
     });
     return style;
   }, [resolvedTheme]);
-  const boardBackground = exportSafe
+  const baseBackground = exportSafe
     ? resolvedTheme?.cssVars["--bday-bg-safe"] ?? resolvedTheme?.cssVars["--bday-bg"]
     : resolvedTheme?.cssVars["--bday-bg"];
+  const overlayBackground = exportSafe
+    ? resolvedTheme?.cssVars["--bday-backdrop-safe"] ?? resolvedTheme?.cssVars["--bday-backdrop"]
+    : resolvedTheme?.cssVars["--bday-backdrop"];
+  const boardBackground = useMemo(() => {
+    const fallback = "var(--bday-bg, linear-gradient(135deg,#111827,#1f2937))";
+    const layers: string[] = [];
+    if (overlayBackground) {
+      layers.push(overlayBackground);
+    }
+    layers.push(baseBackground ?? fallback);
+    return layers.join(",");
+  }, [baseBackground, overlayBackground]);
   const headerPrimaryStyle = useMemo(() => {
     if (!resolvedTheme) return {};
     if (resolvedTheme.headerStyle === "solid") {
@@ -881,7 +893,7 @@ export default function BirthdayMonthClient({
         )}
         style={{
           ...themeCssVariables,
-          backgroundImage: boardBackground ?? "var(--bday-bg, linear-gradient(135deg,#111827,#1f2937))",
+          backgroundImage: boardBackground,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
@@ -1017,20 +1029,6 @@ export default function BirthdayMonthClient({
                             }}
                           >
                             {fmtMonthDay(d)}
-                          </div>
-                        </div>
-                      )}
-
-                      {resolvedTheme?.badge && (
-                        <div className="absolute left-2 bottom-16 pointer-events-none">
-                          <div
-                            className="rounded-full px-2 py-0.5 text-xs font-semibold shadow-sm"
-                            style={{
-                              backgroundColor: resolvedTheme?.cssVars["--bday-badge-bg"] ?? "rgba(0,0,0,0.35)",
-                              color: resolvedTheme?.cssVars["--bday-badge-color"] ?? "#fff",
-                            }}
-                          >
-                            {resolvedTheme.badge}
                           </div>
                         </div>
                       )}
