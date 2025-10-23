@@ -212,6 +212,29 @@ export function DataTable<TData, TValue>({
     autoResetAll: false,
   })
 
+  const pageIndex = table.getState().pagination.pageIndex
+  const pageSize = table.getState().pagination.pageSize
+  const filteredRowCount = table.getFilteredRowModel().rows.length
+
+  useEffect(() => {
+    const pageCount = pageSize > 0 ? Math.ceil(filteredRowCount / pageSize) : 0
+    if (pageCount <= 0) {
+      setPagination((prev) => {
+        if (prev.pageIndex === 0) return prev
+        return { ...prev, pageIndex: 0 }
+      })
+      return
+    }
+
+    if (pageIndex >= pageCount) {
+      const nextIndex = Math.max(0, pageCount - 1)
+      setPagination((prev) => {
+        if (prev.pageIndex === nextIndex) return prev
+        return { ...prev, pageIndex: nextIndex }
+      })
+    }
+  }, [pageIndex, pageSize, filteredRowCount, setPagination])
+
   useEffect(() => {
     if (!enableColumnReorder) return
 
