@@ -44,6 +44,7 @@ export default async function BirthdaysPage({
       middleName: true,
       suffix: true,
       prefix: true,
+      isHead: true,
       images: {
         select: { url: true, createdAt: true },
         orderBy: { createdAt: "desc" },
@@ -72,9 +73,8 @@ export default async function BirthdaysPage({
       nickname: e.nickname ?? null,
       birthday: new Date(e.birthday).toISOString(),
       imageUrl: e.images?.[0]?.url ?? null,
+      isHead: e.isHead,
     }));
-
-  const subtitle = `HRPS • ${people.length} celebrant${people.length === 1 ? "" : "s"} for this month`;
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -88,7 +88,6 @@ export default async function BirthdaysPage({
         departmentId={departmentId}
         initialMonth={month}
         people={people}
-        subtitle={subtitle}
       />
     </div>
   );
