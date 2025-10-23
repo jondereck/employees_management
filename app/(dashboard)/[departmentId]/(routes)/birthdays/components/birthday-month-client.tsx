@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Slider } from "@/components/ui/slider"
+import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import {
   birthdayThemes,
   BirthdayThemeMode,
   BirthdayThemeId,
+  BirthdayTheme,
   getAutoTheme,
 } from "@/themes/birthdays";
 
@@ -339,7 +340,8 @@ export default function BirthdayMonthClient({
   const initialAutoTheme = useMemo(() => getAutoTheme(initialMonth), [initialMonth]);
   const [exportSafe, setExportSafeState] = useState<boolean>(() => {
     if (typeof window === "undefined") {
-      return birthdayThemes[initialAutoTheme]?.exportSafeDefaults ?? false;
+      const initialTheme = birthdayThemes[initialAutoTheme] as BirthdayTheme | undefined;
+      return initialTheme?.exportSafeDefaults ?? false;
     }
     if (exportSafeParam === "1") return true;
     if (exportSafeParam === "0") return false;
@@ -347,7 +349,8 @@ export default function BirthdayMonthClient({
     if (stored === "true") return true;
     if (stored === "false") return false;
     const targetThemeId = themeParam && isThemeId(themeParam) ? themeParam : initialAutoTheme;
-    return birthdayThemes[targetThemeId]?.exportSafeDefaults ?? false;
+    const targetTheme = birthdayThemes[targetThemeId as BirthdayThemeId] as BirthdayTheme | undefined;
+    return targetTheme?.exportSafeDefaults ?? false;
   });
 
   const [showDates, setShowDates] = useState<boolean>(false);
@@ -355,6 +358,7 @@ export default function BirthdayMonthClient({
   const [showWatermark, setShowWatermark] = useState<boolean>(true);
   const [density, setDensity] = useState<number>(3); // 1..5 -> bigger..smaller cards
   const [exporting, setExporting] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const boardRef = useRef<HTMLDivElement>(null);
   const monthParam = searchParams.get("month");
@@ -438,7 +442,11 @@ export default function BirthdayMonthClient({
   const resolvedTheme = birthdayThemes[resolvedThemeId as BirthdayThemeId] ?? birthdayThemes[initialAutoTheme];
   const themeCssVariables = useMemo(() => {
     const style: CSSProperties = {};
-    Object.entries(resolvedTheme?.cssVars ?? {}).forEach(([key, value]) => {
+    const entries = Object.entries(resolvedTheme?.cssVars ?? {}) as Array<[
+      string,
+      string,
+    ]>;
+    entries.forEach(([key, value]) => {
       (style as Record<string, string>)[key] = value;
     });
     return style;
@@ -549,11 +557,120 @@ export default function BirthdayMonthClient({
     }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [router, pathname, searchParams]);
-  const handleShareToFacebook = useCallback(() => {
+  const handleShareToFacebook = useCallback(async () => {
     if (typeof window === "undefined") return;
     if (!shareableBoardUrl) {
       toast.error("Unable to prepare the share link. Please try again.");
       return;
+    }
+    if (!boardRef.current) {
+      toast.error("Unable to locate the birthday board.");
+      return;
+    }
+
+    setSharing(true);
+
+    const node = boardRef.current;
+    const hidden: HTMLElement[] = [];
+    let restoreSwaps: (() => void) | null = null;
+    const previousExportSafe = exportSafe;
+    let shareDataUrl: string | null = null;
+
+    try {
+      if (!previousExportSafe) {
+        setExportSafe(true, { persist: false });
+        await waitTwoFrames();
+      }
+
+      node.querySelectorAll<HTMLElement>("[data-hide-in-export]").forEach((el) => {
+        if (getComputedStyle(el).visibility !== "hidden") {
+          el.style.visibility = "hidden";
+          hidden.push(el);
+        }
+      });
+
+      if ((document as any).fonts?.ready) {
+        await (document as any).fonts.ready;
+      }
+
+      const capture = async () =>
+        htmlToImage.toJpeg(node, {
+          pixelRatio: 1.4,
+          quality: 0.86,
+          backgroundColor: "#ffffff",
+          cacheBust: true,
+          imagePlaceholder: transparentPx,
+          style: {
+            width: getComputedStyle(node).width,
+            height: getComputedStyle(node).height,
+          } as Partial<CSSStyleDeclaration>,
+          filter: (n: any) => n?.dataset?.hideInExport === undefined,
+        });
+
+      try {
+        shareDataUrl = await capture();
+      } catch (error) {
+        restoreSwaps = swapUninlineableImages(node);
+        shareDataUrl = await capture();
+      }
+    } catch (error) {
+      console.error("Failed to prepare share preview", error);
+      toast.error("Unable to prepare the birthday board image for sharing.");
+    } finally {
+      hidden.forEach((el) => {
+        el.style.visibility = "";
+      });
+      if (restoreSwaps) {
+        restoreSwaps();
+      }
+      if (!previousExportSafe) {
+        setExportSafe(previousExportSafe, { persist: false });
+      }
+      setSharing(false);
+    }
+
+    if (!shareDataUrl) {
+      return;
+    }
+
+    let attachedImageBlob: Blob | null = null;
+    try {
+      const response = await fetch(shareDataUrl);
+      attachedImageBlob = await response.blob();
+    } catch (error) {
+      console.warn("Unable to convert shared image", error);
+    }
+
+    const attachmentFileName = `${monthName(month)}_Birthday_Celebrants_Share.jpg`;
+    if (attachedImageBlob) {
+      const file = new File([attachedImageBlob], attachmentFileName, {
+        type: attachedImageBlob.type || "image/jpeg",
+      });
+
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: shareCaption,
+            text: shareCaption,
+          });
+        } catch (error) {
+          if ((error as DOMException)?.name !== "AbortError") {
+            console.warn("navigator.share failed", error);
+          }
+        }
+      } else {
+        const downloadLink = document.createElement("a");
+        downloadLink.href = shareDataUrl;
+        downloadLink.download = attachmentFileName;
+        downloadLink.rel = "noopener";
+        downloadLink.style.position = "fixed";
+        downloadLink.style.top = "-9999px";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        toast.info("A copy of the board image was downloaded so you can attach it on Facebook.");
+      }
     }
 
     const shareDialogUrl = new URL("https://www.facebook.com/sharer/sharer.php");
@@ -563,6 +680,11 @@ export default function BirthdayMonthClient({
       captionSections.push(`See more updates on our Facebook page: ${facebookBusinessPageUrl}`);
     }
     shareDialogUrl.searchParams.set("quote", captionSections.join("\n\n"));
+    shareDialogUrl.searchParams.set("display", "popup");
+
+    if (shareDataUrl.length < 1900) {
+      shareDialogUrl.searchParams.set("picture", shareDataUrl);
+    }
 
     const width = 900;
     const height = 700;
@@ -576,7 +698,15 @@ export default function BirthdayMonthClient({
     if (!popup) {
       window.location.href = shareDialogUrl.toString();
     }
-  }, [facebookBusinessPageUrl, shareCaption, shareableBoardUrl]);
+  }, [
+    boardRef,
+    exportSafe,
+    facebookBusinessPageUrl,
+    month,
+    setExportSafe,
+    shareCaption,
+    shareableBoardUrl,
+  ]);
 
 
 
@@ -918,10 +1048,10 @@ export default function BirthdayMonthClient({
               size="sm"
               data-hide-in-export
               title="Share this board to the Facebook business page"
-              disabled={!shareableBoardUrl}
+              disabled={!shareableBoardUrl || sharing || exporting}
             >
               <Share2 className="h-4 w-4 mr-2" />
-              Share
+              {sharing ? "Sharing…" : "Share"}
             </Button>
 
             <Button

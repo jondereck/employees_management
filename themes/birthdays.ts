@@ -11,7 +11,7 @@ export type OrnamentType =
 type HeaderStyle = "gradient" | "solid";
 
 export type BirthdayTheme = {
-  id: BirthdayThemeId;
+  id: string;
   label: string;
   description?: string;
   cssVars: Record<string, string>;
@@ -411,7 +411,7 @@ export const birthdayThemes = {
     headerStyle: "gradient",
     fontFamily: '\"Quicksand\", "Helvetica", sans-serif',
   },
-} as const;
+} as const satisfies Record<string, BirthdayTheme>;
 
 export type BirthdayThemeId = keyof typeof birthdayThemes;
 
