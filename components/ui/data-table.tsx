@@ -360,8 +360,8 @@ export function DataTable<TData, TValue>({
           className={cn(
             "flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs transition-colors",
             reorderModeActive
-              ? "border-primary/40 bg-primary/10 text-primary"
-              : "border-border/50 bg-muted/40 text-muted-foreground"
+              ? "border-emerald-300/70 bg-emerald-100 text-emerald-800 dark:border-emerald-500/60 dark:bg-emerald-900/20 dark:text-emerald-200"
+              : "border-destructive/50 bg-destructive/10 text-destructive dark:border-destructive/40 dark:bg-destructive/20 dark:text-destructive"
           )}
         >
           <span className="font-medium">
@@ -369,11 +369,17 @@ export function DataTable<TData, TValue>({
           </span>
           <span
             className={cn(
-              "whitespace-nowrap font-medium",
-              reorderModeActive ? "text-primary" : "text-muted-foreground"
+              "flex items-center gap-1 whitespace-nowrap font-semibold",
+              reorderModeActive ? "text-emerald-800 dark:text-emerald-200" : "text-destructive"
             )}
           >
-            {reorderModeActive ? "Reorder mode active" : "Reorder mode inactive"}
+            <span
+              className={cn(
+                "inline-flex h-2.5 w-2.5 rounded-full",
+                reorderModeActive ? "bg-emerald-500" : "bg-destructive"
+              )}
+            />
+            {reorderModeActive ? "Ready to drag" : "Hold to enable dragging"}
           </span>
         </div>
       ) : null}
@@ -583,6 +589,35 @@ function SortableColumnHeader<TData, TValue>({
       return {}
     }
 
+    type GenericListener = (...args: any[]) => void
+
+    const wrapMouseListener = (
+      handler?: GenericListener
+    ): HandleListeners["onMouseDown"] => {
+      if (!handler) return undefined
+      return (event) => {
+        handler(event)
+      }
+    }
+
+    const wrapKeyboardListener = (
+      handler?: GenericListener
+    ): HandleListeners["onKeyDown"] => {
+      if (!handler) return undefined
+      return (event) => {
+        handler(event)
+      }
+    }
+
+    const wrapTouchListener = (
+      handler?: GenericListener
+    ): HandleListeners["onTouchStart"] => {
+      if (!handler) return undefined
+      return (event) => {
+        handler(event)
+      }
+    }
+
     return {
       onMouseDown: (event) => {
         if (!event.ctrlKey) {
@@ -591,21 +626,17 @@ function SortableColumnHeader<TData, TValue>({
         event.stopPropagation()
         listeners.onMouseDown?.(event)
       },
-      onMouseUp: listeners.onMouseUp,
-      onMouseMove: listeners.onMouseMove,
-      onKeyDown: listeners.onKeyDown,
-      onKeyUp: listeners.onKeyUp,
+      onMouseUp: wrapMouseListener(listeners.onMouseUp as GenericListener | undefined),
+      onMouseMove: wrapMouseListener(listeners.onMouseMove as GenericListener | undefined),
+      onKeyDown: wrapKeyboardListener(listeners.onKeyDown as GenericListener | undefined),
+      onKeyUp: wrapKeyboardListener(listeners.onKeyUp as GenericListener | undefined),
       onTouchStart: (event) => {
         event.stopPropagation()
         listeners.onTouchStart?.(event)
       },
-      onTouchMove: listeners.onTouchMove,
-      onTouchEnd: (event) => {
-        listeners.onTouchEnd?.(event)
-      },
-      onTouchCancel: (event) => {
-        listeners.onTouchCancel?.(event)
-      },
+      onTouchMove: wrapTouchListener(listeners.onTouchMove as GenericListener | undefined),
+      onTouchEnd: wrapTouchListener(listeners.onTouchEnd as GenericListener | undefined),
+      onTouchCancel: wrapTouchListener(listeners.onTouchCancel as GenericListener | undefined),
     }
   }, [enableColumnReorder, listeners])
 
@@ -618,8 +649,8 @@ function SortableColumnHeader<TData, TValue>({
       style={style}
       className={cn(
         enableColumnReorder && "relative transition-colors",
-        reorderModeActive && "bg-primary/5",
-        isActiveColumn && "ring-2 ring-primary/50",
+        reorderModeActive && "bg-emerald-50 dark:bg-emerald-900/10",
+        isActiveColumn && "ring-2 ring-emerald-400/70",
         isDragging && "opacity-70"
       )}
     >
@@ -631,8 +662,8 @@ function SortableColumnHeader<TData, TValue>({
             className={cn(
               "inline-flex h-6 w-6 items-center justify-center rounded border border-dashed transition",
               isHandleArmed
-                ? "cursor-grab border-primary/50 bg-primary/10 text-primary"
-                : "cursor-default border-transparent text-muted-foreground/50"
+                ? "cursor-grab border-emerald-400/70 bg-emerald-100 text-emerald-700 dark:border-emerald-500/70 dark:bg-emerald-900/20 dark:text-emerald-200"
+                : "cursor-not-allowed border-destructive/40 bg-destructive/10 text-destructive/70 dark:border-destructive/30 dark:bg-destructive/20 dark:text-destructive/80"
             )}
             aria-label="Reorder column"
             title="Hold Ctrl or long-press to reorder"
