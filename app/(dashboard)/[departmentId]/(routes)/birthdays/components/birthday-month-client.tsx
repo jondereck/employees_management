@@ -1113,7 +1113,7 @@ export default function BirthdayMonthClient({
                   fontFamily: headerFontFamily,
                 }}
               >
-                Birthday <span className="lowercase font-black">celebrators</span>
+                Birthday CELEBRATORS
               </div>
             </div>
           )}
