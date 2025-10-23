@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useCallback } from "react";
+import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import NextImage from "next/image";
 import * as htmlToImage from "html-to-image";
@@ -34,7 +34,11 @@ type Person = {
   prefix?: string | null;
   middleName?: string | null;
   suffix?: string | null;
+  isHead: boolean;
 };
+
+const SHOW_DATES_STORAGE_KEY = "birthdays.showDates";
+type HeadsFilter = "all" | "heads-only";
 
 
 // temporary swap <img> sources to a safe placeholder if they look cross-origin and fail
@@ -182,12 +186,10 @@ export default function BirthdayMonthClient({
   departmentId,
   initialMonth,
   people,
-  subtitle,
 }: {
   departmentId: string;
   initialMonth: number;
   people: Person[];
-  subtitle?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -202,6 +204,8 @@ export default function BirthdayMonthClient({
   const boardRef = useRef<HTMLDivElement>(null);
   const monthParam = searchParams.get("month");
   const month = Number.isFinite(Number(monthParam)) ? Number(monthParam) : initialMonth;
+  const headsParam = searchParams.get("heads");
+  const headsFilter: HeadsFilter = headsParam === "heads-only" ? "heads-only" : "all";
 
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [showExcluded, setShowExcluded] = useState(false);
@@ -222,6 +226,31 @@ export default function BirthdayMonthClient({
   const [cardPerson, setCardPerson] = useState<Person | null>(null);
   const openCardFor = (p: Person) => setCardPerson(p);
   const closeCard = () => setCardPerson(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(SHOW_DATES_STORAGE_KEY);
+    if (stored !== null) {
+      setShowDates(stored === "true");
+    }
+  }, []);
+
+  const handleToggleShowDates = useCallback((value: boolean) => {
+    setShowDates(value);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SHOW_DATES_STORAGE_KEY, value ? "true" : "false");
+    }
+  }, []);
+
+  const onHeadsFilterChange = useCallback((value: HeadsFilter) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === "all") {
+      params.delete("heads");
+    } else {
+      params.set("heads", "heads-only");
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [router, pathname, searchParams]);
 
 
 
@@ -247,12 +276,13 @@ export default function BirthdayMonthClient({
         const d = safeDate(p.birthday);
         return d && d.getMonth() === month;
       })
+      .filter((p) => (headsFilter === "all" ? true : p.isHead))
       .sort((a, b) => {
         const da = safeDate(a.birthday)!;
         const db = safeDate(b.birthday)!;
         return da.getDate() - db.getDate();
       });
-  }, [people, month]);
+  }, [people, month, headsFilter]);
 
   const onChangeMonth = useCallback((m: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -432,19 +462,28 @@ export default function BirthdayMonthClient({
             </Button>
 
 
-            <div className="flex items-center gap-2 ml-1" data-hide-in-export>
-              <Switch checked={showDates} onCheckedChange={setShowDates} id="toggle-dates" />
-              <label htmlFor="toggle-dates" className="text-sm select-none cursor-pointer">
-                Show dates
-              </label>
-            </div>
-
             <div className="text-xs sm:text-sm text-muted-foreground ml-1">
               {celebrants.length} celebrant{celebrants.length === 1 ? "" : "s"}
             </div>
           </div>
 
           <div className="flex items-center gap-2" data-hide-in-export>
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-medium text-muted-foreground">Heads:</span>
+              <Select
+                value={headsFilter}
+                onValueChange={(value) => onHeadsFilterChange(value as HeadsFilter)}
+              >
+                <SelectTrigger className="h-8 w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="heads-only">Heads only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -454,6 +493,10 @@ export default function BirthdayMonthClient({
               </PopoverTrigger>
               <PopoverContent align="end" className="w-72">
                 <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Show dates on cards</span>
+                    <Switch checked={showDates} onCheckedChange={handleToggleShowDates} />
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Show header</span>
                     <Switch checked={showHeader} onCheckedChange={setShowHeader} />
@@ -528,9 +571,6 @@ export default function BirthdayMonthClient({
             <div className="text-3xl md:text-4xl lg:text-5xl font-extrabold uppercase" style={{ letterSpacing: "0.045em" }}>
               Birthday <span className="lowercase font-black">celebrators</span>
             </div>
-            {subtitle ? (
-              <div className="text-xs sm:text-sm text-muted-foreground">{subtitle}</div>
-            ) : null}
           </div>
         )}
 
