@@ -70,6 +70,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     path: "tools/copy-options",
     icon: Copy,
   },
+  "sg-range": {
+    label: "SG Range",
+    path: "tools/sg-range",
+    icon: FileSpreadsheet,
+  },
 };
 
 export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
@@ -82,7 +87,9 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
 
   const metadata = (user?.publicMetadata ?? {}) as Record<string, unknown>;
   const role = typeof (metadata as any).role === "string" ? String((metadata as any).role) : undefined;
-  const permittedTools = Array.from(extractToolAccess({ metadata, role })).map((key) => TOOL_NAV_MAP[key]);
+  const permittedTools = Array.from(extractToolAccess({ metadata, role }))
+    .map((key) => TOOL_NAV_MAP[key])
+    .filter(Boolean);
   const toolItems: NavItem[] = [
     {
       label: "Tools Home",
