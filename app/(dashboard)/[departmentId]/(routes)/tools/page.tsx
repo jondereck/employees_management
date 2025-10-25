@@ -51,8 +51,8 @@ const TOOL_CARD_CONFIG: Array<{
   },
   {
     key: "sg-range",
-    label: "Segment-Range Queries (SG 1–33)",
-    description: "Fast counts & total salary by SG range with filters",
+    label: "SG Range Analytics (SG 1–33)",
+    description: "Live counts and salary totals by SG range with filters",
     slug: "tools/sg-range",
     icon: BarChart3,
   },

@@ -64,7 +64,7 @@ export function ToolsLayout({
 
   return (
     <ToolsNavigationProvider>
-      <div className="space-y-6 p-4 md:p-6">
+      <div className="space-y-2 p-4 md:p-6">
         <div className="space-y-4">
           <ToolsBreadcrumbs items={items} />
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -79,7 +79,7 @@ export function ToolsLayout({
             ) : null}
           </div>
         </div>
-        <div className={cn("mx-auto w-full max-w-6xl", contentClassName)}>{children}</div>
+        <div className={cn("mx-auto w-full max-w-8xl", contentClassName)}>{children}</div>
       </div>
     </ToolsNavigationProvider>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Download, Loader2, RefreshCw } from "lucide-react";
+import { Download, Loader2, RefreshCw, Link as LinkIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,10 +35,13 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
 import type { HeadsMode, SGRangeResult } from "@/types/sgRange";
+// Fetch reference salaries from DB via API (step 1 per grade)
 
 const MIN_SG = 1;
 const MAX_SG = 33;
 const STORAGE_KEY = "hrps.sgRange.v1";
+const SESSION_CACHE_KEY = "hrps.sgRange.cache.v1";
+const AUTORUN_DEBOUNCE_MS = 400;
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -53,7 +56,7 @@ type ControlsState = {
   range: [number, number];
   offices: string[];
   employmentTypes: string[];
-  headsMode: HeadsMode;
+  headsMode: HeadsMode; // kept in state for API compatibility, but UI removed
   dateFrom: string | null;
   dateTo: string | null;
   includeUnknown: boolean;
@@ -188,6 +191,8 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
   const [officesSearch, setOfficesSearch] = useState("");
   const [employmentSearch, setEmploymentSearch] = useState("");
   const [initialized, setInitialized] = useState(false);
+  const debounceTimer = useRef<number | null>(null);
+  const activeRequest = useRef<AbortController | null>(null);
 
   const setRangeNormalized = useCallback((nextL: number, nextR: number) => {
     let L = clampRangeValue(nextL);
@@ -215,6 +220,19 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
     }
     setInitialized(true);
   }, [initialized]);
+
+  // Moved below after handleQuery definition (see bottom of file)
+
+  const handleCopyLink = useCallback(async () => {
+    try {
+      const qs = buildQueryString(controls);
+      const url = `${window.location.origin}${pathname}?${qs}`;
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copied", description: "Current filters copied to clipboard." });
+    } catch {
+      toast({ title: "Copy failed", description: "Could not copy link.", variant: "destructive" });
+    }
+  }, [controls, pathname, toast]);
 
   useEffect(() => {
     let active = true;
@@ -325,6 +343,28 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
     return data;
   }, [controls.range, result?.perSG]);
 
+  const [refSalaries, setRefSalaries] = useState<Record<number, number> | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const KEY = "sgRef.v1";
+    const fromSession = typeof window !== "undefined" ? sessionStorage.getItem(KEY) : null;
+    if (fromSession) {
+      try { setRefSalaries(JSON.parse(fromSession)); } catch {}
+    }
+    (async () => {
+      try {
+        const res = await fetch(`/api/${departmentId}/salary-grades`);
+        if (!res.ok) return;
+        const data = (await res.json()) as Record<number, number>;
+        if (!active) return;
+        setRefSalaries(data);
+        try { sessionStorage.setItem(KEY, JSON.stringify(data)); } catch {}
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, [departmentId]);
+
   const tableRows = useMemo(() => {
     if (!result) return [];
     return result.perSG.map((bucket) => ({
@@ -333,8 +373,24 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
       count: bucket.count,
       sumSalary: bucket.sumSalary,
       avgSalary: bucket.count ? bucket.sumSalary / bucket.count : 0,
+      reference: refSalaries?.[bucket.sg] ?? null,
     }));
-  }, [result]);
+  }, [result, refSalaries]);
+
+  const unknownBucket = result?.perSG.find((bucket) => bucket.sg === 0);
+  const unknownCount = unknownBucket?.count ?? 0;
+  const unknownSum = unknownBucket?.sumSalary ?? 0;
+
+  const baseCount = result?.count ?? 0;
+  const baseSum = result?.sumSalary ?? 0;
+
+  const displayCount = controls.includeUnknown ? baseCount + unknownCount : baseCount;
+  const displaySum = controls.includeUnknown ? baseSum + unknownSum : baseSum;
+  const displayAvg = displayCount ? displaySum / displayCount : 0;
+
+  const employeesSubtitle = controls.includeUnknown
+    ? `SG ${controls.range[0]} - ${controls.range[1]} + unknown`
+    : `SG ${controls.range[0]} - ${controls.range[1]}`;
 
   const optionsLoading = officesLoading || employmentLoading;
 
@@ -352,12 +408,28 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
       },
     };
 
+    // Abort and create controller for this request
+    if (activeRequest.current) {
+      activeRequest.current.abort();
+    }
+    const controller = new AbortController();
+    activeRequest.current = controller;
+
     setLoading(true);
     try {
+      // Show cached result first (stale-while-revalidate)
+      const qsCache = buildQueryString(controls);
+      const cacheKey = `${SESSION_CACHE_KEY}:${qsCache}`;
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) setResult(JSON.parse(cached) as SGRangeResult);
+      } catch {}
+
       const response = await fetch(`/api/${departmentId}/analytics/sg-range`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
       if (!response.ok) {
         const message = await response.text();
@@ -365,6 +437,7 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
       }
       const data = (await response.json()) as SGRangeResult;
       setResult(data);
+      try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch {}
 
       const queryString = buildQueryString(controls);
       if (typeof window !== "undefined") {
@@ -385,14 +458,17 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
       }
       router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false });
     } catch (error) {
-      console.error("[sg-range] query error", error);
-      toast({
-        title: "Query failed",
-        description: error instanceof Error ? error.message : "Unable to complete the request",
-        variant: "destructive",
-      });
+      if ((error as any)?.name !== "AbortError") {
+        console.error("[sg-range] query error", error);
+        toast({
+          title: "Query failed",
+          description: error instanceof Error ? error.message : "Unable to complete the request",
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
+      activeRequest.current = null;
     }
   }, [controls, departmentId, pathname, router, toast]);
 
@@ -428,6 +504,17 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
     },
     []
   );
+
+  // Persist changes, update URL, and debounce query (after handleQuery exists)
+  useEffect(() => {
+    if (!initialized) return;
+    const qs = buildQueryString(controls);
+    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(controls)); } catch {}
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    if (debounceTimer.current) window.clearTimeout(debounceTimer.current);
+    debounceTimer.current = window.setTimeout(() => { void handleQuery(); }, AUTORUN_DEBOUNCE_MS) as unknown as number;
+    return () => { if (debounceTimer.current) window.clearTimeout(debounceTimer.current); };
+  }, [controls, initialized, pathname, router, handleQuery]);
 
   const handleExportCSV = useCallback(() => {
     if (!result) return;
@@ -495,6 +582,20 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
 
   const queryDisabled = loading || optionsLoading;
 
+  // Auto-run query when controls change, and persist to localStorage
+  useEffect(() => {
+    if (!initialized) return;
+    const qs = buildQueryString(controls);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(controls));
+    const url = `${pathname}?${qs}`;
+    router.replace(url);
+    // Trigger query on every change
+    void (async () => {
+      await handleQuery();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controls, initialized]);
+
   return (
     <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
       <Card className="h-fit">
@@ -507,6 +608,13 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">SG Range</Label>
               <span className="text-sm text-muted-foreground">{`SG ${controls.range[0]} – ${controls.range[1]}`}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[[1,10],[11,20],[21,33]].map(([L,R]) => (
+                <Button key={`${L}-${R}`} size="sm" variant="outline" onClick={() => setRangeNormalized(L,R)}>
+                  {`SG ${L}–${R}`}
+                </Button>
+              ))}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Input
@@ -550,14 +658,16 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
                   <span className="text-xs text-muted-foreground">Edit</span>
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-72 space-y-3 p-3" align="start">
+              <PopoverContent className="w-80 p-0" align="start" side="bottom" sideOffset={8}>
+                <div className="p-3 pb-2">
                 <Input
                   value={officesSearch}
                   onChange={(event) => setOfficesSearch(event.target.value)}
                   placeholder="Search offices"
-                  className="h-9"
+                  className="h-9 sticky top-0 z-10 bg-background"
                 />
-                <ScrollArea className="max-h-60 rounded-md border">
+                </div>
+                <div className="max-h-80 overflow-y-auto border-t">
                   <div className="space-y-1 p-2">
                     {filteredOffices.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No offices found.</p>
@@ -589,8 +699,8 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
                       })
                     )}
                   </div>
-                </ScrollArea>
-                <div className="flex items-center justify-between text-xs">
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 text-xs">
                   <Button
                     type="button"
                     variant="ghost"
@@ -613,27 +723,7 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
             </Popover>
           </div>
 
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Heads</Label>
-            <div className="inline-flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={controls.headsMode === "all" ? "default" : "outline"}
-                onClick={() => setControls((prev) => ({ ...prev, headsMode: "all" }))}
-              >
-                All
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={controls.headsMode === "headsOnly" ? "default" : "outline"}
-                onClick={() => setControls((prev) => ({ ...prev, headsMode: "headsOnly" }))}
-              >
-                Heads only
-              </Button>
-            </div>
-          </div>
+          {/* Heads filter removed per request */}
 
           <div className="space-y-3">
             <Label className="text-sm font-medium">Employment types</Label>
@@ -650,14 +740,16 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
                   <span className="text-xs text-muted-foreground">Edit</span>
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-72 space-y-3 p-3" align="start">
+              <PopoverContent className="w-80 p-0" align="start" side="bottom" sideOffset={8}>
+                <div className="p-3 pb-2">
                 <Input
                   value={employmentSearch}
                   onChange={(event) => setEmploymentSearch(event.target.value)}
                   placeholder="Search types"
-                  className="h-9"
+                  className="h-9 sticky top-0 z-10 bg-background"
                 />
-                <ScrollArea className="max-h-60 rounded-md border">
+                </div>
+                <div className="max-h-80 overflow-y-auto border-t">
                   <div className="space-y-1 p-2">
                     {filteredEmployment.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No employment types found.</p>
@@ -689,8 +781,8 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
                       })
                     )}
                   </div>
-                </ScrollArea>
-                <div className="flex items-center justify-between text-xs">
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 text-xs">
                   <Button
                     type="button"
                     variant="ghost"
@@ -775,9 +867,15 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button onClick={handleQuery} disabled={queryDisabled} className="flex items-center gap-2">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-              <span>{loading ? "Querying" : "Query"}</span>
+            {loading ? (
+              <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Updating…
+              </div>
+            ) : null}
+            <Button type="button" variant="outline" className="flex items-center gap-2" onClick={handleCopyLink}>
+              <LinkIcon className="h-4 w-4" aria-hidden="true" />
+              Copy link
             </Button>
             <Button
               type="button"
@@ -799,18 +897,18 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
             <CardHeader className="pb-2">
               <CardDescription>Employees in range</CardDescription>
               <CardTitle className="text-3xl font-semibold">
-                {result ? numberFormatter.format(result.count) : "—"}
+                {result ? numberFormatter.format(displayCount) : "—"}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-sm text-muted-foreground">
-              SG {controls.range[0]} – {controls.range[1]}
+              {employeesSubtitle}
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Total salary</CardDescription>
               <CardTitle className="text-3xl font-semibold">
-                {result ? currencyFormatter.format(result.sumSalary) : "—"}
+                {result ? currencyFormatter.format(displaySum) : "—"}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-sm text-muted-foreground">
@@ -821,11 +919,13 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
             <CardHeader className="pb-2">
               <CardDescription>Average salary</CardDescription>
               <CardTitle className="text-3xl font-semibold">
-                {result ? currencyFormatter.format(result.avgSalary || 0) : "—"}
+                {result ? currencyFormatter.format(displayAvg || 0) : "—"}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 text-sm text-muted-foreground">
-              {result?.count ? `${numberFormatter.format(result.count)} employees` : "Awaiting results"}
+              {result
+                ? `${numberFormatter.format(displayCount)} employees${controls.includeUnknown ? " (incl. unknown)" : ""}`
+                : "Awaiting results"}
             </CardContent>
           </Card>
         </div>
@@ -861,7 +961,9 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="text-lg">Breakdown by SG</CardTitle>
-              <CardDescription>Compare counts and totals per salary grade.</CardDescription>
+              <CardDescription>
+                Compare actual totals vs. reference salary per grade.
+              </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -896,7 +998,8 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
                     <TableHead className="w-24">SG</TableHead>
                     <TableHead>Count</TableHead>
                     <TableHead>Total salary</TableHead>
-                    <TableHead>Average salary</TableHead>
+                    <TableHead>Avg salary (actual)</TableHead>
+                    <TableHead>SG reference salary</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -906,12 +1009,14 @@ const SGRangeTool = ({ departmentId }: SGRangeToolProps) => {
                       <TableCell>{numberFormatter.format(row.count)}</TableCell>
                       <TableCell>{currencyFormatter.format(row.sumSalary)}</TableCell>
                       <TableCell>{currencyFormatter.format(row.avgSalary || 0)}</TableCell>
+                      <TableCell>{row.reference ? currencyFormatter.format(row.reference) : "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
+                {result ? null : null}
               </Table>
             ) : (
-              <p className="text-sm text-muted-foreground">Run a query to populate the table.</p>
+              <p className="text-sm text-muted-foreground">Adjust filters to populate the table.</p>
             )}
           </CardContent>
         </Card>
