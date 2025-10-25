@@ -1,10 +1,12 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import {
+  BarChart3,
   Copy,
   FileSpreadsheet,
   Fingerprint,
   Image as ImageIcon,
 } from "lucide-react";
+import { cookies } from "next/headers";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import prismadb from "@/lib/prismadb";
@@ -47,6 +49,13 @@ const TOOL_CARD_CONFIG: Array<{
     slug: "tools/copy-options",
     icon: Copy,
   },
+  {
+    key: "sg-range",
+    label: "Segment-Range Queries (SG 1–33)",
+    description: "Fast counts & total salary by SG range with filters",
+    slug: "tools/sg-range",
+    icon: BarChart3,
+  },
 ];
 
 export default async function ToolsLandingPage({
@@ -57,6 +66,10 @@ export default async function ToolsLandingPage({
   const { departmentId } = params;
   const { userId } = auth();
   const user = await currentUser().catch(() => null);
+
+  const cookieStore = cookies();
+  const sgRangeCookieName = `sgRangeLast_${departmentId}`;
+  const sgRangeQuery = cookieStore.get(sgRangeCookieName)?.value ?? "";
 
   let isDepartmentOwner = false;
   if (userId) {
@@ -88,10 +101,15 @@ export default async function ToolsLandingPage({
       {cards.length > 0 ? (
         cards.map((card) => {
           const Icon = card.icon;
+          const href =
+            card.key === "sg-range" && sgRangeQuery
+              ? `/${departmentId}/${card.slug}?${sgRangeQuery}`
+              : `/${departmentId}/${card.slug}`;
+
           return (
             <ToolNavigationLink
               key={card.key}
-              href={`/${departmentId}/${card.slug}`}
+              href={href}
               className="group block focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
               <Card className="h-full transition-shadow group-hover:shadow-md">

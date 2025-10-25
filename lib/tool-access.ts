@@ -1,4 +1,10 @@
-const TOOL_KEYS = ["biometrics", "covers", "attendance-import", "copy-options"] as const;
+const TOOL_KEYS = [
+  "biometrics",
+  "covers",
+  "attendance-import",
+  "copy-options",
+  "sg-range",
+] as const;
 
 export type ToolKey = (typeof TOOL_KEYS)[number];
 
