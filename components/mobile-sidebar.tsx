@@ -32,6 +32,7 @@ import {
   Copy,
   Cake,
   Wrench,
+  GitBranch,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
@@ -69,6 +70,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     label: "Copy Options",
     path: "tools/copy-options",
     icon: Copy,
+  },
+  "org-chart": {
+    label: "Org Chart Builder",
+    path: "tools/org-chart",
+    icon: GitBranch,
   },
   "sg-range": {
     label: "SG Range",

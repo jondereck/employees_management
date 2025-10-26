@@ -286,9 +286,11 @@ test("fixed schedule with no punches is marked as no_punch", () => {
 test("flex schedule treats invalid punches as no_punch", () => {
   const schedule = createFlexSchedule({ weeklyPattern: null });
 
+  const invalidTimes = ["-", ""] as unknown as Array<`${number}${number}:${number}${number}`>;
+
   const result = evaluateDay({
     dateISO: "2024-09-08",
-    allTimes: ["-", ""],
+    allTimes: invalidTimes,
     earliest: null,
     latest: null,
     schedule,

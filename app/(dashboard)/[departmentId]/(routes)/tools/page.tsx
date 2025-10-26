@@ -5,6 +5,7 @@ import {
   FileSpreadsheet,
   Fingerprint,
   Image as ImageIcon,
+  GitBranch,
 } from "lucide-react";
 import { cookies } from "next/headers";
 
@@ -55,6 +56,13 @@ const TOOL_CARD_CONFIG: Array<{
     description: "Live counts and salary totals by SG range with filters",
     slug: "tools/sg-range",
     icon: BarChart3,
+  },
+  {
+    key: "org-chart",
+    label: "Org Chart Builder",
+    description: "Edit & export per-office org charts",
+    slug: "tools/org-chart",
+    icon: GitBranch,
   },
 ];
 

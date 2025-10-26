@@ -4,6 +4,7 @@ const TOOL_KEYS = [
   "attendance-import",
   "copy-options",
   "sg-range",
+  "org-chart",
 ] as const;
 
 export type ToolKey = (typeof TOOL_KEYS)[number];
