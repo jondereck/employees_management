@@ -101,6 +101,7 @@ type EmployeeOption = {
   title: string;
   officeId: string | null;
   employeeTypeName: string;
+  imageUrl: string;
 };
 
 type VersionRecord = OrgChartVersion & { isDefault?: boolean };
@@ -112,6 +113,7 @@ type CanvasActions = {
 };
 
 const CanvasActionsContext = createContext<CanvasActions | null>(null);
+const CanvasSettingsContext = createContext<{ showPhotos: boolean }>({ showPhotos: false });
 
 const useCanvasActions = () => {
   const ctx = useContext(CanvasActionsContext);
@@ -120,6 +122,8 @@ const useCanvasActions = () => {
   }
   return ctx;
 };
+
+const useCanvasSettings = () => useContext(CanvasSettingsContext);
 
 const OrgChartTool = ({ departmentId }: OrgChartToolProps) => (
   <ReactFlowProvider>
@@ -151,6 +155,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [focusOfficeId, setFocusOfficeId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
+  const [showPhotos, setShowPhotos] = useState(false);
 
   const { fitView, project, getNode, setViewport } = useReactFlow<
     FlowNodeData,
@@ -185,6 +190,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           label: node.data.label,
           headerColor: node.data.headerColor,
           notes: node.data.notes,
+          imageUrl: node.data.imageUrl,
         },
         width: node.width ?? undefined,
         height: node.height ?? undefined,
@@ -218,6 +224,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           label: node.data.label ?? (node.type === "person" ? node.data.title ?? node.data.name : node.data.name),
           headerColor: node.data.headerColor ?? DEFAULT_NODE_COLORS[node.type],
           notes: node.data.notes,
+          imageUrl: node.data.imageUrl,
         },
         width: node.width,
         height: node.height,
@@ -817,8 +824,9 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   }
 
   return (
-    <CanvasActionsContext.Provider value={actionsContextValue}>
-      <div className="grid gap-4 lg:grid-cols-[280px,1fr,320px]">
+    <CanvasSettingsContext.Provider value={{ showPhotos }}>
+      <CanvasActionsContext.Provider value={actionsContextValue}>
+        <div className="grid gap-4 lg:grid-cols-[280px,1fr,320px]">
         <aside className="space-y-4">
           <Card>
             <CardContent className="space-y-4 pt-6">
@@ -887,7 +895,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                         variant={focusOfficeId === (office.data.officeId ?? office.id) ? "secondary" : "ghost"}
                         size="sm"
                         className="w-full justify-start"
-                        onClick={() => setFocusOfficeId(office.data.officeId ?? office.id)}
+                        onClick={() =>
+                        setFocusOfficeId((prev) =>
+                          prev === (office.data.officeId ?? office.id) ? null : (office.data.officeId ?? office.id)
+                        )
+                      }
                       >
                         {office.data.name}
                       </Button>
@@ -926,6 +938,16 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 <Switch
                   checked={allowCrossOfficeEdges}
                   onCheckedChange={(state) => setAllowCrossOfficeEdges(Boolean(state))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Show photos</Label>
+                  <p className="text-xs text-muted-foreground">Display employee portraits when available.</p>
+                </div>
+                <Switch
+                  checked={showPhotos}
+                  onCheckedChange={(state) => setShowPhotos(Boolean(state))}
                 />
               </div>
             </CardContent>
@@ -1169,7 +1191,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           </Card>
         </aside>
       </div>
-    </CanvasActionsContext.Provider>
+      </CanvasActionsContext.Provider>
+    </CanvasSettingsContext.Provider>
   );
 };
 
@@ -1184,6 +1207,24 @@ type FlowNodeCardProps = NodeProps<FlowNodeData> & { icon: ReactNode };
 function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
   const actions = useCanvasActions();
   const handles = getHandlesForType(type as OrgNodeType);
+  const { showPhotos } = useCanvasSettings();
+
+  const renderAvatar = () => {
+    if (showPhotos && data.imageUrl) {
+      return (
+        <img
+          src={data.imageUrl}
+          alt={data.name}
+          className="h-14 w-14 rounded-full border-2 border-white/80 object-cover shadow-md"
+        />
+      );
+    }
+    return (
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/10 text-sm text-white/80">
+        {icon}
+      </div>
+    );
+  };
 
   return (
     <div className={cn("group relative min-w-[220px] max-w-xs rounded-lg border bg-card shadow-sm transition", selected && "ring-2 ring-primary")}
@@ -1210,28 +1251,13 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
         />
       ))}
 
-      <div className="overflow-hidden rounded-t-lg" style={{ backgroundColor: data.headerColor ?? DEFAULT_NODE_COLORS[type as OrgNodeType] }}>
-        <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white/90">
-          {icon}
-          <span>{data.label ?? data.name}</span>
-        </div>
-      </div>
-      <div className="space-y-2 px-3 py-3">
-        <div>
+      <div className="flex items-center gap-3 px-4 py-3">
+        {renderAvatar()}
+        <div className="space-y-1">
           <p className="text-sm font-semibold text-foreground">{data.name}</p>
           {data.title ? <p className="text-xs text-muted-foreground">{data.title}</p> : null}
-          {type === "person" && data.employeeTypeName ? (
-            <span className="mt-1 inline-flex rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              {data.employeeTypeName}
-            </span>
-          ) : null}
+          {data.employeeTypeName ? <p className="text-xs text-muted-foreground">{data.employeeTypeName}</p> : null}
         </div>
-        {data.isHead ? (
-          <Badge variant="outline" className="text-xs text-primary">
-            Head
-          </Badge>
-        ) : null}
-        {data.notes ? <p className="text-xs text-muted-foreground">{data.notes}</p> : null}
       </div>
     </div>
   );

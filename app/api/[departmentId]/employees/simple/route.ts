@@ -21,6 +21,11 @@ export async function GET(_request: Request, { params }: Params) {
       employeeType: {
         select: { name: true },
       },
+      images: {
+        select: { url: true },
+        take: 1,
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
 
@@ -30,6 +35,7 @@ export async function GET(_request: Request, { params }: Params) {
     title: emp.position ?? "",
     employeeTypeName: emp.employeeType?.name ?? "",
     officeId: emp.officeId,
+    imageUrl: emp.images?.[0]?.url ?? "",
   }));
 
   return NextResponse.json(formatted);

@@ -10,6 +10,7 @@ export type OrgNodeData = {
   label?: string;
   headerColor?: string;
   notes?: string;
+  imageUrl?: string;
 };
 
 export type OrgChartNode = {

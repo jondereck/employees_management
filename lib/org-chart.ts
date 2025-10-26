@@ -21,6 +21,7 @@ export async function buildInitialOrgDocument(
       id: true,
       name: true,
       employee: {
+        where: { isArchived: false },
         select: {
           id: true,
           firstName: true,
@@ -30,6 +31,11 @@ export async function buildInitialOrgDocument(
           isHead: true,
           employeeType: {
             select: { name: true },
+          },
+          images: {
+            select: { url: true },
+            take: 1,
+            orderBy: { createdAt: "desc" },
           },
         },
         orderBy: [{ isHead: "desc" }, { lastName: "asc" }],
@@ -76,6 +82,7 @@ export async function buildInitialOrgDocument(
           employeeId: employee.id,
           label: employee.position || "Head",
           headerColor: "#3949AB",
+          imageUrl: employee.images?.[0]?.url ?? undefined,
         },
       });
       edges.push({
@@ -117,16 +124,17 @@ export async function buildInitialOrgDocument(
           id: nodeId,
           type: "person",
           position: { x, y },
-          data: {
-            name: formatEmployeeName(employee),
-            title: employee.position || undefined,
-            employeeTypeName: employee.employeeType?.name ?? undefined,
-            officeId: office.id,
-            employeeId: employee.id,
-            label: employee.position || employee.employeeType?.name || "Staff",
-            headerColor: "#5E35B1",
-          },
-        });
+        data: {
+          name: formatEmployeeName(employee),
+          title: employee.position || undefined,
+          employeeTypeName: employee.employeeType?.name ?? undefined,
+          officeId: office.id,
+          employeeId: employee.id,
+          label: employee.position || employee.employeeType?.name || "Staff",
+          headerColor: "#5E35B1",
+          imageUrl: employee.images?.[0]?.url ?? undefined,
+        },
+      });
         edges.push({
           id: `${unitId}-${nodeId}`,
           source: unitId,
@@ -145,16 +153,17 @@ export async function buildInitialOrgDocument(
           id: nodeId,
           type: "person",
           position: { x, y },
-          data: {
-            name: formatEmployeeName(employee),
-            title: employee.position || undefined,
-            employeeTypeName: employee.employeeType?.name ?? undefined,
-            officeId: office.id,
-            employeeId: employee.id,
-            label: employee.position || employee.employeeType?.name || "Staff",
-            headerColor: "#5E35B1",
-          },
-        });
+        data: {
+          name: formatEmployeeName(employee),
+          title: employee.position || undefined,
+          employeeTypeName: employee.employeeType?.name ?? undefined,
+          officeId: office.id,
+          employeeId: employee.id,
+          label: employee.position || employee.employeeType?.name || "Staff",
+          headerColor: "#5E35B1",
+          imageUrl: employee.images?.[0]?.url ?? undefined,
+        },
+      });
         edges.push({
           id: `${officeNodeId}-${nodeId}`,
           source: officeNodeId,
