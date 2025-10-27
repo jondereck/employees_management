@@ -221,22 +221,8 @@ const cloneGraphState = (graph: GraphState): GraphState => {
     return structuredClone(graph);
   }
   return {
-    nodes: graph.nodes.map((node) => ({
-      ...node,
-      data: { ...node.data },
-      position: { ...node.position },
-      style: node.style ? { ...node.style } : undefined,
-      width: node.width,
-      height: node.height,
-    })),
-    edges: graph.edges.map((edge) => ({
-      ...edge,
-      data: edge.data ? { ...edge.data } : undefined,
-      style: edge.style ? { ...edge.style } : undefined,
-      markerEnd: edge.markerEnd
-        ? { ...edge.markerEnd, style: edge.markerEnd?.style ? { ...edge.markerEnd.style } : undefined }
-        : undefined,
-    })),
+    nodes: graph.nodes.map((node) => ({ ...node })),
+    edges: graph.edges.map((edge) => ({ ...edge })),
   };
 };
 
@@ -246,7 +232,8 @@ type OrgChartToolProps = {
 
 type FlowNodeData = OrgNodeData;
 type FlowNode = Node<FlowNodeData>;
-type FlowEdge = Edge<{ color?: string; customType?: "orth" | "smoothstep" | "straight" }>;
+type FlowEdge = Edge<{ color?: string; customType?: string }>;
+type FlowEdgeData = { color?: string; customType?: string };
 
 type EmployeeOption = {
   id: string;
@@ -295,7 +282,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const saveTimer = useRef<number | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNodeData>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<{ color?: string; customType?: "orth" | "smoothstep" | "straight" }>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<{ color?: string; customType?: string }>([]);
   const [edgeType, setEdgeType] = useState<"orth" | "smoothstep">("orth");
   const [allowCrossOfficeEdges, setAllowCrossOfficeEdges] = useState(true);
   const [versions, setVersions] = useState<VersionRecord[]>([]);
@@ -356,12 +343,23 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     height: node.height,
   }), []);
 
-  const cloneFlowEdge = useCallback((edge: FlowEdge): FlowEdge => ({
-    ...edge,
-    data: edge.data ? { ...edge.data } : undefined,
-    style: edge.style ? { ...edge.style } : undefined,
-    markerEnd: edge.markerEnd ? { ...edge.markerEnd } : undefined,
-  }), []);
+  // clone edges safely: copy nested optionals too
+  const cloneFlowEdge = useCallback(
+    (edge: FlowEdge): FlowEdge => {
+      const cloned: FlowEdge = { ...edge };
+      if (edge.data) cloned.data = { ...edge.data };
+      if (edge.style) cloned.style = { ...edge.style } as typeof edge.style;
+      // markerEnd/markerStart can be boolean | object depending on reactflow types; copy only if object
+      if (edge.markerEnd && typeof edge.markerEnd === "object") {
+        cloned.markerEnd = { ...(edge.markerEnd as Record<string, unknown>) } as typeof edge.markerEnd;
+      }
+      if (edge.markerStart && typeof edge.markerStart === "object") {
+        cloned.markerStart = { ...(edge.markerStart as Record<string, unknown>) } as typeof edge.markerStart;
+      }
+      return cloned;
+    },
+    []
+  );
 
   const nodesRef = useRef<FlowNode[]>([]);
   const edgesRef = useRef<FlowEdge[]>([]);
@@ -621,29 +619,47 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         };
       });
 
-      const newEdges = clonedEdges
-        .map((edge) => {
-          const newSource = idMap.get(edge.source);
-          const newTarget = idMap.get(edge.target);
-          if (!newSource || !newTarget) return null;
-          const orientationSource = normalizeHandleId(edge.sourceHandle);
-          const orientationTarget = normalizeHandleId(edge.targetHandle);
-          const color = edge.data?.color ?? DEFAULT_EDGE_COLOR;
-          return {
-            ...edge,
-            id: `edge-${crypto.randomUUID()}`,
-            source: newSource,
-            target: newTarget,
-            sourceHandle: getSourceHandleId(orientationSource) ?? edge.sourceHandle,
-            targetHandle: getTargetHandleId(orientationTarget) ?? edge.targetHandle,
-            data: edge.data?.customType
-              ? { ...edge.data, color, customType: edge.data.customType }
-              : { color },
-            style: { ...(edge.style ?? {}), stroke: color, strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color },
-          };
-        })
-        .filter((edge): edge is FlowEdge => Boolean(edge));
+      const newEdges: FlowEdge[] = [];
+      clonedEdges.forEach((edge) => {
+        const newSource = idMap.get(edge.source);
+        const newTarget = idMap.get(edge.target);
+        if (!newSource || !newTarget) {
+          return;
+        }
+        const orientationSource = normalizeHandleId(edge.sourceHandle);
+        const orientationTarget = normalizeHandleId(edge.targetHandle);
+        const color = edge.data?.color ?? DEFAULT_EDGE_COLOR;
+        let customType: "orth" | "smoothstep" | "straight" | undefined;
+        switch (edge.data?.customType) {
+          case "orth":
+          case "smoothstep":
+          case "straight":
+            customType = edge.data.customType;
+            break;
+          default:
+            customType = undefined;
+        }
+
+        const mergedData: FlowEdgeData = { ...(edge.data ?? {}), color };
+        const newEdge: FlowEdge = {
+          ...edge,
+          id: `edge-${crypto.randomUUID()}`,
+          source: newSource,
+          target: newTarget,
+          sourceHandle: getSourceHandleId(orientationSource),
+          targetHandle: getTargetHandleId(orientationTarget),
+          data: mergedData,
+          style: { ...(edge.style ?? {}), stroke: color, strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color },
+        };
+        if (customType) {
+          mergedData.customType = customType;
+        } else {
+          delete mergedData.customType;
+        }
+
+        newEdges.push(newEdge);
+      });
 
       runWithHistory(() => {
         setNodes((existing) => [...existing, ...newNodes]);
@@ -993,7 +1009,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       return baseX + width / 2;
     };
 
-    const updatedEdges = edgeList.map((edge) => {
+    const updatedEdges: FlowEdge[] = edgeList.map((edge) => {
       const sourceType = nodeTypeMap.get(edge.source);
       const targetType = nodeTypeMap.get(edge.target);
       const normalizedSource = normalizeHandleId(edge.sourceHandle);
@@ -1031,7 +1047,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           return nextEdge;
         }
         changed = true;
-        return {
+        const out: FlowEdge = {
           ...nextEdge,
           type: "straight",
           sourceHandle: sourceHandleId,
@@ -1040,6 +1056,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
           markerEnd: { type: MarkerType.ArrowClosed, color },
         };
+        return out;
       }
 
       const isVerticalPair =
@@ -1058,7 +1075,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
             if (!alreadyStraight) {
               changed = true;
             }
-            return {
+            const out: FlowEdge = {
               ...nextEdge,
               type: "straight",
               sourceHandle: getSourceHandleId(normalizedSource ?? "b") ?? nextEdge.sourceHandle,
@@ -1067,11 +1084,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
               markerEnd: { type: MarkerType.ArrowClosed, color },
             };
+            return out;
           }
           if (!aligned && nextEdge.data?.customType === "straight") {
             const color = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
             changed = true;
-            return {
+            const out: FlowEdge = {
               ...nextEdge,
               type: mapDocEdgeTypeToFlow(edgeType),
               sourceHandle: getSourceHandleId(normalizedSource) ?? nextEdge.sourceHandle,
@@ -1080,6 +1098,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
               markerEnd: { type: MarkerType.ArrowClosed, color },
             };
+            return out;
           }
         }
       }
@@ -1087,7 +1106,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       if (nextEdge.type === "straight" && nextEdge.data?.customType !== "straight") {
         const fallbackColor = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
         changed = true;
-        return {
+        const out: FlowEdge = {
           ...nextEdge,
           type: mapDocEdgeTypeToFlow(edgeType),
           sourceHandle: getSourceHandleId(normalizeHandleId(nextEdge.sourceHandle)) ?? nextEdge.sourceHandle,
@@ -1096,6 +1115,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           markerEnd: { type: MarkerType.ArrowClosed, color: fallbackColor },
           style: { stroke: fallbackColor, strokeWidth: 2 },
         };
+        return out;
       }
 
       return nextEdge;
@@ -2096,7 +2116,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 onNodeDragStop={handleNodeDragStop}
                 onMoveStart={handleMoveStart}
                 onMoveEnd={handleMoveEnd}
-                fitViewOnInit={false}
                 minZoom={0.2}
                 maxZoom={3}
                 deleteKeyCode={["Delete", "Backspace"]}
