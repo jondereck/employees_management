@@ -1,9 +1,7 @@
-import {
-  createOrgChartVersion,
-  listOrgChartVersions,
-} from "@/lib/org-chart-store";
-import { OrgChartDocument } from "@/types/orgChart";
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 type Params = {
   params: {
@@ -11,45 +9,136 @@ type Params = {
   };
 };
 
+const SaveSchema = z.object({
+  label: z.string().min(1, "Label is required"),
+  data: z
+    .object({
+      nodes: z.array(z.any()),
+      edges: z.array(z.any()),
+    })
+    .passthrough(),
+});
+
+const ParamsSchema = z.object({
+  departmentId: z.string().min(1),
+});
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "15mb",
+    },
+  },
+};
+
 export async function GET(_request: Request, { params }: Params) {
-  const versions = listOrgChartVersions(params.departmentId);
-  return NextResponse.json(versions);
-}
+  const parseParams = ParamsSchema.safeParse(params);
+  if (!parseParams.success) {
+    return NextResponse.json(
+      { code: "BAD_REQUEST", message: "Invalid department id" },
+      { status: 400 }
+    );
+  }
 
-export async function POST(request: Request, { params }: Params) {
+  const { departmentId } = parseParams.data;
+
   try {
-    const body = (await request.json()) as {
-      label?: string;
-      data?: OrgChartDocument;
-    };
+    const versions = await prisma.orgChartVersion.findMany({
+      where: { departmentId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        departmentId: true,
+        label: true,
+        createdAt: true,
+        isDefault: true,
+      },
+    });
 
-    if (!body.label || !body.label.trim()) {
-      return new NextResponse("Label is required", { status: 400 });
-    }
+    console.info("orgchart:versions:list", {
+      departmentId,
+      count: versions.length,
+    });
 
-    if (!isValidDocument(body.data)) {
-      return new NextResponse("Invalid org chart document", { status: 400 });
-    }
-
-    const version = createOrgChartVersion(
-      params.departmentId,
-      body.label.trim(),
-      body.data
+    return NextResponse.json(
+      versions.map((version) => ({
+        ...version,
+        createdAt: version.createdAt.toISOString(),
+      }))
     );
-
-    return NextResponse.json(version, { status: 201 });
   } catch (error) {
-    console.error("[org-chart version create]", error);
-    return new NextResponse(
-      error instanceof Error ? error.message : "Failed to save version",
-      { status: 500 }
-    );
+    console.error("orgchart:api", error);
+    return NextResponse.json({ code: "ERR" }, { status: 500 });
   }
 }
 
-function isValidDocument(document: unknown): document is OrgChartDocument {
-  if (!document || typeof document !== "object") return false;
-  const doc = document as OrgChartDocument;
-  if (!Array.isArray(doc.nodes) || !Array.isArray(doc.edges)) return false;
-  return true;
+export async function POST(request: Request, { params }: Params) {
+  const parseParams = ParamsSchema.safeParse(params);
+  if (!parseParams.success) {
+    return NextResponse.json(
+      { code: "BAD_REQUEST", message: "Invalid department id" },
+      { status: 400 }
+    );
+  }
+
+  const { departmentId } = parseParams.data;
+
+  let payload: z.infer<typeof SaveSchema>;
+  try {
+    const json = await request.json();
+    const parsed = SaveSchema.safeParse(json);
+    if (!parsed.success) {
+      console.info("orgchart:versions:save:invalid", {
+        departmentId,
+        issues: parsed.error.issues.map((issue) => issue.message),
+      });
+      return NextResponse.json(
+        { code: "BAD_REQUEST", message: "Invalid payload" },
+        { status: 400 }
+      );
+    }
+    payload = parsed.data;
+  } catch (error) {
+    console.info("orgchart:versions:save:parse_error", {
+      departmentId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return NextResponse.json(
+      { code: "BAD_REQUEST", message: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
+
+  const { label, data } = payload;
+  const jsonData = data as Prisma.InputJsonValue;
+  const bodySize = Buffer.byteLength(JSON.stringify(jsonData), "utf8");
+
+  try {
+    console.info("orgchart:versions:save", {
+      departmentId,
+      label,
+      size: bodySize,
+    });
+
+    const record = await prisma.orgChartVersion.create({
+      data: {
+        departmentId,
+        label: label.trim(),
+        data: jsonData,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        id: record.id,
+        label: record.label,
+        createdAt: record.createdAt.toISOString(),
+        isDefault: record.isDefault,
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("orgchart:api", error);
+    return NextResponse.json({ code: "ERR" }, { status: 500 });
+  }
 }

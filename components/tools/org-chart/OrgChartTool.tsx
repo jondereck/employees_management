@@ -57,6 +57,7 @@ import type {
   OrgChartEdge,
   OrgChartNode,
   OrgChartVersion,
+  OrgChartVersionSummary,
   OrgNodeData,
   OrgNodeType,
 } from "@/types/orgChart";
@@ -245,8 +246,6 @@ type EmployeeOption = {
   imageUrl: string;
 };
 
-type VersionRecord = OrgChartVersion & { isDefault?: boolean };
-
 type CanvasActions = {
   duplicateNode: (id: string) => void;
   addChildUnit: (id: string) => void;
@@ -285,8 +284,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState<{ color?: string; customType?: string }>([]);
   const [edgeType, setEdgeType] = useState<"orth" | "smoothstep">("orth");
   const [allowCrossOfficeEdges, setAllowCrossOfficeEdges] = useState(true);
-  const [versions, setVersions] = useState<VersionRecord[]>([]);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [versions, setVersions] = useState<OrgChartVersionSummary[]>([]);
+  const [currentVersionId, setCurrentVersionId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [availableEmployees, setAvailableEmployees] = useState<EmployeeOption[]>([]);
@@ -299,6 +298,28 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
   const [showPhotos, setShowPhotos] = useState(false);
   const [focusTrigger, setFocusTrigger] = useState(0);
+  const versionStorageKey = useMemo(
+    () => `org-chart:current-version:${departmentId}`,
+    [departmentId]
+  );
+  const persistCurrentVersionId = useCallback(
+    (id: string | null) => {
+      if (typeof window === "undefined") return;
+      if (id) {
+        window.localStorage.setItem(versionStorageKey, id);
+      } else {
+        window.localStorage.removeItem(versionStorageKey);
+      }
+    },
+    [versionStorageKey]
+  );
+  const applyCurrentVersionId = useCallback(
+    (id: string | null) => {
+      setCurrentVersionId(id);
+      persistCurrentVersionId(id);
+    },
+    [persistCurrentVersionId]
+  );
   const clipboardRef = useRef<{
     nodes: FlowNode[];
     edges: FlowEdge[];
@@ -1146,6 +1167,61 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     [applyEdgeDefaults, applyNodeDefaults, normalizeEdges, requestFocus, resetHistory, serializeDocument, setEdges, setNodes]
   );
 
+  const loadVersionById = useCallback(
+    async (
+      versionId: string
+    ): Promise<
+      | { status: "success"; record: OrgChartVersion }
+      | { status: "not_found" }
+      | { status: "error"; message: string }
+    > => {
+      try {
+        const response = await fetch(
+          `/api/${departmentId}/org-chart/versions/${versionId}`
+        );
+        if (response.status === 404) {
+          return { status: "not_found" };
+        }
+        if (!response.ok) {
+          const message = await response.text();
+          return {
+            status: "error",
+            message: message || "Failed to load version",
+          };
+        }
+        const record = (await response.json()) as OrgChartVersion;
+        setVersions((prev) => {
+          const summary: OrgChartVersionSummary = {
+            id: record.id,
+            departmentId: record.departmentId,
+            label: record.label,
+            createdAt: record.createdAt,
+            isDefault: record.isDefault,
+          };
+          const existingIndex = prev.findIndex((item) => item.id === record.id);
+          if (existingIndex === -1) {
+            return [summary, ...prev];
+          }
+          const clone = [...prev];
+          clone[existingIndex] = summary;
+          return clone;
+        });
+        setDocument(record.data, true, true);
+        applyCurrentVersionId(record.id);
+        return { status: "success", record };
+      } catch (error) {
+        return {
+          status: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to load version",
+        };
+      }
+    },
+    [applyCurrentVersionId, departmentId, setDocument]
+  );
+
   const loadInitialData = useCallback(async () => {
     try {
       setLoading(true);
@@ -1168,13 +1244,56 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         setAvailableEmployees(employees);
       }
 
+      let versionList: OrgChartVersionSummary[] = [];
       if (versionsRes.ok) {
-        const versionList = (await versionsRes.json()) as VersionRecord[];
-        setVersions(versionList);
+        versionList = (await versionsRes.json()) as OrgChartVersionSummary[];
+      }
+      setVersions(versionList);
+
+      let hasLoadedVersion = false;
+
+      const storedVersionId =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(versionStorageKey)
+          : null;
+
+      if (storedVersionId) {
+        const restored = await loadVersionById(storedVersionId);
+        if (restored.status === "success") {
+          hasLoadedVersion = true;
+        } else if (restored.status === "not_found") {
+          applyCurrentVersionId(null);
+          toast({
+            title: "Version not found",
+            description: "Showing current draft.",
+          });
+        } else if (restored.status === "error") {
+          toast({
+            title: "Failed to restore version",
+            description: restored.message,
+            variant: "destructive",
+          });
+        }
+      }
+
+      if (!hasLoadedVersion && versionList.length) {
         const defaultVersion = versionList.find((item) => item.isDefault);
         if (defaultVersion) {
-          setSelectedVersionId(defaultVersion.id);
+          const loadDefault = await loadVersionById(defaultVersion.id);
+          if (loadDefault.status === "success") {
+            hasLoadedVersion = true;
+          } else if (loadDefault.status === "not_found") {
+            applyCurrentVersionId(null);
+            toast({
+              title: "Default version missing",
+              description: "Showing current draft.",
+            });
+          }
         }
+      }
+
+      if (!hasLoadedVersion) {
+        applyCurrentVersionId(null);
       }
     } catch (error) {
       toast({
@@ -1185,7 +1304,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     } finally {
       setLoading(false);
     }
-  }, [departmentId, setDocument, toast]);
+  }, [applyCurrentVersionId, departmentId, loadVersionById, setDocument, toast, versionStorageKey]);
 
   useEffect(() => {
     void loadInitialData();
@@ -1583,13 +1702,20 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label, data: latestDocument }),
       });
-      if (!response.ok) throw new Error(await response.text());
-      const record: VersionRecord = await response.json();
-      setVersions((prev) => [record, ...prev]);
-      setSelectedVersionId(record.id);
+      if (!response.ok) {
+        applyCurrentVersionId(null);
+        throw new Error(await response.text());
+      }
+      const record = (await response.json()) as OrgChartVersionSummary;
+      setVersions((prev) => {
+        const deduped = prev.filter((item) => item.id !== record.id);
+        return [record, ...deduped];
+      });
+      applyCurrentVersionId(record.id);
       lastSavedSnapshotRef.current = snapshot;
-      toast({ title: "Version saved", description: label });
+      toast({ title: "Version saved", description: record.label });
     } catch (error) {
+      applyCurrentVersionId(null);
       toast({
         title: "Failed to save",
         description: error instanceof Error ? error.message : "Unable to save version",
@@ -1598,17 +1724,17 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     } finally {
       setIsSaving(false);
     }
-  }, [departmentId, edgeType, edges, nodes, serializeDocument, toast]);
+  }, [applyCurrentVersionId, departmentId, edgeType, edges, nodes, serializeDocument, toast]);
 
   const handleSetDefault = useCallback(async () => {
-    if (!selectedVersionId) return;
+    if (!currentVersionId) return;
     try {
       const response = await fetch(
-        `/api/${departmentId}/org-chart/versions/${selectedVersionId}/default`,
+        `/api/${departmentId}/org-chart/versions/${currentVersionId}/default`,
         { method: "POST" }
       );
       if (!response.ok) throw new Error(await response.text());
-      const updated: VersionRecord = await response.json();
+      const updated = (await response.json()) as OrgChartVersion;
       setVersions((prev) => prev.map((item) => ({ ...item, isDefault: item.id === updated.id })));
       toast({ title: "Default version updated", description: updated.label });
     } catch (error) {
@@ -1618,31 +1744,40 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         variant: "destructive",
       });
     }
-  }, [departmentId, selectedVersionId, toast]);
+  }, [currentVersionId, departmentId, toast]);
 
   const handleVersionChange = useCallback(
     async (value: string) => {
       if (value === "__draft__") {
-        setSelectedVersionId(null);
+        applyCurrentVersionId(null);
         return;
       }
 
-      try {
-        const response = await fetch(`/api/${departmentId}/org-chart/versions/${value}`);
-        if (!response.ok) throw new Error(await response.text());
-        const record: VersionRecord = await response.json();
-        setDocument(record.data, true, true);
-        setSelectedVersionId(record.id);
-        toast({ title: "Version loaded", description: record.label });
-      } catch (error) {
+      const result = await loadVersionById(value);
+      if (result.status === "success") {
+        toast({ title: "Version loaded", description: result.record.label });
+        return;
+      }
+
+      if (result.status === "not_found") {
+        applyCurrentVersionId(null);
+        toast({
+          title: "Version not found",
+          description: "The requested version is unavailable.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (result.status === "error") {
         toast({
           title: "Failed to load version",
-          description: error instanceof Error ? error.message : "Unable to load version",
+          description: result.message ?? "Unable to load version",
           variant: "destructive",
         });
       }
     },
-    [departmentId, setDocument, toast]
+    [applyCurrentVersionId, loadVersionById, toast]
   );
 
   const handleExport = useCallback(
@@ -1848,7 +1983,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 </div>
                 <GitBranch className="h-5 w-5 text-muted-foreground" />
               </div>
-              <Select value={selectedVersionId ?? "__draft__"} onValueChange={handleVersionChange}>
+              <Select value={currentVersionId ?? "__draft__"} onValueChange={handleVersionChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Current draft" />
                 </SelectTrigger>
@@ -1857,7 +1992,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   {versions.map((version) => (
                     <SelectItem key={version.id} value={version.id}>
                       {version.label}
-                      {version.isDefault ? " ??? default" : ""}
+                      {version.isDefault ? " (default)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1873,7 +2008,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   onClick={handleSetDefault}
                   variant="outline"
                   size="sm"
-                  disabled={!selectedVersionId}
+                  disabled={!currentVersionId}
                   className="flex items-center gap-2"
                 >
                   <BadgeCheck className="h-4 w-4" /> Set default

@@ -47,4 +47,7 @@ export type OrgChartVersion = {
   label: string;
   createdAt: string;
   data: OrgChartDocument;
+  isDefault?: boolean;
 };
+
+export type OrgChartVersionSummary = Omit<OrgChartVersion, "data">;

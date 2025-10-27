@@ -1,1 +1,1 @@
-ALTER TABLE "WorkSchedule" ADD COLUMN "weeklyPattern" JSONB;
+ALTER TABLE IF EXISTS "WorkSchedule" ADD COLUMN IF NOT EXISTS "weeklyPattern" JSONB;
