@@ -46,6 +46,12 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type {
   OrgChartDocument,
   OrgChartEdge,
@@ -57,6 +63,8 @@ import type {
 import {
   BadgeCheck,
   Building2,
+  ClipboardCopy,
+  ClipboardPaste,
   Copy,
   Download,
   GitBranch,
@@ -303,8 +311,18 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
   const [showPhotos, setShowPhotos] = useState(false);
   const [focusTrigger, setFocusTrigger] = useState(0);
+  const clipboardRef = useRef<{
+    nodes: FlowNode[];
+    edges: FlowEdge[];
+    sourceOfficeId: string | null;
+    includePeople: boolean;
+    copiedAt: number;
+  } | null>(null);
+  const [clipboardVersion, setClipboardVersion] = useState(0);
+  const lastCopyPeopleRef = useRef(false);
 
   const defaultEdgeOptions = useMemo(() => ({ type: mapDocEdgeTypeToFlow(edgeType) }), [edgeType]);
+  const clipboardAvailable = useMemo(() => clipboardVersion > 0 && clipboardRef.current !== null, [clipboardVersion]);
   const reactFlowInstance = useReactFlow<
     FlowNodeData,
     { color?: string; customType?: "orth" | "smoothstep" | "straight" }
@@ -324,6 +342,25 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     if (!query) return offices;
     return offices.filter((office) => office.data.name.toLowerCase().includes(query));
   }, [officeSearch, offices]);
+
+  const cloneFlowNode = useCallback((node: FlowNode): FlowNode => ({
+    ...node,
+    position: { ...node.position },
+    data: { ...node.data },
+    style: node.style ? { ...node.style } : undefined,
+    dragging: false,
+    selected: false,
+    positionAbsolute: node.positionAbsolute ? { ...node.positionAbsolute } : undefined,
+    width: node.width,
+    height: node.height,
+  }), []);
+
+  const cloneFlowEdge = useCallback((edge: FlowEdge): FlowEdge => ({
+    ...edge,
+    data: edge.data ? { ...edge.data } : undefined,
+    style: edge.style ? { ...edge.style } : undefined,
+    markerEnd: edge.markerEnd ? { ...edge.markerEnd } : undefined,
+  }), []);
 
   const nodesRef = useRef<FlowNode[]>([]);
   const edgesRef = useRef<FlowEdge[]>([]);
@@ -422,6 +459,206 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     updateHistoryStatus();
   }, [updateHistoryStatus]);
 
+  const copySelection = useCallback(
+    (includePeople: boolean) => {
+      const nodeIdSet = new Set<string>();
+      if (selectedNodeIds.length) {
+        selectedNodeIds.forEach((id) => nodeIdSet.add(id));
+      } else if (focusOfficeId) {
+        nodes.forEach((node) => {
+          if (node.data.officeId === focusOfficeId && node.type !== "office") {
+            nodeIdSet.add(node.id);
+          }
+        });
+      }
+
+      if (!nodeIdSet.size) {
+        toast({
+          title: "Nothing to copy",
+          description: "Select nodes or choose an office first.",
+        });
+        return;
+      }
+
+      const nodesToCopy = nodes
+        .filter((node) => nodeIdSet.has(node.id))
+        .map((node) => {
+          const cloned = cloneFlowNode(node);
+          if (!includePeople && cloned.type === "person") {
+            cloned.data = {
+              ...cloned.data,
+              employeeId: undefined,
+              employeeTypeName: undefined,
+              employeeTypeColor: undefined,
+              imageUrl: undefined,
+              notes: undefined,
+            };
+          }
+          return cloned;
+        });
+
+      if (!nodesToCopy.length) {
+        toast({
+          title: "Nothing to copy",
+          description: "No eligible nodes found for copying.",
+        });
+        return;
+      }
+
+      const nodeIdsCopied = new Set(nodesToCopy.map((node) => node.id));
+      const edgesToCopy = edges
+        .filter((edge) => nodeIdsCopied.has(edge.source) && nodeIdsCopied.has(edge.target))
+        .map((edge) => cloneFlowEdge(edge));
+
+      const sourceOfficeId =
+        focusOfficeId ?? nodesToCopy.find((node) => node.data.officeId)?.data.officeId ?? null;
+
+      clipboardRef.current = {
+        nodes: nodesToCopy,
+        edges: edgesToCopy,
+        sourceOfficeId,
+        includePeople,
+        copiedAt: Date.now(),
+      };
+      lastCopyPeopleRef.current = includePeople;
+      setClipboardVersion((prev) => prev + 1);
+      toast({
+        title: "Copied to clipboard",
+        description: `Copied ${nodesToCopy.length} ${nodesToCopy.length === 1 ? "node" : "nodes"} and ${edgesToCopy.length} ${edgesToCopy.length === 1 ? "edge" : "edges"}.`,
+      });
+    },
+    [cloneFlowNode, cloneFlowEdge, edges, focusOfficeId, nodes, selectedNodeIds, toast]
+  );
+
+  const pasteIntoOffice = useCallback(
+    (options?: { targetOfficeId?: string | null; centerOnViewport?: boolean }) => {
+      const clipboard = clipboardRef.current;
+      if (!clipboard) {
+        toast({
+          title: "Clipboard is empty",
+          description: "Copy nodes before pasting.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const targetOfficeId =
+        options?.targetOfficeId ??
+        focusOfficeId ??
+        clipboard.sourceOfficeId ??
+        (offices[0]?.data.officeId ?? offices[0]?.id ?? null);
+
+      if (!targetOfficeId) {
+        toast({
+          title: "No target office",
+          description: "Select an office to paste into.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const idMap = new Map<string, string>();
+      const clonedNodes = clipboard.nodes.map((node) => cloneFlowNode(node));
+      const clonedEdges = clipboard.edges.map((edge) => cloneFlowEdge(edge));
+
+      clonedNodes.forEach((node) => {
+        const newId = crypto.randomUUID();
+        idMap.set(node.id, newId);
+        node.id = newId;
+        node.data = {
+          ...node.data,
+          officeId: targetOfficeId,
+        };
+        node.selected = false;
+        node.dragging = false;
+      });
+
+      const bbox = clonedNodes.reduce(
+        (acc, node) => ({
+          minX: Math.min(acc.minX, node.position.x),
+          minY: Math.min(acc.minY, node.position.y),
+          maxX: Math.max(acc.maxX, node.position.x),
+          maxY: Math.max(acc.maxY, node.position.y),
+        }),
+        { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+      );
+
+      const width = bbox.maxX === -Infinity ? 0 : bbox.maxX - bbox.minX;
+      const height = bbox.maxY === -Infinity ? 0 : bbox.maxY - bbox.minY;
+
+      let offset = { x: 80, y: 80 };
+
+      if (options?.centerOnViewport && reactFlowWrapper.current) {
+        const bounds = reactFlowWrapper.current.getBoundingClientRect();
+        const projectedCenter = project({
+          x: bounds.width / 2,
+          y: bounds.height / 2,
+        });
+        const sourceCenter = {
+          x: bbox.minX + width / 2,
+          y: bbox.minY + height / 2,
+        };
+        offset = {
+          x: projectedCenter.x - sourceCenter.x,
+          y: projectedCenter.y - sourceCenter.y,
+        };
+      }
+
+      if (targetOfficeId === clipboard.sourceOfficeId && !options?.centerOnViewport) {
+        offset = { x: 120, y: 120 };
+      }
+
+      const pastedNodeIds: string[] = [];
+      const newNodes = clonedNodes.map((node) => {
+        pastedNodeIds.push(node.id);
+        return {
+          ...node,
+          position: {
+            x: node.position.x + offset.x,
+            y: node.position.y + offset.y,
+          },
+        };
+      });
+
+      const newEdges = clonedEdges
+        .map((edge) => {
+          const newSource = idMap.get(edge.source);
+          const newTarget = idMap.get(edge.target);
+          if (!newSource || !newTarget) return null;
+          const orientationSource = normalizeHandleId(edge.sourceHandle);
+          const orientationTarget = normalizeHandleId(edge.targetHandle);
+          const color = edge.data?.color ?? DEFAULT_EDGE_COLOR;
+          return {
+            ...edge,
+            id: `edge-${crypto.randomUUID()}`,
+            source: newSource,
+            target: newTarget,
+            sourceHandle: getSourceHandleId(orientationSource) ?? edge.sourceHandle,
+            targetHandle: getTargetHandleId(orientationTarget) ?? edge.targetHandle,
+            data: edge.data?.customType
+              ? { ...edge.data, color, customType: edge.data.customType }
+              : { color },
+            style: { ...(edge.style ?? {}), stroke: color, strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color },
+          };
+        })
+        .filter((edge): edge is FlowEdge => Boolean(edge));
+
+      runWithHistory(() => {
+        setNodes((existing) => [...existing, ...newNodes]);
+        setEdges((existing) => [...existing, ...newEdges]);
+      });
+      setSelectedNodeIds(pastedNodeIds);
+      setFocusOfficeId(targetOfficeId);
+      requestFocus();
+      toast({
+        title: "Pasted nodes",
+        description: `Added ${newNodes.length} ${newNodes.length === 1 ? "node" : "nodes"} to the office.`,
+      });
+    },
+    [cloneFlowEdge, cloneFlowNode, focusOfficeId, offices, project, requestFocus, runWithHistory, setEdges, setNodes, setSelectedNodeIds, toast]
+  );
+
   const undo = useCallback((): boolean => {
     const history = historyRef.current;
     if (!history.past.length) {
@@ -481,6 +718,22 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         if (redo()) {
           event.preventDefault();
         }
+        return;
+      }
+      if (key === "c") {
+        if (event.shiftKey) return;
+        copySelection(lastCopyPeopleRef.current);
+        event.preventDefault();
+        return;
+      }
+      if (key === "v") {
+        if (event.shiftKey) {
+          pasteIntoOffice({ centerOnViewport: true });
+          event.preventDefault();
+          return;
+        }
+        pasteIntoOffice();
+        event.preventDefault();
       }
     };
 
@@ -488,7 +741,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [redo, undo]);
+  }, [copySelection, pasteIntoOffice, redo, undo]);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeIds.length) return null;
@@ -1652,15 +1905,26 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                       const officeIdentifier = office.data.officeId ?? office.id;
                       const isActive = focusOfficeId === officeIdentifier || focusOfficeId === office.id;
                       return (
-                        <Button
-                          key={office.id}
-                          variant={isActive ? "secondary" : "ghost"}
-                          size="sm"
-                          className="w-full justify-start"
-                          onClick={() => setFocusOfficeId(officeIdentifier)}
-                        >
-                          {office.data.name}
-                        </Button>
+                        <div key={office.id} className="flex items-center gap-2">
+                          <Button
+                            variant={isActive ? "secondary" : "ghost"}
+                            size="sm"
+                            className="flex-1 justify-start"
+                            onClick={() => setFocusOfficeId(officeIdentifier)}
+                          >
+                            {office.data.name}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="px-2"
+                            onClick={() => pasteIntoOffice({ targetOfficeId: officeIdentifier, centerOnViewport: true })}
+                            disabled={!clipboardAvailable}
+                            title="Paste into this office"
+                          >
+                            <ClipboardPaste className="h-4 w-4" />
+                          </Button>
+                        </div>
                       );
                     }) : (
                       <p className="px-2 py-4 text-sm text-muted-foreground">No matches</p>
@@ -1756,6 +2020,37 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 aria-label="Redo"
               >
                 <Redo2 className="h-4 w-4" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    title="Copy"
+                    aria-label="Copy"
+                    disabled={loading}
+                  >
+                    <ClipboardCopy className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => copySelection(false)}>
+                    Copy structure only
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => copySelection(true)}>
+                    Copy with people
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => pasteIntoOffice()}
+                disabled={!clipboardAvailable}
+                title="Paste (Ctrl/Cmd+V)"
+                aria-label="Paste"
+              >
+                <ClipboardPaste className="h-4 w-4" />
               </Button>
               <Select value={edgeType} onValueChange={(value: "orth" | "smoothstep") => setEdgeType(value)}>
                 <SelectTrigger className="h-9 w-36">
