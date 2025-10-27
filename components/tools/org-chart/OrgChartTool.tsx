@@ -123,13 +123,13 @@ const LEGACY_HANDLE_MAP: Record<string, "t" | "r" | "b" | "l"> = {
   "r-target": "r",
 };
 
-const normalizeHandleId = (handle?: string | null): "t" | "r" | "b" | "l" | undefined => {
+const normalizeHandleId = (handle?: string | null): HandleOrientation | undefined => {
   if (!handle) return undefined;
   const normalized = LEGACY_HANDLE_MAP[handle] ?? handle;
-  return VALID_HANDLE_IDS.has(normalized) ? (normalized as "t" | "r" | "b" | "l") : undefined;
+  return VALID_HANDLE_IDS.has(normalized) ? (normalized as HandleOrientation) : undefined;
 };
 
-const getSourceHandleId = (orientation: "t" | "r" | "b" | "l" | undefined): string | undefined => {
+const getSourceHandleId = (orientation: HandleOrientation | undefined): string | undefined => {
   if (!orientation) return undefined;
   switch (orientation) {
     case "t":
@@ -145,7 +145,7 @@ const getSourceHandleId = (orientation: "t" | "r" | "b" | "l" | undefined): stri
   }
 };
 
-const getTargetHandleId = (orientation: "t" | "r" | "b" | "l" | undefined): string | undefined => {
+const getTargetHandleId = (orientation: HandleOrientation | undefined): string | undefined => {
   if (!orientation) return undefined;
   switch (orientation) {
     case "t":
@@ -235,6 +235,61 @@ type FlowNodeData = OrgNodeData;
 type FlowNode = Node<FlowNodeData>;
 type FlowEdge = Edge<{ color?: string; customType?: string }>;
 type FlowEdgeData = { color?: string; customType?: string };
+
+type HandleOrientation = "t" | "r" | "b" | "l";
+
+const EDGE_ALIGNMENT_TOLERANCE = 6;
+const DEFAULT_NODE_WIDTH = 240;
+const DEFAULT_NODE_HEIGHT = 160;
+
+const getNodeCenter = (node: FlowNode | undefined): { x: number; y: number } | null => {
+  if (!node) return null;
+  const baseX = node.positionAbsolute?.x ?? node.position.x;
+  const baseY = node.positionAbsolute?.y ?? node.position.y;
+  const width = node.width ?? DEFAULT_NODE_WIDTH;
+  const height = node.height ?? DEFAULT_NODE_HEIGHT;
+  return { x: baseX + width / 2, y: baseY + height / 2 };
+};
+
+const resolveEdgeLayout = (
+  sourceNode: FlowNode | undefined,
+  targetNode: FlowNode | undefined,
+  fallbackType: Edge["type"]
+): { source: HandleOrientation; target: HandleOrientation; type: Edge["type"] } | null => {
+  const sourceCenter = getNodeCenter(sourceNode);
+  const targetCenter = getNodeCenter(targetNode);
+
+  if (!sourceCenter || !targetCenter) {
+    return fallbackType
+      ? { source: "r", target: "l", type: fallbackType }
+      : null;
+  }
+
+  const deltaX = targetCenter.x - sourceCenter.x;
+  const deltaY = targetCenter.y - sourceCenter.y;
+  const absDeltaX = Math.abs(deltaX);
+  const absDeltaY = Math.abs(deltaY);
+
+  if (absDeltaY >= absDeltaX) {
+    const sourceAboveTarget = deltaY >= 0;
+    const alignsX = absDeltaX <= EDGE_ALIGNMENT_TOLERANCE;
+    return {
+      source: sourceAboveTarget ? "b" : "t",
+      target: sourceAboveTarget ? "t" : "b",
+      type: alignsX ? "straight" : "orthogonal",
+    };
+  }
+
+  const sourceLeftOfTarget = deltaX <= 0;
+  const alignsY = absDeltaY <= EDGE_ALIGNMENT_TOLERANCE;
+  return {
+    source: sourceLeftOfTarget ? "l" : "r",
+    target: sourceLeftOfTarget ? "r" : "l",
+    type: alignsY ? "straight" : "orthogonal",
+  };
+};
+
+const ORTHOGONAL_CONNECTION_LINE = "orthogonal" as unknown as ConnectionLineType;
 
 type EmployeeOption = {
   id: string;
@@ -330,7 +385,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [clipboardVersion, setClipboardVersion] = useState(0);
   const lastCopyPeopleRef = useRef(false);
 
-  const defaultEdgeOptions = useMemo(() => ({ type: mapDocEdgeTypeToFlow(edgeType) }), [edgeType]);
+  const defaultEdgeOptions = useMemo(() => ({ type: "orthogonal" as Edge["type"] }), []);
   const clipboardAvailable = useMemo(() => clipboardVersion > 0 && clipboardRef.current !== null, [clipboardVersion]);
   const reactFlowInstance = useReactFlow<
     FlowNodeData,
@@ -1018,131 +1073,111 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   );
 
   const normalizeEdges = useCallback((edgeList: FlowEdge[], nodeList: FlowNode[]): FlowEdge[] => {
-    const nodeTypeMap = new Map(nodeList.map((node) => [node.id, node.type]));
     const nodeLookup = new Map(nodeList.map((node) => [node.id, node]));
     let changed = false;
-    const getCenterX = (nodeId: string | undefined): number | null => {
-      if (!nodeId) return null;
-      const node = nodeLookup.get(nodeId);
-      if (!node) return null;
-      const baseX = node.positionAbsolute?.x ?? node.position.x;
-      const width = node.width ?? 240;
-      return baseX + width / 2;
-    };
 
-    const updatedEdges: FlowEdge[] = edgeList.map((edge) => {
-      const sourceType = nodeTypeMap.get(edge.source);
-      const targetType = nodeTypeMap.get(edge.target);
-      const normalizedSource = normalizeHandleId(edge.sourceHandle);
-      const normalizedTarget = normalizeHandleId(edge.targetHandle);
-      let nextEdge: FlowEdge = edge;
-      const desiredSourceHandle = getSourceHandleId(normalizedSource);
-      const desiredTargetHandle = getTargetHandleId(normalizedTarget);
-      if (
-        desiredSourceHandle &&
-        desiredSourceHandle !== edge.sourceHandle
-      ) {
-        nextEdge = { ...nextEdge, sourceHandle: desiredSourceHandle };
-        changed = true;
-      }
-      if (
-        desiredTargetHandle &&
-        desiredTargetHandle !== edge.targetHandle
-      ) {
-        nextEdge = { ...nextEdge, targetHandle: desiredTargetHandle };
-        changed = true;
-      }
+    const normalizedEdges = edgeList.map((edge) => {
+      const sourceNode = nodeLookup.get(edge.source);
+      const targetNode = nodeLookup.get(edge.target);
+      const currentCustomType = edge.data?.customType;
+      const fallbackType =
+        currentCustomType === "smoothstep"
+          ? "smoothstep"
+          : currentCustomType === "straight"
+          ? "straight"
+          : mapDocEdgeTypeToFlow(edgeType);
+      const layout = resolveEdgeLayout(sourceNode, targetNode, fallbackType);
+      const color = edge.data?.color ?? DEFAULT_EDGE_COLOR;
+      const nextData: FlowEdgeData = { ...(edge.data ?? {}), color };
 
-      if (sourceType === "person" && targetType === "person") {
-        const color = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
-        const orientationSource = normalizedSource ?? "r";
-        const orientationTarget = normalizedTarget ?? "l";
-        const sourceHandleId = getSourceHandleId(orientationSource) ?? "r-source";
-        const targetHandleId = getTargetHandleId(orientationTarget) ?? "l-target";
-        const alreadyStraight =
-          nextEdge.type === "straight" &&
-          nextEdge.data?.customType === "straight" &&
-          nextEdge.sourceHandle === sourceHandleId &&
-          nextEdge.targetHandle === targetHandleId;
-        if (alreadyStraight) {
-          return nextEdge;
+      let desiredSourceHandle =
+        edge.sourceHandle ??
+        getSourceHandleId(normalizeHandleId(edge.sourceHandle)) ??
+        getSourceHandleId("r");
+      let desiredTargetHandle =
+        edge.targetHandle ??
+        getTargetHandleId(normalizeHandleId(edge.targetHandle)) ??
+        getTargetHandleId("l");
+      let desiredType: Edge["type"] = edge.type;
+      let edgeChanged = false;
+
+      if (layout) {
+        const resolvedSource = getSourceHandleId(layout.source) ?? desiredSourceHandle;
+        const resolvedTarget = getTargetHandleId(layout.target) ?? desiredTargetHandle;
+
+        if (resolvedSource !== edge.sourceHandle) {
+          desiredSourceHandle = resolvedSource;
+          edgeChanged = true;
         }
-        changed = true;
-        const out: FlowEdge = {
-          ...nextEdge,
-          type: "straight",
-          sourceHandle: sourceHandleId,
-          targetHandle: targetHandleId,
-          data: { ...(nextEdge.data ?? {}), color, customType: "straight" },
-          style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color },
-        };
-        return out;
-      }
+        if (resolvedTarget !== edge.targetHandle) {
+          desiredTargetHandle = resolvedTarget;
+          edgeChanged = true;
+        }
 
-      const isVerticalPair =
-        ((normalizedSource ?? "") === "b" && (normalizedTarget ?? "") === "t") ||
-        ((normalizedSource ?? "") === "t" && (normalizedTarget ?? "") === "b");
+        if (layout.type !== edge.type) {
+          desiredType = layout.type;
+          edgeChanged = true;
+        }
 
-      if (isVerticalPair) {
-        const sourceCenter = getCenterX(nextEdge.source);
-        const targetCenter = getCenterX(nextEdge.target);
-        if (sourceCenter !== null && targetCenter !== null) {
-          const aligned = Math.abs(sourceCenter - targetCenter) <= 6;
-          if (aligned) {
-            const color = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
-            const alreadyStraight =
-              nextEdge.type === "straight" && nextEdge.data?.customType === "straight";
-            if (!alreadyStraight) {
-              changed = true;
-            }
-            const out: FlowEdge = {
-              ...nextEdge,
-              type: "straight",
-              sourceHandle: getSourceHandleId(normalizedSource ?? "b") ?? nextEdge.sourceHandle,
-              targetHandle: getTargetHandleId(normalizedTarget ?? "t") ?? nextEdge.targetHandle,
-              data: { ...(nextEdge.data ?? {}), color, customType: "straight" },
-              style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
-              markerEnd: { type: MarkerType.ArrowClosed, color },
-            };
-            return out;
+        const desiredCustomType: FlowEdgeData["customType"] =
+          layout.type === "straight"
+            ? "straight"
+            : layout.type === "smoothstep"
+            ? "smoothstep"
+            : "orth";
+
+        if (nextData.customType !== desiredCustomType) {
+          if (desiredCustomType) {
+            nextData.customType = desiredCustomType;
+          } else {
+            delete nextData.customType;
           }
-          if (!aligned && nextEdge.data?.customType === "straight") {
-            const color = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
-            changed = true;
-            const out: FlowEdge = {
-              ...nextEdge,
-              type: mapDocEdgeTypeToFlow(edgeType),
-              sourceHandle: getSourceHandleId(normalizedSource) ?? nextEdge.sourceHandle,
-              targetHandle: getTargetHandleId(normalizedTarget) ?? nextEdge.targetHandle,
-              data: { color },
-              style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
-              markerEnd: { type: MarkerType.ArrowClosed, color },
-            };
-            return out;
-          }
+          edgeChanged = true;
+        }
+      } else {
+        const normalizedSourceHandle = getSourceHandleId(normalizeHandleId(edge.sourceHandle));
+        const normalizedTargetHandle = getTargetHandleId(normalizeHandleId(edge.targetHandle));
+        if (normalizedSourceHandle && normalizedSourceHandle !== edge.sourceHandle) {
+          desiredSourceHandle = normalizedSourceHandle;
+          edgeChanged = true;
+        }
+        if (normalizedTargetHandle && normalizedTargetHandle !== edge.targetHandle) {
+          desiredTargetHandle = normalizedTargetHandle;
+          edgeChanged = true;
         }
       }
 
-      if (nextEdge.type === "straight" && nextEdge.data?.customType !== "straight") {
-        const fallbackColor = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
-        changed = true;
-        const out: FlowEdge = {
-          ...nextEdge,
-          type: mapDocEdgeTypeToFlow(edgeType),
-          sourceHandle: getSourceHandleId(normalizeHandleId(nextEdge.sourceHandle)) ?? nextEdge.sourceHandle,
-          targetHandle: getTargetHandleId(normalizeHandleId(nextEdge.targetHandle)) ?? nextEdge.targetHandle,
-          data: { color: fallbackColor },
-          markerEnd: { type: MarkerType.ArrowClosed, color: fallbackColor },
-          style: { stroke: fallbackColor, strokeWidth: 2 },
-        };
-        return out;
+      if ((edge.data?.color ?? DEFAULT_EDGE_COLOR) !== color) {
+        edgeChanged = true;
       }
 
-      return nextEdge;
+      if (edge.style?.stroke !== color || edge.style?.strokeWidth !== 2) {
+        edgeChanged = true;
+      }
+
+      const markerColor = edge.markerEnd?.color ?? color;
+      const markerType = edge.markerEnd?.type ?? MarkerType.ArrowClosed;
+      if (markerColor !== color || markerType !== MarkerType.ArrowClosed) {
+        edgeChanged = true;
+      }
+
+      if (!edgeChanged) {
+        return edge;
+      }
+
+      changed = true;
+      return {
+        ...edge,
+        sourceHandle: desiredSourceHandle,
+        targetHandle: desiredTargetHandle,
+        type: desiredType,
+        data: nextData,
+        style: { ...(edge.style ?? {}), stroke: color, strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color },
+      };
     });
 
-    return changed ? updatedEdges : edgeList;
+    return changed ? normalizedEdges : edgeList;
   }, [edgeType]);
 
   const setDocument = useCallback(
@@ -1460,51 +1495,28 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         }
       }
 
-      const rawSourceOrientation = normalizeHandleId(connection.sourceHandle);
-      const rawTargetOrientation = normalizeHandleId(connection.targetHandle);
+      const defaultType = mapDocEdgeTypeToFlow(edgeType);
+      const layout = resolveEdgeLayout(sourceNode, targetNode, defaultType);
 
-      const shouldForceHorizontal =
-        sourceNode?.type === "person" &&
-        targetNode?.type === "person" &&
-        (!rawSourceOrientation || rawSourceOrientation === "l" || rawSourceOrientation === "r") &&
-        (!rawTargetOrientation || rawTargetOrientation === "l" || rawTargetOrientation === "r");
+      const fallbackSourceOrientation: HandleOrientation =
+        layout?.source ?? normalizeHandleId(connection.sourceHandle) ?? "r";
+      const fallbackTargetOrientation: HandleOrientation =
+        layout?.target ?? normalizeHandleId(connection.targetHandle) ?? "l";
 
-      const normalizedSourceOrientation = shouldForceHorizontal
-        ? "r"
-        : rawSourceOrientation ?? "r";
-      const normalizedTargetOrientation = shouldForceHorizontal
-        ? "l"
-        : rawTargetOrientation ?? "l";
+      const resolvedSourceHandle =
+        getSourceHandleId(fallbackSourceOrientation) ?? getSourceHandleId("r") ?? "r-source";
+      const resolvedTargetHandle =
+        getTargetHandleId(fallbackTargetOrientation) ?? getTargetHandleId("l") ?? "l-target";
 
-      const resolvedSourceHandle = getSourceHandleId(normalizedSourceOrientation) ?? "r-source";
-      const resolvedTargetHandle = getTargetHandleId(normalizedTargetOrientation) ?? "l-target";
+      const resolvedType: Edge["type"] = layout?.type ?? defaultType;
+      const resolvedCustomType: FlowEdgeData["customType"] =
+        resolvedType === "straight"
+          ? "straight"
+          : resolvedType === "smoothstep"
+          ? "smoothstep"
+          : "orth";
 
-      const isVerticalPair =
-        ((normalizedSourceOrientation === "b" && normalizedTargetOrientation === "t") ||
-          (normalizedSourceOrientation === "t" && normalizedTargetOrientation === "b")) &&
-          sourceNode &&
-          targetNode;
-
-      const getCenterX = (node: FlowNode | undefined): number | null => {
-        if (!node) return null;
-        const baseX = node.positionAbsolute?.x ?? node.position.x;
-        const width = node.width ?? 240;
-        return baseX + width / 2;
-      };
-
-      const verticalAligned =
-        isVerticalPair &&
-        (() => {
-          const sourceCenter = getCenterX(sourceNode);
-          const targetCenter = getCenterX(targetNode);
-          if (sourceCenter === null || targetCenter === null) {
-            return false;
-          }
-          return Math.abs(sourceCenter - targetCenter) <= 6;
-        })();
-
-      const forceStraight = shouldForceHorizontal || verticalAligned;
-      const edgeVisualType = forceStraight ? "straight" : mapDocEdgeTypeToFlow(edgeType);
+      const color = DEFAULT_EDGE_COLOR;
 
       const newEdge: FlowEdge = {
         id: `edge-${crypto.randomUUID()}`,
@@ -1512,13 +1524,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         target: connection.target,
         sourceHandle: resolvedSourceHandle,
         targetHandle: resolvedTargetHandle,
-        type: edgeVisualType,
+        type: resolvedType,
         label: "",
-        data: forceStraight
-          ? { color: DEFAULT_EDGE_COLOR, customType: "straight" }
-          : { color: DEFAULT_EDGE_COLOR },
-        style: { stroke: DEFAULT_EDGE_COLOR, strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: DEFAULT_EDGE_COLOR },
+        data: resolvedCustomType ? { color, customType: resolvedCustomType } : { color },
+        style: { stroke: color, strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color },
       };
 
       runWithHistory(() => {
@@ -2242,8 +2252,9 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 snapGrid={[10, 10]}
                 selectionOnDrag
                 multiSelectionKeyCode="Shift"
-                connectionMode={ConnectionMode.Loose}
+                connectionMode={"loose" as ConnectionMode}
                 defaultEdgeOptions={defaultEdgeOptions}
+                fitViewOnInit={false}
                 panOnDrag={[1]}
                 nodesDraggable
                 elementsSelectable
@@ -2254,7 +2265,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 minZoom={0.2}
                 maxZoom={3}
                 deleteKeyCode={["Delete", "Backspace"]}
-                connectionLineType={edgeType === "smoothstep" ? ConnectionLineType.SmoothStep : ConnectionLineType.Step}
+                connectionLineType={ORTHOGONAL_CONNECTION_LINE}
                 style={{ width: "100%", height: "100%" }}
               >
                 <Background gap={10} color="rgba(15,23,42,0.08)" size={1} />
@@ -2561,7 +2572,7 @@ const HANDLE_POSITIONS: Array<{
   {
     id: "t",
     position: Position.Top,
-    style: { left: "50%", top: 0, transform: "translate(-50%, -50%)" },
+    style: { top: 0, left: "50%", transform: "translateX(-50%)" },
   },
   {
     id: "r",
@@ -2571,7 +2582,7 @@ const HANDLE_POSITIONS: Array<{
   {
     id: "b",
     position: Position.Bottom,
-    style: { left: "50%", bottom: 0, transform: "translate(-50%, 50%)" },
+    style: { bottom: 0, left: "50%", transform: "translateX(-50%)" },
   },
   {
     id: "l",
@@ -2590,11 +2601,12 @@ function getHandlesForType(type: OrgNodeType): HandleConfig[] {
 function mapDocEdgeTypeToFlow(type?: "orth" | "smoothstep" | "straight"): Edge["type"] {
   if (type === "smoothstep") return "smoothstep";
   if (type === "straight") return "straight";
-  return "step";
+  return "orthogonal";
 }
 
 function mapFlowEdgeTypeToDoc(type?: string): "orth" | "smoothstep" | "straight" {
   if (type === "smoothstep") return "smoothstep";
   if (type === "straight") return "straight";
+  if (type === "orthogonal" || type === "step" || type === "orth") return "orth";
   return "orth";
 }
