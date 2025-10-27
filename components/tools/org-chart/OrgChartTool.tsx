@@ -226,7 +226,6 @@ const cloneGraphState = (graph: GraphState): GraphState => {
       data: { ...node.data },
       position: { ...node.position },
       style: node.style ? { ...node.style } : undefined,
-      origin: node.origin ? { ...node.origin } : undefined,
       width: node.width,
       height: node.height,
     })),
@@ -234,7 +233,9 @@ const cloneGraphState = (graph: GraphState): GraphState => {
       ...edge,
       data: edge.data ? { ...edge.data } : undefined,
       style: edge.style ? { ...edge.style } : undefined,
-      markerEnd: edge.markerEnd ? { ...edge.markerEnd } : undefined,
+      markerEnd: edge.markerEnd
+        ? { ...edge.markerEnd, style: edge.markerEnd?.style ? { ...edge.markerEnd.style } : undefined }
+        : undefined,
     })),
   };
 };
