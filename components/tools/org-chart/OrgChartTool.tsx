@@ -95,21 +95,61 @@ const LEGACY_HANDLE_MAP: Record<string, "t" | "r" | "b" | "l"> = {
   top: "t",
   "top-source": "t",
   "top-target": "t",
+  "t-source": "t",
+  "t-target": "t",
   bottom: "b",
   "bottom-source": "b",
   "bottom-target": "b",
+  "b-source": "b",
+  "b-target": "b",
   left: "l",
   "left-source": "l",
   "left-target": "l",
+  "l-source": "l",
+  "l-target": "l",
   right: "r",
   "right-source": "r",
   "right-target": "r",
+  "r-source": "r",
+  "r-target": "r",
 };
 
 const normalizeHandleId = (handle?: string | null): "t" | "r" | "b" | "l" | undefined => {
   if (!handle) return undefined;
   const normalized = LEGACY_HANDLE_MAP[handle] ?? handle;
   return VALID_HANDLE_IDS.has(normalized) ? (normalized as "t" | "r" | "b" | "l") : undefined;
+};
+
+const getSourceHandleId = (orientation: "t" | "r" | "b" | "l" | undefined): string | undefined => {
+  if (!orientation) return undefined;
+  switch (orientation) {
+    case "t":
+      return "t-source";
+    case "r":
+      return "r-source";
+    case "b":
+      return "b-source";
+    case "l":
+      return "l-source";
+    default:
+      return undefined;
+  }
+};
+
+const getTargetHandleId = (orientation: "t" | "r" | "b" | "l" | undefined): string | undefined => {
+  if (!orientation) return undefined;
+  switch (orientation) {
+    case "t":
+      return "t-target";
+    case "r":
+      return "r-target";
+    case "b":
+      return "b-target";
+    case "l":
+      return "l-target";
+    default:
+      return undefined;
+  }
 };
 
 type GraphState = { nodes: FlowNode[]; edges: FlowEdge[] };
@@ -259,6 +299,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [isExporting, setIsExporting] = useState(false);
   const [focusOfficeId, setFocusOfficeId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [officeSearch, setOfficeSearch] = useState("");
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
   const [showPhotos, setShowPhotos] = useState(false);
   const [focusTrigger, setFocusTrigger] = useState(0);
@@ -278,6 +319,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   }, []);
 
   const offices = useMemo(() => nodes.filter((node: FlowNode) => node.type === "office"), [nodes]);
+  const filteredOffices = useMemo(() => {
+    const query = officeSearch.trim().toLowerCase();
+    if (!query) return offices;
+    return offices.filter((office) => office.data.name.toLowerCase().includes(query));
+  }, [officeSearch, offices]);
 
   const nodesRef = useRef<FlowNode[]>([]);
   const edgesRef = useRef<FlowEdge[]>([]);
@@ -616,8 +662,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         type: mapFlowEdgeTypeToDoc(edge.data?.customType ?? (edge.type as string | undefined)),
         label: typeof edge.label === "string" ? edge.label : undefined,
         color: edge.data?.color ?? DEFAULT_EDGE_COLOR,
-        sourceHandle: edge.sourceHandle ? normalizeHandleId(edge.sourceHandle) : undefined,
-        targetHandle: edge.targetHandle ? normalizeHandleId(edge.targetHandle) : undefined,
+        sourceHandle: normalizeHandleId(edge.sourceHandle) ?? undefined,
+        targetHandle: normalizeHandleId(edge.targetHandle) ?? undefined,
       })),
       edgeType: currentEdgeType,
     }),
@@ -669,8 +715,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         id: edge.id,
         source: edge.source,
         target: edge.target,
-        sourceHandle: normalizeHandleId(edge.sourceHandle),
-        targetHandle: normalizeHandleId(edge.targetHandle),
+        sourceHandle: getSourceHandleId(normalizeHandleId(edge.sourceHandle)),
+        targetHandle: getTargetHandleId(normalizeHandleId(edge.targetHandle)),
         type: mapDocEdgeTypeToFlow(edge.type),
         label: edge.label,
         data: { color: edge.color ?? DEFAULT_EDGE_COLOR, customType: edge.type },
@@ -680,9 +726,18 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     []
   );
 
-  const normalizePersonEdges = useCallback((edgeList: FlowEdge[], nodeList: FlowNode[]): FlowEdge[] => {
+  const normalizeEdges = useCallback((edgeList: FlowEdge[], nodeList: FlowNode[]): FlowEdge[] => {
     const nodeTypeMap = new Map(nodeList.map((node) => [node.id, node.type]));
+    const nodeLookup = new Map(nodeList.map((node) => [node.id, node]));
     let changed = false;
+    const getCenterX = (nodeId: string | undefined): number | null => {
+      if (!nodeId) return null;
+      const node = nodeLookup.get(nodeId);
+      if (!node) return null;
+      const baseX = node.positionAbsolute?.x ?? node.position.x;
+      const width = node.width ?? 240;
+      return baseX + width / 2;
+    };
 
     const updatedEdges = edgeList.map((edge) => {
       const sourceType = nodeTypeMap.get(edge.source);
@@ -690,24 +745,34 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       const normalizedSource = normalizeHandleId(edge.sourceHandle);
       const normalizedTarget = normalizeHandleId(edge.targetHandle);
       let nextEdge: FlowEdge = edge;
-      if (normalizedSource !== edge.sourceHandle || normalizedTarget !== edge.targetHandle) {
-        nextEdge = {
-          ...nextEdge,
-          sourceHandle: normalizedSource,
-          targetHandle: normalizedTarget,
-        };
+      const desiredSourceHandle = getSourceHandleId(normalizedSource);
+      const desiredTargetHandle = getTargetHandleId(normalizedTarget);
+      if (
+        desiredSourceHandle &&
+        desiredSourceHandle !== edge.sourceHandle
+      ) {
+        nextEdge = { ...nextEdge, sourceHandle: desiredSourceHandle };
+        changed = true;
+      }
+      if (
+        desiredTargetHandle &&
+        desiredTargetHandle !== edge.targetHandle
+      ) {
+        nextEdge = { ...nextEdge, targetHandle: desiredTargetHandle };
         changed = true;
       }
 
       if (sourceType === "person" && targetType === "person") {
         const color = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
-        const sourceHandle = normalizedSource ?? "r";
-        const targetHandle = normalizedTarget ?? "l";
+        const orientationSource = normalizedSource ?? "r";
+        const orientationTarget = normalizedTarget ?? "l";
+        const sourceHandleId = getSourceHandleId(orientationSource) ?? "r-source";
+        const targetHandleId = getTargetHandleId(orientationTarget) ?? "l-target";
         const alreadyStraight =
           nextEdge.type === "straight" &&
           nextEdge.data?.customType === "straight" &&
-          nextEdge.sourceHandle === sourceHandle &&
-          nextEdge.targetHandle === targetHandle;
+          nextEdge.sourceHandle === sourceHandleId &&
+          nextEdge.targetHandle === targetHandleId;
         if (alreadyStraight) {
           return nextEdge;
         }
@@ -715,11 +780,67 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         return {
           ...nextEdge,
           type: "straight",
-          sourceHandle,
-          targetHandle,
+          sourceHandle: sourceHandleId,
+          targetHandle: targetHandleId,
           data: { ...(nextEdge.data ?? {}), color, customType: "straight" },
           style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
           markerEnd: { type: MarkerType.ArrowClosed, color },
+        };
+      }
+
+      const isVerticalPair =
+        ((normalizedSource ?? "") === "b" && (normalizedTarget ?? "") === "t") ||
+        ((normalizedSource ?? "") === "t" && (normalizedTarget ?? "") === "b");
+
+      if (isVerticalPair) {
+        const sourceCenter = getCenterX(nextEdge.source);
+        const targetCenter = getCenterX(nextEdge.target);
+        if (sourceCenter !== null && targetCenter !== null) {
+          const aligned = Math.abs(sourceCenter - targetCenter) <= 6;
+          if (aligned) {
+            const color = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
+            const alreadyStraight =
+              nextEdge.type === "straight" && nextEdge.data?.customType === "straight";
+            if (!alreadyStraight) {
+              changed = true;
+            }
+            return {
+              ...nextEdge,
+              type: "straight",
+              sourceHandle: getSourceHandleId(normalizedSource ?? "b") ?? nextEdge.sourceHandle,
+              targetHandle: getTargetHandleId(normalizedTarget ?? "t") ?? nextEdge.targetHandle,
+              data: { ...(nextEdge.data ?? {}), color, customType: "straight" },
+              style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
+              markerEnd: { type: MarkerType.ArrowClosed, color },
+            };
+          }
+          if (!aligned && nextEdge.data?.customType === "straight") {
+            const color = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
+            changed = true;
+            return {
+              ...nextEdge,
+              type: mapDocEdgeTypeToFlow(edgeType),
+              sourceHandle: getSourceHandleId(normalizedSource) ?? nextEdge.sourceHandle,
+              targetHandle: getTargetHandleId(normalizedTarget) ?? nextEdge.targetHandle,
+              data: { color },
+              style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
+              markerEnd: { type: MarkerType.ArrowClosed, color },
+            };
+          }
+        }
+      }
+
+      if (nextEdge.type === "straight" && nextEdge.data?.customType !== "straight") {
+        const fallbackColor = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
+        changed = true;
+        return {
+          ...nextEdge,
+          type: mapDocEdgeTypeToFlow(edgeType),
+          sourceHandle: getSourceHandleId(normalizeHandleId(nextEdge.sourceHandle)) ?? nextEdge.sourceHandle,
+          targetHandle: getTargetHandleId(normalizeHandleId(nextEdge.targetHandle)) ?? nextEdge.targetHandle,
+          data: { color: fallbackColor },
+          markerEnd: { type: MarkerType.ArrowClosed, color: fallbackColor },
+          style: { stroke: fallbackColor, strokeWidth: 2 },
         };
       }
 
@@ -727,12 +848,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     });
 
     return changed ? updatedEdges : edgeList;
-  }, []);
+  }, [edgeType]);
 
   const setDocument = useCallback(
     (document: OrgChartDocument, markSaved = true, shouldRefocus = false) => {
       const flowNodes = applyNodeDefaults(document.nodes);
-      const flowEdges = normalizePersonEdges(applyEdgeDefaults(document.edges), flowNodes);
+      const flowEdges = normalizeEdges(applyEdgeDefaults(document.edges), flowNodes);
       setNodes(flowNodes);
       setEdges(flowEdges);
       setEdgeType(document.edgeType ?? "orth");
@@ -748,7 +869,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         requestFocus();
       }
     },
-    [applyEdgeDefaults, applyNodeDefaults, normalizePersonEdges, requestFocus, resetHistory, serializeDocument, setEdges, setNodes]
+    [applyEdgeDefaults, applyNodeDefaults, normalizeEdges, requestFocus, resetHistory, serializeDocument, setEdges, setNodes]
   );
 
   const loadInitialData = useCallback(async () => {
@@ -825,8 +946,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   }, [edgeType, setEdges]);
 
   useEffect(() => {
-    setEdges((eds: FlowEdge[]) => normalizePersonEdges(eds, nodesRef.current));
-  }, [normalizePersonEdges, setEdges, nodes]);
+    setEdges((eds: FlowEdge[]) => normalizeEdges(eds, nodesRef.current));
+  }, [normalizeEdges, setEdges, nodes]);
 
   useEffect(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -946,14 +1067,51 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         }
       }
 
-      const forceHorizontal = sourceNode?.type === "person" && targetNode?.type === "person";
-      const resolvedSourceHandle = forceHorizontal
+      const rawSourceOrientation = normalizeHandleId(connection.sourceHandle);
+      const rawTargetOrientation = normalizeHandleId(connection.targetHandle);
+
+      const shouldForceHorizontal =
+        sourceNode?.type === "person" &&
+        targetNode?.type === "person" &&
+        (!rawSourceOrientation || rawSourceOrientation === "l" || rawSourceOrientation === "r") &&
+        (!rawTargetOrientation || rawTargetOrientation === "l" || rawTargetOrientation === "r");
+
+      const normalizedSourceOrientation = shouldForceHorizontal
         ? "r"
-        : normalizeHandleId(connection.sourceHandle) ?? "r";
-      const resolvedTargetHandle = forceHorizontal
+        : rawSourceOrientation ?? "r";
+      const normalizedTargetOrientation = shouldForceHorizontal
         ? "l"
-        : normalizeHandleId(connection.targetHandle) ?? "l";
-      const edgeVisualType = forceHorizontal ? "straight" : mapDocEdgeTypeToFlow(edgeType);
+        : rawTargetOrientation ?? "l";
+
+      const resolvedSourceHandle = getSourceHandleId(normalizedSourceOrientation) ?? "r-source";
+      const resolvedTargetHandle = getTargetHandleId(normalizedTargetOrientation) ?? "l-target";
+
+      const isVerticalPair =
+        ((normalizedSourceOrientation === "b" && normalizedTargetOrientation === "t") ||
+          (normalizedSourceOrientation === "t" && normalizedTargetOrientation === "b")) &&
+          sourceNode &&
+          targetNode;
+
+      const getCenterX = (node: FlowNode | undefined): number | null => {
+        if (!node) return null;
+        const baseX = node.positionAbsolute?.x ?? node.position.x;
+        const width = node.width ?? 240;
+        return baseX + width / 2;
+      };
+
+      const verticalAligned =
+        isVerticalPair &&
+        (() => {
+          const sourceCenter = getCenterX(sourceNode);
+          const targetCenter = getCenterX(targetNode);
+          if (sourceCenter === null || targetCenter === null) {
+            return false;
+          }
+          return Math.abs(sourceCenter - targetCenter) <= 6;
+        })();
+
+      const forceStraight = shouldForceHorizontal || verticalAligned;
+      const edgeVisualType = forceStraight ? "straight" : mapDocEdgeTypeToFlow(edgeType);
 
       const newEdge: FlowEdge = {
         id: `edge-${crypto.randomUUID()}`,
@@ -963,7 +1121,9 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         targetHandle: resolvedTargetHandle,
         type: edgeVisualType,
         label: "",
-        data: forceHorizontal ? { color: DEFAULT_EDGE_COLOR, customType: "straight" } : { color: DEFAULT_EDGE_COLOR },
+        data: forceStraight
+          ? { color: DEFAULT_EDGE_COLOR, customType: "straight" }
+          : { color: DEFAULT_EDGE_COLOR },
         style: { stroke: DEFAULT_EDGE_COLOR, strokeWidth: 2 },
         markerEnd: { type: MarkerType.ArrowClosed, color: DEFAULT_EDGE_COLOR },
       };
@@ -1452,9 +1612,43 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
             <CardContent className="space-y-4 pt-6">
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Offices</Label>
+                <div className="relative">
+                  <Input
+                    value={officeSearch}
+                    onChange={(event) => setOfficeSearch(event.target.value)}
+                    placeholder="Search offices"
+                    className="h-8 pr-8"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        const first = filteredOffices[0];
+                        if (first) {
+                          setFocusOfficeId(first.data.officeId ?? first.id);
+                        }
+                      }
+                    }}
+                  />
+                  {officeSearch ? (
+                    <button
+                      type="button"
+                      onClick={() => setOfficeSearch("")}
+                      aria-label="Clear office search"
+                      className="absolute right-2 top-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
                 <ScrollArea className="mt-2 h-64 pr-2">
                   <div className="space-y-1 pr-1">
-                    {offices.map((office: FlowNode) => {
+                    <Button
+                      variant={focusOfficeId ? "ghost" : "secondary"}
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => setFocusOfficeId(null)}
+                    >
+                      Whole org
+                    </Button>
+                    {filteredOffices.length ? filteredOffices.map((office: FlowNode) => {
                       const officeIdentifier = office.data.officeId ?? office.id;
                       const isActive = focusOfficeId === officeIdentifier || focusOfficeId === office.id;
                       return (
@@ -1468,7 +1662,9 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                           {office.data.name}
                         </Button>
                       );
-                    })}
+                    }) : (
+                      <p className="px-2 py-4 text-sm text-muted-foreground">No matches</p>
+                    )}
                   </div>
                 </ScrollArea>
               </div>
@@ -1936,8 +2132,8 @@ const HANDLE_POSITIONS: Array<{
 
 function getHandlesForType(type: OrgNodeType): HandleConfig[] {
   return HANDLE_POSITIONS.flatMap(({ id, position, style }) => [
-    { id, type: "target" as const, position, style: { ...style, zIndex: 5 } },
-    { id, type: "source" as const, position, style: { ...style, zIndex: 5 } },
+    { id: `${id}-target`, type: "target" as const, position, style: { ...style, zIndex: 5 } },
+    { id: `${id}-source`, type: "source" as const, position, style: { ...style, zIndex: 5 } },
   ]);
 }
 
