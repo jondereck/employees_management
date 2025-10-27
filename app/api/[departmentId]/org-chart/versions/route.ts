@@ -9,6 +9,8 @@ type Params = {
   };
 };
 
+export const runtime = "nodejs";
+
 const SaveSchema = z.object({
   label: z.string().min(1, "Label is required"),
   data: z
@@ -22,14 +24,6 @@ const SaveSchema = z.object({
 const ParamsSchema = z.object({
   departmentId: z.string().min(1),
 });
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "15mb",
-    },
-  },
-};
 
 export async function GET(_request: Request, { params }: Params) {
   const parseParams = ParamsSchema.safeParse(params);
