@@ -1,5 +1,7 @@
 export type OrgNodeType = "office" | "unit" | "person";
 
+export type OrgMarkerType = "none" | "arrow" | "arrowClosed" | "diamond" | "circle";
+
 export type OrgNodeData = {
   name: string;
   title?: string;
@@ -33,6 +35,10 @@ export type OrgChartEdge = {
   color?: string;
   sourceHandle?: string;
   targetHandle?: string;
+  markerStartType?: OrgMarkerType;
+  markerEndType?: OrgMarkerType;
+  markerSize?: number;
+  markerColor?: string;
 };
 
 export type OrgChartDocument = {

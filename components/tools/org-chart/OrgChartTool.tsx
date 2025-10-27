@@ -60,6 +60,7 @@ import type {
   OrgChartVersionSummary,
   OrgNodeData,
   OrgNodeType,
+  OrgMarkerType,
 } from "@/types/orgChart";
 import {
   BadgeCheck,
@@ -80,6 +81,7 @@ import {
   User,
   Users,
   Wand2,
+  Hand,
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import { PDFDocument } from "pdf-lib";
@@ -98,6 +100,20 @@ const EDGE_TYPE_OPTIONS: Array<{ label: string; value: "orth" | "smoothstep" }> 
   { label: "Orthogonal", value: "orth" },
   { label: "Smooth", value: "smoothstep" },
 ];
+
+const MARKER_TYPE_OPTIONS: Array<{ label: string; value: OrgMarkerType; description: string }> = [
+  { label: "None", value: "none", description: "No marker" },
+  { label: "Arrow", value: "arrow", description: "Open arrow" },
+  { label: "Arrow (closed)", value: "arrowClosed", description: "Closed arrow" },
+  { label: "Diamond", value: "diamond", description: "Diamond marker" },
+  { label: "Circle", value: "circle", description: "Circle marker" },
+];
+
+const DEFAULT_MARKER_START: OrgMarkerType = "none";
+const DEFAULT_MARKER_END: OrgMarkerType = "arrowClosed";
+const DEFAULT_MARKER_SIZE = 18;
+const MIN_MARKER_SIZE = 8;
+const MAX_MARKER_SIZE = 28;
 
 const VALID_HANDLE_IDS = new Set(["t", "r", "b", "l"]);
 const LEGACY_HANDLE_MAP: Record<string, "t" | "r" | "b" | "l"> = {
@@ -227,16 +243,271 @@ const cloneGraphState = (graph: GraphState): GraphState => {
   };
 };
 
+type MarkerPosition = "start" | "end";
+
+type CustomMarkerDefinition = {
+  id: string;
+  type: Extract<OrgMarkerType, "diamond" | "circle">;
+  size: number;
+  color: string;
+  position: MarkerPosition;
+};
+
+const sanitizeMarkerIdPart = (value: string): string => {
+  if (!value) return "default";
+  return value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "default";
+};
+
+const getCustomMarkerId = (
+  type: Extract<OrgMarkerType, "diamond" | "circle">,
+  color: string,
+  size: number,
+  position: MarkerPosition
+): string => `orgchart-marker-${type}-${position}-${size}-${sanitizeMarkerIdPart(color)}`;
+
+const normalizeMarkerSizeValue = (size?: number): number => {
+  if (typeof size !== "number" || Number.isNaN(size)) {
+    return DEFAULT_MARKER_SIZE;
+  }
+  return clamp(Math.round(size), MIN_MARKER_SIZE, MAX_MARKER_SIZE);
+};
+
+const getMarkerReference = (
+  type: OrgMarkerType,
+  color: string,
+  size: number,
+  position: MarkerPosition
+): Edge["markerStart"] => {
+  if (type === "none") return undefined;
+  if (type === "arrow") {
+    return { type: MarkerType.Arrow, color, width: size, height: size };
+  }
+  if (type === "arrowClosed") {
+    return { type: MarkerType.ArrowClosed, color, width: size, height: size };
+  }
+  const customId = getCustomMarkerId(type, color, size, position);
+  return `url(#${customId})`;
+};
+
 type OrgChartToolProps = {
   departmentId: string;
 };
 
 type FlowNodeData = OrgNodeData;
 type FlowNode = Node<FlowNodeData>;
-type FlowEdge = Edge<{ color?: string; customType?: string }>;
-type FlowEdgeData = { color?: string; customType?: string };
+type FlowEdgeData = {
+  color?: string;
+  customType?: string;
+  markerStartType?: OrgMarkerType;
+  markerEndType?: OrgMarkerType;
+  markerSize?: number;
+  markerColor?: string;
+};
+type FlowEdge = Edge<FlowEdgeData>;
 
 type HandleOrientation = "t" | "r" | "b" | "l";
+type Tool = "select" | "hand" | "connect";
+
+const markerEquals = (a: Edge["markerStart"], b: Edge["markerStart"]): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (typeof a === "string" || typeof b === "string") {
+    return typeof a === "string" && typeof b === "string" && a === b;
+  }
+  return (
+    a.type === b.type &&
+    (a.color ?? undefined) === (b.color ?? undefined) &&
+    (a.width ?? undefined) === (b.width ?? undefined) &&
+    (a.height ?? undefined) === (b.height ?? undefined) &&
+    (a.markerUnits ?? undefined) === (b.markerUnits ?? undefined) &&
+    (a.orient ?? undefined) === (b.orient ?? undefined) &&
+    (a.strokeWidth ?? undefined) === (b.strokeWidth ?? undefined)
+  );
+};
+
+const applyEdgePresentation = (edge: FlowEdge): FlowEdge => {
+  const normalizedColor = normalizeColor(edge.data?.color) ?? DEFAULT_EDGE_COLOR;
+  const markerSize = normalizeMarkerSizeValue(edge.data?.markerSize);
+  const markerColor = normalizeColor(edge.data?.markerColor ?? edge.data?.color) ?? normalizedColor;
+  const markerStartType = edge.data?.markerStartType ?? DEFAULT_MARKER_START;
+  const markerEndType = edge.data?.markerEndType ?? DEFAULT_MARKER_END;
+
+  const nextData: FlowEdgeData = {
+    ...edge.data,
+    color: normalizedColor,
+    markerColor,
+    markerSize,
+    markerStartType,
+    markerEndType,
+  };
+
+  const markerStartRef = getMarkerReference(markerStartType, markerColor, markerSize, "start");
+  const markerEndRef = getMarkerReference(markerEndType, markerColor, markerSize, "end");
+  const nextStyle = { ...(edge.style ?? {}), stroke: normalizedColor, strokeWidth: 2 };
+
+  const currentData = edge.data ?? {};
+  const dataMatches =
+    (normalizeColor(currentData.color) ?? DEFAULT_EDGE_COLOR) === normalizedColor &&
+    normalizeMarkerSizeValue(currentData.markerSize) === markerSize &&
+    (normalizeColor(currentData.markerColor ?? currentData.color) ?? normalizedColor) === markerColor &&
+    (currentData.markerStartType ?? DEFAULT_MARKER_START) === markerStartType &&
+    (currentData.markerEndType ?? DEFAULT_MARKER_END) === markerEndType;
+
+  const styleMatches =
+    (edge.style?.stroke ?? normalizedColor) === normalizedColor &&
+    (edge.style?.strokeWidth ?? 2) === 2;
+
+  const startMatches = markerEquals(edge.markerStart, markerStartRef);
+  const endMatches = markerEquals(edge.markerEnd, markerEndRef);
+
+  if (dataMatches && styleMatches && startMatches && endMatches) {
+    return edge;
+  }
+
+  return {
+    ...edge,
+    data: nextData,
+    style: nextStyle,
+    markerStart: markerStartRef,
+    markerEnd: markerEndRef,
+  };
+};
+
+const getCustomMarkerDefinitions = (edges: FlowEdge[]): CustomMarkerDefinition[] => {
+  const definitionMap = new Map<string, CustomMarkerDefinition>();
+
+  edges.forEach((edge) => {
+    const data = edge.data;
+    if (!data) return;
+    const markerSize = normalizeMarkerSizeValue(data.markerSize);
+    const markerColor = normalizeColor(data.markerColor ?? data.color) ?? DEFAULT_EDGE_COLOR;
+
+    const register = (type: OrgMarkerType | undefined, position: MarkerPosition) => {
+      if (type !== "diamond" && type !== "circle") return;
+      const id = getCustomMarkerId(type, markerColor, markerSize, position);
+      definitionMap.set(`${id}-${position}`, {
+        id,
+        type,
+        size: markerSize,
+        color: markerColor,
+        position,
+      });
+    };
+
+    register(data.markerStartType, "start");
+    register(data.markerEndType, "end");
+  });
+
+  return Array.from(definitionMap.values());
+};
+
+const MarkerDefinitionsLayer = ({ definitions }: { definitions: CustomMarkerDefinition[] }): JSX.Element | null => {
+  if (!definitions.length) {
+    return null;
+  }
+
+  return (
+    <svg className="pointer-events-none absolute h-0 w-0">
+      <defs>
+        {definitions.map(({ id, type, color, size, position }) => {
+          const strokeWidth = Math.max(1, Math.round(size * 0.1));
+          if (type === "circle") {
+            const radius = size / 2;
+            const ref = radius;
+            return (
+              <marker
+                key={id}
+                id={id}
+                markerWidth={size}
+                markerHeight={size}
+                refX={ref}
+                refY={radius}
+                orient="auto"
+                markerUnits="userSpaceOnUse"
+              >
+                <circle cx={radius} cy={radius} r={radius} fill={color} stroke={color} strokeWidth={strokeWidth} />
+              </marker>
+            );
+          }
+
+          const refX = position === "end" ? size : 0;
+          const half = size / 2;
+          const path = `M0 ${half} L${half} ${size} L${size} ${half} L${half} 0 Z`;
+
+          return (
+            <marker
+              key={id}
+              id={id}
+              markerWidth={size}
+              markerHeight={size}
+              refX={refX}
+              refY={half}
+              orient="auto"
+              markerUnits="userSpaceOnUse"
+            >
+              <path d={path} fill={color} stroke={color} strokeWidth={strokeWidth} />
+            </marker>
+          );
+        })}
+      </defs>
+    </svg>
+  );
+};
+
+const MarkerPreview = ({ type, color, direction }: { type: OrgMarkerType; color: string; direction: MarkerPosition }) => {
+  const normalizedColor = normalizeColor(color) ?? DEFAULT_EDGE_COLOR;
+
+  if (type === "none") {
+    return <div className="h-6 w-6 rounded border border-dashed border-muted-foreground/60" />;
+  }
+
+  const transform = direction === "start" ? "translate(24 0) scale(-1 1)" : undefined;
+
+  let shape: ReactNode = null;
+  switch (type) {
+    case "arrow":
+      shape = (
+        <g>
+          <line x1={4} y1={12} x2={18} y2={12} stroke={normalizedColor} strokeWidth={2} strokeLinecap="round" />
+          <line x1={18} y1={12} x2={12} y2={6} stroke={normalizedColor} strokeWidth={2} strokeLinecap="round" />
+          <line x1={18} y1={12} x2={12} y2={18} stroke={normalizedColor} strokeWidth={2} strokeLinecap="round" />
+        </g>
+      );
+      break;
+    case "arrowClosed":
+      shape = (
+        <g>
+          <line x1={4} y1={12} x2={14} y2={12} stroke={normalizedColor} strokeWidth={2} strokeLinecap="round" />
+          <path d="M14 6 L20 12 L14 18 Z" fill={normalizedColor} />
+        </g>
+      );
+      break;
+    case "diamond":
+      shape = (
+        <g>
+          <line x1={4} y1={12} x2={10} y2={12} stroke={normalizedColor} strokeWidth={2} strokeLinecap="round" />
+          <path d="M10 12 L16 6 L22 12 L16 18 Z" fill={normalizedColor} />
+        </g>
+      );
+      break;
+    case "circle":
+      shape = (
+        <g>
+          <line x1={4} y1={12} x2={10} y2={12} stroke={normalizedColor} strokeWidth={2} strokeLinecap="round" />
+          <circle cx={16} cy={12} r={6} fill={normalizedColor} />
+        </g>
+      );
+      break;
+    default:
+      shape = null;
+  }
+
+  return (
+    <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden>
+      <g transform={transform}>{shape}</g>
+    </svg>
+  );
+};
 
 const EDGE_ALIGNMENT_TOLERANCE = 6;
 const DEFAULT_NODE_WIDTH = 240;
@@ -338,7 +609,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const saveTimer = useRef<number | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNodeData>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<{ color?: string; customType?: string }>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdgeData>([]);
   const [edgeType, setEdgeType] = useState<"orth" | "smoothstep">("orth");
   const [allowCrossOfficeEdges, setAllowCrossOfficeEdges] = useState(true);
   const [versions, setVersions] = useState<OrgChartVersionSummary[]>([]);
@@ -355,6 +626,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
   const [showPhotos, setShowPhotos] = useState(false);
   const [focusTrigger, setFocusTrigger] = useState(0);
+  const [tool, setTool] = useState<Tool>("select");
   const versionStorageKey = useMemo(
     () => `org-chart:current-version:${departmentId}`,
     [departmentId]
@@ -389,10 +661,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   const defaultEdgeOptions = useMemo(() => ({ type: "step" as Edge["type"] }), []);
   const clipboardAvailable = useMemo(() => clipboardVersion > 0 && clipboardRef.current !== null, [clipboardVersion]);
-  const reactFlowInstance = useReactFlow<
-    FlowNodeData,
-    { color?: string; customType?: "orth" | "smoothstep" | "straight" }
-  >();
+  const reactFlowInstance = useReactFlow<FlowNodeData, FlowEdgeData>();
   const { fitView, project, getNode, setViewport } = reactFlowInstance;
 
   const MIN_FOCUS_ZOOM = 0.25;
@@ -408,6 +677,43 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     if (!query) return offices;
     return offices.filter((office) => office.data.name.toLowerCase().includes(query));
   }, [officeSearch, offices]);
+
+  const isHand = tool === "hand";
+  const customMarkerDefinitions = useMemo(() => getCustomMarkerDefinitions(edges), [edges]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const isEditable = (element: Element | null) =>
+      Boolean(
+        element &&
+          (element.tagName === "INPUT" ||
+            element.tagName === "TEXTAREA" ||
+            element.tagName === "SELECT" ||
+            (element as HTMLElement).isContentEditable)
+      );
+
+    const handleToolHotkeys = (event: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      if (event.key.toLowerCase() === "h") {
+        if (isEditable(activeElement)) {
+          return;
+        }
+        event.preventDefault();
+        setTool("hand");
+        return;
+      }
+
+      if (event.key === "Escape") {
+        setTool("select");
+      }
+    };
+
+    window.addEventListener("keydown", handleToolHotkeys);
+    return () => {
+      window.removeEventListener("keydown", handleToolHotkeys);
+    };
+  }, [setTool]);
 
   const cloneFlowNode = useCallback((node: FlowNode): FlowNode => ({
     ...node,
@@ -719,7 +1025,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         }
 
         const mergedData: FlowEdgeData = { ...(edge.data ?? {}), color };
-        const newEdge: FlowEdge = {
+        const newEdgeBase: FlowEdge = {
           ...edge,
           id: `edge-${crypto.randomUUID()}`,
           source: newSource,
@@ -727,8 +1033,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           sourceHandle: getSourceHandleId(orientationSource),
           targetHandle: getTargetHandleId(orientationTarget),
           data: mergedData,
-          style: { ...(edge.style ?? {}), stroke: color, strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color },
         };
         if (customType) {
           mergedData.customType = customType;
@@ -736,7 +1040,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           delete mergedData.customType;
         }
 
-        newEdges.push(newEdge);
+        newEdges.push(applyEdgePresentation(newEdgeBase));
       });
 
       runWithHistory(() => {
@@ -858,6 +1162,25 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     if (!selectedEdgeIds.length) return null;
     return edges.find((edge: FlowEdge) => edge.id === selectedEdgeIds[0]) ?? null;
   }, [edges, selectedEdgeIds]);
+
+  const selectedEdgeMarkerConfig = useMemo(() => {
+    if (!selectedEdge) {
+      return {
+        start: DEFAULT_MARKER_START,
+        end: DEFAULT_MARKER_END,
+        color: DEFAULT_EDGE_COLOR,
+        size: DEFAULT_MARKER_SIZE,
+      };
+    }
+    const data = selectedEdge.data ?? {};
+    const color = normalizeColor(data.markerColor ?? data.color) ?? DEFAULT_EDGE_COLOR;
+    return {
+      start: data.markerStartType ?? DEFAULT_MARKER_START,
+      end: data.markerEndType ?? DEFAULT_MARKER_END,
+      color,
+      size: normalizeMarkerSizeValue(data.markerSize),
+    };
+  }, [selectedEdge]);
 
   const collectNodesForOffice = useCallback((officeId: string | null, sourceNodes: FlowNode[]): FlowNode[] => {
     if (!sourceNodes.length) {
@@ -1012,6 +1335,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         color: edge.data?.color ?? DEFAULT_EDGE_COLOR,
         sourceHandle: normalizeHandleId(edge.sourceHandle) ?? undefined,
         targetHandle: normalizeHandleId(edge.targetHandle) ?? undefined,
+        markerStartType: edge.data?.markerStartType ?? DEFAULT_MARKER_START,
+        markerEndType: edge.data?.markerEndType ?? DEFAULT_MARKER_END,
+        markerSize: normalizeMarkerSizeValue(edge.data?.markerSize),
+        markerColor: edge.data?.markerColor ?? edge.data?.color ?? DEFAULT_EDGE_COLOR,
       })),
       edgeType: currentEdgeType,
     }),
@@ -1059,18 +1386,31 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   const applyEdgeDefaults = useCallback(
     (docEdges: OrgChartEdge[]): FlowEdge[] =>
-      docEdges.map((edge: OrgChartEdge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: getSourceHandleId(normalizeHandleId(edge.sourceHandle)),
-        targetHandle: getTargetHandleId(normalizeHandleId(edge.targetHandle)),
-        type: mapDocEdgeTypeToFlow(edge.type),
-        label: edge.label,
-        data: { color: edge.color ?? DEFAULT_EDGE_COLOR, customType: edge.type },
-        style: { stroke: edge.color ?? DEFAULT_EDGE_COLOR, strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: edge.color ?? DEFAULT_EDGE_COLOR },
-      })),
+      docEdges.map((edge: OrgChartEdge) => {
+        const normalizedColor = normalizeColor(edge.color) ?? DEFAULT_EDGE_COLOR;
+        const markerSize = normalizeMarkerSizeValue(edge.markerSize);
+        const markerColor = normalizeColor(edge.markerColor ?? normalizedColor) ?? normalizedColor;
+
+        const baseEdge: FlowEdge = {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: getSourceHandleId(normalizeHandleId(edge.sourceHandle)),
+          targetHandle: getTargetHandleId(normalizeHandleId(edge.targetHandle)),
+          type: mapDocEdgeTypeToFlow(edge.type),
+          label: edge.label,
+          data: {
+            color: normalizedColor,
+            customType: edge.type,
+            markerStartType: edge.markerStartType ?? DEFAULT_MARKER_START,
+            markerEndType: edge.markerEndType ?? DEFAULT_MARKER_END,
+            markerSize,
+            markerColor,
+          },
+        };
+
+        return applyEdgePresentation(baseEdge);
+      }),
     []
   );
 
@@ -1089,8 +1429,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           ? "straight"
           : mapDocEdgeTypeToFlow(edgeType);
       const layout = resolveEdgeLayout(sourceNode, targetNode, fallbackType);
-      const color = edge.data?.color ?? DEFAULT_EDGE_COLOR;
-      const nextData: FlowEdgeData = { ...(edge.data ?? {}), color };
 
       let desiredSourceHandle =
         edge.sourceHandle ??
@@ -1101,7 +1439,17 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         getTargetHandleId(normalizeHandleId(edge.targetHandle)) ??
         getTargetHandleId("l");
       let desiredType: Edge["type"] = edge.type;
+
+      let dataChanged = false;
       let edgeChanged = false;
+
+      let nextData: FlowEdgeData | undefined;
+
+      const ensureData = () => {
+        if (!nextData) {
+          nextData = edge.data ? { ...edge.data } : {};
+        }
+      };
 
       if (layout) {
         const resolvedSource = getSourceHandleId(layout.source) ?? desiredSourceHandle;
@@ -1128,59 +1476,55 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
             ? "smoothstep"
             : "orth";
 
-        if (nextData.customType !== desiredCustomType) {
-          if (desiredCustomType) {
+        if (edge.data?.customType !== desiredCustomType) {
+          ensureData();
+          if (nextData) {
             nextData.customType = desiredCustomType;
-          } else {
-            delete nextData.customType;
+            dataChanged = true;
           }
-          edgeChanged = true;
         }
       } else {
         const normalizedSourceHandle = getSourceHandleId(normalizeHandleId(edge.sourceHandle));
-        const normalizedTargetHandle = getTargetHandleId(normalizeHandleId(edge.targetHandle));
         if (normalizedSourceHandle && normalizedSourceHandle !== edge.sourceHandle) {
           desiredSourceHandle = normalizedSourceHandle;
           edgeChanged = true;
         }
+        const normalizedTargetHandle = getTargetHandleId(normalizeHandleId(edge.targetHandle));
         if (normalizedTargetHandle && normalizedTargetHandle !== edge.targetHandle) {
           desiredTargetHandle = normalizedTargetHandle;
           edgeChanged = true;
         }
       }
 
-      if ((edge.data?.color ?? DEFAULT_EDGE_COLOR) !== color) {
-        edgeChanged = true;
+      if (!edge.data?.color) {
+        ensureData();
+        if (nextData && !nextData.color) {
+          nextData.color = DEFAULT_EDGE_COLOR;
+          dataChanged = true;
+        }
       }
 
-      if (edge.style?.stroke !== color || edge.style?.strokeWidth !== 2) {
-        edgeChanged = true;
+      let updatedEdge = edge;
+
+      if (edgeChanged) {
+        updatedEdge = {
+          ...edge,
+          sourceHandle: desiredSourceHandle,
+          targetHandle: desiredTargetHandle,
+          type: desiredType,
+          data: dataChanged ? nextData : edge.data,
+        } as FlowEdge;
+      } else if (dataChanged && nextData) {
+        updatedEdge = { ...edge, data: nextData };
       }
 
-      let markerColor = color;
-      let markerType = MarkerType.ArrowClosed as MarkerType;
-      if (edge.markerEnd && typeof edge.markerEnd === "object") {
-        markerColor = edge.markerEnd.color ?? color;
-        markerType = edge.markerEnd.type ?? MarkerType.ArrowClosed;
-      }
-      if (markerColor !== color || markerType !== MarkerType.ArrowClosed) {
-        edgeChanged = true;
+      const presentedEdge = applyEdgePresentation(updatedEdge);
+
+      if (presentedEdge !== edge) {
+        changed = true;
       }
 
-      if (!edgeChanged) {
-        return edge;
-      }
-
-      changed = true;
-      return {
-        ...edge,
-        sourceHandle: desiredSourceHandle,
-        targetHandle: desiredTargetHandle,
-        type: desiredType,
-        data: nextData,
-        style: { ...(edge.style ?? {}), stroke: color, strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color },
-      };
+      return presentedEdge;
     });
 
     return changed ? normalizedEdges : edgeList;
@@ -1524,7 +1868,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
       const color = DEFAULT_EDGE_COLOR;
 
-      const newEdge: FlowEdge = {
+      const baseEdge: FlowEdge = {
         id: `edge-${crypto.randomUUID()}`,
         source: connection.source,
         target: connection.target,
@@ -1532,10 +1876,17 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         targetHandle: resolvedTargetHandle,
         type: resolvedType,
         label: "",
-        data: resolvedCustomType ? { color, customType: resolvedCustomType } : { color },
-        style: { stroke: color, strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color },
+        data: {
+          color,
+          ...(resolvedCustomType ? { customType: resolvedCustomType } : {}),
+          markerStartType: DEFAULT_MARKER_START,
+          markerEndType: DEFAULT_MARKER_END,
+          markerSize: DEFAULT_MARKER_SIZE,
+          markerColor: color,
+        },
       };
+
+      const newEdge = applyEdgePresentation(baseEdge);
 
       runWithHistory(() => {
         setEdges((eds: FlowEdge[]) => addEdge(newEdge, eds));
@@ -1627,16 +1978,20 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         setNodes((nds: FlowNode[]) => [...nds, newNode]);
         setEdges((eds: FlowEdge[]) => [
           ...eds,
-          {
+          applyEdgePresentation({
             id: `edge-${crypto.randomUUID()}`,
             source: parent.id,
             target: newId,
             type: mapDocEdgeTypeToFlow(edgeType),
             label: "",
-            data: { color: DEFAULT_EDGE_COLOR },
-            style: { stroke: DEFAULT_EDGE_COLOR, strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: DEFAULT_EDGE_COLOR },
-          },
+            data: {
+              color: DEFAULT_EDGE_COLOR,
+              markerStartType: DEFAULT_MARKER_START,
+              markerEndType: DEFAULT_MARKER_END,
+              markerSize: DEFAULT_MARKER_SIZE,
+              markerColor: DEFAULT_EDGE_COLOR,
+            },
+          }),
         ]);
       });
     },
@@ -1896,16 +2251,17 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         setEdges((eds: FlowEdge[]) =>
           eds.map((edge: FlowEdge) =>
             edge.id === selectedEdge.id
-              ? {
+              ? applyEdgePresentation({
                   ...edge,
                   ...updates,
                   data: {
                     ...edge.data,
                     ...(updates.data ?? {}),
                   },
-                  style: updates.style ?? edge.style,
+                  style: updates.style ? { ...(edge.style ?? {}), ...updates.style } : edge.style,
+                  markerStart: updates.markerStart ?? edge.markerStart,
                   markerEnd: updates.markerEnd ?? edge.markerEnd,
-                }
+                })
               : edge
           )
         );
@@ -2224,6 +2580,15 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               >
                 <ClipboardPaste className="h-4 w-4" />
               </Button>
+              <Button
+                variant={tool === "hand" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTool((current) => (current === "hand" ? "select" : "hand"))}
+                title="Hand (H) – pan the canvas"
+                aria-pressed={tool === "hand"}
+              >
+                <Hand className="mr-2 h-4 w-4" /> Hand
+              </Button>
               <Select value={edgeType} onValueChange={(value: "orth" | "smoothstep") => setEdgeType(value)}>
                 <SelectTrigger className="h-9 w-36">
                   <SelectValue placeholder="Edge type" />
@@ -2245,7 +2610,13 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
             </div>
           </div>
           <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
-            <div ref={reactFlowWrapper} className="h-full w-full">
+            <div
+              ref={reactFlowWrapper}
+              className={cn(
+                "relative h-full w-full",
+                isHand ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+              )}
+            >
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -2256,13 +2627,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 nodeTypes={nodeTypes}
                 snapToGrid
                 snapGrid={[10, 10]}
-                selectionOnDrag
+                selectionOnDrag={!isHand}
                 multiSelectionKeyCode="Shift"
                 connectionMode={"loose" as ConnectionMode}
                 defaultEdgeOptions={defaultEdgeOptions}
-                panOnDrag={[1]}
-                nodesDraggable
-                elementsSelectable
+                panOnDrag={isHand}
+                nodesDraggable={!isHand}
+                nodesConnectable={!isHand}
+                elementsSelectable={!isHand}
                 onNodeDragStart={handleNodeDragStart}
                 onNodeDragStop={handleNodeDragStop}
                 onMoveStart={handleMoveStart}
@@ -2273,6 +2645,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 connectionLineType={ORTHOGONAL_CONNECTION_LINE}
                 style={{ width: "100%", height: "100%" }}
               >
+                <MarkerDefinitionsLayer definitions={customMarkerDefinitions} />
                 <Background gap={10} color="rgba(15,23,42,0.08)" size={1} />
                 <MiniMap
                   className="rounded-md border bg-background"
@@ -2287,6 +2660,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 />
                 <Controls showInteractive={false} position="bottom-right" />
               </ReactFlow>
+              {isHand ? (
+                <div className="pointer-events-none absolute right-3 top-3 z-50 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white shadow">
+                  Hand tool active — press ESC to exit
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
@@ -2423,13 +2801,119 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                       onChange={(event) => {
                         const color = event.target.value;
                         updateSelectedEdge({
-                          data: { ...selectedEdge.data, color },
-                          style: { stroke: color, strokeWidth: 2 },
-                          markerEnd: { type: MarkerType.ArrowClosed, color },
+                          data: {
+                            ...selectedEdge.data,
+                            color,
+                            markerColor: color,
+                          },
                         });
                       }}
                       className="h-10 w-16 cursor-pointer p-1"
                     />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="edge-start-marker">Start marker</Label>
+                      <MarkerPreview
+                        type={selectedEdgeMarkerConfig.start}
+                        color={selectedEdgeMarkerConfig.color}
+                        direction="start"
+                      />
+                    </div>
+                    <Select
+                      value={selectedEdgeMarkerConfig.start}
+                      onValueChange={(value) =>
+                        updateSelectedEdge({
+                          data: {
+                            ...selectedEdge.data,
+                            markerStartType: value as OrgMarkerType,
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger id="edge-start-marker">
+                        <SelectValue placeholder="Start marker" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MARKER_TYPE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value} title={option.description}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="edge-end-marker">End marker</Label>
+                      <MarkerPreview
+                        type={selectedEdgeMarkerConfig.end}
+                        color={selectedEdgeMarkerConfig.color}
+                        direction="end"
+                      />
+                    </div>
+                    <Select
+                      value={selectedEdgeMarkerConfig.end}
+                      onValueChange={(value) =>
+                        updateSelectedEdge({
+                          data: {
+                            ...selectedEdge.data,
+                            markerEndType: value as OrgMarkerType,
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger id="edge-end-marker">
+                        <SelectValue placeholder="End marker" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MARKER_TYPE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value} title={option.description}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="edge-marker-color">Marker color</Label>
+                    <Input
+                      id="edge-marker-color"
+                      type="color"
+                      value={selectedEdgeMarkerConfig.color}
+                      onChange={(event) => {
+                        const markerColor = event.target.value;
+                        updateSelectedEdge({
+                          data: {
+                            ...selectedEdge.data,
+                            markerColor,
+                          },
+                        });
+                      }}
+                      className="h-10 w-16 cursor-pointer p-1"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="edge-marker-size">Marker size</Label>
+                    <Input
+                      id="edge-marker-size"
+                      type="number"
+                      min={MIN_MARKER_SIZE}
+                      max={MAX_MARKER_SIZE}
+                      value={selectedEdgeMarkerConfig.size}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        const markerSize = normalizeMarkerSizeValue(Number.isNaN(value) ? DEFAULT_MARKER_SIZE : value);
+                        updateSelectedEdge({
+                          data: {
+                            ...selectedEdge.data,
+                            markerSize,
+                          },
+                        });
+                      }}
+                      className="h-10 w-20"
+                    />
+                    <p className="text-xs text-muted-foreground">{MIN_MARKER_SIZE}-{MAX_MARKER_SIZE} px</p>
                   </div>
                   <Button variant="destructive" size="sm" onClick={removeSelectedEdge} className="flex items-center gap-2">
                     <Trash2 className="h-4 w-4" /> Remove connection
