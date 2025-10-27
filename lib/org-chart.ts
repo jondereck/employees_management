@@ -30,7 +30,7 @@ export async function buildInitialOrgDocument(
           position: true,
           isHead: true,
           employeeType: {
-            select: { name: true },
+            select: { name: true, value: true },
           },
           images: {
             select: { url: true },
@@ -49,6 +49,7 @@ export async function buildInitialOrgDocument(
   offices.forEach((office, officeIndex) => {
     const officeNodeId = `office-${office.id}`;
     const baseX = officeIndex * OFFICE_GAP_X;
+    const officeOutline = "#1E88E5";
 
     nodes.push({
       id: officeNodeId,
@@ -58,7 +59,8 @@ export async function buildInitialOrgDocument(
         name: office.name,
         label: office.name,
         officeId: office.id,
-        headerColor: "#1E88E5",
+        headerColor: officeOutline,
+        outlineColor: officeOutline,
       },
     });
 
@@ -69,6 +71,8 @@ export async function buildInitialOrgDocument(
       const nodeId = `person-${employee.id}`;
       const x = baseX + index * PERSON_GAP_X;
       const y = LEVEL_GAP_Y;
+      const employeeTypeColor = employee.employeeType?.value || "#3949AB";
+      const outlineColor = employeeTypeColor || "#3949AB";
       nodes.push({
         id: nodeId,
         type: "person",
@@ -77,11 +81,13 @@ export async function buildInitialOrgDocument(
           name: formatEmployeeName(employee),
           title: employee.position || undefined,
           employeeTypeName: employee.employeeType?.name ?? undefined,
+          employeeTypeColor: employeeTypeColor ?? undefined,
           isHead: true,
           officeId: office.id,
           employeeId: employee.id,
           label: employee.position || "Head",
-          headerColor: "#3949AB",
+          headerColor: outlineColor,
+          outlineColor,
           imageUrl: employee.images?.[0]?.url ?? undefined,
         },
       });
@@ -96,6 +102,7 @@ export async function buildInitialOrgDocument(
     if (includeStaffUnit && staffEmployees.length) {
       const unitId = `unit-${office.id}-staff`;
       const unitY = headEmployees.length ? LEVEL_GAP_Y * 2 : LEVEL_GAP_Y;
+      const unitOutline = "#FB8C00";
       nodes.push({
         id: unitId,
         type: "unit",
@@ -104,7 +111,8 @@ export async function buildInitialOrgDocument(
           name: "Staff",
           label: "Staff",
           officeId: office.id,
-          headerColor: "#FB8C00",
+          headerColor: unitOutline,
+          outlineColor: unitOutline,
         },
       });
       edges.push({
@@ -120,21 +128,25 @@ export async function buildInitialOrgDocument(
         const x = baseX + column * PERSON_GAP_X;
         const y = unitY + LEVEL_GAP_Y + row * LEVEL_GAP_Y;
         const nodeId = `person-${employee.id}`;
+        const employeeTypeColor = employee.employeeType?.value || "#5E35B1";
+        const outlineColor = employeeTypeColor || "#5E35B1";
         nodes.push({
           id: nodeId,
           type: "person",
           position: { x, y },
-        data: {
-          name: formatEmployeeName(employee),
-          title: employee.position || undefined,
-          employeeTypeName: employee.employeeType?.name ?? undefined,
-          officeId: office.id,
-          employeeId: employee.id,
-          label: employee.position || employee.employeeType?.name || "Staff",
-          headerColor: "#5E35B1",
-          imageUrl: employee.images?.[0]?.url ?? undefined,
-        },
-      });
+          data: {
+            name: formatEmployeeName(employee),
+            title: employee.position || undefined,
+            employeeTypeName: employee.employeeType?.name ?? undefined,
+            employeeTypeColor: employeeTypeColor ?? undefined,
+            officeId: office.id,
+            employeeId: employee.id,
+            label: employee.position || employee.employeeType?.name || "Staff",
+            headerColor: outlineColor,
+            outlineColor,
+            imageUrl: employee.images?.[0]?.url ?? undefined,
+          },
+        });
         edges.push({
           id: `${unitId}-${nodeId}`,
           source: unitId,
@@ -149,21 +161,25 @@ export async function buildInitialOrgDocument(
         const x = baseX + column * PERSON_GAP_X;
         const y = (headEmployees.length ? LEVEL_GAP_Y * 2 : LEVEL_GAP_Y) + row * LEVEL_GAP_Y;
         const nodeId = `person-${employee.id}`;
+        const employeeTypeColor = employee.employeeType?.value || "#5E35B1";
+        const outlineColor = employeeTypeColor || "#5E35B1";
         nodes.push({
           id: nodeId,
           type: "person",
           position: { x, y },
-        data: {
-          name: formatEmployeeName(employee),
-          title: employee.position || undefined,
-          employeeTypeName: employee.employeeType?.name ?? undefined,
-          officeId: office.id,
-          employeeId: employee.id,
-          label: employee.position || employee.employeeType?.name || "Staff",
-          headerColor: "#5E35B1",
-          imageUrl: employee.images?.[0]?.url ?? undefined,
-        },
-      });
+          data: {
+            name: formatEmployeeName(employee),
+            title: employee.position || undefined,
+            employeeTypeName: employee.employeeType?.name ?? undefined,
+            employeeTypeColor: employeeTypeColor ?? undefined,
+            officeId: office.id,
+            employeeId: employee.id,
+            label: employee.position || employee.employeeType?.name || "Staff",
+            headerColor: outlineColor,
+            outlineColor,
+            imageUrl: employee.images?.[0]?.url ?? undefined,
+          },
+        });
         edges.push({
           id: `${officeNodeId}-${nodeId}`,
           source: officeNodeId,

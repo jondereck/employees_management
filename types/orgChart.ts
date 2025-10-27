@@ -4,11 +4,13 @@ export type OrgNodeData = {
   name: string;
   title?: string;
   employeeTypeName?: string;
+  employeeTypeColor?: string;
   isHead?: boolean;
   officeId?: string;
   employeeId?: string;
   label?: string;
   headerColor?: string;
+  outlineColor?: string;
   notes?: string;
   imageUrl?: string;
 };
@@ -26,9 +28,11 @@ export type OrgChartEdge = {
   id: string;
   source: string;
   target: string;
-  type?: "orth" | "smoothstep";
+  type?: "orth" | "smoothstep" | "straight";
   label?: string;
   color?: string;
+  sourceHandle?: string;
+  targetHandle?: string;
 };
 
 export type OrgChartDocument = {

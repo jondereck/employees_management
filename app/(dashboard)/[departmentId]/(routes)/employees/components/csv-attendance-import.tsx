@@ -735,7 +735,7 @@ export default function CsvAttendanceImport() {
         }
       }
 
-      XLSX.utils.book_append_sheet(wb, ws4, "Flag Ceremony");
+      XLSX.utils.book_append_sheet(wb, ws4, "Absentees");
     }
 
       XLSX.writeFile(wb, `Attendance_${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true });

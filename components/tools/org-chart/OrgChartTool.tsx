@@ -10,6 +10,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import ReactFlow, {
@@ -63,13 +64,13 @@ import {
   ListFilter,
   Move,
   Plus,
+  Redo2,
   RefreshCw,
   Trash2,
+  Undo2,
   User,
   Users,
   Wand2,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import { PDFDocument } from "pdf-lib";
@@ -81,11 +82,114 @@ const DEFAULT_NODE_COLORS: Record<OrgNodeType, string> = {
 };
 
 const DEFAULT_EDGE_COLOR = "#0F172A";
+const NEUTRAL_OUTLINE_COLOR = "#E2E8F0";
+const HISTORY_LIMIT = 100;
 
 const EDGE_TYPE_OPTIONS: Array<{ label: string; value: "orth" | "smoothstep" }> = [
   { label: "Orthogonal", value: "orth" },
   { label: "Smooth", value: "smoothstep" },
 ];
+
+const VALID_HANDLE_IDS = new Set(["t", "r", "b", "l"]);
+const LEGACY_HANDLE_MAP: Record<string, "t" | "r" | "b" | "l"> = {
+  top: "t",
+  "top-source": "t",
+  "top-target": "t",
+  bottom: "b",
+  "bottom-source": "b",
+  "bottom-target": "b",
+  left: "l",
+  "left-source": "l",
+  "left-target": "l",
+  right: "r",
+  "right-source": "r",
+  "right-target": "r",
+};
+
+const normalizeHandleId = (handle?: string | null): "t" | "r" | "b" | "l" | undefined => {
+  if (!handle) return undefined;
+  const normalized = LEGACY_HANDLE_MAP[handle] ?? handle;
+  return VALID_HANDLE_IDS.has(normalized) ? (normalized as "t" | "r" | "b" | "l") : undefined;
+};
+
+type GraphState = { nodes: FlowNode[]; edges: FlowEdge[] };
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const componentToHex = (value: number) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0");
+
+const normalizeColor = (input?: string | null): string | null => {
+  if (!input) return null;
+  const value = input.trim();
+  if (!value) return null;
+  if (/^#([0-9a-f]{3})$/i.test(value)) {
+    const [, hex] = value.match(/^#([0-9a-f]{3})$/i) ?? [];
+    if (!hex) return null;
+    return `#${hex
+      .split("")
+      .map((char) => char + char)
+      .join("")}`.toUpperCase();
+  }
+  if (/^#([0-9a-f]{6})$/i.test(value)) {
+    return value.toUpperCase();
+  }
+  const rgbMatch = value.match(/^rgba?\(([^)]+)\)$/i);
+  if (rgbMatch) {
+    const parts = rgbMatch[1]
+      .split(",")
+      .map((part) => part.trim())
+      .map(Number)
+      .filter((part, index) => !Number.isNaN(part) && (index < 3 || index === 3));
+    if (parts.length >= 3) {
+      const [r, g, b] = parts;
+      return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`.toUpperCase();
+    }
+  }
+  return null;
+};
+
+const hexToRgb = (hex: string): [number, number, number] | null => {
+  const normalized = normalizeColor(hex);
+  if (!normalized) return null;
+  const value = normalized.replace("#", "");
+  const bigint = parseInt(value, 16);
+  if (Number.isNaN(bigint)) return null;
+  return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+};
+
+const colorWithAlpha = (color: string | undefined, alpha: number): string => {
+  const normalized = normalizeColor(color);
+  if (!normalized) {
+    const [r, g, b] = hexToRgb(NEUTRAL_OUTLINE_COLOR) ?? [226, 232, 240];
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const rgb = hexToRgb(normalized) ?? hexToRgb(NEUTRAL_OUTLINE_COLOR) ?? [226, 232, 240];
+  const [r, g, b] = rgb;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const cloneGraphState = (graph: GraphState): GraphState => {
+  if (typeof structuredClone === "function") {
+    return structuredClone(graph);
+  }
+  return {
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      data: { ...node.data },
+      position: { ...node.position },
+      style: node.style ? { ...node.style } : undefined,
+      origin: node.origin ? { ...node.origin } : undefined,
+      width: node.width,
+      height: node.height,
+    })),
+    edges: graph.edges.map((edge) => ({
+      ...edge,
+      data: edge.data ? { ...edge.data } : undefined,
+      style: edge.style ? { ...edge.style } : undefined,
+      markerEnd: edge.markerEnd ? { ...edge.markerEnd } : undefined,
+    })),
+  };
+};
 
 type OrgChartToolProps = {
   departmentId: string;
@@ -93,7 +197,7 @@ type OrgChartToolProps = {
 
 type FlowNodeData = OrgNodeData;
 type FlowNode = Node<FlowNodeData>;
-type FlowEdge = Edge<{ color?: string; customType?: "orth" | "smoothstep" }>;
+type FlowEdge = Edge<{ color?: string; customType?: "orth" | "smoothstep" | "straight" }>;
 
 type EmployeeOption = {
   id: string;
@@ -101,6 +205,7 @@ type EmployeeOption = {
   title: string;
   officeId: string | null;
   employeeTypeName: string;
+  employeeTypeColor?: string;
   imageUrl: string;
 };
 
@@ -141,7 +246,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const saveTimer = useRef<number | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNodeData>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<{ color?: string; customType?: "orth" | "smoothstep" }>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<{ color?: string; customType?: "orth" | "smoothstep" | "straight" }>([]);
   const [edgeType, setEdgeType] = useState<"orth" | "smoothstep">("orth");
   const [allowCrossOfficeEdges, setAllowCrossOfficeEdges] = useState(true);
   const [versions, setVersions] = useState<VersionRecord[]>([]);
@@ -156,23 +261,328 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
   const [showPhotos, setShowPhotos] = useState(false);
+  const [focusTrigger, setFocusTrigger] = useState(0);
 
-  const { fitView, project, getNode, setViewport } = useReactFlow<
+  const defaultEdgeOptions = useMemo(() => ({ type: mapDocEdgeTypeToFlow(edgeType) }), [edgeType]);
+  const reactFlowInstance = useReactFlow<
     FlowNodeData,
-    { color?: string; customType?: "orth" | "smoothstep" }
+    { color?: string; customType?: "orth" | "smoothstep" | "straight" }
   >();
+  const { fitView, project, getNode, setViewport } = reactFlowInstance;
+
+  const MIN_FOCUS_ZOOM = 0.25;
+  const MAX_FOCUS_ZOOM = 1.5;
+
+  const requestFocus = useCallback(() => {
+    setFocusTrigger((prev) => prev + 1);
+  }, []);
 
   const offices = useMemo(() => nodes.filter((node: FlowNode) => node.type === "office"), [nodes]);
+
+  const nodesRef = useRef<FlowNode[]>([]);
+  const edgesRef = useRef<FlowEdge[]>([]);
+  const focusTimeoutRef = useRef<number | null>(null);
+  const dragRecenterTimeoutRef = useRef<number | null>(null);
+  const isDraggingRef = useRef(false);
+  const isPanningRef = useRef(false);
+  const pendingHistoryEntryRef = useRef<GraphState | null>(null);
+  const historyRef = useRef<{ past: GraphState[]; future: GraphState[] }>({ past: [], future: [] });
+  const [historyStatus, setHistoryStatus] = useState({ canUndo: false, canRedo: false });
+
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  useEffect(
+    () => () => {
+      if (focusTimeoutRef.current) {
+        window.clearTimeout(focusTimeoutRef.current);
+      }
+      if (dragRecenterTimeoutRef.current) {
+        window.clearTimeout(dragRecenterTimeoutRef.current);
+      }
+      pendingHistoryEntryRef.current = null;
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!offices.length) return;
+    const firstOffice = offices[0];
+    const firstOfficeId = firstOffice.data.officeId ?? firstOffice.id;
+
+    setFocusOfficeId((current) => {
+      if (
+        current &&
+        offices.some((office) => {
+          const officeId = office.data.officeId ?? office.id;
+          return officeId === current || office.id === current;
+        })
+      ) {
+        return current;
+      }
+      return firstOfficeId ?? current;
+    });
+    requestFocus();
+  }, [offices, requestFocus]);
+
+  const getCurrentGraphState = useCallback(
+    (): GraphState =>
+      cloneGraphState({
+        nodes: nodesRef.current,
+        edges: edgesRef.current,
+      }),
+    []
+  );
+
+  const updateHistoryStatus = useCallback(() => {
+    const history = historyRef.current;
+    setHistoryStatus({ canUndo: history.past.length > 0, canRedo: history.future.length > 0 });
+  }, []);
+
+  const pushHistoryEntry = useCallback(
+    (entry: GraphState) => {
+      const history = historyRef.current;
+      history.past.push(entry);
+      if (history.past.length > HISTORY_LIMIT) {
+        history.past.shift();
+      }
+      history.future = [];
+      pendingHistoryEntryRef.current = null;
+      updateHistoryStatus();
+    },
+    [updateHistoryStatus]
+  );
+
+  const pushHistorySnapshot = useCallback(() => {
+    const snapshot = getCurrentGraphState();
+    pushHistoryEntry(snapshot);
+  }, [getCurrentGraphState, pushHistoryEntry]);
+
+  const runWithHistory = useCallback(
+    (operation: () => void) => {
+      pushHistorySnapshot();
+      operation();
+    },
+    [pushHistorySnapshot]
+  );
+
+  const resetHistory = useCallback(() => {
+    historyRef.current = { past: [], future: [] };
+    pendingHistoryEntryRef.current = null;
+    updateHistoryStatus();
+  }, [updateHistoryStatus]);
+
+  const undo = useCallback((): boolean => {
+    const history = historyRef.current;
+    if (!history.past.length) {
+      return false;
+    }
+    const previous = history.past.pop();
+    if (!previous) return false;
+    const current = getCurrentGraphState();
+    history.future.unshift(cloneGraphState(current));
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    updateHistoryStatus();
+    requestFocus();
+    return true;
+  }, [getCurrentGraphState, requestFocus, setEdges, setNodes, updateHistoryStatus]);
+
+  const redo = useCallback((): boolean => {
+    const history = historyRef.current;
+    if (!history.future.length) {
+      return false;
+    }
+    const next = history.future.shift();
+    if (!next) return false;
+    history.past.push(getCurrentGraphState());
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    updateHistoryStatus();
+    requestFocus();
+    return true;
+  }, [getCurrentGraphState, requestFocus, setEdges, setNodes, updateHistoryStatus]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+
+      const isMac = navigator.platform.toLowerCase().includes("mac");
+      const primaryKey = isMac ? event.metaKey : event.ctrlKey;
+      if (!primaryKey) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "z") {
+        if (event.shiftKey) {
+          if (redo()) {
+            event.preventDefault();
+          }
+          return;
+        }
+        if (undo()) {
+          event.preventDefault();
+        }
+        return;
+      }
+      if (key === "y") {
+        if (redo()) {
+          event.preventDefault();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [redo, undo]);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeIds.length) return null;
     return nodes.find((node: FlowNode) => node.id === selectedNodeIds[0]) ?? null;
   }, [nodes, selectedNodeIds]);
 
+  const selectedNodeOutlineColor = useMemo(() => {
+    if (!selectedNode) return NEUTRAL_OUTLINE_COLOR;
+    return (
+      normalizeColor(selectedNode.data.outlineColor) ??
+      normalizeColor(selectedNode.data.headerColor) ??
+      (selectedNode.type === "person" ? normalizeColor(selectedNode.data.employeeTypeColor) : null) ??
+      normalizeColor(DEFAULT_NODE_COLORS[selectedNode.type as OrgNodeType]) ??
+      NEUTRAL_OUTLINE_COLOR
+    );
+  }, [selectedNode]);
+
   const selectedEdge = useMemo(() => {
     if (!selectedEdgeIds.length) return null;
     return edges.find((edge: FlowEdge) => edge.id === selectedEdgeIds[0]) ?? null;
   }, [edges, selectedEdgeIds]);
+
+  const collectNodesForOffice = useCallback((officeId: string | null, sourceNodes: FlowNode[]): FlowNode[] => {
+    if (!sourceNodes.length) {
+      return [];
+    }
+
+    const visibleNodes = sourceNodes.filter((node) => !node.hidden);
+    if (!officeId) {
+      return visibleNodes.length ? visibleNodes : sourceNodes;
+    }
+
+    const officeNodesVisible = visibleNodes.filter((node) => {
+      if (node.type === "office") {
+        return (node.data.officeId ?? node.id) === officeId || node.id === officeId;
+      }
+      return node.data.officeId === officeId;
+    });
+
+    if (officeNodesVisible.length) {
+      return officeNodesVisible;
+    }
+
+    const officeNodesAll = sourceNodes.filter((node) => {
+      if (node.type === "office") {
+        return (node.data.officeId ?? node.id) === officeId || node.id === officeId;
+      }
+      return node.data.officeId === officeId;
+    });
+
+    if (officeNodesAll.length) {
+      return officeNodesAll;
+    }
+
+    return visibleNodes.length ? visibleNodes : sourceNodes;
+  }, []);
+
+  const focusOffice = useCallback(
+    (officeId: string | null) => {
+      if (isDraggingRef.current || isPanningRef.current) {
+        return;
+      }
+
+      if (!nodesRef.current.length) {
+        return;
+      }
+
+      if (focusTimeoutRef.current) {
+        window.clearTimeout(focusTimeoutRef.current);
+      }
+
+      focusTimeoutRef.current = window.setTimeout(() => {
+        const targets = collectNodesForOffice(officeId, nodesRef.current);
+        if (!targets.length) {
+          return;
+        }
+
+        try {
+          fitView({
+            nodes: targets,
+            padding: 0.2,
+            duration: 500,
+            minZoom: MIN_FOCUS_ZOOM,
+            maxZoom: MAX_FOCUS_ZOOM,
+            includeHiddenNodes: true,
+          });
+        } catch {
+          // ignore focus errors
+        } finally {
+          focusTimeoutRef.current = null;
+        }
+      }, 200);
+    },
+    [collectNodesForOffice, fitView, MAX_FOCUS_ZOOM, MIN_FOCUS_ZOOM]
+  );
+
+  const handleNodeDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+    pendingHistoryEntryRef.current = getCurrentGraphState();
+    if (dragRecenterTimeoutRef.current) {
+      window.clearTimeout(dragRecenterTimeoutRef.current);
+      dragRecenterTimeoutRef.current = null;
+    }
+  }, [getCurrentGraphState]);
+
+  const handleNodeDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingHistoryEntryRef.current) {
+      const pending = pendingHistoryEntryRef.current;
+      const hasMoved = pending.nodes.some((node) => {
+        const current = nodesRef.current.find((item) => item.id === node.id);
+        if (!current) return true;
+        return current.position.x !== node.position.x || current.position.y !== node.position.y;
+      });
+      if (hasMoved) {
+        pushHistoryEntry(pending);
+      } else {
+        pendingHistoryEntryRef.current = null;
+      }
+    }
+    if (dragRecenterTimeoutRef.current) {
+      window.clearTimeout(dragRecenterTimeoutRef.current);
+    }
+    dragRecenterTimeoutRef.current = window.setTimeout(() => {
+      focusOffice(focusOfficeId);
+      dragRecenterTimeoutRef.current = null;
+    }, 120);
+  }, [focusOffice, focusOfficeId, pushHistoryEntry]);
+
+  const handleMoveStart = useCallback(() => {
+    isPanningRef.current = true;
+    if (focusTimeoutRef.current) {
+      window.clearTimeout(focusTimeoutRef.current);
+      focusTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleMoveEnd = useCallback(() => {
+    isPanningRef.current = false;
+  }, []);
 
   const serializeDocument = useCallback(
     (flowNodes: FlowNode[], flowEdges: FlowEdge[], currentEdgeType: "orth" | "smoothstep"): OrgChartDocument => ({
@@ -184,11 +594,15 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           name: node.data.name,
           title: node.data.title,
           employeeTypeName: node.data.employeeTypeName,
+          employeeTypeColor: node.data.employeeTypeColor,
           isHead: node.data.isHead,
           officeId: node.data.officeId,
           employeeId: node.data.employeeId,
           label: node.data.label,
-          headerColor: node.data.headerColor,
+          outlineColor:
+            normalizeColor(node.data.outlineColor) ?? normalizeColor(node.data.headerColor) ?? undefined,
+          headerColor:
+            normalizeColor(node.data.outlineColor) ?? normalizeColor(node.data.headerColor) ?? undefined,
           notes: node.data.notes,
           imageUrl: node.data.imageUrl,
         },
@@ -202,6 +616,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         type: mapFlowEdgeTypeToDoc(edge.data?.customType ?? (edge.type as string | undefined)),
         label: typeof edge.label === "string" ? edge.label : undefined,
         color: edge.data?.color ?? DEFAULT_EDGE_COLOR,
+        sourceHandle: edge.sourceHandle ? normalizeHandleId(edge.sourceHandle) : undefined,
+        targetHandle: edge.targetHandle ? normalizeHandleId(edge.targetHandle) : undefined,
       })),
       edgeType: currentEdgeType,
     }),
@@ -210,25 +626,40 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   const applyNodeDefaults = useCallback(
     (docNodes: OrgChartNode[]): FlowNode[] =>
-      docNodes.map((node: OrgChartNode) => ({
-        id: node.id,
-        type: node.type,
-        position: node.position,
-        data: {
-          name: node.data.name,
-          title: node.data.title,
-          employeeTypeName: node.data.employeeTypeName,
-          isHead: node.data.isHead,
-          officeId: node.data.officeId,
-          employeeId: node.data.employeeId,
-          label: node.data.label ?? (node.type === "person" ? node.data.title ?? node.data.name : node.data.name),
-          headerColor: node.data.headerColor ?? DEFAULT_NODE_COLORS[node.type],
-          notes: node.data.notes,
-          imageUrl: node.data.imageUrl,
-        },
-        width: node.width,
-        height: node.height,
-      })),
+      docNodes.map((node: OrgChartNode) => {
+        const outlineColor =
+          normalizeColor(node.data.outlineColor) ??
+          normalizeColor(node.data.headerColor) ??
+          (node.type === "person" ? normalizeColor(node.data.employeeTypeColor) : null) ??
+          normalizeColor(DEFAULT_NODE_COLORS[node.type]) ??
+          NEUTRAL_OUTLINE_COLOR;
+        const baseNode: FlowNode = {
+          id: node.id,
+          type: node.type,
+          position: node.position,
+          data: {
+            name: node.data.name,
+            title: node.data.title,
+            employeeTypeName: node.data.employeeTypeName,
+            employeeTypeColor: normalizeColor(node.data.employeeTypeColor) ?? undefined,
+            isHead: node.data.isHead,
+            officeId: node.data.officeId,
+            employeeId: node.data.employeeId,
+            label: node.data.label ?? (node.type === "person" ? node.data.title ?? node.data.name : node.data.name),
+            outlineColor,
+            headerColor: outlineColor,
+            notes: node.data.notes,
+            imageUrl: node.data.imageUrl,
+          },
+          width: node.width,
+          height: node.height,
+        };
+        if (node.type === "person") {
+          baseNode.sourcePosition = Position.Right;
+          baseNode.targetPosition = Position.Left;
+        }
+        return baseNode;
+      }),
     []
   );
 
@@ -238,6 +669,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         id: edge.id,
         source: edge.source,
         target: edge.target,
+        sourceHandle: normalizeHandleId(edge.sourceHandle),
+        targetHandle: normalizeHandleId(edge.targetHandle),
         type: mapDocEdgeTypeToFlow(edge.type),
         label: edge.label,
         data: { color: edge.color ?? DEFAULT_EDGE_COLOR, customType: edge.type },
@@ -247,28 +680,75 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     []
   );
 
+  const normalizePersonEdges = useCallback((edgeList: FlowEdge[], nodeList: FlowNode[]): FlowEdge[] => {
+    const nodeTypeMap = new Map(nodeList.map((node) => [node.id, node.type]));
+    let changed = false;
+
+    const updatedEdges = edgeList.map((edge) => {
+      const sourceType = nodeTypeMap.get(edge.source);
+      const targetType = nodeTypeMap.get(edge.target);
+      const normalizedSource = normalizeHandleId(edge.sourceHandle);
+      const normalizedTarget = normalizeHandleId(edge.targetHandle);
+      let nextEdge: FlowEdge = edge;
+      if (normalizedSource !== edge.sourceHandle || normalizedTarget !== edge.targetHandle) {
+        nextEdge = {
+          ...nextEdge,
+          sourceHandle: normalizedSource,
+          targetHandle: normalizedTarget,
+        };
+        changed = true;
+      }
+
+      if (sourceType === "person" && targetType === "person") {
+        const color = nextEdge.data?.color ?? DEFAULT_EDGE_COLOR;
+        const sourceHandle = normalizedSource ?? "r";
+        const targetHandle = normalizedTarget ?? "l";
+        const alreadyStraight =
+          nextEdge.type === "straight" &&
+          nextEdge.data?.customType === "straight" &&
+          nextEdge.sourceHandle === sourceHandle &&
+          nextEdge.targetHandle === targetHandle;
+        if (alreadyStraight) {
+          return nextEdge;
+        }
+        changed = true;
+        return {
+          ...nextEdge,
+          type: "straight",
+          sourceHandle,
+          targetHandle,
+          data: { ...(nextEdge.data ?? {}), color, customType: "straight" },
+          style: { ...(nextEdge.style ?? {}), stroke: color, strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color },
+        };
+      }
+
+      return nextEdge;
+    });
+
+    return changed ? updatedEdges : edgeList;
+  }, []);
+
   const setDocument = useCallback(
-    (document: OrgChartDocument, markSaved = true) => {
+    (document: OrgChartDocument, markSaved = true, shouldRefocus = false) => {
       const flowNodes = applyNodeDefaults(document.nodes);
-      const flowEdges = applyEdgeDefaults(document.edges);
+      const flowEdges = normalizePersonEdges(applyEdgeDefaults(document.edges), flowNodes);
       setNodes(flowNodes);
       setEdges(flowEdges);
       setEdgeType(document.edgeType ?? "orth");
-      docRef.current = document;
-      const snapshot = JSON.stringify(document);
+      const normalizedDocument = serializeDocument(flowNodes, flowEdges, document.edgeType ?? "orth");
+      docRef.current = normalizedDocument;
+      const snapshot = JSON.stringify(normalizedDocument);
       setDraftSnapshot(snapshot);
       if (markSaved) {
         lastSavedSnapshotRef.current = snapshot;
       }
-      requestAnimationFrame(() => {
-        try {
-          fitView({ padding: 0.3, duration: 400 });
-        } catch (error) {
-          // ignore
-        }
-      });
+      resetHistory();
+      if (shouldRefocus) {
+        requestFocus();
+      }
     },
-    [applyEdgeDefaults, applyNodeDefaults, fitView, setEdges, setNodes]
+    [applyEdgeDefaults, applyNodeDefaults, normalizePersonEdges, requestFocus, resetHistory, serializeDocument, setEdges, setNodes]
   );
 
   const loadInitialData = useCallback(async () => {
@@ -286,7 +766,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
       if (!previewRes.ok) throw new Error(await previewRes.text());
       const previewData = (await previewRes.json()) as { document: OrgChartDocument };
-      setDocument(previewData.document, true);
+      setDocument(previewData.document, true, true);
 
       if (employeesRes.ok) {
         const employees = (await employeesRes.json()) as EmployeeOption[];
@@ -345,13 +825,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   }, [edgeType, setEdges]);
 
   useEffect(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-    if (!focusOfficeId && !normalizedSearch) {
-    setNodes((nds: FlowNode[]) => nds.map((node: FlowNode) => ({ ...node, hidden: false })));
-    setEdges((eds: FlowEdge[]) => eds.map((edge: FlowEdge) => ({ ...edge, hidden: false })));
-      return;
-    }
+    setEdges((eds: FlowEdge[]) => normalizePersonEdges(eds, nodesRef.current));
+  }, [normalizePersonEdges, setEdges, nodes]);
 
+  useEffect(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
     const visibleNodeIds = new Set<string>();
 
     setNodes((nds: FlowNode[]) =>
@@ -359,7 +837,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         const officeMatch =
           !focusOfficeId ||
           (node.type === "office"
-            ? (node.data.officeId ?? node.id) === focusOfficeId
+            ? (node.data.officeId ?? node.id) === focusOfficeId || node.id === focusOfficeId
             : node.data.officeId === focusOfficeId);
 
         const searchMatch =
@@ -372,6 +850,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         if (visible) {
           visibleNodeIds.add(node.id);
         }
+
         return { ...node, hidden: !visible };
       })
     );
@@ -383,6 +862,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       }))
     );
   }, [focusOfficeId, searchTerm, setEdges, setNodes]);
+
+  useEffect(() => {
+    if (!nodesRef.current.length) return;
+    focusOffice(focusOfficeId);
+  }, [focusOffice, focusOfficeId, focusTrigger]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -399,16 +883,22 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           return;
         }
       }
+      if (changes.some((change) => change.type === "remove")) {
+        pushHistorySnapshot();
+      }
       onNodesChange(changes);
     },
-    [edges, onNodesChange]
+    [edges, onNodesChange, pushHistorySnapshot]
   );
 
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
+      if (changes.some((change) => change.type === "remove")) {
+        pushHistorySnapshot();
+      }
       onEdgesChange(changes);
     },
-    [onEdgesChange]
+    [onEdgesChange, pushHistorySnapshot]
   );
 
   const handleSelectionChange = useCallback(({ nodes: selectedNodes, edges: selectedEdges }: { nodes: FlowNode[]; edges: FlowEdge[] }) => {
@@ -440,9 +930,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         return;
       }
 
+      const sourceNode = getNode(connection.source);
+      const targetNode = getNode(connection.target);
+
       if (!allowCrossOfficeEdges) {
-        const sourceNode = getNode(connection.source);
-        const targetNode = getNode(connection.target);
         const sourceOffice = sourceNode?.data?.officeId ?? sourceNode?.id;
         const targetOffice = targetNode?.data?.officeId ?? targetNode?.id;
         if (sourceOffice && targetOffice && sourceOffice !== targetOffice) {
@@ -455,45 +946,60 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         }
       }
 
+      const forceHorizontal = sourceNode?.type === "person" && targetNode?.type === "person";
+      const resolvedSourceHandle = forceHorizontal
+        ? "r"
+        : normalizeHandleId(connection.sourceHandle) ?? "r";
+      const resolvedTargetHandle = forceHorizontal
+        ? "l"
+        : normalizeHandleId(connection.targetHandle) ?? "l";
+      const edgeVisualType = forceHorizontal ? "straight" : mapDocEdgeTypeToFlow(edgeType);
+
       const newEdge: FlowEdge = {
         id: `edge-${crypto.randomUUID()}`,
         source: connection.source,
         target: connection.target,
-        type: mapDocEdgeTypeToFlow(edgeType),
+        sourceHandle: resolvedSourceHandle,
+        targetHandle: resolvedTargetHandle,
+        type: edgeVisualType,
         label: "",
-        data: { color: DEFAULT_EDGE_COLOR },
+        data: forceHorizontal ? { color: DEFAULT_EDGE_COLOR, customType: "straight" } : { color: DEFAULT_EDGE_COLOR },
         style: { stroke: DEFAULT_EDGE_COLOR, strokeWidth: 2 },
         markerEnd: { type: MarkerType.ArrowClosed, color: DEFAULT_EDGE_COLOR },
       };
 
-      setEdges((eds: FlowEdge[]) => addEdge(newEdge, eds));
+      runWithHistory(() => {
+        setEdges((eds: FlowEdge[]) => addEdge(newEdge, eds));
+      });
     },
-    [allowCrossOfficeEdges, edgeType, edges, getNode, setEdges, toast]
+    [allowCrossOfficeEdges, edgeType, edges, getNode, runWithHistory, setEdges, toast]
   );
 
   const duplicateNode = useCallback(
     (nodeId: string) => {
-      setNodes((nds: FlowNode[]) => {
-        const node = nds.find((n) => n.id === nodeId);
-        if (!node) return nds;
-        const newId = `${node.type}-${crypto.randomUUID()}`;
-        const newNode: FlowNode = {
-          ...node,
-          id: newId,
-          position: {
-            x: node.position.x + 40,
-            y: node.position.y + 40,
-          },
-          data: {
-            ...node.data,
-            name: `${node.data.name} copy`,
-            employeeId: undefined,
-          },
-        };
-        return [...nds, newNode];
+      runWithHistory(() => {
+        setNodes((nds: FlowNode[]) => {
+          const node = nds.find((n) => n.id === nodeId);
+          if (!node) return nds;
+          const newId = `${node.type}-${crypto.randomUUID()}`;
+          const newNode: FlowNode = {
+            ...node,
+            id: newId,
+            position: {
+              x: node.position.x + 40,
+              y: node.position.y + 40,
+            },
+            data: {
+              ...node.data,
+              name: `${node.data.name} copy`,
+              employeeId: undefined,
+            },
+          };
+          return [...nds, newNode];
+        });
       });
     },
-    [setNodes]
+    [runWithHistory, setNodes]
   );
 
   const getOfficeIdForNode = useCallback(
@@ -518,6 +1024,15 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       const parentOfficeId = getOfficeIdForNode(parent);
       const basePosition = parent.position;
       const newId = `${type}-${crypto.randomUUID()}`;
+      const parentOutlineColor =
+        normalizeColor(parent.data.outlineColor) ?? normalizeColor(parent.data.headerColor) ?? null;
+      const parentEmployeeTypeColor = normalizeColor(parent.data.employeeTypeColor) ?? undefined;
+      const defaultOutlineForType =
+        normalizeColor(DEFAULT_NODE_COLORS[type]) ?? normalizeColor(DEFAULT_NODE_COLORS.office) ?? NEUTRAL_OUTLINE_COLOR;
+      const outlineColor =
+        (type === "person"
+          ? parentEmployeeTypeColor ?? parentOutlineColor
+          : parentOutlineColor ?? defaultOutlineForType) ?? defaultOutlineForType;
       const newNode: FlowNode = {
         id: newId,
         type,
@@ -529,27 +1044,34 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           name: type === "person" ? "New Person" : type === "unit" ? "New Unit" : "New Office",
           label: type === "person" ? "New Role" : type === "unit" ? "Unit" : "Office",
           title: type === "person" ? "" : parent.data.title,
-          headerColor: DEFAULT_NODE_COLORS[type],
+          employeeTypeColor: type === "person" ? parentEmployeeTypeColor ?? undefined : undefined,
+          outlineColor,
+          headerColor: outlineColor,
           officeId: type === "office" ? undefined : parentOfficeId,
         },
+        ...(type === "person"
+          ? { sourcePosition: Position.Right, targetPosition: Position.Left }
+          : {}),
       };
 
-      setNodes((nds: FlowNode[]) => [...nds, newNode]);
-      setEdges((eds: FlowEdge[]) => [
-        ...eds,
-        {
-          id: `edge-${crypto.randomUUID()}`,
-          source: parent.id,
-          target: newId,
-          type: mapDocEdgeTypeToFlow(edgeType),
-          label: "",
-          data: { color: DEFAULT_EDGE_COLOR },
-          style: { stroke: DEFAULT_EDGE_COLOR, strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: DEFAULT_EDGE_COLOR },
-        },
-      ]);
+      runWithHistory(() => {
+        setNodes((nds: FlowNode[]) => [...nds, newNode]);
+        setEdges((eds: FlowEdge[]) => [
+          ...eds,
+          {
+            id: `edge-${crypto.randomUUID()}`,
+            source: parent.id,
+            target: newId,
+            type: mapDocEdgeTypeToFlow(edgeType),
+            label: "",
+            data: { color: DEFAULT_EDGE_COLOR },
+            style: { stroke: DEFAULT_EDGE_COLOR, strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: DEFAULT_EDGE_COLOR },
+          },
+        ]);
+      });
     },
-    [edgeType, getNode, getOfficeIdForNode, setEdges, setNodes]
+    [edgeType, getNode, getOfficeIdForNode, runWithHistory, setEdges, setNodes]
   );
 
   const addChildUnit = useCallback((nodeId: string) => createChildNode(nodeId, "unit"), [createChildNode]);
@@ -578,6 +1100,15 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         return;
       }
 
+      const defaultOutline =
+        normalizeColor(
+          type === "person"
+            ? selectedNode?.data.employeeTypeColor ??
+              selectedNode?.data.outlineColor ??
+              DEFAULT_NODE_COLORS.person
+            : selectedNode?.data.outlineColor ?? DEFAULT_NODE_COLORS[type]
+        ) ?? NEUTRAL_OUTLINE_COLOR;
+
       const newNode: FlowNode = {
         id: `${type}-${crypto.randomUUID()}`,
         type,
@@ -586,14 +1117,20 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           name: type === "person" ? "New Person" : type === "unit" ? "New Unit" : "New Office",
           label: type === "person" ? "New Role" : type === "unit" ? "Unit" : "Office",
           title: type === "person" ? "" : undefined,
-          headerColor: DEFAULT_NODE_COLORS[type],
+          outlineColor: defaultOutline,
+          headerColor: defaultOutline,
           officeId: type === "office" ? undefined : officeId,
         },
+        ...(type === "person"
+          ? { sourcePosition: Position.Right, targetPosition: Position.Left }
+          : {}),
       };
 
-      setNodes((nds: FlowNode[]) => [...nds, newNode]);
+      runWithHistory(() => {
+        setNodes((nds: FlowNode[]) => [...nds, newNode]);
+      });
     },
-    [focusOfficeId, offices, project, selectedNode, setNodes, toast]
+    [focusOfficeId, offices, project, runWithHistory, selectedNode, setNodes, toast]
   );
 
   const unsavedChanges = useMemo(() => draftSnapshot !== lastSavedSnapshotRef.current, [draftSnapshot]);
@@ -660,7 +1197,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         const response = await fetch(`/api/${departmentId}/org-chart/versions/${value}`);
         if (!response.ok) throw new Error(await response.text());
         const record: VersionRecord = await response.json();
-        setDocument(record.data, true);
+        setDocument(record.data, true, true);
         setSelectedVersionId(record.id);
         toast({ title: "Version loaded", description: record.label });
       } catch (error) {
@@ -729,86 +1266,119 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const updateSelectedNode = useCallback(
     (updates: Partial<OrgNodeData>) => {
       if (!selectedNode) return;
-      setNodes((nds: FlowNode[]) =>
-        nds.map((node: FlowNode) =>
-          node.id === selectedNode.id
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  ...updates,
-                },
-              }
-            : node
-        )
-      );
+      const preparedUpdates: Partial<OrgNodeData> = { ...updates };
+      if (updates.outlineColor) {
+        const normalized =
+          normalizeColor(updates.outlineColor) ??
+          normalizeColor(selectedNode.data.outlineColor) ??
+          NEUTRAL_OUTLINE_COLOR;
+        preparedUpdates.outlineColor = normalized;
+        preparedUpdates.headerColor = normalized;
+      }
+      if (updates.employeeTypeColor) {
+        preparedUpdates.employeeTypeColor = normalizeColor(updates.employeeTypeColor) ?? undefined;
+      }
+      const hasChanges = Object.entries(preparedUpdates).some(([key, value]) => {
+        const current = (selectedNode.data as Record<string, unknown>)[key];
+        return current !== value;
+      });
+      if (!hasChanges) {
+        return;
+      }
+      runWithHistory(() => {
+        setNodes((nds: FlowNode[]) =>
+          nds.map((node: FlowNode) =>
+            node.id === selectedNode.id
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    ...preparedUpdates,
+                  },
+                }
+              : node
+          )
+        );
+      });
     },
-    [selectedNode, setNodes]
+    [runWithHistory, selectedNode, setNodes]
   );
 
   const updateSelectedEdge = useCallback(
     (updates: Partial<FlowEdge>) => {
       if (!selectedEdge) return;
-      setEdges((eds: FlowEdge[]) =>
-        eds.map((edge: FlowEdge) =>
-          edge.id === selectedEdge.id
-            ? {
-                ...edge,
-                ...updates,
-                data: {
-                  ...edge.data,
-                  ...(updates.data ?? {}),
-                },
-                style: updates.style ?? edge.style,
-                markerEnd: updates.markerEnd ?? edge.markerEnd,
-              }
-            : edge
-        )
-      );
+      runWithHistory(() => {
+        setEdges((eds: FlowEdge[]) =>
+          eds.map((edge: FlowEdge) =>
+            edge.id === selectedEdge.id
+              ? {
+                  ...edge,
+                  ...updates,
+                  data: {
+                    ...edge.data,
+                    ...(updates.data ?? {}),
+                  },
+                  style: updates.style ?? edge.style,
+                  markerEnd: updates.markerEnd ?? edge.markerEnd,
+                }
+              : edge
+          )
+        );
+      });
     },
-    [selectedEdge, setEdges]
+    [runWithHistory, selectedEdge, setEdges]
   );
 
   const removeSelectedNode = useCallback(() => {
     if (!selectedNode) return;
-      const outgoing = edges.filter((edge: FlowEdge) => edge.source === selectedNode.id);
+    const outgoing = edges.filter((edge: FlowEdge) => edge.source === selectedNode.id);
     if (outgoing.length && !window.confirm("Remove node and its connections?")) {
       return;
     }
-    setNodes((nds: FlowNode[]) => nds.filter((node) => node.id !== selectedNode.id));
-    setEdges((eds: FlowEdge[]) => eds.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id));
+    runWithHistory(() => {
+      setNodes((nds: FlowNode[]) => nds.filter((node) => node.id !== selectedNode.id));
+      setEdges((eds: FlowEdge[]) =>
+        eds.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id)
+      );
+    });
     setSelectedNodeIds([]);
-  }, [edges, selectedNode, setEdges, setNodes]);
+  }, [edges, runWithHistory, selectedNode, setEdges, setNodes]);
 
   const removeSelectedEdge = useCallback(() => {
     if (!selectedEdge) return;
-    setEdges((eds: FlowEdge[]) => eds.filter((edge) => edge.id !== selectedEdge.id));
+    runWithHistory(() => {
+      setEdges((eds: FlowEdge[]) => eds.filter((edge) => edge.id !== selectedEdge.id));
+    });
     setSelectedEdgeIds([]);
-  }, [selectedEdge, setEdges]);
+  }, [runWithHistory, selectedEdge, setEdges]);
 
   const bringToFront = useCallback(() => {
     if (!selectedNode) return;
-    setNodes((nds: FlowNode[]) => {
-      const index = nds.findIndex((node) => node.id === selectedNode.id);
-      if (index === -1) return nds;
-      const clone = [...nds];
-      const [node] = clone.splice(index, 1);
-      clone.push(node);
-      return clone;
+    runWithHistory(() => {
+      setNodes((nds: FlowNode[]) => {
+        const index = nds.findIndex((node) => node.id === selectedNode.id);
+        if (index === -1) return nds;
+        const clone = [...nds];
+        const [node] = clone.splice(index, 1);
+        clone.push(node);
+        return clone;
+      });
     });
-  }, [selectedNode, setNodes]);
+  }, [runWithHistory, selectedNode, setNodes]);
 
   const sendToBack = useCallback(() => {
     if (!selectedNode) return;
-    setNodes((nds: FlowNode[]) => {
-      const index = nds.findIndex((node) => node.id === selectedNode.id);
-      if (index === -1) return nds;
-      const clone = [...nds];
-      const [node] = clone.splice(index, 1);
-      clone.unshift(node);
-      return clone;
+    runWithHistory(() => {
+      setNodes((nds: FlowNode[]) => {
+        const index = nds.findIndex((node) => node.id === selectedNode.id);
+        if (index === -1) return nds;
+        const clone = [...nds];
+        const [node] = clone.splice(index, 1);
+        clone.unshift(node);
+        return clone;
+      });
     });
-  }, [selectedNode, setNodes]);
+  }, [runWithHistory, selectedNode, setNodes]);
 
   const actionsContextValue = useMemo(
     () => ({ duplicateNode, addChildUnit, addChildPerson }),
@@ -817,8 +1387,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   if (loading) {
     return (
-      <div className="flex h-[640px] items-center justify-center rounded-lg border bg-muted/10">
-        <p className="text-sm text-muted-foreground">Preparing org chart…</p>
+      <div className="flex h-[calc(100vh-140px)] items-center justify-center rounded-lg border bg-muted/10">
+        <p className="text-sm text-muted-foreground">Preparing org chart...</p>
       </div>
     );
   }
@@ -826,7 +1396,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   return (
     <CanvasSettingsContext.Provider value={{ showPhotos }}>
       <CanvasActionsContext.Provider value={actionsContextValue}>
-        <div className="grid gap-4 lg:grid-cols-[280px,1fr,320px]">
+        <div
+          className="grid min-h-0 gap-4 lg:grid-cols-[280px,1fr,320px]"
+          style={{ height: "calc(100vh - 140px)" }}
+        >
         <aside className="space-y-4">
           <Card>
             <CardContent className="space-y-4 pt-6">
@@ -850,7 +1423,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   {versions.map((version) => (
                     <SelectItem key={version.id} value={version.id}>
                       {version.label}
-                      {version.isDefault ? " • default" : ""}
+                      {version.isDefault ? " ??? default" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -881,29 +1454,21 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 <Label className="text-sm font-semibold">Offices</Label>
                 <ScrollArea className="mt-2 h-64 pr-2">
                   <div className="space-y-1 pr-1">
-                    <Button
-                      variant={focusOfficeId ? "ghost" : "secondary"}
-                      size="sm"
-                      className="w-full justify-start"
-                      onClick={() => setFocusOfficeId(null)}
-                    >
-                      Whole org
-                    </Button>
-                    {offices.map((office: FlowNode) => (
-                      <Button
-                        key={office.id}
-                        variant={focusOfficeId === (office.data.officeId ?? office.id) ? "secondary" : "ghost"}
-                        size="sm"
-                        className="w-full justify-start"
-                        onClick={() =>
-                        setFocusOfficeId((prev) =>
-                          prev === (office.data.officeId ?? office.id) ? null : (office.data.officeId ?? office.id)
-                        )
-                      }
-                      >
-                        {office.data.name}
-                      </Button>
-                    ))}
+                    {offices.map((office: FlowNode) => {
+                      const officeIdentifier = office.data.officeId ?? office.id;
+                      const isActive = focusOfficeId === officeIdentifier || focusOfficeId === office.id;
+                      return (
+                        <Button
+                          key={office.id}
+                          variant={isActive ? "secondary" : "ghost"}
+                          size="sm"
+                          className="w-full justify-start"
+                          onClick={() => setFocusOfficeId(officeIdentifier)}
+                        >
+                          {office.data.name}
+                        </Button>
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               </div>
@@ -966,12 +1531,36 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           </Card>
         </aside>
 
-        <section className="relative overflow-hidden rounded-lg border bg-background">
+        <section className="relative flex min-h-0 flex-col overflow-hidden rounded-lg border bg-background">
           <div className="flex items-center justify-between border-b px-4 py-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Move className="h-4 w-4" /> Drag, pan, and connect nodes freely
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  undo();
+                }}
+                disabled={!historyStatus.canUndo}
+                title="Undo (Ctrl/Cmd+Z)"
+                aria-label="Undo"
+              >
+                <Undo2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  redo();
+                }}
+                disabled={!historyStatus.canRedo}
+                title="Redo (Ctrl/Cmd+Y)"
+                aria-label="Redo"
+              >
+                <Redo2 className="h-4 w-4" />
+              </Button>
               <Select value={edgeType} onValueChange={(value: "orth" | "smoothstep") => setEdgeType(value)}>
                 <SelectTrigger className="h-9 w-36">
                   <SelectValue placeholder="Edge type" />
@@ -987,41 +1576,56 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               <Button variant="outline" size="icon" onClick={() => setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 400 })}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="icon" onClick={() => fitView({ padding: 0.3, duration: 400 })}>
+              <Button variant="outline" size="icon" onClick={() => focusOffice(focusOfficeId)}>
                 <Wand2 className="h-4 w-4" />
               </Button>
             </div>
           </div>
-          <div ref={reactFlowWrapper} className="h-[640px] w-full">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={handleNodesChange}
-              onEdgesChange={handleEdgesChange}
-              onConnect={handleConnect}
-              onSelectionChange={handleSelectionChange}
-              nodeTypes={nodeTypes}
-              snapToGrid
-              snapGrid={[10, 10]}
-              selectionOnDrag
-              multiSelectionKeyCode="Shift"
-              connectionMode={ConnectionMode.Loose}
-              fitView
-              minZoom={0.2}
-              maxZoom={3}
-              deleteKeyCode={["Delete", "Backspace"]}
-              connectionLineType={edgeType === "smoothstep" ? ConnectionLineType.SmoothStep : ConnectionLineType.Step}
-            >
-              <Background gap={10} color="rgba(15,23,42,0.08)" size={1} />
-              <MiniMap
-                className="rounded-md border bg-background"
-                zoomable
-                pannable
-                nodeStrokeWidth={3}
-                nodeColor={(node: FlowNode) => node.data.headerColor ?? DEFAULT_NODE_COLORS[node.type as OrgNodeType]}
-              />
-              <Controls showInteractive={false} position="bottom-right" />
-            </ReactFlow>
+          <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+            <div ref={reactFlowWrapper} className="h-full w-full">
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={handleNodesChange}
+                onEdgesChange={handleEdgesChange}
+                onConnect={handleConnect}
+                onSelectionChange={handleSelectionChange}
+                nodeTypes={nodeTypes}
+                snapToGrid
+                snapGrid={[10, 10]}
+                selectionOnDrag
+                multiSelectionKeyCode="Shift"
+                connectionMode={ConnectionMode.Loose}
+                defaultEdgeOptions={defaultEdgeOptions}
+                panOnDrag={[1]}
+                nodesDraggable
+                elementsSelectable
+                onNodeDragStart={handleNodeDragStart}
+                onNodeDragStop={handleNodeDragStop}
+                onMoveStart={handleMoveStart}
+                onMoveEnd={handleMoveEnd}
+                fitViewOnInit={false}
+                minZoom={0.2}
+                maxZoom={3}
+                deleteKeyCode={["Delete", "Backspace"]}
+                connectionLineType={edgeType === "smoothstep" ? ConnectionLineType.SmoothStep : ConnectionLineType.Step}
+                style={{ width: "100%", height: "100%" }}
+              >
+                <Background gap={10} color="rgba(15,23,42,0.08)" size={1} />
+                <MiniMap
+                  className="rounded-md border bg-background"
+                  zoomable
+                  pannable
+                  nodeStrokeWidth={3}
+                  nodeColor={(node: FlowNode) =>
+                    node.data.outlineColor ??
+                    node.data.headerColor ??
+                    DEFAULT_NODE_COLORS[node.type as OrgNodeType]
+                  }
+                />
+                <Controls showInteractive={false} position="bottom-right" />
+              </ReactFlow>
+            </div>
           </div>
         </section>
 
@@ -1043,12 +1647,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="prop-color">Header color</Label>
+                    <Label htmlFor="prop-outline">Outline color</Label>
                     <Input
-                      id="prop-color"
+                      id="prop-outline"
                       type="color"
-                      value={selectedNode.data.headerColor ?? DEFAULT_NODE_COLORS[selectedNode.type as OrgNodeType]}
-                      onChange={(event) => updateSelectedNode({ headerColor: event.target.value })}
+                      value={selectedNodeOutlineColor}
+                      onChange={(event) => updateSelectedNode({ outlineColor: event.target.value })}
                       className="h-10 w-16 cursor-pointer p-1"
                     />
                   </div>
@@ -1208,6 +1812,16 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
   const actions = useCanvasActions();
   const handles = getHandlesForType(type as OrgNodeType);
   const { showPhotos } = useCanvasSettings();
+  const outlineColor = normalizeColor(data.outlineColor) ?? NEUTRAL_OUTLINE_COLOR;
+  const borderWidth = data.isHead ? 3 : 2;
+  const glowSize = data.isHead ? 6 : 3;
+  const cardStyles: CSSProperties = {
+    borderColor: outlineColor,
+    borderWidth,
+    boxShadow: `0 0 0 ${glowSize}px ${colorWithAlpha(outlineColor, data.isHead ? 0.25 : 0.15)}`,
+  };
+  const headerLabel =
+    data.label ?? (type === "person" ? data.title ?? data.name : data.name);
 
   const renderAvatar = () => {
     if (showPhotos && data.imageUrl) {
@@ -1215,21 +1829,36 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
         <img
           src={data.imageUrl}
           alt={data.name}
-          className="h-14 w-14 rounded-full border-2 border-white/80 object-cover shadow-md"
+          className="h-14 w-14 rounded-full border-2 object-cover shadow-md"
+          style={{ borderColor: colorWithAlpha(outlineColor, 0.35) }}
         />
       );
     }
     return (
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/10 text-sm text-white/80">
+      <div
+        className="flex h-14 w-14 items-center justify-center rounded-full text-sm text-foreground"
+        style={{
+          border: `2px solid ${colorWithAlpha(outlineColor, 0.3)}`,
+          backgroundColor: colorWithAlpha(outlineColor, 0.12),
+        }}
+      >
         {icon}
       </div>
     );
   };
 
   return (
-    <div className={cn("group relative min-w-[220px] max-w-xs rounded-lg border bg-card shadow-sm transition", selected && "ring-2 ring-primary")}
+    <div
+      className={cn(
+        "group relative min-w-[220px] max-w-xs overflow-visible rounded-lg border bg-card transition-shadow",
+        selected && "ring-2 ring-primary/40"
+      )}
+      style={cardStyles}
     >
-      <NodeToolbar isVisible={selected} className="flex gap-2 rounded-full border bg-background px-3 py-1 text-xs shadow">
+      <NodeToolbar
+        isVisible={selected}
+        className="flex gap-2 rounded-full border bg-background px-3 py-1 text-xs shadow"
+      >
         <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground" onClick={() => actions.duplicateNode(id)} type="button">
           <Copy className="h-3 w-3" /> Duplicate
         </button>
@@ -1248,14 +1877,27 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
           position={handle.position}
           id={handle.id}
           className="h-3 w-3"
+          style={handle.style}
         />
       ))}
 
+      <div className="rounded-t-lg border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {headerLabel}
+      </div>
       <div className="flex items-center gap-3 px-4 py-3">
         {renderAvatar()}
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">{data.name}</p>
-          {data.title ? <p className="text-xs text-muted-foreground">{data.title}</p> : null}
+        <div className="flex-1 space-y-1">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{data.name}</p>
+              {data.title ? <p className="text-xs text-muted-foreground">{data.title}</p> : null}
+            </div>
+            {data.isHead ? (
+              <Badge variant="outline" className="border-none bg-transparent px-2 py-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                Head
+              </Badge>
+            ) : null}
+          </div>
           {data.employeeTypeName ? <p className="text-xs text-muted-foreground">{data.employeeTypeName}</p> : null}
         </div>
       </div>
@@ -1263,21 +1905,50 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
   );
 }
 
-type HandleConfig = { id: string; type: "source" | "target"; position: Position };
+type HandleConfig = { id: string; type: "source" | "target"; position: Position; style?: CSSProperties };
+
+const HANDLE_POSITIONS: Array<{
+  id: "t" | "r" | "b" | "l";
+  position: Position;
+  style: CSSProperties;
+}> = [
+  {
+    id: "t",
+    position: Position.Top,
+    style: { left: "50%", top: 0, transform: "translate(-50%, -50%)" },
+  },
+  {
+    id: "r",
+    position: Position.Right,
+    style: { top: "50%", right: 0, transform: "translate(50%, -50%)" },
+  },
+  {
+    id: "b",
+    position: Position.Bottom,
+    style: { left: "50%", bottom: 0, transform: "translate(-50%, 50%)" },
+  },
+  {
+    id: "l",
+    position: Position.Left,
+    style: { top: "50%", left: 0, transform: "translate(-50%, -50%)" },
+  },
+];
 
 function getHandlesForType(type: OrgNodeType): HandleConfig[] {
-  return [
-    { id: "top", type: "target", position: Position.Top },
-    { id: "bottom", type: "source", position: Position.Bottom },
-    { id: "left", type: "source", position: Position.Left },
-    { id: "right", type: "source", position: Position.Right },
-  ];
+  return HANDLE_POSITIONS.flatMap(({ id, position, style }) => [
+    { id, type: "target" as const, position, style: { ...style, zIndex: 5 } },
+    { id, type: "source" as const, position, style: { ...style, zIndex: 5 } },
+  ]);
 }
 
-function mapDocEdgeTypeToFlow(type?: "orth" | "smoothstep"): Edge["type"] {
-  return type === "smoothstep" ? "smoothstep" : "step";
+function mapDocEdgeTypeToFlow(type?: "orth" | "smoothstep" | "straight"): Edge["type"] {
+  if (type === "smoothstep") return "smoothstep";
+  if (type === "straight") return "straight";
+  return "step";
 }
 
-function mapFlowEdgeTypeToDoc(type?: string): "orth" | "smoothstep" {
-  return type === "smoothstep" ? "smoothstep" : "orth";
+function mapFlowEdgeTypeToDoc(type?: string): "orth" | "smoothstep" | "straight" {
+  if (type === "smoothstep") return "smoothstep";
+  if (type === "straight") return "straight";
+  return "orth";
 }
