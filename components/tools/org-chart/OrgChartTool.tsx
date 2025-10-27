@@ -276,7 +276,7 @@ const resolveEdgeLayout = (
     return {
       source: sourceAboveTarget ? "b" : "t",
       target: sourceAboveTarget ? "t" : "b",
-      type: alignsX ? "straight" : "orthogonal",
+      type: alignsX ? "straight" : "step",
     };
   }
 
@@ -285,11 +285,13 @@ const resolveEdgeLayout = (
   return {
     source: sourceLeftOfTarget ? "l" : "r",
     target: sourceLeftOfTarget ? "r" : "l",
-    type: alignsY ? "straight" : "orthogonal",
+    type: alignsY ? "straight" : "step",
   };
 };
 
-const ORTHOGONAL_CONNECTION_LINE = "orthogonal" as unknown as ConnectionLineType;
+// React Flow uses "step" as the built-in orthogonal connection/edge type.
+// Use the enum instead of a string cast to avoid runtime/type issues.
+const ORTHOGONAL_CONNECTION_LINE = ConnectionLineType.Step;
 
 type EmployeeOption = {
   id: string;
@@ -385,7 +387,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [clipboardVersion, setClipboardVersion] = useState(0);
   const lastCopyPeopleRef = useRef(false);
 
-  const defaultEdgeOptions = useMemo(() => ({ type: "orthogonal" as Edge["type"] }), []);
+  const defaultEdgeOptions = useMemo(() => ({ type: "step" as Edge["type"] }), []);
   const clipboardAvailable = useMemo(() => clipboardVersion > 0 && clipboardRef.current !== null, [clipboardVersion]);
   const reactFlowInstance = useReactFlow<
     FlowNodeData,
@@ -1155,8 +1157,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         edgeChanged = true;
       }
 
-      const markerColor = edge.markerEnd?.color ?? color;
-      const markerType = edge.markerEnd?.type ?? MarkerType.ArrowClosed;
+      let markerColor = color;
+      let markerType = MarkerType.ArrowClosed as MarkerType;
+      if (edge.markerEnd && typeof edge.markerEnd === "object") {
+        markerColor = edge.markerEnd.color ?? color;
+        markerType = edge.markerEnd.type ?? MarkerType.ArrowClosed;
+      }
       if (markerColor !== color || markerType !== MarkerType.ArrowClosed) {
         edgeChanged = true;
       }
@@ -2254,7 +2260,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 multiSelectionKeyCode="Shift"
                 connectionMode={"loose" as ConnectionMode}
                 defaultEdgeOptions={defaultEdgeOptions}
-                fitViewOnInit={false}
                 panOnDrag={[1]}
                 nodesDraggable
                 elementsSelectable
@@ -2601,12 +2606,14 @@ function getHandlesForType(type: OrgNodeType): HandleConfig[] {
 function mapDocEdgeTypeToFlow(type?: "orth" | "smoothstep" | "straight"): Edge["type"] {
   if (type === "smoothstep") return "smoothstep";
   if (type === "straight") return "straight";
-  return "orthogonal";
+  // Default/document value "orth" maps to React Flow's built-in "step" type
+  return "step";
 }
 
 function mapFlowEdgeTypeToDoc(type?: string): "orth" | "smoothstep" | "straight" {
   if (type === "smoothstep") return "smoothstep";
   if (type === "straight") return "straight";
-  if (type === "orthogonal" || type === "step" || type === "orth") return "orth";
+  // Treat any orthogonal/step-like type as "orth" in the document
+  if (type === "step" || type === "orthogonal" || type === "orth") return "orth";
   return "orth";
 }
