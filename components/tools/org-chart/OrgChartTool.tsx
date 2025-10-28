@@ -93,6 +93,7 @@ const DEFAULT_NODE_COLORS: Record<OrgNodeType, string> = {
 };
 
 const DEFAULT_EDGE_COLOR = "#0F172A";
+const DEFAULT_EDGE_STROKE_WIDTH = 22;
 const NEUTRAL_OUTLINE_COLOR = "#E2E8F0";
 const HISTORY_LIMIT = 100;
 
@@ -110,7 +111,7 @@ const MARKER_TYPE_OPTIONS: Array<{ label: string; value: OrgMarkerType; descript
 ];
 
 const DEFAULT_MARKER_START: OrgMarkerType = "none";
-const DEFAULT_MARKER_END: OrgMarkerType = "arrowClosed";
+const DEFAULT_MARKER_END: OrgMarkerType = "none";
 const DEFAULT_MARKER_SIZE = 18;
 const MIN_MARKER_SIZE = 8;
 const MAX_MARKER_SIZE = 28;
@@ -343,7 +344,7 @@ const applyEdgePresentation = (edge: FlowEdge): FlowEdge => {
 
   const markerStartRef = getMarkerReference(markerStartType, markerColor, markerSize, "start");
   const markerEndRef = getMarkerReference(markerEndType, markerColor, markerSize, "end");
-  const nextStyle = { ...(edge.style ?? {}), stroke: normalizedColor, strokeWidth: 2 };
+  const nextStyle = { ...(edge.style ?? {}), stroke: normalizedColor, strokeWidth: DEFAULT_EDGE_STROKE_WIDTH };
 
   const currentData = edge.data ?? {};
   const dataMatches =
@@ -355,7 +356,7 @@ const applyEdgePresentation = (edge: FlowEdge): FlowEdge => {
 
   const styleMatches =
     (edge.style?.stroke ?? normalizedColor) === normalizedColor &&
-    (edge.style?.strokeWidth ?? 2) === 2;
+    (edge.style?.strokeWidth ?? DEFAULT_EDGE_STROKE_WIDTH) === DEFAULT_EDGE_STROKE_WIDTH;
 
   const startMatches = markerEquals(edge.markerStart, markerStartRef);
   const endMatches = markerEquals(edge.markerEnd, markerEndRef);
@@ -680,6 +681,30 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   const isHand = tool === "hand";
   const customMarkerDefinitions = useMemo(() => getCustomMarkerDefinitions(edges), [edges]);
+  const hideInterfaceForExport = useCallback(() => {
+    const targets = [
+      ".react-flow__controls",
+      ".react-flow__minimap",
+      ".react-flow__panel",
+      ".react-flow__attribution",
+      "[data-orgchart-export-ignore='true']",
+    ];
+    const restored: Array<{ element: HTMLElement; visibility: string }> = [];
+    if (!reactFlowWrapper.current) return () => undefined;
+    targets.forEach((selector) => {
+      const elements = reactFlowWrapper.current?.querySelectorAll(selector);
+      elements?.forEach((el) => {
+        if (!(el instanceof HTMLElement)) return;
+        restored.push({ element: el, visibility: el.style.visibility });
+        el.style.visibility = "hidden";
+      });
+    });
+    return () => {
+      restored.forEach(({ element, visibility }) => {
+        element.style.visibility = visibility;
+      });
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1614,7 +1639,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         fetch(`/api/${departmentId}/org-chart/preview`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ includeStaffUnit: true }),
+          body: JSON.stringify({ includeStaffUnit: false }),
         }),
         fetch(`/api/${departmentId}/employees/simple`),
         fetch(`/api/${departmentId}/org-chart/versions`),
@@ -2117,6 +2142,32 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     }
   }, [currentVersionId, departmentId, toast]);
 
+  const handleDeleteVersion = useCallback(async () => {
+    if (!currentVersionId) return;
+    const confirmed = window.confirm("Delete this saved version? This action cannot be undone.");
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(
+        `/api/${departmentId}/org-chart/versions/${currentVersionId}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok && response.status !== 204) {
+        throw new Error(await response.text());
+      }
+
+      setVersions((prev) => prev.filter((item) => item.id !== currentVersionId));
+      applyCurrentVersionId(null);
+      toast({ title: "Version deleted" });
+    } catch (error) {
+      toast({
+        title: "Failed to delete version",
+        description: error instanceof Error ? error.message : "Unable to delete version",
+        variant: "destructive",
+      });
+    }
+  }, [applyCurrentVersionId, currentVersionId, departmentId, toast]);
+
   const handleVersionChange = useCallback(
     async (value: string) => {
       if (value === "__draft__") {
@@ -2154,6 +2205,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const handleExport = useCallback(
     async (format: "png" | "pdf") => {
       if (!reactFlowWrapper.current) return;
+      const restoreUi = hideInterfaceForExport();
       try {
         setIsExporting(true);
         const dataUrl = await htmlToImage.toPng(reactFlowWrapper.current, {
@@ -2197,10 +2249,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           variant: "destructive",
         });
       } finally {
+        restoreUi();
         setIsExporting(false);
       }
     },
-    [toast]
+    [hideInterfaceForExport, toast]
   );
 
   const updateSelectedNode = useCallback(
@@ -2384,6 +2437,15 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   className="flex items-center gap-2"
                 >
                   <BadgeCheck className="h-4 w-4" /> Set default
+                </Button>
+                <Button
+                  onClick={handleDeleteVersion}
+                  variant="destructive"
+                  size="sm"
+                  disabled={!currentVersionId}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete version
                 </Button>
               </div>
             </CardContent>
@@ -2629,7 +2691,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 snapGrid={[10, 10]}
                 selectionOnDrag={!isHand}
                 multiSelectionKeyCode="Shift"
-                connectionMode={"loose" as ConnectionMode}
+                connectionMode={ConnectionMode.Loose}
                 defaultEdgeOptions={defaultEdgeOptions}
                 panOnDrag={isHand}
                 nodesDraggable={!isHand}
@@ -2643,6 +2705,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 maxZoom={3}
                 deleteKeyCode={["Delete", "Backspace"]}
                 connectionLineType={ORTHOGONAL_CONNECTION_LINE}
+                proOptions={{ hideAttribution: true }}
                 style={{ width: "100%", height: "100%" }}
               >
                 <MarkerDefinitionsLayer definitions={customMarkerDefinitions} />
@@ -2661,8 +2724,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 <Controls showInteractive={false} position="bottom-right" />
               </ReactFlow>
               {isHand ? (
-                <div className="pointer-events-none absolute right-3 top-3 z-50 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white shadow">
-                  Hand tool active — press ESC to exit
+                <div
+                  data-orgchart-export-ignore="true"
+                  className="pointer-events-none absolute right-3 top-3 z-50 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white shadow"
+                >
+                  Hand tool active - press ESC to exit
                 </div>
               ) : null}
             </div>
@@ -2678,14 +2744,16 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               </div>
               {selectedNode ? (
                 <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-label">Header label</Label>
-                    <Input
-                      id="prop-label"
-                      value={selectedNode.data.label ?? ""}
-                      onChange={(event) => updateSelectedNode({ label: event.target.value || undefined })}
-                    />
-                  </div>
+                  {selectedNode.type !== "person" ? (
+                    <div className="space-y-1">
+                      <Label htmlFor="prop-label">Header label</Label>
+                      <Input
+                        id="prop-label"
+                        value={selectedNode.data.label ?? ""}
+                        onChange={(event) => updateSelectedNode({ label: event.target.value || undefined })}
+                      />
+                    </div>
+                  ) : null}
                   <div className="space-y-1">
                     <Label htmlFor="prop-outline">Outline color</Label>
                     <Input
@@ -2968,6 +3036,7 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
   };
   const headerLabel =
     data.label ?? (type === "person" ? data.title ?? data.name : data.name);
+  const showHeaderBar = type !== "person";
 
   const renderAvatar = () => {
     if (showPhotos && data.imageUrl) {
@@ -3027,9 +3096,11 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
         />
       ))}
 
-      <div className="rounded-t-lg border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {headerLabel}
-      </div>
+      {showHeaderBar ? (
+        <div className="rounded-t-lg border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {headerLabel}
+        </div>
+      ) : null}
       <div className="flex items-center gap-3 px-4 py-3">
         {renderAvatar()}
         <div className="flex-1 space-y-1">
