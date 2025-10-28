@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import ReactFlow, {
@@ -46,6 +47,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import { AddOfficeDialog, type OfficeSearchResult } from "./dialogs/AddOfficeDialog";
+import {
+  AddPersonDialog,
+  type AddPersonDialogSelection,
+  type EmployeeSearchResult,
+} from "./dialogs/AddPersonDialog";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -232,6 +239,49 @@ const colorWithAlpha = (color: string | undefined, alpha: number): string => {
   const rgb = hexToRgb(normalized) ?? hexToRgb(NEUTRAL_OUTLINE_COLOR) ?? [226, 232, 240];
   const [r, g, b] = rgb;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const snapValueToGrid = (value: number, grid = 16): number => Math.round(value / grid) * grid;
+
+const snapPointToGrid = (point: { x: number; y: number }, grid = 16): { x: number; y: number } => ({
+  x: snapValueToGrid(point.x, grid),
+  y: snapValueToGrid(point.y, grid),
+});
+
+const darkenColor = (input: string | undefined, amount = 0.2): string => {
+  const normalized = normalizeColor(input);
+  if (!normalized) return DEFAULT_EDGE_COLOR;
+  const rgb = hexToRgb(normalized);
+  if (!rgb) return normalized;
+  const factor = clamp(1 - amount, 0, 1);
+  const [r, g, b] = rgb.map((channel) => Math.max(0, Math.min(255, Math.round(channel * factor)))) as [
+    number,
+    number,
+    number,
+  ];
+  return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`.toUpperCase();
+};
+
+const formatFullName = (employee: Pick<EmployeeSearchResult, "firstName" | "middleName" | "lastName">): string => {
+  const middle = employee.middleName ? `${employee.middleName.charAt(0)}.` : "";
+  return [employee.firstName, middle, employee.lastName].filter(Boolean).join(" ");
+};
+
+const chunkArray = <T,>(items: T[], size: number): T[][] => {
+  if (size <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+};
+
+const determineColumnCount = (count: number): number => {
+  if (count <= 1) return count || 1;
+  if (count === 2) return 2;
+  if (count === 3) return 3;
+  const approx = Math.ceil(Math.sqrt(count));
+  return Math.min(5, Math.max(3, approx));
 };
 
 const cloneGraphState = (graph: GraphState): GraphState => {
@@ -580,6 +630,19 @@ type EmployeeOption = {
   imageUrl: string;
 };
 
+type OfficeEmployeeRecord = {
+  id: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  positionTitle?: string;
+  employeeType: string;
+  employeeTypeColor?: string;
+  employeeNo: string;
+  photoUrl?: string;
+  isHead: boolean;
+};
+
 type CanvasActions = {
   duplicateNode: (id: string) => void;
   addChildUnit: (id: string) => void;
@@ -610,6 +673,7 @@ export default OrgChartTool;
 const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
+  const pointerPositionRef = useRef<{ x: number; y: number } | null>(null);
   const docRef = useRef<OrgChartDocument>({ nodes: [], edges: [], edgeType: "orth" });
   const lastSavedSnapshotRef = useRef<string>(JSON.stringify(docRef.current));
   const saveTimer = useRef<number | null>(null);
@@ -633,6 +697,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [showPhotos, setShowPhotos] = useState(true);
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [tool, setTool] = useState<Tool>("select");
+  const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
+  const [isAddOfficeOpen, setIsAddOfficeOpen] = useState(false);
   const versionStorageKey = useMemo(
     () => `org-chart:current-version:${departmentId}`,
     [departmentId]
@@ -668,13 +734,31 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const defaultEdgeOptions = useMemo(() => ({ type: "step" as Edge["type"] }), []);
   const clipboardAvailable = useMemo(() => clipboardVersion > 0 && clipboardRef.current !== null, [clipboardVersion]);
   const reactFlowInstance = useReactFlow<FlowNodeData, FlowEdgeData>();
-  const { fitView, project, getNode, setViewport, getNodes, getViewport } = reactFlowInstance;
+  const { fitView, project, getNode, setViewport, getNodes, getViewport, setCenter } = reactFlowInstance;
 
   const MIN_FOCUS_ZOOM = 0.25;
   const MAX_FOCUS_ZOOM = 1.5;
 
   const requestFocus = useCallback(() => {
     setFocusTrigger((prev) => prev + 1);
+  }, []);
+
+  const updatePointerPosition = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!reactFlowWrapper.current) {
+        pointerPositionRef.current = null;
+        return;
+      }
+      const bounds = reactFlowWrapper.current.getBoundingClientRect();
+      const localX = event.clientX - bounds.left;
+      const localY = event.clientY - bounds.top;
+      pointerPositionRef.current = project({ x: localX, y: localY });
+    },
+    [project]
+  );
+
+  const clearPointerPosition = useCallback(() => {
+    pointerPositionRef.current = null;
   }, []);
 
   const offices = useMemo(() => nodes.filter((node: FlowNode) => node.type === "office"), [nodes]);
@@ -1177,6 +1261,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     return nodes.find((node: FlowNode) => node.id === selectedNodeIds[0]) ?? null;
   }, [nodes, selectedNodeIds]);
 
+  const canConnectToSelectedParent = useMemo(() => {
+    if (selectedNodeIds.length !== 1) return false;
+    if (!selectedNode) return false;
+    return selectedNode.type === "office" || selectedNode.type === "unit" || selectedNode.type === "person";
+  }, [selectedNode, selectedNodeIds]);
+
+  const defaultDropNearCursor = useMemo(() => !canConnectToSelectedParent, [canConnectToSelectedParent]);
+
   const selectedNodeOutlineColor = useMemo(() => {
     if (!selectedNode) return NEUTRAL_OUTLINE_COLOR;
     return (
@@ -1211,6 +1303,27 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       size: normalizeMarkerSizeValue(data.markerSize),
     };
   }, [selectedEdge]);
+
+  const highlightNode = useCallback(
+    (nodeId: string) => {
+      const node = getNode(nodeId);
+      if (!node) return;
+      setSelectedNodeIds([nodeId]);
+      setSelectedEdgeIds([]);
+      const center = getNodeCenter(node);
+      if (!center) return;
+      const viewport = getViewport();
+      const zoom = clamp(viewport?.zoom ?? 1, MIN_FOCUS_ZOOM, MAX_FOCUS_ZOOM);
+      requestAnimationFrame(() => {
+        try {
+          setCenter(center.x, center.y, { zoom, duration: 400 });
+        } catch {
+          // ignore center errors
+        }
+      });
+    },
+    [MIN_FOCUS_ZOOM, MAX_FOCUS_ZOOM, getNode, getViewport, setCenter, setSelectedEdgeIds, setSelectedNodeIds]
+  );
 
   const collectNodesForOffice = useCallback((officeId: string | null, sourceNodes: FlowNode[]): FlowNode[] => {
     if (!sourceNodes.length) {
@@ -2087,6 +2200,491 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     [focusOfficeId, offices, project, runWithHistory, selectedNode, setNodes, toast]
   );
 
+  const handleAddPersonSelection = useCallback(
+    ({ employee, connectToParent, dropNearCursor, alignToGrid }: AddPersonDialogSelection) => {
+      const employeeHasOffice = Boolean(employee.officeId);
+      const shouldConnect = connectToParent && canConnectToSelectedParent && employeeHasOffice;
+      const parentCandidateId = shouldConnect && selectedNodeIds.length === 1 ? selectedNodeIds[0] : null;
+      const parentNode = parentCandidateId
+        ? nodesRef.current.find((node) => node.id === parentCandidateId) ?? null
+        : null;
+      const resolveOfficeId = (node: FlowNode | null): string | undefined => {
+        if (!node) return undefined;
+        if (node.type === "office") return node.data.officeId ?? node.id;
+        if (node.data.officeId) return node.data.officeId;
+        const incoming = edgesRef.current.find((edge) => edge.target === node.id);
+        if (!incoming) return undefined;
+        const parent = nodesRef.current.find((candidate) => candidate.id === incoming.source) ?? null;
+        return resolveOfficeId(parent);
+      };
+      const parentOfficeId = resolveOfficeId(parentNode);
+      const resolvedOfficeId =
+        parentOfficeId ??
+        focusOfficeId ??
+        employee.officeId ??
+        resolveOfficeId(nodesRef.current.find((node) => node.type === "office") ?? null) ??
+        null;
+
+      if (!resolvedOfficeId) {
+        toast({
+          title: "Select an office",
+          description: "Choose or create an office before adding a person.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const duplicate = nodesRef.current.find(
+        (node) =>
+          node.type === "person" &&
+          node.data.employeeId === employee.id &&
+          (node.data.officeId ?? null) === resolvedOfficeId
+      );
+
+      if (duplicate) {
+        toast({ title: "Already on chart", description: "This person is already in the selected office." });
+        highlightNode(duplicate.id);
+        setIsAddPersonOpen(false);
+        return;
+      }
+
+      const outlineCandidate =
+        normalizeColor(employee.employeeTypeColor) ??
+        (parentNode?.type === "person" ? normalizeColor(parentNode.data.employeeTypeColor) : null) ??
+        normalizeColor(parentNode?.data.outlineColor) ??
+        NEUTRAL_OUTLINE_COLOR;
+
+      const outlineColor = outlineCandidate ?? NEUTRAL_OUTLINE_COLOR;
+      const edgeColor = darkenColor(outlineColor, 0.25);
+
+      let position: { x: number; y: number };
+
+      const shouldDropNearCursor = dropNearCursor || !shouldConnect;
+
+      if (shouldConnect && parentNode) {
+        const siblingEdges = edgesRef.current.filter((edge) => edge.source === parentNode.id);
+        const siblingCount = siblingEdges.length;
+        const horizontalStep = DEFAULT_NODE_WIDTH + 40;
+        const verticalStep = DEFAULT_NODE_HEIGHT + 80;
+        position = {
+          x: parentNode.position.x + siblingCount * horizontalStep,
+          y: parentNode.position.y + verticalStep,
+        };
+      } else if (shouldDropNearCursor && pointerPositionRef.current) {
+        position = { ...pointerPositionRef.current };
+      } else {
+        const viewport = reactFlowWrapper.current?.getBoundingClientRect();
+        if (viewport) {
+          position = project({ x: viewport.width / 2, y: viewport.height / 2 });
+        } else {
+          const currentViewport = getViewport();
+          position = { x: -currentViewport.x + 200, y: -currentViewport.y + 200 };
+        }
+      }
+
+      if (alignToGrid) {
+        position = snapPointToGrid(position);
+      }
+
+      const nodeId = `person-${employee.id}-${crypto.randomUUID()}`;
+      const name = formatFullName(employee);
+      const newNode: FlowNode = {
+        id: nodeId,
+        type: "person",
+        position,
+        data: {
+          name,
+          title: employee.positionTitle ?? "",
+          employeeTypeName: employee.employeeType,
+          employeeTypeColor: normalizeColor(employee.employeeTypeColor) ?? undefined,
+          employeeId: employee.id,
+          officeId: resolvedOfficeId,
+          label: employee.positionTitle ?? employee.employeeType ?? name,
+          outlineColor,
+          headerColor: outlineColor,
+          imageUrl: employee.photoUrl ?? undefined,
+        },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+      };
+
+      runWithHistory(() => {
+        setNodes((nds: FlowNode[]) => [...nds, newNode]);
+        if (shouldConnect && parentNode) {
+          const defaultType = mapDocEdgeTypeToFlow(edgeType);
+          const layout = resolveEdgeLayout(parentNode, newNode, defaultType);
+          const sourceHandle = getSourceHandleId(layout?.source ?? "b") ?? "b-source";
+          const targetHandle = getTargetHandleId(layout?.target ?? "t") ?? "t-target";
+          const edge = applyEdgePresentation({
+            id: `edge-${crypto.randomUUID()}`,
+            source: parentNode.id,
+            target: nodeId,
+            sourceHandle,
+            targetHandle,
+            type: layout?.type ?? defaultType,
+            label: "",
+            data: {
+              color: edgeColor,
+              markerColor: edgeColor,
+              markerStartType: DEFAULT_MARKER_START,
+              markerEndType: DEFAULT_MARKER_END,
+              markerSize: DEFAULT_MARKER_SIZE,
+            },
+          });
+          setEdges((eds: FlowEdge[]) => [...eds, edge]);
+        }
+      });
+
+      setSelectedNodeIds([nodeId]);
+      setSelectedEdgeIds([]);
+      setFocusOfficeId(resolvedOfficeId);
+      requestFocus();
+      setIsAddPersonOpen(false);
+      toast({ title: "Person added", description: `${name} added to the chart.` });
+    },
+    [
+      canConnectToSelectedParent,
+      edgeType,
+      focusOfficeId,
+      getViewport,
+      highlightNode,
+      project,
+      requestFocus,
+      runWithHistory,
+      selectedNodeIds,
+      setEdges,
+      setFocusOfficeId,
+      setNodes,
+      setSelectedEdgeIds,
+      setSelectedNodeIds,
+      toast,
+    ]
+  );
+
+  const fetchOfficeEmployees = useCallback(
+    async (officeId: string): Promise<OfficeEmployeeRecord[]> => {
+      const fetchWithLimit = async (limit?: string) => {
+        const params = new URLSearchParams();
+        if (limit) params.set("limit", limit);
+        const response = await fetch(
+          `/api/${departmentId}/offices/${officeId}/employees?${params.toString()}`
+        );
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        return (await response.json()) as {
+          items: OfficeEmployeeRecord[];
+          totalCount: number;
+          limit: number | null;
+        };
+      };
+
+      const initial = await fetchWithLimit();
+      let items = initial.items;
+
+      const effectiveLimit = initial.limit ?? initial.items.length;
+      if (initial.totalCount > effectiveLimit) {
+        const loadRecommended = window.confirm(
+          `Load the first ${effectiveLimit} employees now? (Recommended)\nPress Cancel to load all ${initial.totalCount}.`
+        );
+        if (!loadRecommended) {
+          const all = await fetchWithLimit("all");
+          items = all.items;
+        }
+      }
+
+      return items;
+    },
+    [departmentId]
+  );
+
+  const handleAddOfficeSelection = useCallback(
+    async (
+      office: OfficeSearchResult,
+      { includePeople, includeStaffUnit }: { includePeople: boolean; includeStaffUnit: boolean }
+    ) => {
+      try {
+        const nodesToAdd: FlowNode[] = [];
+        const edgesToAdd: FlowEdge[] = [];
+
+        const existingOffice = nodesRef.current.find(
+          (node) =>
+            node.type === "office" &&
+            ((node.data.officeId ?? node.id) === office.id || node.id === `office-${office.id}`)
+        );
+
+        let officeNode: FlowNode;
+        let renameOffice = false;
+
+        if (existingOffice) {
+          officeNode = existingOffice;
+          if (existingOffice.data.name !== office.name) {
+            renameOffice = true;
+          }
+        } else {
+          const viewport = reactFlowWrapper.current?.getBoundingClientRect();
+          let position = viewport ? project({ x: viewport.width / 2, y: viewport.height / 2 }) : { x: 0, y: 0 };
+          position = snapPointToGrid(position);
+          const outline = normalizeColor(DEFAULT_NODE_COLORS.office) ?? DEFAULT_NODE_COLORS.office;
+          officeNode = {
+            id: `office-${office.id}`,
+            type: "office",
+            position,
+            data: {
+              name: office.name,
+              label: office.name,
+              officeId: office.id,
+              outlineColor: outline,
+              headerColor: outline,
+            },
+          };
+          nodesToAdd.push(officeNode);
+        }
+
+        let staffNode: FlowNode | null = null;
+        let staffNodeId: string | null = null;
+
+        if (includePeople && includeStaffUnit) {
+          staffNode =
+            nodesRef.current.find(
+              (node) =>
+                node.type === "unit" &&
+                node.data.officeId === office.id &&
+                node.data.name.toLowerCase() === "staff"
+            ) ?? null;
+          if (staffNode) {
+            staffNodeId = staffNode.id;
+          } else {
+            const baseY = officeNode.position.y + DEFAULT_NODE_HEIGHT + 80;
+            const staffPosition = snapPointToGrid({ x: officeNode.position.x, y: baseY });
+            const outline = normalizeColor(DEFAULT_NODE_COLORS.unit) ?? DEFAULT_NODE_COLORS.unit;
+            staffNodeId = `unit-${office.id}-staff`;
+            staffNode = {
+              id: staffNodeId,
+              type: "unit",
+              position: staffPosition,
+              data: {
+                name: "Staff",
+                label: "Staff",
+                officeId: office.id,
+                outlineColor: outline,
+                headerColor: outline,
+              },
+            };
+            nodesToAdd.push(staffNode);
+            const staffEdge = applyEdgePresentation({
+              id: `edge-${crypto.randomUUID()}`,
+              source: officeNode.id,
+              target: staffNodeId,
+              sourceHandle: getSourceHandleId("b") ?? "b-source",
+              targetHandle: getTargetHandleId("t") ?? "t-target",
+              type: mapDocEdgeTypeToFlow(edgeType),
+              label: "",
+              data: {
+                color: darkenColor(outline, 0.25),
+                markerColor: darkenColor(outline, 0.25),
+                markerStartType: DEFAULT_MARKER_START,
+                markerEndType: DEFAULT_MARKER_END,
+                markerSize: DEFAULT_MARKER_SIZE,
+              },
+            });
+            edgesToAdd.push(staffEdge);
+          }
+        }
+
+        const parentNodeForPeople = includePeople
+          ? includeStaffUnit && staffNode
+            ? staffNode
+            : officeNode
+          : null;
+
+        const personNodes: FlowNode[] = [];
+        const personEdges: FlowEdge[] = [];
+        const duplicates: string[] = [];
+
+        if (includePeople) {
+          let employees: OfficeEmployeeRecord[] = [];
+          try {
+            employees = await fetchOfficeEmployees(office.id);
+          } catch (error) {
+            toast({
+              title: "Unable to load employees",
+              description: (error as Error).message || "",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          if (employees.length === 0) {
+            toast({ title: "No employees", description: `${office.name} has no employees to add yet.` });
+          }
+
+          const parentPosition = parentNodeForPeople?.position ?? officeNode.position;
+          const parentId = parentNodeForPeople?.id ?? officeNode.id;
+          const columns = determineColumnCount(employees.length);
+          const columnWidth = DEFAULT_NODE_WIDTH + 40;
+          const rowHeight = DEFAULT_NODE_HEIGHT + 80;
+          const startX = parentPosition.x - ((columns - 1) * columnWidth) / 2;
+          const baseY = parentPosition.y + DEFAULT_NODE_HEIGHT + 80;
+
+          employees.forEach((employee, index) => {
+            const existsInChart = nodesRef.current.some(
+              (node) =>
+                node.type === "person" &&
+                node.data.employeeId === employee.id &&
+                (node.data.officeId ?? null) === office.id
+            );
+            const existsInBatch = personNodes.some((node) => node.data.employeeId === employee.id);
+            if (existsInChart || existsInBatch) {
+              duplicates.push(employee.id);
+              return;
+            }
+
+            const row = columns ? Math.floor(index / columns) : 0;
+            const col = columns ? index % columns : 0;
+            let position = {
+              x: startX + col * columnWidth,
+              y: baseY + row * rowHeight,
+            };
+            position = snapPointToGrid(position);
+
+            const outline = normalizeColor(employee.employeeTypeColor) ?? NEUTRAL_OUTLINE_COLOR;
+            const personId = `person-${employee.id}-${crypto.randomUUID()}`;
+            const name = formatFullName(employee);
+            const personNode: FlowNode = {
+              id: personId,
+              type: "person",
+              position,
+              data: {
+                name,
+                title: employee.positionTitle ?? "",
+                employeeTypeName: employee.employeeType,
+                employeeTypeColor: normalizeColor(employee.employeeTypeColor) ?? undefined,
+                employeeId: employee.id,
+                officeId: office.id,
+                label:
+                  employee.positionTitle ??
+                  employee.employeeType ??
+                  (employee.isHead ? "Head" : "Staff"),
+                outlineColor: outline,
+                headerColor: outline,
+                imageUrl: employee.photoUrl ?? undefined,
+              },
+              sourcePosition: Position.Right,
+              targetPosition: Position.Left,
+            };
+            personNodes.push(personNode);
+
+            const defaultType = mapDocEdgeTypeToFlow(edgeType);
+            const layout = resolveEdgeLayout(parentNodeForPeople ?? officeNode, personNode, defaultType);
+            const personEdge = applyEdgePresentation({
+              id: `edge-${crypto.randomUUID()}`,
+              source: parentId,
+              target: personId,
+              sourceHandle: getSourceHandleId(layout?.source ?? "b") ?? "b-source",
+              targetHandle: getTargetHandleId(layout?.target ?? "t") ?? "t-target",
+              type: layout?.type ?? defaultType,
+              label: "",
+              data: {
+                color: darkenColor(outline, 0.25),
+                markerColor: darkenColor(outline, 0.25),
+                markerStartType: DEFAULT_MARKER_START,
+                markerEndType: DEFAULT_MARKER_END,
+                markerSize: DEFAULT_MARKER_SIZE,
+              },
+            });
+            personEdges.push(personEdge);
+          });
+        }
+
+        const allNodes = [...nodesToAdd, ...personNodes];
+        const allEdges = [...edgesToAdd, ...personEdges];
+        const nodeBatches = chunkArray(allNodes, 50);
+        const edgeBatches = chunkArray(allEdges, 50);
+        const maxBatches = Math.max(nodeBatches.length, edgeBatches.length);
+
+        if (renameOffice || maxBatches) {
+          runWithHistory(() => {
+            if (renameOffice) {
+              setNodes((nds: FlowNode[]) =>
+                nds.map((node) =>
+                  node.id === officeNode.id
+                    ? {
+                        ...node,
+                        data: {
+                          ...node.data,
+                          name: office.name,
+                          label: office.name,
+                        },
+                      }
+                    : node
+                )
+              );
+            }
+
+            if (!maxBatches) {
+              return;
+            }
+
+            const applyBatch = (index: number) => {
+              if (index >= maxBatches) return;
+              const nodeBatch = nodeBatches[index] ?? [];
+              const edgeBatch = edgeBatches[index] ?? [];
+              if (nodeBatch.length) {
+                setNodes((nds: FlowNode[]) => [...nds, ...nodeBatch]);
+              }
+              if (edgeBatch.length) {
+                setEdges((eds: FlowEdge[]) => [...eds, ...edgeBatch]);
+              }
+              if (index + 1 < maxBatches) {
+                requestAnimationFrame(() => applyBatch(index + 1));
+              }
+            };
+
+            applyBatch(0);
+          });
+        }
+
+        setSelectedNodeIds([officeNode.id]);
+        setSelectedEdgeIds([]);
+        setFocusOfficeId(office.id);
+        requestFocus();
+        setIsAddOfficeOpen(false);
+
+        let description: string;
+        if (includePeople) {
+          description = `Added ${personNodes.length} ${personNodes.length === 1 ? "person" : "people"} to ${office.name}.`;
+          if (duplicates.length) {
+            description += ` Skipped ${duplicates.length} duplicate${duplicates.length === 1 ? "" : "s"}.`;
+          }
+        } else {
+          description = `${office.name} added to the chart.`;
+        }
+
+        toast({ title: "Office updated", description });
+      } catch (error) {
+        toast({
+          title: "Unable to add office",
+          description: (error as Error).message || "",
+          variant: "destructive",
+        });
+      }
+    },
+    [
+      edgeType,
+      fetchOfficeEmployees,
+      project,
+      requestFocus,
+      runWithHistory,
+      setEdges,
+      setFocusOfficeId,
+      setNodes,
+      setSelectedEdgeIds,
+      setSelectedNodeIds,
+      toast,
+    ]
+  );
+
   const unsavedChanges = useMemo(() => draftSnapshot !== lastSavedSnapshotRef.current, [draftSnapshot]);
 
   const handleSaveVersion = useCallback(async () => {
@@ -2605,9 +3203,9 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               <div className="space-y-1">
                 <Label className="text-sm font-semibold">New node</Label>
                 <div className="grid gap-2">
-                  <Button size="sm" variant="outline" onClick={() => addStandaloneNode("office")}>Add office</Button>
+                  <Button size="sm" variant="outline" onClick={() => setIsAddOfficeOpen(true)}>Add office</Button>
                   <Button size="sm" variant="outline" onClick={() => addStandaloneNode("unit")}>Add unit</Button>
-                  <Button size="sm" variant="outline" onClick={() => addStandaloneNode("person")}>Add person</Button>
+                  <Button size="sm" variant="outline" onClick={() => setIsAddPersonOpen(true)}>Add person</Button>
                 </div>
               </div>
               <div className="flex items-center justify-between">
@@ -2743,6 +3341,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 "relative h-full w-full",
                 isHand ? "cursor-grab active:cursor-grabbing" : "cursor-default"
               )}
+              onPointerMove={updatePointerPosition}
+              onPointerLeave={clearPointerPosition}
             >
               <ReactFlow
                 nodes={nodes}
@@ -3082,6 +3682,21 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           </div>
         </CanvasActionsContext.Provider>
       </CanvasSettingsContext.Provider>
+      <AddPersonDialog
+        open={isAddPersonOpen}
+        onOpenChange={setIsAddPersonOpen}
+        departmentId={departmentId}
+        onSelect={handleAddPersonSelection}
+        canConnectToParent={canConnectToSelectedParent}
+        initialConnectToParent={canConnectToSelectedParent}
+        initialDropNearCursor={defaultDropNearCursor}
+      />
+      <AddOfficeDialog
+        open={isAddOfficeOpen}
+        onOpenChange={setIsAddOfficeOpen}
+        departmentId={departmentId}
+        onSelect={handleAddOfficeSelection}
+      />
     </>
   );
 };
