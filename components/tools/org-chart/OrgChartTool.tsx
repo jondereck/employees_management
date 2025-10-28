@@ -34,6 +34,7 @@ import ReactFlow, {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  getRectOfNodes,
 } from "reactflow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,6 +93,7 @@ const DEFAULT_NODE_COLORS: Record<OrgNodeType, string> = {
   person: "#3949AB",
 };
 const DEFAULT_EDGE_COLOR = "#0F172A";
+const DEFAULT_EDGE_STROKE_WIDTH = 2;
 const NEUTRAL_OUTLINE_COLOR = "#E2E8F0";
 const HISTORY_LIMIT = 100;
 
@@ -342,7 +344,11 @@ const applyEdgePresentation = (edge: FlowEdge): FlowEdge => {
 
   const markerStartRef = getMarkerReference(markerStartType, markerColor, markerSize, "start");
   const markerEndRef = getMarkerReference(markerEndType, markerColor, markerSize, "end");
-  const nextStyle = { ...(edge.style ?? {}), stroke: normalizedColor, strokeWidth: 2 };
+  const nextStyle = {
+    ...(edge.style ?? {}),
+    stroke: normalizedColor,
+    strokeWidth: DEFAULT_EDGE_STROKE_WIDTH,
+  };
 
   const currentData = edge.data ?? {};
   const dataMatches =
@@ -352,9 +358,10 @@ const applyEdgePresentation = (edge: FlowEdge): FlowEdge => {
     (currentData.markerStartType ?? DEFAULT_MARKER_START) === markerStartType &&
     (currentData.markerEndType ?? DEFAULT_MARKER_END) === markerEndType;
 
-  const styleMatches =
-    (edge.style?.stroke ?? normalizedColor) === normalizedColor &&
-    (edge.style?.strokeWidth ?? 2) === 2;
+const styleMatches =
+  edge.style?.stroke === normalizedColor &&
+  edge.style?.strokeWidth === DEFAULT_EDGE_STROKE_WIDTH;
+
 
   const startMatches = markerEquals(edge.markerStart, markerStartRef);
   const endMatches = markerEquals(edge.markerEnd, markerEndRef);
@@ -364,12 +371,12 @@ const applyEdgePresentation = (edge: FlowEdge): FlowEdge => {
   }
 
   return {
-    ...edge,
-    data: nextData,
-    style: nextStyle,
-    markerStart: markerStartRef,
-    markerEnd: markerEndRef,
-  };
+  ...edge,
+  data: nextData,
+  style: { ...(edge.style ?? {}), stroke: normalizedColor, strokeWidth: DEFAULT_EDGE_STROKE_WIDTH },
+  markerStart: markerStartRef,
+  markerEnd: markerEndRef,
+};
 };
 
 const getCustomMarkerDefinitions = (edges: FlowEdge[]): CustomMarkerDefinition[] => {
@@ -661,7 +668,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const defaultEdgeOptions = useMemo(() => ({ type: "step" as Edge["type"] }), []);
   const clipboardAvailable = useMemo(() => clipboardVersion > 0 && clipboardRef.current !== null, [clipboardVersion]);
   const reactFlowInstance = useReactFlow<FlowNodeData, FlowEdgeData>();
-  const { fitView, project, getNode, setViewport } = reactFlowInstance;
+  const { fitView, project, getNode, setViewport, getNodes, getViewport } = reactFlowInstance;
 
   const MIN_FOCUS_ZOOM = 0.25;
   const MAX_FOCUS_ZOOM = 1.5;
@@ -1274,7 +1281,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         } finally {
           focusTimeoutRef.current = null;
         }
-      }, 200);
+      }, 10000);
     },
     [collectNodesForOffice, fitView, MAX_FOCUS_ZOOM, MIN_FOCUS_ZOOM]
   );
@@ -1309,7 +1316,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     dragRecenterTimeoutRef.current = window.setTimeout(() => {
       focusOffice(focusOfficeId);
       dragRecenterTimeoutRef.current = null;
-    }, 120);
+    }, 10000);
   }, [focusOffice, focusOfficeId, pushHistoryEntry]);
 
   const handleMoveStart = useCallback(() => {
@@ -2203,12 +2210,50 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const handleExport = useCallback(
     async (format: "png" | "pdf") => {
       if (!reactFlowWrapper.current) return;
-      const restoreUi = hideInterfaceForExport();
+      const nodesForExport = getNodes().filter((node) => !node.hidden);
+      if (!nodesForExport.length) {
+        toast({ title: "Nothing to export", description: "Add some nodes before exporting." });
+        return;
+      }
+
+      const bounds = getRectOfNodes(nodesForExport);
+      const exportWidth = Math.max(bounds.width, 1);
+      const exportHeight = Math.max(bounds.height, 1);
+      const restoreInterface = hideInterfaceForExport();
+      const wrapper = reactFlowWrapper.current;
+      const viewportElement = wrapper.querySelector(".react-flow__viewport") as HTMLElement | null;
+      const originalTransform = viewportElement?.style.transform ?? "";
+      const originalTransformOrigin = viewportElement?.style.transformOrigin ?? "";
+      const originalWidth = wrapper.style.width;
+      const originalHeight = wrapper.style.height;
+      const originalPosition = wrapper.style.position;
+      const { zoom } = getViewport();
+      const exportStrokeWidth = Math.max(4, 4 / Math.max(zoom, 0.5));
+
       try {
         setIsExporting(true);
-        const dataUrl = await htmlToImage.toPng(reactFlowWrapper.current, {
+        wrapper.classList.add("orgchart-exporting");
+        wrapper.style.setProperty("--orgchart-export-stroke", `${exportStrokeWidth}px`);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        wrapper.style.width = `${exportWidth}px`;
+        wrapper.style.height = `${exportHeight}px`;
+        wrapper.style.position = "relative";
+
+        if (viewportElement) {
+          viewportElement.style.transform = `translate(${-bounds.x}px, ${-bounds.y}px) scale(1)`;
+          viewportElement.style.transformOrigin = "0 0";
+        }
+
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const dataUrl = await htmlToImage.toPng(wrapper, {
           backgroundColor: "#ffffff",
-          pixelRatio: 2,
+          pixelRatio: 3,
+          style: {
+            transform: "none",
+            transformOrigin: "top left",
+          },
         });
 
         if (format === "png") {
@@ -2247,11 +2292,20 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           variant: "destructive",
         });
       } finally {
-        restoreUi();
+        wrapper.classList.remove("orgchart-exporting");
+        wrapper.style.removeProperty("--orgchart-export-stroke");
+        wrapper.style.width = originalWidth;
+        wrapper.style.height = originalHeight;
+        wrapper.style.position = originalPosition;
+        if (viewportElement) {
+          viewportElement.style.transform = originalTransform;
+          viewportElement.style.transformOrigin = originalTransformOrigin;
+        }
+        restoreInterface();
         setIsExporting(false);
       }
     },
-    [hideInterfaceForExport, toast]
+    [getNodes, getViewport, hideInterfaceForExport, toast]
   );
 
   const updateSelectedNode = useCallback(
@@ -2386,11 +2440,24 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   }
 
   return (
-    <CanvasSettingsContext.Provider value={{ showPhotos }}>
-      <CanvasActionsContext.Provider value={actionsContextValue}>
-        <div
-          className="grid min-h-0 gap-4 lg:grid-cols-[280px,1fr,320px]"
-          style={{ height: "calc(100vh - 140px)" }}
+    <>
+      <style jsx global>{`
+        .orgchart-exporting .react-flow__edge-path {
+          stroke-width: var(--orgchart-export-stroke, 2.25px) !important;
+          stroke: #1f2937 !important;
+          opacity: 1 !important;
+          stroke-opacity: 1 !important;
+          shape-rendering: geometricPrecision !important;
+        }
+        .orgchart-exporting .react-flow__edge .react-flow__edge-interaction {
+          display: none !important;
+        }
+      `}</style>
+      <CanvasSettingsContext.Provider value={{ showPhotos }}>
+        <CanvasActionsContext.Provider value={actionsContextValue}>
+          <div
+            className="grid min-h-0 gap-4 lg:grid-cols-[280px,1fr,320px]"
+            style={{ height: "calc(100vh - 140px)" }}
         >
         <aside className="space-y-4">
           <Card>
@@ -2487,7 +2554,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                       className="w-full justify-start"
                       onClick={() => setFocusOfficeId(null)}
                     >
-                      Whole org
+                      Organizational Chart
                     </Button>
                     {filteredOffices.length ? filteredOffices.map((office: FlowNode) => {
                       const officeIdentifier = office.data.officeId ?? office.id;
@@ -3006,9 +3073,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
             </CardContent>
           </Card>
         </aside>
-      </div>
-      </CanvasActionsContext.Provider>
-    </CanvasSettingsContext.Provider>
+          </div>
+        </CanvasActionsContext.Provider>
+      </CanvasSettingsContext.Provider>
+    </>
   );
 };
 
