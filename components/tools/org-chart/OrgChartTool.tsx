@@ -91,9 +91,7 @@ const DEFAULT_NODE_COLORS: Record<OrgNodeType, string> = {
   unit: "#FB8C00",
   person: "#3949AB",
 };
-
 const DEFAULT_EDGE_COLOR = "#0F172A";
-const DEFAULT_EDGE_STROKE_WIDTH = 22;
 const NEUTRAL_OUTLINE_COLOR = "#E2E8F0";
 const HISTORY_LIMIT = 100;
 
@@ -344,7 +342,7 @@ const applyEdgePresentation = (edge: FlowEdge): FlowEdge => {
 
   const markerStartRef = getMarkerReference(markerStartType, markerColor, markerSize, "start");
   const markerEndRef = getMarkerReference(markerEndType, markerColor, markerSize, "end");
-  const nextStyle = { ...(edge.style ?? {}), stroke: normalizedColor, strokeWidth: DEFAULT_EDGE_STROKE_WIDTH };
+  const nextStyle = { ...(edge.style ?? {}), stroke: normalizedColor, strokeWidth: 2 };
 
   const currentData = edge.data ?? {};
   const dataMatches =
@@ -356,7 +354,7 @@ const applyEdgePresentation = (edge: FlowEdge): FlowEdge => {
 
   const styleMatches =
     (edge.style?.stroke ?? normalizedColor) === normalizedColor &&
-    (edge.style?.strokeWidth ?? DEFAULT_EDGE_STROKE_WIDTH) === DEFAULT_EDGE_STROKE_WIDTH;
+    (edge.style?.strokeWidth ?? 2) === 2;
 
   const startMatches = markerEquals(edge.markerStart, markerStartRef);
   const endMatches = markerEquals(edge.markerEnd, markerEndRef);

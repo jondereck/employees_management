@@ -13,7 +13,7 @@ export async function buildInitialOrgDocument(
   departmentId: string,
   options: BuildOptions = {}
 ): Promise<OrgChartDocument> {
-  const includeStaffUnit = options.includeStaffUnit ?? true;
+  const includeStaffUnit = options.includeStaffUnit ?? false;
   const offices = await prismadb.offices.findMany({
     where: { departmentId },
     orderBy: { name: "asc" },

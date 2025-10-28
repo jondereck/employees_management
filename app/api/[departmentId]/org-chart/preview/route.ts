@@ -10,7 +10,7 @@ type Params = {
 export async function POST(request: Request, { params }: Params) {
   try {
     const body = await request.json().catch(() => ({}));
-    const includeStaffUnit = Boolean(body?.includeStaffUnit ?? true);
+    const includeStaffUnit = Boolean(body?.includeStaffUnit ?? false);
     const document = await buildInitialOrgDocument(params.departmentId, {
       includeStaffUnit,
     });
