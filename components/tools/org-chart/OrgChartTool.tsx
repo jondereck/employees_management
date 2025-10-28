@@ -630,7 +630,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [officeSearch, setOfficeSearch] = useState("");
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
-  const [showPhotos, setShowPhotos] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(true);
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [tool, setTool] = useState<Tool>("select");
   const versionStorageKey = useMemo(
@@ -1281,7 +1281,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         } finally {
           focusTimeoutRef.current = null;
         }
-      }, 10000);
+      }, 5000);
     },
     [collectNodesForOffice, fitView, MAX_FOCUS_ZOOM, MIN_FOCUS_ZOOM]
   );
@@ -1316,7 +1316,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     dragRecenterTimeoutRef.current = window.setTimeout(() => {
       focusOffice(focusOfficeId);
       dragRecenterTimeoutRef.current = null;
-    }, 10000);
+    }, 5000);
   }, [focusOffice, focusOfficeId, pushHistoryEntry]);
 
   const handleMoveStart = useCallback(() => {
@@ -2775,18 +2775,24 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               >
                 <MarkerDefinitionsLayer definitions={customMarkerDefinitions} />
                 <Background gap={10} color="rgba(15,23,42,0.08)" size={1} />
-                <MiniMap
-                  className="rounded-md border bg-background"
-                  zoomable
-                  pannable
-                  nodeStrokeWidth={3}
-                  nodeColor={(node: FlowNode) =>
-                    node.data.outlineColor ??
-                    node.data.headerColor ??
-                    DEFAULT_NODE_COLORS[node.type as OrgNodeType]
-                  }
-                />
-                <Controls showInteractive={false} position="bottom-right" />
+             <MiniMap
+  className="rounded-md border bg-background"
+  zoomable
+  pannable
+  nodeStrokeWidth={3}
+  nodeColor={(node: FlowNode) =>
+    node.data.outlineColor ??
+    node.data.headerColor ??
+    DEFAULT_NODE_COLORS[node.type as OrgNodeType]
+  }
+  position="top-right"   // ⬅️ add this
+/>
+
+<Controls
+  showInteractive={false}
+  position="top-right"   // ⬅️ change from "bottom-right"
+/>
+
               </ReactFlow>
               {isHand ? (
                 <div
@@ -3164,7 +3170,7 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
 
       {showHeaderBar ? (
         <div className="rounded-t-lg border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {headerLabel}
+        LGU Lingayen
         </div>
       ) : null}
       <div className="flex items-center gap-3 px-4 py-3">
