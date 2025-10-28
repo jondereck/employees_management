@@ -1,4 +1,8 @@
-export type OrgNodeType = "office" | "unit" | "person";
+export type OrgNodeType = "office" | "unit" | "person" | "annotation";
+
+export type AnnotationWeight = "normal" | "bold";
+
+export type AnnotationAlignment = "left" | "center" | "right";
 
 export type OrgMarkerType = "none" | "arrow" | "arrowClosed" | "diamond" | "circle";
 
@@ -15,6 +19,15 @@ export type OrgNodeData = {
   outlineColor?: string;
   notes?: string;
   imageUrl?: string;
+  text?: string;
+  color?: string;
+  bg?: string;
+  fontSize?: number;
+  weight?: AnnotationWeight;
+  align?: AnnotationAlignment;
+  rotate?: number;
+  z?: number;
+  lock?: boolean;
 };
 
 export type OrgChartNode = {

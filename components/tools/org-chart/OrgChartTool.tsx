@@ -37,6 +37,7 @@ import ReactFlow, {
   useReactFlow,
   getRectOfNodes,
 } from "reactflow";
+import { AlertModal } from "@/components/modals/alert-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,6 +62,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type {
+  AnnotationAlignment,
+  AnnotationWeight,
   OrgChartDocument,
   OrgChartEdge,
   OrgChartNode,
@@ -71,25 +74,32 @@ import type {
   OrgMarkerType,
 } from "@/types/orgChart";
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   BadgeCheck,
+  Bold,
   Building2,
   ClipboardCopy,
   ClipboardPaste,
   Copy,
   Download,
   GitBranch,
+  Hand,
   Layers,
   ListFilter,
+  Lock,
   Move,
   Plus,
   Redo2,
   RefreshCw,
   Trash2,
+  Type,
   Undo2,
+  Unlock,
   User,
   Users,
   Wand2,
-  Hand,
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import { PDFDocument } from "pdf-lib";
@@ -98,11 +108,20 @@ const DEFAULT_NODE_COLORS: Record<OrgNodeType, string> = {
   office: "#1E88E5",
   unit: "#FB8C00",
   person: "#3949AB",
+  annotation: "#111827",
 };
 const DEFAULT_EDGE_COLOR = "#0F172A";
 const DEFAULT_EDGE_STROKE_WIDTH = 2;
 const NEUTRAL_OUTLINE_COLOR = "#E2E8F0";
 const HISTORY_LIMIT = 100;
+
+const DEFAULT_ANNOTATION_TEXT = "New text";
+const DEFAULT_ANNOTATION_COLOR = "#111827";
+const DEFAULT_ANNOTATION_FONT_SIZE = 18;
+const MIN_ANNOTATION_FONT_SIZE = 12;
+const MAX_ANNOTATION_FONT_SIZE = 64;
+const MIN_ANNOTATION_ROTATION = -45;
+const MAX_ANNOTATION_ROTATION = 45;
 
 const EDGE_TYPE_OPTIONS: Array<{ label: string; value: "orth" | "smoothstep" }> = [
   { label: "Orthogonal", value: "orth" },
@@ -190,6 +209,29 @@ type GraphState = { nodes: FlowNode[]; edges: FlowEdge[] };
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 const componentToHex = (value: number) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0");
+
+const normalizeAnnotationFontSize = (value?: number): number => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return DEFAULT_ANNOTATION_FONT_SIZE;
+  }
+  return clamp(value, MIN_ANNOTATION_FONT_SIZE, MAX_ANNOTATION_FONT_SIZE);
+};
+
+const normalizeAnnotationRotation = (value?: number): number => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0;
+  }
+  return clamp(value, MIN_ANNOTATION_ROTATION, MAX_ANNOTATION_ROTATION);
+};
+
+const normalizeAnnotationAlignment = (value?: string | null): AnnotationAlignment => {
+  if (value === "center" || value === "right") return value;
+  return "left";
+};
+
+const normalizeAnnotationWeight = (value?: string | null): AnnotationWeight => {
+  return value === "normal" ? "normal" : "bold";
+};
 
 const normalizeColor = (input?: string | null): string | null => {
   if (!input) return null;
@@ -647,6 +689,7 @@ type CanvasActions = {
   duplicateNode: (id: string) => void;
   addChildUnit: (id: string) => void;
   addChildPerson: (id: string) => void;
+  updateNodeData: (id: string, updates: Partial<OrgNodeData>, options?: { pushHistory?: boolean }) => void;
 };
 
 const CanvasActionsContext = createContext<CanvasActions | null>(null);
@@ -695,10 +738,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [officeSearch, setOfficeSearch] = useState("");
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
   const [showPhotos, setShowPhotos] = useState(true);
-  const [focusTrigger, setFocusTrigger] = useState(0);
-  const [tool, setTool] = useState<Tool>("select");
-  const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
-  const [isAddOfficeOpen, setIsAddOfficeOpen] = useState(false);
+    const [focusTrigger, setFocusTrigger] = useState(0);
+    const [tool, setTool] = useState<Tool>("select");
+    const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
+    const [isAddOfficeOpen, setIsAddOfficeOpen] = useState(false);
+    const [isDeleteVersionOpen, setIsDeleteVersionOpen] = useState(false);
+    const [isDeletingVersion, setIsDeletingVersion] = useState(false);
   const versionStorageKey = useMemo(
     () => `org-chart:current-version:${departmentId}`,
     [departmentId]
@@ -942,13 +987,104 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     pushHistoryEntry(snapshot);
   }, [getCurrentGraphState, pushHistoryEntry]);
 
-  const runWithHistory = useCallback(
-    (operation: () => void) => {
-      pushHistorySnapshot();
-      operation();
-    },
-    [pushHistorySnapshot]
-  );
+    const runWithHistory = useCallback(
+      (operation: () => void) => {
+        pushHistorySnapshot();
+        operation();
+      },
+      [pushHistorySnapshot]
+    );
+
+    const applyNodeUpdates = useCallback(
+      (nodeId: string, updates: Partial<OrgNodeData>, options?: { pushHistory?: boolean }) => {
+        const target = nodesRef.current.find((node) => node.id === nodeId);
+        if (!target) return;
+
+        const prepared: Partial<OrgNodeData> = { ...updates };
+
+        if ("outlineColor" in updates && updates.outlineColor !== undefined) {
+          const normalized =
+            normalizeColor(updates.outlineColor) ??
+            normalizeColor(target.data.outlineColor) ??
+            NEUTRAL_OUTLINE_COLOR;
+          prepared.outlineColor = normalized;
+          prepared.headerColor = normalized;
+        }
+
+        if ("employeeTypeColor" in updates) {
+          prepared.employeeTypeColor = normalizeColor(updates.employeeTypeColor) ?? undefined;
+        }
+
+        if ("color" in updates) {
+          prepared.color = normalizeColor(updates.color) ?? undefined;
+        }
+
+        if ("bg" in updates) {
+          prepared.bg = normalizeColor(updates.bg) ?? undefined;
+        }
+
+        if ("fontSize" in updates) {
+          prepared.fontSize = normalizeAnnotationFontSize(updates.fontSize);
+        }
+
+        if ("weight" in updates) {
+          prepared.weight = normalizeAnnotationWeight(updates.weight);
+        }
+
+        if ("align" in updates) {
+          prepared.align = normalizeAnnotationAlignment(updates.align);
+        }
+
+        if ("rotate" in updates) {
+          prepared.rotate = normalizeAnnotationRotation(updates.rotate);
+        }
+
+        if ("z" in updates) {
+          prepared.z = typeof updates.z === "number" && !Number.isNaN(updates.z) ? updates.z : target.data.z;
+        }
+
+        if ("lock" in updates) {
+          prepared.lock = Boolean(updates.lock);
+        }
+
+        const hasChanges = Object.entries(prepared).some(([key, value]) => {
+          const current = (target.data as Record<string, unknown>)[key];
+          return current !== value;
+        });
+
+        if (!hasChanges) {
+          return;
+        }
+
+        const apply = () => {
+          setNodes((nds: FlowNode[]) =>
+            nds.map((node: FlowNode) => {
+              if (node.id !== nodeId) return node;
+              const updatedData = {
+                ...node.data,
+                ...prepared,
+              };
+              const lockValue =
+                node.type === "annotation"
+                  ? ("lock" in prepared ? Boolean(prepared.lock) : Boolean(updatedData.lock))
+                  : undefined;
+              return {
+                ...node,
+                data: updatedData,
+                ...(node.type === "annotation" ? { draggable: !lockValue } : {}),
+              };
+            })
+          );
+        };
+
+        if (options?.pushHistory === false) {
+          apply();
+        } else {
+          runWithHistory(apply);
+        }
+      },
+      [runWithHistory, setNodes]
+    );
 
   const resetHistory = useCallback(() => {
     historyRef.current = { past: [], future: [] };
@@ -1280,6 +1416,36 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     );
   }, [selectedNode]);
 
+  const selectedAnnotationText =
+    selectedNode?.type === "annotation"
+      ? selectedNode.data.text ?? selectedNode.data.name ?? ""
+      : "";
+  const selectedAnnotationFontSize =
+    selectedNode?.type === "annotation"
+      ? normalizeAnnotationFontSize(selectedNode.data.fontSize)
+      : DEFAULT_ANNOTATION_FONT_SIZE;
+  const selectedAnnotationColor =
+    selectedNode?.type === "annotation"
+      ? normalizeColor(selectedNode.data.color) ?? DEFAULT_ANNOTATION_COLOR
+      : DEFAULT_ANNOTATION_COLOR;
+  const selectedAnnotationBg =
+    selectedNode?.type === "annotation"
+      ? normalizeColor(selectedNode.data.bg) ?? undefined
+      : undefined;
+  const selectedAnnotationWeight =
+    selectedNode?.type === "annotation"
+      ? normalizeAnnotationWeight(selectedNode.data.weight)
+      : "bold";
+  const selectedAnnotationAlign =
+    selectedNode?.type === "annotation"
+      ? normalizeAnnotationAlignment(selectedNode.data.align)
+      : "left";
+  const selectedAnnotationRotation =
+    selectedNode?.type === "annotation"
+      ? normalizeAnnotationRotation(selectedNode.data.rotate)
+      : 0;
+  const selectedAnnotationLocked = selectedNode?.type === "annotation" ? Boolean(selectedNode.data.lock) : false;
+
   const selectedEdge = useMemo(() => {
     if (!selectedEdgeIds.length) return null;
     return edges.find((edge: FlowEdge) => edge.id === selectedEdgeIds[0]) ?? null;
@@ -1444,31 +1610,45 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     isPanningRef.current = false;
   }, []);
 
-  const serializeDocument = useCallback(
-    (flowNodes: FlowNode[], flowEdges: FlowEdge[], currentEdgeType: "orth" | "smoothstep"): OrgChartDocument => ({
-      nodes: flowNodes.map((node: FlowNode) => ({
-        id: node.id,
-        type: node.type as OrgNodeType,
-        position: node.position,
-        data: {
-          name: node.data.name,
-          title: node.data.title,
-          employeeTypeName: node.data.employeeTypeName,
-          employeeTypeColor: node.data.employeeTypeColor,
-          isHead: node.data.isHead,
-          officeId: node.data.officeId,
-          employeeId: node.data.employeeId,
-          label: node.data.label,
-          outlineColor:
-            normalizeColor(node.data.outlineColor) ?? normalizeColor(node.data.headerColor) ?? undefined,
-          headerColor:
-            normalizeColor(node.data.outlineColor) ?? normalizeColor(node.data.headerColor) ?? undefined,
-          notes: node.data.notes,
-          imageUrl: node.data.imageUrl,
-        },
-        width: node.width ?? undefined,
-        height: node.height ?? undefined,
-      })),
+    const serializeDocument = useCallback(
+      (flowNodes: FlowNode[], flowEdges: FlowEdge[], currentEdgeType: "orth" | "smoothstep"): OrgChartDocument => ({
+        nodes: flowNodes.map((node: FlowNode) => ({
+          id: node.id,
+          type: node.type as OrgNodeType,
+          position: node.position,
+          data:
+            node.type === "annotation"
+              ? {
+                  name: node.data.name ?? node.data.text ?? DEFAULT_ANNOTATION_TEXT,
+                  text: node.data.text ?? node.data.name ?? DEFAULT_ANNOTATION_TEXT,
+                  color: normalizeColor(node.data.color) ?? DEFAULT_ANNOTATION_COLOR,
+                  bg: normalizeColor(node.data.bg) ?? undefined,
+                  fontSize: normalizeAnnotationFontSize(node.data.fontSize),
+                  weight: normalizeAnnotationWeight(node.data.weight),
+                  align: normalizeAnnotationAlignment(node.data.align),
+                  rotate: normalizeAnnotationRotation(node.data.rotate),
+                  z: typeof node.data.z === "number" && !Number.isNaN(node.data.z) ? node.data.z : undefined,
+                  lock: Boolean(node.data.lock),
+                }
+              : {
+                  name: node.data.name,
+                  title: node.data.title,
+                  employeeTypeName: node.data.employeeTypeName,
+                  employeeTypeColor: node.data.employeeTypeColor,
+                  isHead: node.data.isHead,
+                  officeId: node.data.officeId,
+                  employeeId: node.data.employeeId,
+                  label: node.data.label,
+                  outlineColor:
+                    normalizeColor(node.data.outlineColor) ?? normalizeColor(node.data.headerColor) ?? undefined,
+                  headerColor:
+                    normalizeColor(node.data.outlineColor) ?? normalizeColor(node.data.headerColor) ?? undefined,
+                  notes: node.data.notes,
+                  imageUrl: node.data.imageUrl,
+                },
+          width: node.width ?? undefined,
+          height: node.height ?? undefined,
+        })),
       edges: flowEdges.map((edge: FlowEdge) => ({
         id: edge.id,
         source: edge.source,
@@ -1488,44 +1668,77 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     []
   );
 
-  const applyNodeDefaults = useCallback(
-    (docNodes: OrgChartNode[]): FlowNode[] =>
-      docNodes.map((node: OrgChartNode) => {
-        const outlineColor =
-          normalizeColor(node.data.outlineColor) ??
-          normalizeColor(node.data.headerColor) ??
-          (node.type === "person" ? normalizeColor(node.data.employeeTypeColor) : null) ??
-          normalizeColor(DEFAULT_NODE_COLORS[node.type]) ??
-          NEUTRAL_OUTLINE_COLOR;
-        const baseNode: FlowNode = {
-          id: node.id,
-          type: node.type,
-          position: node.position,
-          data: {
-            name: node.data.name,
-            title: node.data.title,
-            employeeTypeName: node.data.employeeTypeName,
-            employeeTypeColor: normalizeColor(node.data.employeeTypeColor) ?? undefined,
-            isHead: node.data.isHead,
-            officeId: node.data.officeId,
-            employeeId: node.data.employeeId,
-            label: node.data.label ?? (node.type === "person" ? node.data.title ?? node.data.name : node.data.name),
-            outlineColor,
-            headerColor: outlineColor,
-            notes: node.data.notes,
-            imageUrl: node.data.imageUrl,
-          },
-          width: node.width,
-          height: node.height,
-        };
-        if (node.type === "person") {
-          baseNode.sourcePosition = Position.Right;
-          baseNode.targetPosition = Position.Left;
-        }
-        return baseNode;
-      }),
-    []
-  );
+    const applyNodeDefaults = useCallback(
+      (docNodes: OrgChartNode[]): FlowNode[] =>
+        docNodes.map((node: OrgChartNode) => {
+          if (node.type === "annotation") {
+            const text = node.data.text ?? node.data.name ?? DEFAULT_ANNOTATION_TEXT;
+            const color = normalizeColor(node.data.color) ?? DEFAULT_ANNOTATION_COLOR;
+            const bg = normalizeColor(node.data.bg) ?? undefined;
+            const fontSize = normalizeAnnotationFontSize(node.data.fontSize);
+            const weight = normalizeAnnotationWeight(node.data.weight);
+            const align = normalizeAnnotationAlignment(node.data.align);
+            const rotate = normalizeAnnotationRotation(node.data.rotate);
+            const zValue = typeof node.data.z === "number" && !Number.isNaN(node.data.z) ? node.data.z : 0;
+            const lock = Boolean(node.data.lock);
+            return {
+              id: node.id,
+              type: node.type,
+              position: node.position,
+              data: {
+                name: node.data.name ?? text,
+                text,
+                color,
+                bg,
+                fontSize,
+                weight,
+                align,
+                rotate,
+                z: zValue,
+                lock,
+              },
+              width: node.width,
+              height: node.height,
+              draggable: !lock,
+              connectable: false,
+            };
+          }
+
+          const outlineColor =
+            normalizeColor(node.data.outlineColor) ??
+            normalizeColor(node.data.headerColor) ??
+            (node.type === "person" ? normalizeColor(node.data.employeeTypeColor) : null) ??
+            normalizeColor(DEFAULT_NODE_COLORS[node.type]) ??
+            NEUTRAL_OUTLINE_COLOR;
+          const baseNode: FlowNode = {
+            id: node.id,
+            type: node.type,
+            position: node.position,
+            data: {
+              name: node.data.name,
+              title: node.data.title,
+              employeeTypeName: node.data.employeeTypeName,
+              employeeTypeColor: normalizeColor(node.data.employeeTypeColor) ?? undefined,
+              isHead: node.data.isHead,
+              officeId: node.data.officeId,
+              employeeId: node.data.employeeId,
+              label: node.data.label ?? (node.type === "person" ? node.data.title ?? node.data.name : node.data.name),
+              outlineColor,
+              headerColor: outlineColor,
+              notes: node.data.notes,
+              imageUrl: node.data.imageUrl,
+            },
+            width: node.width,
+            height: node.height,
+          };
+          if (node.type === "person") {
+            baseNode.sourcePosition = Position.Right;
+            baseNode.targetPosition = Position.Left;
+          }
+          return baseNode;
+        }),
+      []
+    );
 
   const applyEdgeDefaults = useCallback(
     (docEdges: OrgChartEdge[]): FlowEdge[] =>
@@ -2040,27 +2253,34 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   const duplicateNode = useCallback(
     (nodeId: string) => {
-      runWithHistory(() => {
-        setNodes((nds: FlowNode[]) => {
-          const node = nds.find((n) => n.id === nodeId);
-          if (!node) return nds;
-          const newId = `${node.type}-${crypto.randomUUID()}`;
-          const newNode: FlowNode = {
-            ...node,
-            id: newId,
-            position: {
-              x: node.position.x + 40,
-              y: node.position.y + 40,
-            },
-            data: {
-              ...node.data,
-              name: `${node.data.name} copy`,
-              employeeId: undefined,
-            },
-          };
-          return [...nds, newNode];
+        runWithHistory(() => {
+          setNodes((nds: FlowNode[]) => {
+            const node = nds.find((n) => n.id === nodeId);
+            if (!node) return nds;
+            const newId = `${node.type}-${crypto.randomUUID()}`;
+            const newNode: FlowNode = {
+              ...node,
+              id: newId,
+              position: {
+                x: node.position.x + 40,
+                y: node.position.y + 40,
+              },
+              data: {
+                ...node.data,
+                name:
+                  node.type === "annotation"
+                    ? `${node.data.name ?? node.data.text ?? DEFAULT_ANNOTATION_TEXT} copy`
+                    : `${node.data.name} copy`,
+                employeeId: node.type === "annotation" ? node.data.employeeId : undefined,
+                text:
+                  node.type === "annotation"
+                    ? node.data.text ?? node.data.name ?? DEFAULT_ANNOTATION_TEXT
+                    : node.data.text,
+              },
+            };
+            return [...nds, newNode];
+          });
         });
-      });
     },
     [runWithHistory, setNodes]
   );
@@ -2144,13 +2364,51 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const addChildUnit = useCallback((nodeId: string) => createChildNode(nodeId, "unit"), [createChildNode]);
   const addChildPerson = useCallback((nodeId: string) => createChildNode(nodeId, "person"), [createChildNode]);
 
-  const addStandaloneNode = useCallback(
-    (type: OrgNodeType) => {
-      const viewport = reactFlowWrapper.current?.getBoundingClientRect();
-      const center = viewport
-        ? { x: viewport.width / 2, y: viewport.height / 2 }
-        : { x: 400, y: 200 };
-      const projected = project({ x: center.x, y: center.y });
+    const addStandaloneNode = useCallback(
+      (type: OrgNodeType) => {
+        if (type === "annotation") {
+          const viewport = reactFlowWrapper.current?.getBoundingClientRect();
+          const center = viewport
+            ? { x: viewport.width / 2, y: viewport.height / 2 }
+            : { x: 400, y: 200 };
+          const projected = project({ x: center.x + 24, y: center.y + 24 });
+          const maxZ = nodesRef.current.reduce((acc, node) => {
+            if (node.type !== "annotation") return acc;
+            const value = typeof node.data.z === "number" && !Number.isNaN(node.data.z) ? node.data.z : 0;
+            return Math.max(acc, value);
+          }, 0);
+          const newId = `annotation-${crypto.randomUUID()}`;
+          const newNode: FlowNode = {
+            id: newId,
+            type: "annotation",
+            position: { x: projected.x, y: projected.y },
+            data: {
+              name: DEFAULT_ANNOTATION_TEXT,
+              text: DEFAULT_ANNOTATION_TEXT,
+              color: DEFAULT_ANNOTATION_COLOR,
+              fontSize: DEFAULT_ANNOTATION_FONT_SIZE,
+              weight: "bold",
+              align: "left",
+              z: maxZ + 1,
+              lock: false,
+            },
+            draggable: true,
+            connectable: false,
+          };
+
+          runWithHistory(() => {
+            setNodes((nds: FlowNode[]) => [...nds, newNode]);
+          });
+          setSelectedNodeIds([newId]);
+          setSelectedEdgeIds([]);
+          return;
+        }
+
+        const viewport = reactFlowWrapper.current?.getBoundingClientRect();
+        const center = viewport
+          ? { x: viewport.width / 2, y: viewport.height / 2 }
+          : { x: 400, y: 200 };
+        const projected = project({ x: center.x, y: center.y });
       const officeId =
         type === "office"
           ? undefined
@@ -2193,12 +2451,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           : {}),
       };
 
-      runWithHistory(() => {
-        setNodes((nds: FlowNode[]) => [...nds, newNode]);
-      });
-    },
-    [focusOfficeId, offices, project, runWithHistory, selectedNode, setNodes, toast]
-  );
+        runWithHistory(() => {
+          setNodes((nds: FlowNode[]) => [...nds, newNode]);
+        });
+        setSelectedNodeIds([newNode.id]);
+        setSelectedEdgeIds([]);
+      },
+      [focusOfficeId, offices, project, runWithHistory, selectedNode, setNodes, setSelectedEdgeIds, setSelectedNodeIds, toast]
+    );
 
   const handleAddPersonSelection = useCallback(
     ({ employee, connectToParent, dropNearCursor, alignToGrid }: AddPersonDialogSelection) => {
@@ -2745,31 +3005,37 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     }
   }, [currentVersionId, departmentId, toast]);
 
-  const handleDeleteVersion = useCallback(async () => {
-    if (!currentVersionId) return;
-    const confirmed = window.confirm("Delete this saved version? This action cannot be undone.");
-    if (!confirmed) return;
+    const handleDeleteVersion = useCallback(() => {
+      if (!currentVersionId) return;
+      setIsDeleteVersionOpen(true);
+    }, [currentVersionId]);
 
-    try {
-      const response = await fetch(
-        `/api/${departmentId}/org-chart/versions/${currentVersionId}`,
-        { method: "DELETE" }
-      );
-      if (!response.ok && response.status !== 204) {
-        throw new Error(await response.text());
+    const confirmDeleteVersion = useCallback(async () => {
+      if (!currentVersionId) return;
+      setIsDeletingVersion(true);
+      try {
+        const response = await fetch(
+          `/api/${departmentId}/org-chart/versions/${currentVersionId}`,
+          { method: "DELETE" }
+        );
+        if (!response.ok && response.status !== 204) {
+          throw new Error(await response.text());
+        }
+
+        setVersions((prev) => prev.filter((item) => item.id !== currentVersionId));
+        applyCurrentVersionId(null);
+        toast({ title: "Version deleted" });
+      } catch (error) {
+        toast({
+          title: "Failed to delete version",
+          description: error instanceof Error ? error.message : "Unable to delete version",
+          variant: "destructive",
+        });
+      } finally {
+        setIsDeletingVersion(false);
+        setIsDeleteVersionOpen(false);
       }
-
-      setVersions((prev) => prev.filter((item) => item.id !== currentVersionId));
-      applyCurrentVersionId(null);
-      toast({ title: "Version deleted" });
-    } catch (error) {
-      toast({
-        title: "Failed to delete version",
-        description: error instanceof Error ? error.message : "Unable to delete version",
-        variant: "destructive",
-      });
-    }
-  }, [applyCurrentVersionId, currentVersionId, departmentId, toast]);
+    }, [applyCurrentVersionId, currentVersionId, departmentId, setVersions, toast]);
 
   const handleVersionChange = useCallback(
     async (value: string) => {
@@ -2906,72 +3172,46 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     [getNodes, getViewport, hideInterfaceForExport, toast]
   );
 
-  const updateSelectedNode = useCallback(
-    (updates: Partial<OrgNodeData>) => {
-      if (!selectedNode) return;
-      const preparedUpdates: Partial<OrgNodeData> = { ...updates };
-      if (updates.outlineColor) {
-        const normalized =
-          normalizeColor(updates.outlineColor) ??
-          normalizeColor(selectedNode.data.outlineColor) ??
-          NEUTRAL_OUTLINE_COLOR;
-        preparedUpdates.outlineColor = normalized;
-        preparedUpdates.headerColor = normalized;
-      }
-      if (updates.employeeTypeColor) {
-        preparedUpdates.employeeTypeColor = normalizeColor(updates.employeeTypeColor) ?? undefined;
-      }
-      const hasChanges = Object.entries(preparedUpdates).some(([key, value]) => {
-        const current = (selectedNode.data as Record<string, unknown>)[key];
-        return current !== value;
-      });
-      if (!hasChanges) {
-        return;
-      }
-      runWithHistory(() => {
-        setNodes((nds: FlowNode[]) =>
-          nds.map((node: FlowNode) =>
-            node.id === selectedNode.id
-              ? {
-                  ...node,
-                  data: {
-                    ...node.data,
-                    ...preparedUpdates,
-                  },
-                }
-              : node
-          )
-        );
-      });
-    },
-    [runWithHistory, selectedNode, setNodes]
-  );
+    const updateSelectedNode = useCallback(
+      (updates: Partial<OrgNodeData>, options?: { pushHistory?: boolean }) => {
+        if (!selectedNode) return;
+        applyNodeUpdates(selectedNode.id, updates, options);
+      },
+      [applyNodeUpdates, selectedNode]
+    );
 
-  const updateSelectedEdge = useCallback(
-    (updates: Partial<FlowEdge>) => {
-      if (!selectedEdge) return;
-      runWithHistory(() => {
-        setEdges((eds: FlowEdge[]) =>
-          eds.map((edge: FlowEdge) =>
-            edge.id === selectedEdge.id
-              ? applyEdgePresentation({
-                  ...edge,
-                  ...updates,
-                  data: {
-                    ...edge.data,
-                    ...(updates.data ?? {}),
-                  },
-                  style: updates.style ? { ...(edge.style ?? {}), ...updates.style } : edge.style,
-                  markerStart: updates.markerStart ?? edge.markerStart,
-                  markerEnd: updates.markerEnd ?? edge.markerEnd,
-                })
-              : edge
-          )
-        );
-      });
-    },
-    [runWithHistory, selectedEdge, setEdges]
-  );
+    const updateSelectedEdge = useCallback(
+      (updates: Partial<FlowEdge>) => {
+        if (!selectedEdge) return;
+        runWithHistory(() => {
+          setEdges((eds: FlowEdge[]) =>
+            eds.map((edge: FlowEdge) =>
+              edge.id === selectedEdge.id
+                ? applyEdgePresentation({
+                    ...edge,
+                    ...updates,
+                    data: {
+                      ...edge.data,
+                      ...(updates.data ?? {}),
+                    },
+                    style: updates.style ? { ...(edge.style ?? {}), ...updates.style } : edge.style,
+                    markerStart: updates.markerStart ?? edge.markerStart,
+                    markerEnd: updates.markerEnd ?? edge.markerEnd,
+                  })
+                : edge
+            )
+          );
+        });
+      },
+      [runWithHistory, selectedEdge, setEdges]
+    );
+
+    const updateNodeData = useCallback(
+      (nodeId: string, updates: Partial<OrgNodeData>, options?: { pushHistory?: boolean }) => {
+        applyNodeUpdates(nodeId, updates, options);
+      },
+      [applyNodeUpdates]
+    );
 
   const removeSelectedNode = useCallback(() => {
     if (!selectedNode) return;
@@ -2996,38 +3236,56 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     setSelectedEdgeIds([]);
   }, [runWithHistory, selectedEdge, setEdges]);
 
-  const bringToFront = useCallback(() => {
-    if (!selectedNode) return;
-    runWithHistory(() => {
-      setNodes((nds: FlowNode[]) => {
-        const index = nds.findIndex((node) => node.id === selectedNode.id);
-        if (index === -1) return nds;
-        const clone = [...nds];
-        const [node] = clone.splice(index, 1);
-        clone.push(node);
-        return clone;
+    const bringToFront = useCallback(() => {
+      if (!selectedNode) return;
+      if (selectedNode.type === "annotation") {
+        const maxZ = nodesRef.current.reduce((max, node) => {
+          if (node.type !== "annotation") return max;
+          const value = typeof node.data.z === "number" ? node.data.z : 0;
+          return Math.max(max, value);
+        }, 0);
+        applyNodeUpdates(selectedNode.id, { z: maxZ + 1 });
+        return;
+      }
+      runWithHistory(() => {
+        setNodes((nds: FlowNode[]) => {
+          const index = nds.findIndex((node) => node.id === selectedNode.id);
+          if (index === -1) return nds;
+          const clone = [...nds];
+          const [node] = clone.splice(index, 1);
+          clone.push(node);
+          return clone;
+        });
       });
-    });
-  }, [runWithHistory, selectedNode, setNodes]);
+    }, [applyNodeUpdates, runWithHistory, selectedNode, setNodes]);
 
-  const sendToBack = useCallback(() => {
-    if (!selectedNode) return;
-    runWithHistory(() => {
-      setNodes((nds: FlowNode[]) => {
-        const index = nds.findIndex((node) => node.id === selectedNode.id);
-        if (index === -1) return nds;
-        const clone = [...nds];
-        const [node] = clone.splice(index, 1);
-        clone.unshift(node);
-        return clone;
+    const sendToBack = useCallback(() => {
+      if (!selectedNode) return;
+      if (selectedNode.type === "annotation") {
+        const minZ = nodesRef.current.reduce((min, node) => {
+          if (node.type !== "annotation") return min;
+          const value = typeof node.data.z === "number" ? node.data.z : 0;
+          return Math.min(min, value);
+        }, 0);
+        applyNodeUpdates(selectedNode.id, { z: minZ - 1 });
+        return;
+      }
+      runWithHistory(() => {
+        setNodes((nds: FlowNode[]) => {
+          const index = nds.findIndex((node) => node.id === selectedNode.id);
+          if (index === -1) return nds;
+          const clone = [...nds];
+          const [node] = clone.splice(index, 1);
+          clone.unshift(node);
+          return clone;
+        });
       });
-    });
-  }, [runWithHistory, selectedNode, setNodes]);
+    }, [applyNodeUpdates, runWithHistory, selectedNode, setNodes]);
 
-  const actionsContextValue = useMemo(
-    () => ({ duplicateNode, addChildUnit, addChildPerson }),
-    [addChildPerson, addChildUnit, duplicateNode]
-  );
+    const actionsContextValue = useMemo(
+      () => ({ duplicateNode, addChildUnit, addChildPerson, updateNodeData }),
+      [addChildPerson, addChildUnit, duplicateNode, updateNodeData]
+    );
 
   if (loading) {
     return (
@@ -3101,15 +3359,15 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 >
                   <BadgeCheck className="h-4 w-4" /> Set default
                 </Button>
-                <Button
-                  onClick={handleDeleteVersion}
-                  variant="destructive"
-                  size="sm"
-                  disabled={!currentVersionId}
-                  className="flex items-center gap-2"
-                >
-                  <Trash2 className="h-4 w-4" /> Delete version
-                </Button>
+                  <Button
+                    onClick={handleDeleteVersion}
+                    variant="destructive"
+                    size="sm"
+                    disabled={!currentVersionId || isDeletingVersion}
+                    className="flex items-center gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" /> Delete version
+                  </Button>
               </div>
             </CardContent>
           </Card>
@@ -3295,21 +3553,31 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => pasteIntoOffice()}
-                disabled={!clipboardAvailable}
-                title="Paste (Ctrl/Cmd+V)"
-                aria-label="Paste"
-              >
-                <ClipboardPaste className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={tool === "hand" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setTool((current) => (current === "hand" ? "select" : "hand"))}
-                title="Hand (H) – pan the canvas"
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => pasteIntoOffice()}
+                  disabled={!clipboardAvailable}
+                  title="Paste (Ctrl/Cmd+V)"
+                  aria-label="Paste"
+                >
+                  <ClipboardPaste className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => addStandaloneNode("annotation")}
+                  title="Add text annotation"
+                  className="flex items-center gap-2"
+                >
+                  <span className="text-sm font-semibold leading-none">T</span>
+                  Text
+                </Button>
+                <Button
+                  variant={tool === "hand" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTool((current) => (current === "hand" ? "select" : "hand"))}
+                  title="Hand (H) – pan the canvas"
                 aria-pressed={tool === "hand"}
               >
                 <Hand className="mr-2 h-4 w-4" /> Hand
@@ -3406,99 +3674,274 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           </div>
         </section>
 
-        <aside className="space-y-4">
-          <Card>
-            <CardContent className="space-y-4 pt-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Properties</h3>
-                {selectedNode?.type === "person" ? <User className="h-4 w-4" /> : selectedNode?.type === "unit" ? <Users className="h-4 w-4" /> : <Building2 className="h-4 w-4" />}
-              </div>
-              {selectedNode ? (
-                <div className="space-y-3">
-                  {selectedNode.type !== "person" ? (
-                    <div className="space-y-1">
-                      <Label htmlFor="prop-label">Header label</Label>
-                      <Input
-                        id="prop-label"
-                        value={selectedNode.data.label ?? ""}
-                        onChange={(event) => updateSelectedNode({ label: event.target.value || undefined })}
-                      />
-                    </div>
+          <aside className="space-y-4">
+            <Card>
+              <CardContent className="space-y-4 pt-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Properties</h3>
+                  {selectedNode ? (
+                    selectedNode.type === "person" ? (
+                      <User className="h-4 w-4" />
+                    ) : selectedNode.type === "unit" ? (
+                      <Users className="h-4 w-4" />
+                    ) : selectedNode.type === "annotation" ? (
+                      <Type className="h-4 w-4" />
+                    ) : (
+                      <Building2 className="h-4 w-4" />
+                    )
+                  ) : selectedEdge ? (
+                    <GitBranch className="h-4 w-4" />
                   ) : null}
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-outline">Outline color</Label>
-                    <Input
-                      id="prop-outline"
-                      type="color"
-                      value={selectedNodeOutlineColor}
-                      onChange={(event) => updateSelectedNode({ outlineColor: event.target.value })}
-                      className="h-10 w-16 cursor-pointer p-1"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-name">Name</Label>
-                    <Input
-                      id="prop-name"
-                      value={selectedNode.data.name}
-                      onChange={(event) => updateSelectedNode({ name: event.target.value })}
-                    />
-                  </div>
-                  {selectedNode.type !== "office" ? (
-                    <div className="space-y-1">
-                      <Label htmlFor="prop-title">Title</Label>
-                      <Input
-                        id="prop-title"
-                        value={selectedNode.data.title ?? ""}
-                        onChange={(event) => updateSelectedNode({ title: event.target.value })}
-                      />
-                    </div>
-                  ) : null}
-                  {selectedNode.type === "person" ? (
-                    <>
+                </div>
+                {selectedNode ? (
+                  selectedNode.type === "annotation" ? (
+                    <div className="space-y-3">
                       <div className="space-y-1">
-                        <Label htmlFor="prop-type">Employee type</Label>
-                        <Input
-                          id="prop-type"
-                          value={selectedNode.data.employeeTypeName ?? ""}
-                          onChange={(event) => updateSelectedNode({ employeeTypeName: event.target.value || undefined })}
+                        <Label htmlFor="annotation-text">Text</Label>
+                        <Textarea
+                          id="annotation-text"
+                          rows={3}
+                          value={selectedAnnotationText}
+                          onChange={(event) =>
+                            updateSelectedNode({
+                              text: event.target.value,
+                              name: event.target.value,
+                            })
+                          }
                         />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="annotation-color">Text color</Label>
+                        <Input
+                          id="annotation-color"
+                          type="color"
+                          value={selectedAnnotationColor}
+                          onChange={(event) => updateSelectedNode({ color: event.target.value })}
+                          className="h-10 w-16 cursor-pointer p-1"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="annotation-bg">Background</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="annotation-bg"
+                            type="color"
+                            value={selectedAnnotationBg ?? "#ffffff"}
+                            onChange={(event) => updateSelectedNode({ bg: event.target.value })}
+                            className="h-10 w-16 cursor-pointer p-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => updateSelectedNode({ bg: undefined })}
+                            disabled={!selectedAnnotationBg}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="annotation-font-size">Font size</Label>
+                        <Input
+                          id="annotation-font-size"
+                          type="range"
+                          min={MIN_ANNOTATION_FONT_SIZE}
+                          max={MAX_ANNOTATION_FONT_SIZE}
+                          value={selectedAnnotationFontSize}
+                          onChange={(event) => updateSelectedNode({ fontSize: Number(event.target.value) })}
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>
+                            {MIN_ANNOTATION_FONT_SIZE}-{MAX_ANNOTATION_FONT_SIZE}px
+                          </span>
+                          <span>{selectedAnnotationFontSize}px</span>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Weight</Label>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant={selectedAnnotationWeight === "normal" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => updateSelectedNode({ weight: "normal" })}
+                          >
+                            Normal
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={selectedAnnotationWeight === "bold" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => updateSelectedNode({ weight: "bold" })}
+                          >
+                            <Bold className="mr-1 h-4 w-4" /> Bold
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Align</Label>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant={selectedAnnotationAlign === "left" ? "default" : "outline"}
+                            size="icon"
+                            onClick={() => updateSelectedNode({ align: "left" })}
+                            aria-label="Align left"
+                          >
+                            <AlignLeft className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={selectedAnnotationAlign === "center" ? "default" : "outline"}
+                            size="icon"
+                            onClick={() => updateSelectedNode({ align: "center" })}
+                            aria-label="Align center"
+                          >
+                            <AlignCenter className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={selectedAnnotationAlign === "right" ? "default" : "outline"}
+                            size="icon"
+                            onClick={() => updateSelectedNode({ align: "right" })}
+                            aria-label="Align right"
+                          >
+                            <AlignRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="annotation-rotate">Rotate</Label>
+                        <Input
+                          id="annotation-rotate"
+                          type="range"
+                          min={MIN_ANNOTATION_ROTATION}
+                          max={MAX_ANNOTATION_ROTATION}
+                          value={selectedAnnotationRotation}
+                          onChange={(event) => updateSelectedNode({ rotate: Number(event.target.value) })}
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>
+                            {MIN_ANNOTATION_ROTATION}° – {MAX_ANNOTATION_ROTATION}°
+                          </span>
+                          <span>{selectedAnnotationRotation}°</span>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <Label className="text-sm">Head of office</Label>
+                        <div className="flex items-center gap-2 text-sm">
+                          {selectedAnnotationLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                          <span>{selectedAnnotationLocked ? "Position locked" : "Position unlocked"}</span>
+                        </div>
                         <Switch
-                          checked={Boolean(selectedNode.data.isHead)}
-                          onCheckedChange={(state) => updateSelectedNode({ isHead: Boolean(state) })}
+                          checked={selectedAnnotationLocked}
+                          onCheckedChange={(state) => updateSelectedNode({ lock: state })}
                         />
                       </div>
-                    </>
-                  ) : null}
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-notes">Notes</Label>
-                    <Textarea
-                      id="prop-notes"
-                      rows={3}
-                      value={selectedNode.data.notes ?? ""}
-                      onChange={(event) => updateSelectedNode({ notes: event.target.value })}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={sendToBack}>
-                      <Layers className="mr-2 h-4 w-4" /> Send back
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={bringToFront}>
-                      <Layers className="mr-2 h-4 w-4 rotate-180" /> Bring front
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => duplicateNode(selectedNode.id)}>
-                      <Copy className="mr-2 h-4 w-4" /> Duplicate
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={removeSelectedNode} className="flex items-center gap-2">
-                      <Trash2 className="h-4 w-4" /> Remove
-                    </Button>
-                  </div>
-                </div>
-              ) : selectedEdge ? (
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={sendToBack}>
+                          <Layers className="mr-2 h-4 w-4" /> Send back
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={bringToFront}>
+                          <Layers className="mr-2 h-4 w-4 rotate-180" /> Bring front
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => duplicateNode(selectedNode.id)}>
+                          <Copy className="mr-2 h-4 w-4" /> Duplicate
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={removeSelectedNode} className="flex items-center gap-2">
+                          <Trash2 className="h-4 w-4" /> Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedNode.type !== "person" ? (
+                        <div className="space-y-1">
+                          <Label htmlFor="prop-label">Header label</Label>
+                          <Input
+                            id="prop-label"
+                            value={selectedNode.data.label ?? ""}
+                            onChange={(event) => updateSelectedNode({ label: event.target.value || undefined })}
+                          />
+                        </div>
+                      ) : null}
+                      <div className="space-y-1">
+                        <Label htmlFor="prop-outline">Outline color</Label>
+                        <Input
+                          id="prop-outline"
+                          type="color"
+                          value={selectedNodeOutlineColor}
+                          onChange={(event) => updateSelectedNode({ outlineColor: event.target.value })}
+                          className="h-10 w-16 cursor-pointer p-1"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="prop-name">Name</Label>
+                        <Input
+                          id="prop-name"
+                          value={selectedNode.data.name}
+                          onChange={(event) => updateSelectedNode({ name: event.target.value })}
+                        />
+                      </div>
+                      {selectedNode.type !== "office" ? (
+                        <div className="space-y-1">
+                          <Label htmlFor="prop-title">Title</Label>
+                          <Input
+                            id="prop-title"
+                            value={selectedNode.data.title ?? ""}
+                            onChange={(event) => updateSelectedNode({ title: event.target.value })}
+                          />
+                        </div>
+                      ) : null}
+                      {selectedNode.type === "person" ? (
+                        <>
+                          <div className="space-y-1">
+                            <Label htmlFor="prop-type">Employee type</Label>
+                            <Input
+                              id="prop-type"
+                              value={selectedNode.data.employeeTypeName ?? ""}
+                              onChange={(event) => updateSelectedNode({ employeeTypeName: event.target.value || undefined })}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm">Head of office</Label>
+                            <Switch
+                              checked={Boolean(selectedNode.data.isHead)}
+                              onCheckedChange={(state) => updateSelectedNode({ isHead: Boolean(state) })}
+                            />
+                          </div>
+                        </>
+                      ) : null}
+                      <div className="space-y-1">
+                        <Label htmlFor="prop-notes">Notes</Label>
+                        <Textarea
+                          id="prop-notes"
+                          rows={3}
+                          value={selectedNode.data.notes ?? ""}
+                          onChange={(event) => updateSelectedNode({ notes: event.target.value })}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={sendToBack}>
+                          <Layers className="mr-2 h-4 w-4" /> Send back
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={bringToFront}>
+                          <Layers className="mr-2 h-4 w-4 rotate-180" /> Bring front
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => duplicateNode(selectedNode.id)}>
+                          <Copy className="mr-2 h-4 w-4" /> Duplicate
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={removeSelectedNode} className="flex items-center gap-2">
+                          <Trash2 className="h-4 w-4" /> Remove
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                ) : selectedEdge ? (
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <Label htmlFor="edge-label">Label</Label>
@@ -3697,19 +4140,38 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         departmentId={departmentId}
         onSelect={handleAddOfficeSelection}
       />
+      <AlertModal
+        title="Delete version?"
+        description="This permanently removes the selected org chart version. Current draft is not affected."
+        isOpen={isDeleteVersionOpen}
+        onClose={() => {
+          if (!isDeletingVersion) {
+            setIsDeleteVersionOpen(false);
+          }
+        }}
+        onConfirm={confirmDeleteVersion}
+        loading={isDeletingVersion}
+        variant="destructive"
+        confirmText="Delete"
+      />
     </>
   );
 };
 
 const nodeTypes = {
-  office: (props: NodeProps<FlowNodeData>) => <FlowNodeCard {...props} icon={<Building2 className="h-4 w-4" />} />,
-  unit: (props: NodeProps<FlowNodeData>) => <FlowNodeCard {...props} icon={<Users className="h-4 w-4" />} />,
-  person: (props: NodeProps<FlowNodeData>) => <FlowNodeCard {...props} icon={<User className="h-4 w-4" />} />, 
+  office: (props: NodeProps<FlowNodeData>) => (
+    <FlowNodeCard {...props} icon={<Building2 className="h-4 w-4" />} showHeaderLabel={false} />
+  ),
+  unit: (props: NodeProps<FlowNodeData>) => (
+    <FlowNodeCard {...props} icon={<Users className="h-4 w-4" />} showHeaderLabel={false} />
+  ),
+  person: (props: NodeProps<FlowNodeData>) => <FlowNodeCard {...props} icon={<User className="h-4 w-4" />} />,
+  annotation: (props: NodeProps<FlowNodeData>) => <AnnotationNode {...props} />,
 };
 
-type FlowNodeCardProps = NodeProps<FlowNodeData> & { icon: ReactNode };
+type FlowNodeCardProps = NodeProps<FlowNodeData> & { icon: ReactNode; showHeaderLabel?: boolean };
 
-function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
+function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }: FlowNodeCardProps) {
   const actions = useCanvasActions();
   const handles = getHandlesForType(type as OrgNodeType);
   const { showPhotos } = useCanvasSettings();
@@ -3723,7 +4185,7 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
   };
   const headerLabel =
     data.label ?? (type === "person" ? data.title ?? data.name : data.name);
-  const showHeaderBar = type !== "person";
+  const showHeaderBar = showHeaderLabel && type !== "person" && Boolean(data.label);
 
   const renderAvatar = () => {
     if (showPhotos && data.imageUrl) {
@@ -3785,7 +4247,7 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
 
       {showHeaderBar ? (
         <div className="rounded-t-lg border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        LGU Lingayen
+          {data.label}
         </div>
       ) : null}
       <div className="flex items-center gap-3 px-4 py-3">
@@ -3804,6 +4266,136 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
           </div>
           {data.employeeTypeName ? <p className="text-xs text-muted-foreground">{data.employeeTypeName}</p> : null}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AnnotationNode({ id, data, selected }: NodeProps<FlowNodeData>) {
+  const actions = useCanvasActions();
+  const [isEditing, setIsEditing] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [draftText, setDraftText] = useState(
+    data.text ?? data.name ?? DEFAULT_ANNOTATION_TEXT
+  );
+
+  useEffect(() => {
+    setDraftText(data.text ?? data.name ?? DEFAULT_ANNOTATION_TEXT);
+  }, [data.name, data.text]);
+
+  useEffect(() => {
+    if (contentRef.current && contentRef.current.textContent !== draftText) {
+      contentRef.current.textContent = draftText;
+    }
+  }, [draftText]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    const element = contentRef.current;
+    if (!element) return;
+    element.focus();
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }, [isEditing]);
+
+  const commitText = useCallback(() => {
+    const value = (contentRef.current?.textContent ?? "").trim();
+    const normalized = value || DEFAULT_ANNOTATION_TEXT;
+    setDraftText(normalized);
+    actions.updateNodeData(id, { text: normalized, name: normalized });
+    setIsEditing(false);
+  }, [actions, id]);
+
+  const cancelEditing = useCallback(() => {
+    setIsEditing(false);
+    setDraftText(data.text ?? data.name ?? DEFAULT_ANNOTATION_TEXT);
+  }, [data.name, data.text]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        const nextWeight = data.weight === "bold" ? "normal" : "bold";
+        actions.updateNodeData(id, { weight: nextWeight });
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (isEditing) {
+          commitText();
+        } else {
+          setIsEditing(true);
+        }
+        return;
+      }
+
+      if (event.key === "Escape" && isEditing) {
+        event.preventDefault();
+        cancelEditing();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [actions, cancelEditing, commitText, data.weight, id, isEditing, selected]);
+
+  const color = normalizeColor(data.color) ?? DEFAULT_ANNOTATION_COLOR;
+  const bg = normalizeColor(data.bg) ?? undefined;
+  const fontSize = normalizeAnnotationFontSize(data.fontSize);
+  const weight = normalizeAnnotationWeight(data.weight);
+  const align = normalizeAnnotationAlignment(data.align);
+  const rotation = normalizeAnnotationRotation(data.rotate);
+  const zIndex = typeof data.z === "number" && !Number.isNaN(data.z) ? data.z : 0;
+  const locked = Boolean(data.lock);
+
+  return (
+    <div
+      className={cn(
+        "group min-w-[120px] max-w-md cursor-text rounded-md px-3 py-2 shadow-sm transition",
+        selected ? "ring-2 ring-primary/40" : "ring-1 ring-transparent",
+        isEditing ? "cursor-text" : locked ? "cursor-default" : "cursor-move"
+      )}
+      style={{
+        color,
+        backgroundColor: bg ?? "transparent",
+        fontSize,
+        fontWeight: weight,
+        textAlign: align,
+        transform: `rotate(${rotation}deg)`,
+        zIndex,
+      }}
+      onDoubleClick={() => {
+        setIsEditing(true);
+      }}
+      onPointerDown={(event) => {
+        if (isEditing) {
+          event.stopPropagation();
+        }
+      }}
+    >
+      <div
+        ref={contentRef}
+        className={cn(
+          "whitespace-pre-wrap break-words border border-transparent outline-none",
+          selected ? "border-dashed border-primary/40" : "border-transparent"
+        )}
+        contentEditable={isEditing}
+        suppressContentEditableWarning
+        onInput={(event) => setDraftText((event.target as HTMLDivElement).textContent ?? "")}
+        onBlur={() => {
+          if (isEditing) {
+            commitText();
+          }
+        }}
+      >
+        {draftText}
       </div>
     </div>
   );
