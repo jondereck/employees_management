@@ -1341,6 +1341,7 @@ type IdentityRecord = {
   officeName: string;
   employeeNo: string | null;
   isHead: boolean | null;
+  employeeType: string | null;
   candidates?: string[];
   missingOffice?: boolean;
 };
@@ -1448,6 +1449,7 @@ const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord
       officeName: UNKNOWN_OFFICE_LABEL,
       employeeNo: null,
       isHead: null,
+      employeeType: null,
     };
   }
 
@@ -1464,6 +1466,7 @@ const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord
       officeName: UNKNOWN_OFFICE_LABEL,
       employeeNo: null,
       isHead: null,
+      employeeType: null,
     };
   }
 
@@ -1475,6 +1478,7 @@ const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord
     officeName: officeName && officeName.length ? officeName : UNASSIGNED_OFFICE_LABEL,
     employeeNo: firstEmployeeNoToken(record.employeeNo) ?? null,
     isHead: typeof record.isHead === "boolean" ? record.isHead : null,
+    employeeType: record.employeeType?.trim()?.length ? record.employeeType.trim() : null,
     candidates:
       status === "ambiguous" && record.candidates && record.candidates.length
         ? [...record.candidates]
@@ -1773,7 +1777,9 @@ function BioLogUploaderContent() {
     setSearch,
     setHeads,
     setOffices,
+    setEmployeeTypes,
     clearOffices,
+    clearEmployeeTypes,
     setSchedules,
     clearSchedules,
     setShowUnmatched,
@@ -1785,6 +1791,7 @@ function BioLogUploaderContent() {
   const {
     offices: selectedOffices,
     schedules: selectedScheduleTypes,
+    employeeTypes: selectedEmployeeTypes,
     heads: headsFilter,
     showUnmatched,
     showNoPunch: showNoPunchColumn,
@@ -1857,6 +1864,7 @@ function BioLogUploaderContent() {
       filters.search.trim().length > 0 ||
       filters.heads !== DEFAULT_SUMMARY_FILTERS.heads ||
       filters.offices.length > 0 ||
+      filters.employeeTypes.length > 0 ||
       filters.schedules.length > 0 ||
       filters.showUnmatched !== DEFAULT_SUMMARY_FILTERS.showUnmatched ||
       filters.showNoPunch !== DEFAULT_SUMMARY_FILTERS.showNoPunch ||
@@ -1874,6 +1882,7 @@ function BioLogUploaderContent() {
     setSearch(DEFAULT_SUMMARY_FILTERS.search);
     setHeads(DEFAULT_SUMMARY_FILTERS.heads);
     clearOffices();
+    clearEmployeeTypes();
     clearSchedules();
     setShowUnmatched(DEFAULT_SUMMARY_FILTERS.showUnmatched);
     setShowNoPunch(DEFAULT_SUMMARY_FILTERS.showNoPunch);
@@ -1886,6 +1895,7 @@ function BioLogUploaderContent() {
     });
   }, [
     clearOffices,
+    clearEmployeeTypes,
     clearSchedules,
     setColumnFilters,
     setHeads,
@@ -2400,6 +2410,8 @@ function BioLogUploaderContent() {
         : normalized.officeName ?? null;
       const officeId = isUnmatched ? null : normalized.officeId ?? null;
       const employeeId = isUnmatched ? token : row.employeeId;
+      const rowType = row.employeeType?.trim();
+      const employeeType = normalized.employeeType ?? (rowType && rowType.length ? rowType : null);
 
       return {
         ...row,
@@ -2409,6 +2421,7 @@ function BioLogUploaderContent() {
         officeId,
         officeName,
         identityStatus: normalized.status,
+        employeeType,
       };
     });
     return sortPerDayRows(mapped.map((row) => toChronologicalRow(row)));
@@ -2908,6 +2921,20 @@ function BioLogUploaderContent() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [dedupedPerEmployee]);
 
+  const employeeTypeOptions = useMemo<string[]>(() => {
+    if (!dedupedPerEmployee.length) return [];
+    const map = new Map<string, string>();
+    for (const row of dedupedPerEmployee) {
+      const rawType = row.employeeType?.trim();
+      if (!rawType) continue;
+      const key = rawType.toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, rawType);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [dedupedPerEmployee]);
+
   const manualOfficeOptions = useMemo<ManualDialogOfficeOption[]>(() => {
     if (!dedupedPerEmployee.length) return [];
     const map = new Map<string, string>();
@@ -2958,6 +2985,13 @@ function BioLogUploaderContent() {
     if (!dedupedPerEmployee.length) return [] as PerEmployeeRow[];
     const officeKeys = selectedOffices.length ? new Set(selectedOffices) : null;
     const scheduleKeys = selectedScheduleTypes.length ? new Set(selectedScheduleTypes) : null;
+    const employeeTypeKeys = selectedEmployeeTypes.length
+      ? new Set(
+          selectedEmployeeTypes
+            .map((value) => value.trim().toLowerCase())
+            .filter((value) => value.length > 0)
+        )
+      : null;
     return dedupedPerEmployee.filter((row) => {
       if (officeKeys) {
         const key = makeOfficeKey(
@@ -2969,6 +3003,12 @@ function BioLogUploaderContent() {
       if (scheduleKeys) {
         const hasType = row.scheduleTypes?.some((type) => scheduleKeys.has(type)) ?? false;
         if (!hasType) return false;
+      }
+      if (employeeTypeKeys) {
+        const typeValue = row.employeeType?.trim().toLowerCase() ?? "";
+        if (!typeValue || !employeeTypeKeys.has(typeValue)) {
+          return false;
+        }
       }
       if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
         return false;
@@ -2986,6 +3026,7 @@ function BioLogUploaderContent() {
     dedupedPerEmployee,
     selectedOffices,
     selectedScheduleTypes,
+    selectedEmployeeTypes,
     showUnmatched,
   ]);
 
@@ -3170,6 +3211,13 @@ const applyColumnFilters = useCallback(
     if (!perDay) return [] as PerDayRow[];
     const officeKeys = selectedOffices.length ? new Set(selectedOffices) : null;
     const scheduleKeys = selectedScheduleTypes.length ? new Set(selectedScheduleTypes) : null;
+    const employeeTypeKeys = selectedEmployeeTypes.length
+      ? new Set(
+          selectedEmployeeTypes
+            .map((value) => value.trim().toLowerCase())
+            .filter((value) => value.length > 0)
+        )
+      : null;
     const query = employeeSearch.trim().toLowerCase();
     const hasQuery = query.length > 0;
     return perDay.filter((row) => {
@@ -3184,6 +3232,12 @@ const applyColumnFilters = useCallback(
         if (!scheduleKeys.has(row.scheduleType)) return false;
       } else if (scheduleKeys && !row.scheduleType) {
         return false;
+      }
+      if (employeeTypeKeys) {
+        const typeValue = row.employeeType?.trim().toLowerCase() ?? "";
+        if (!typeValue || !employeeTypeKeys.has(typeValue)) {
+          return false;
+        }
       }
       if (headsFilter === "heads" && row.isHead !== true) {
         return false;
@@ -3212,6 +3266,7 @@ const applyColumnFilters = useCallback(
     perDay,
     selectedOffices,
     selectedScheduleTypes,
+    selectedEmployeeTypes,
     showUnmatched,
   ]);
 
@@ -3227,6 +3282,19 @@ const applyColumnFilters = useCallback(
       setSchedules(filtered);
     }
   }, [scheduleTypeOptions, selectedScheduleTypes, setSchedules]);
+
+  useEffect(() => {
+    if (!selectedEmployeeTypes.length) return;
+    const available = new Set(
+      employeeTypeOptions.map((value) => value.trim().toLowerCase()).filter((value) => value.length > 0)
+    );
+    const filtered = selectedEmployeeTypes.filter((value) =>
+      available.has(value.trim().toLowerCase())
+    );
+    if (filtered.length !== selectedEmployeeTypes.length) {
+      setEmployeeTypes(filtered);
+    }
+  }, [employeeTypeOptions, selectedEmployeeTypes, setEmployeeTypes]);
 
   useEffect(() => {
     if (!selectedOffices.length) return;
@@ -4762,10 +4830,37 @@ const applyColumnFilters = useCallback(
                 ) : null}
               </div>
             </div>
-            <SummaryFiltersBar officeOptions={officeOptions} scheduleOptions={scheduleTypeOptions} />
+            <SummaryFiltersBar
+              officeOptions={officeOptions}
+              scheduleOptions={scheduleTypeOptions}
+              employeeTypeOptions={employeeTypeOptions}
+            />
           </div>
-          <div className="overflow-x-auto rounded-xl border">
-            <table className="w-full text-sm">
+          {sortedPerEmployee.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-muted/20 p-10 text-center">
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold">No results</h3>
+                <p className="text-sm text-muted-foreground">
+                  Adjust or clear filters to see employee records.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {selectedEmployeeTypes.length ? (
+                  <Button variant="secondary" size="sm" onClick={clearEmployeeTypes}>
+                    Clear Employee Type filter
+                  </Button>
+                ) : null}
+                {hasAnyFilters ? (
+                  <Button variant="outline" size="sm" onClick={handleClearAllFilters}>
+                    Reset filters
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {sortedPerEmployee.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border">
+              <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
                   <th className="p-2 text-left">
@@ -5294,7 +5389,8 @@ const applyColumnFilters = useCallback(
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Per-Day Details</h2>

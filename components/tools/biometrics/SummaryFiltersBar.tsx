@@ -63,10 +63,16 @@ const DIRECTION_LABELS: Record<SortDirection, string> = {
 export type SummaryFiltersBarProps = {
   officeOptions: { key: string; label: string; count: number }[];
   scheduleOptions: string[];
+  employeeTypeOptions: string[];
   className?: string;
 };
 
-const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: SummaryFiltersBarProps) => {
+const SummaryFiltersBar = ({
+  officeOptions,
+  scheduleOptions,
+  employeeTypeOptions,
+  className,
+}: SummaryFiltersBarProps) => {
   const {
     filters,
     setSearch,
@@ -74,6 +80,9 @@ const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: Summar
     toggleOffice,
     setOffices,
     clearOffices,
+    toggleEmployeeType,
+    setEmployeeTypes,
+    clearEmployeeTypes,
     toggleSchedule,
     clearSchedules,
     setShowUnmatched,
@@ -86,6 +95,10 @@ const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: Summar
 
   const officeSelectedSet = useMemo(() => new Set(filters.offices), [filters.offices]);
   const scheduleSelectedSet = useMemo(() => new Set(filters.schedules), [filters.schedules]);
+  const employeeTypeSelectedSet = useMemo(
+    () => new Set(filters.employeeTypes),
+    [filters.employeeTypes]
+  );
 
   const sortSummary = useMemo(() => {
     const primary = `${SORT_FIELD_LABELS[filters.sortBy]} (${filters.sortDir === "asc" ? "A→Z" : "High→Low"})`;
@@ -115,18 +128,30 @@ const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: Summar
     }
   }, [filters.heads]);
 
+  const employeeTypeSummary = filters.employeeTypes.length
+    ? `${filters.employeeTypes.length} selected`
+    : "All";
+
   const { filtersActive, filtersActiveCount } = useMemo(() => {
     let count = 0;
     if (filters.heads !== "all") count += 1;
     if (filters.showNoPunch) count += 1;
     if (filters.showUnmatched) count += 1;
     if (filters.offices.length) count += 1;
+    if (filters.employeeTypes.length) count += 1;
     if (filters.schedules.length) count += 1;
     return {
       filtersActive: count > 0,
       filtersActiveCount: count,
     };
-  }, [filters.heads, filters.offices.length, filters.schedules.length, filters.showNoPunch, filters.showUnmatched]);
+  }, [
+    filters.heads,
+    filters.offices.length,
+    filters.employeeTypes.length,
+    filters.schedules.length,
+    filters.showNoPunch,
+    filters.showUnmatched,
+  ]);
 
   const handlePrimaryFieldChange = (value: SummarySortField) => {
     setSort({ sortBy: value });
@@ -215,12 +240,71 @@ const SummaryFiltersBar = ({ officeOptions, scheduleOptions, className }: Summar
                 checked={filters.showNoPunch}
                 onCheckedChange={(checked) => setShowNoPunch(Boolean(checked))}
               />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">Employee Type</p>
+              <p className="text-xs text-muted-foreground">{employeeTypeSummary}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              {filters.employeeTypes.length ? (
+                <Button variant="ghost" size="sm" onClick={clearEmployeeTypes}>
+                  Clear
+                </Button>
+              ) : null}
+              {employeeTypeOptions.length > 0 &&
+              filters.employeeTypes.length < employeeTypeOptions.length ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEmployeeTypes(employeeTypeOptions)}
+                >
+                  Select all
+                </Button>
+              ) : null}
             </div>
           </div>
+          <Command shouldFilter>
+            <CommandInput placeholder="Search employee types…" aria-label="Search employee types" />
+            <CommandList className="max-h-48">
+              <CommandEmpty>No employee types found.</CommandEmpty>
+              <CommandGroup heading="Employee Types">
+                {employeeTypeOptions.map((option) => {
+                  const checked = employeeTypeSelectedSet.has(option);
+                  return (
+                    <CommandItem
+                      key={option}
+                      onSelect={() => toggleEmployeeType(option)}
+                      className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm"
+                      aria-selected={checked}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "flex h-4 w-4 items-center justify-center rounded border",
+                            checked
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-input bg-background"
+                          )}
+                        >
+                          {checked ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
+                        </span>
+                        <span className="truncate">{option}</span>
+                      </span>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </div>
 
-          <Separator />
+        <Separator />
 
-          <div className="space-y-2">
+        <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">Offices</p>
               <div className="flex items-center gap-1">
