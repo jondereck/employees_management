@@ -11,6 +11,7 @@ const QUERY_KEYS = {
   search: "pe-search",
   heads: "pe-heads",
   offices: "pe-offices",
+  employeeTypes: "pe-types",
   schedules: "pe-schedules",
   showUnmatched: "pe-unmatched",
   showNoPunch: "pe-nopunch",
@@ -47,6 +48,7 @@ export type SummaryFiltersState = {
   search: string;
   heads: HeadsFilterValue;
   offices: string[];
+  employeeTypes: string[];
   schedules: string[];
   showUnmatched: boolean;
   showNoPunch: boolean;
@@ -61,6 +63,7 @@ export const DEFAULT_SUMMARY_FILTERS: SummaryFiltersState = {
   search: "",
   heads: "all",
   offices: [],
+  employeeTypes: [],
   schedules: [],
   showUnmatched: true,
   showNoPunch: false,
@@ -127,6 +130,7 @@ const normalizeFilters = (state: SummaryFiltersState): SummaryFiltersState => {
     search: state.search?.slice(0, 200) ?? "",
     heads,
     offices: normalizeList(state.offices ?? []),
+    employeeTypes: normalizeList(state.employeeTypes ?? []),
     schedules: normalizeList(state.schedules ?? []),
     showUnmatched: Boolean(state.showUnmatched),
     showNoPunch: Boolean(state.showNoPunch),
@@ -150,6 +154,8 @@ const filtersEqual = (a: SummaryFiltersState, b: SummaryFiltersState) =>
   a.secondarySortDir === b.secondarySortDir &&
   a.offices.length === b.offices.length &&
   a.offices.every((value, index) => value === b.offices[index]) &&
+  a.employeeTypes.length === b.employeeTypes.length &&
+  a.employeeTypes.every((value, index) => value === b.employeeTypes[index]) &&
   a.schedules.length === b.schedules.length &&
   a.schedules.every((value, index) => value === b.schedules[index]);
 
@@ -168,6 +174,7 @@ const parseFiltersFromSearchParams = (
     search: fallback.search,
     heads: fallback.heads,
     offices: fallback.offices,
+    employeeTypes: fallback.employeeTypes,
     schedules: fallback.schedules,
     showUnmatched: fallback.showUnmatched,
     showNoPunch: fallback.showNoPunch,
@@ -191,6 +198,11 @@ const parseFiltersFromSearchParams = (
   const officeValues = params.getAll(QUERY_KEYS.offices);
   if (officeValues.length) {
     next.offices = officeValues;
+  }
+
+  const employeeTypeValues = params.getAll(QUERY_KEYS.employeeTypes);
+  if (employeeTypeValues.length) {
+    next.employeeTypes = employeeTypeValues;
   }
 
   const scheduleValues = params.getAll(QUERY_KEYS.schedules);
@@ -241,6 +253,9 @@ export type UseSummaryFilters = {
   toggleOffice: (key: string) => void;
   setOffices: (values: string[]) => void;
   clearOffices: () => void;
+  toggleEmployeeType: (value: string) => void;
+  setEmployeeTypes: (values: string[]) => void;
+  clearEmployeeTypes: () => void;
   toggleSchedule: (value: string) => void;
   setSchedules: (values: string[]) => void;
   clearSchedules: () => void;
@@ -317,6 +332,11 @@ const useSummaryFiltersInternal = (): UseSummaryFilters => {
       if (next.offices.length) {
         next.offices.forEach((value) => {
           nextParams.append(QUERY_KEYS.offices, value);
+        });
+      }
+      if (next.employeeTypes.length) {
+        next.employeeTypes.forEach((value) => {
+          nextParams.append(QUERY_KEYS.employeeTypes, value);
         });
       }
       if (next.schedules.length) {
@@ -404,6 +424,32 @@ const useSummaryFiltersInternal = (): UseSummaryFilters => {
           set.add(key);
         }
         return { ...current, offices: Array.from(set) };
+      });
+    },
+    [updateFilters]
+  );
+
+  const setEmployeeTypes = useCallback(
+    (values: string[]) => {
+      updateFilters((current) => ({ ...current, employeeTypes: values }));
+    },
+    [updateFilters]
+  );
+
+  const clearEmployeeTypes = useCallback(() => {
+    setEmployeeTypes([]);
+  }, [setEmployeeTypes]);
+
+  const toggleEmployeeType = useCallback(
+    (value: string) => {
+      updateFilters((current) => {
+        const set = new Set(current.employeeTypes);
+        if (set.has(value)) {
+          set.delete(value);
+        } else {
+          set.add(value);
+        }
+        return { ...current, employeeTypes: Array.from(set) };
       });
     },
     [updateFilters]
@@ -517,6 +563,9 @@ const useSummaryFiltersInternal = (): UseSummaryFilters => {
     toggleOffice,
     setOffices,
     clearOffices,
+    toggleEmployeeType,
+    setEmployeeTypes,
+    clearEmployeeTypes,
     toggleSchedule,
     setSchedules,
     clearSchedules,

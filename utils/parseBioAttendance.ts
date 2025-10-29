@@ -71,6 +71,7 @@ export type ParsedPerDayRow = {
   employeeNo?: string | null;
   isHead?: boolean | null;
   employeeDept?: string | null;
+  employeeType?: string | null;
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
@@ -127,6 +128,7 @@ export type PerEmployeeRow = {
   employeeName: string;
   employeeNo?: string | null;
   isHead?: boolean | null;
+  employeeType?: string | null;
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
@@ -1026,6 +1028,7 @@ export function mergeParsedWorkbooks(files: ParsedWorkbook[]): MergeResult {
         employeeToken: record.employeeToken,
         employeeName: record.employeeName,
         employeeDept: record.employeeDept ?? null,
+        employeeType: null,
         dateISO: record.dateISO,
         day: Number(record.dateISO.slice(-2)),
         earliest: allTimes[0] ?? null,
@@ -1069,6 +1072,7 @@ type AggregateRow = {
   employeeName: string;
   employeeNo?: string | null;
   isHead?: boolean | null;
+  employeeType?: string | null;
   identityStatus: "matched" | "unmatched" | "ambiguous";
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
@@ -1300,6 +1304,9 @@ export function summarizePerEmployee(
         employeeName: row.employeeName,
         employeeNo: employeeNo ?? null,
         isHead: row.isHead ?? null,
+        employeeType: row.employeeType?.trim()?.length
+          ? row.employeeType.trim()
+          : null,
         identityStatus,
         resolvedEmployeeId: row.resolvedEmployeeId ?? null,
         officeId: row.officeId ?? null,
@@ -1336,6 +1343,12 @@ export function summarizePerEmployee(
     }
     if (agg.isHead == null && row.isHead != null) {
       agg.isHead = row.isHead;
+    }
+    if (!agg.employeeType && row.employeeType) {
+      const trimmedType = row.employeeType.trim();
+      if (trimmedType.length) {
+        agg.employeeType = trimmedType;
+      }
     }
     if (statusPriority[identityStatus] > statusPriority[agg.identityStatus]) {
       agg.identityStatus = identityStatus;
@@ -1394,6 +1407,7 @@ export function summarizePerEmployee(
     employeeName: entry.employeeName,
     employeeNo: entry.employeeNo ?? null,
     isHead: entry.isHead ?? null,
+    employeeType: entry.employeeType ?? null,
     resolvedEmployeeId: entry.resolvedEmployeeId ?? null,
     officeId: entry.officeId ?? null,
     officeName: entry.officeName ?? null,
