@@ -32,6 +32,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { CheckedState } from "@radix-ui/react-checkbox";
 import {
   Command,
   CommandEmpty,
@@ -170,6 +171,7 @@ type OvertimePolicyPayload = {
   mealTriggerMin: number | null;
   nightDiffEnabled: boolean;
   flexMode: FlexOTMode;
+  overtimeOnExcused: boolean;
 };
 
 const OVERTIME_STORAGE_PREFIX = "hrps.biometrics.overtimePolicy";
@@ -183,6 +185,7 @@ const defaultOvertimePolicy: OvertimePolicyState = {
   mealTriggerMin: 300,
   nightDiffEnabled: false,
   flexMode: "strict",
+  overtimeOnExcused: true,
 };
 
 const OVERTIME_ROUNDING_OPTIONS: ReadonlyArray<{ value: OvertimeRounding; label: string }> = [
@@ -253,6 +256,7 @@ const sanitizeOvertimePolicyState = (
     mealTriggerMin,
     nightDiffEnabled: Boolean(policy?.nightDiffEnabled),
     flexMode,
+    overtimeOnExcused: policy?.overtimeOnExcused === false ? false : true,
   } satisfies OvertimePolicyState;
 };
 
@@ -265,6 +269,7 @@ const toOvertimePolicyPayload = (policy: OvertimePolicyState): OvertimePolicyPay
   mealTriggerMin: policy.mealTriggerMin ?? null,
   nightDiffEnabled: policy.nightDiffEnabled,
   flexMode: policy.flexMode,
+  overtimeOnExcused: policy.overtimeOnExcused,
 });
 
 const serializeOvertimePolicy = (policy: OvertimePolicyPayload): string =>
@@ -277,6 +282,7 @@ const serializeOvertimePolicy = (policy: OvertimePolicyPayload): string =>
     policy.mealTriggerMin ?? "null",
     policy.nightDiffEnabled ? 1 : 0,
     policy.flexMode,
+    policy.overtimeOnExcused ? 1 : 0,
   ].join(":");
 
 type ColumnFilterOperator = "=" | ">" | ">=" | "<" | "<=";
@@ -410,6 +416,7 @@ const ManualExclusionDialog = ({
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>(initial?.employeeIds ?? []);
   const [reason, setReason] = useState<ManualExclusionReason>(initial?.reason ?? "LEAVE");
   const [note, setNote] = useState<string>(initial?.note ?? "");
+  const [otEligible, setOtEligible] = useState<boolean | null>(initial?.otEligible ?? null);
   const [officePopoverOpen, setOfficePopoverOpen] = useState(false);
   const [employeePopoverOpen, setEmployeePopoverOpen] = useState(false);
 
@@ -421,6 +428,7 @@ const ManualExclusionDialog = ({
     setSelectedEmployees(initial?.employeeIds ?? []);
     setReason(initial?.reason ?? "LEAVE");
     setNote(initial?.note ?? "");
+    setOtEligible(initial?.otEligible ?? null);
   }, [initial, open]);
 
   const officeNameMap = useMemo(() => new Map(offices.map((office) => [office.id, office.name])), [offices]);
@@ -530,6 +538,9 @@ const ManualExclusionDialog = ({
     }
     if (scope === "employees") {
       payload.employeeIds = selectedEmployees.slice();
+    }
+    if (otEligible !== null) {
+      payload.otEligible = otEligible;
     }
     onSubmit(payload);
     onOpenChange(false);
@@ -732,6 +743,43 @@ const ManualExclusionDialog = ({
               placeholder={notePlaceholder}
               rows={3}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="manual-exclusion-ot" className="text-sm font-medium">
+              Overtime credit
+            </Label>
+            <div className="flex items-start gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-3 py-2">
+              <Checkbox
+                id="manual-exclusion-ot"
+                checked={otEligible === null ? "indeterminate" : otEligible}
+                onCheckedChange={(value: CheckedState) => {
+                  if (value === "indeterminate") {
+                    setOtEligible(true);
+                    return;
+                  }
+                  setOtEligible(value === true);
+                }}
+              />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Count OT if worked</p>
+                <p className="text-xs text-muted-foreground">
+                  Override the global overtime policy for this exclusion. Leave unset to inherit the period default.
+                </p>
+                {otEligible === null ? (
+                  <p className="text-[11px] text-muted-foreground/80">Inheriting global setting.</p>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="h-6 px-0 text-xs"
+                    onClick={() => setOtEligible(null)}
+                  >
+                    Reset to inherit
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
         <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -1052,6 +1100,10 @@ const sanitizeManualExclusions = (value: unknown): ManualExclusion[] => {
     const employeeIds = scope === "employees" ? sanitizeManualIds((entry as ManualExclusion).employeeIds) : undefined;
     if (scope === "employees" && !employeeIds?.length) continue;
     const note = normalizeManualNote((entry as ManualExclusion).note);
+    const otEligible =
+      typeof (entry as ManualExclusion).otEligible === "boolean"
+        ? (entry as ManualExclusion).otEligible
+        : undefined;
     sanitized.push({
       id,
       scope,
@@ -1060,6 +1112,7 @@ const sanitizeManualExclusions = (value: unknown): ManualExclusion[] => {
       officeIds,
       employeeIds,
       note,
+      otEligible,
     });
   }
   return sortManualExclusions(sanitized);
@@ -1872,6 +1925,7 @@ function BioLogUploaderContent() {
             draft.scope === "employees" && draft.employeeIds?.length
               ? [...draft.employeeIds]
               : undefined,
+          otEligible: draft.otEligible ?? undefined,
         };
         if (manualDialogEditing) {
           return sortManualExclusions(
@@ -2616,6 +2670,27 @@ function BioLogUploaderContent() {
     [filteredPerDayRows, identityMap, identityState.status]
   );
 
+  const excusedOtWarnings = useMemo(() => {
+    if (!filteredPerDayRows.length) return [] as ParseWarning[];
+    const rows = filteredPerDayRows.filter((row) => (row.OT_excused ?? 0) > 0);
+    if (!rows.length) return [] as ParseWarning[];
+    const samples = rows.slice(0, MAX_WARNING_SAMPLE_COUNT).map((row) => {
+      const identifier = row.employeeName?.trim()
+        ? row.employeeName
+        : row.employeeId || row.employeeToken || "(unknown)";
+      return `${identifier} – ${row.dateISO}`;
+    });
+    return [
+      {
+        type: "GENERAL",
+        level: "info",
+        message: "Excused day with punches credited as OT (Excused)",
+        count: rows.length,
+        samples,
+      },
+    ] satisfies ParseWarning[];
+  }, [filteredPerDayRows]);
+
   const aggregatedWarnings = useMemo(() => {
     const sources: ParseWarning[][] = [];
     for (const file of parsedFiles) {
@@ -2629,9 +2704,12 @@ function BioLogUploaderContent() {
     if (identityWarnings.length) {
       sources.push(identityWarnings);
     }
+    if (excusedOtWarnings.length) {
+      sources.push(excusedOtWarnings);
+    }
     if (!sources.length) return [];
     return aggregateWarnings(sources);
-  }, [identityWarnings, mergeResult, parsedFiles]);
+  }, [excusedOtWarnings, identityWarnings, mergeResult, parsedFiles]);
 
   useEffect(() => {
     if (aggregatedWarnings.length === 0) {
@@ -2960,6 +3038,8 @@ function BioLogUploaderContent() {
           return row.totalOTRestdayMinutes ?? 0;
         case "otHolidayMinutes":
           return row.totalOTHolidayMinutes ?? 0;
+        case "otExcusedMinutes":
+          return row.totalOTExcusedMinutes ?? 0;
         case "nightDiffMinutes":
           return row.totalNightDiffMinutes ?? 0;
         case "resolvedEmployeeId":
@@ -3946,6 +4026,7 @@ const applyColumnFilters = useCallback(
                     : `Employees (${employeeNames.length})`;
                 const scopeDetails = exclusion.scope === "offices" ? officeNames : employeeNames;
                 const outOfPeriod = manualOutOfPeriodMap.get(exclusion.id) ?? 0;
+                const effectiveOtEligible = (exclusion.otEligible ?? overtimePolicy.overtimeOnExcused) === true;
                 return (
                   <li
                     key={exclusion.id}
@@ -3972,6 +4053,11 @@ const applyColumnFilters = useCallback(
                         )}
                         {outOfPeriod > 0 ? ` • ${outOfPeriod} out of period` : null}
                       </p>
+                      {effectiveOtEligible ? (
+                        <Badge className="mt-1 border-emerald-500/70 bg-emerald-500/15 text-emerald-700" variant="outline">
+                          OT eligible
+                        </Badge>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-1">
                       <Button
@@ -4118,6 +4204,41 @@ const applyColumnFilters = useCallback(
                             sanitizeOvertimePolicyState({
                               ...prev,
                               countPreShift: Boolean(checked),
+                            })
+                          )
+                        }
+                        disabled={!overtimeHydrated}
+                      />
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <div className="flex items-start justify-between gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-3 py-2">
+                      <div className="space-y-1 pr-3">
+                        <p className="flex items-center gap-1 text-sm font-medium text-foreground">
+                          Credit OT if worked on excused days
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex">
+                                <Info className="h-4 w-4 text-muted-foreground" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Late/UT/Absence stay 0. If punches exist, minutes are credited to OT (Excused).
+                            </TooltipContent>
+                          </Tooltip>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Applies to manual exclusions with punches, treating work as excused overtime.
+                        </p>
+                      </div>
+                      <Switch
+                        id="ot-excused"
+                        checked={overtimePolicy.overtimeOnExcused}
+                        onCheckedChange={(checked) =>
+                          setOvertimePolicy((prev) =>
+                            sanitizeOvertimePolicyState({
+                              ...prev,
+                              overtimeOnExcused: Boolean(checked),
                             })
                           )
                         }
@@ -5213,6 +5334,7 @@ const applyColumnFilters = useCallback(
                   <th className="p-2 text-center">OT (post)</th>
                   <th className="p-2 text-center">Rest day OT</th>
                   <th className="p-2 text-center">Holiday OT</th>
+                  <th className="p-2 text-center">Excused OT</th>
                   <th className="p-2 text-center">OT (min)</th>
                   <th className="p-2 text-center">Night diff</th>
                   <th className="p-2 text-left">Schedule</th>
@@ -5262,6 +5384,7 @@ const applyColumnFilters = useCallback(
                   const otPostLabel = formatMinutesOrDash(row.OT_post);
                   const otRestdayLabel = formatMinutesOrDash(row.OT_restday);
                   const otHolidayLabel = formatMinutesOrDash(row.OT_holiday);
+                  const otExcusedLabel = formatMinutesOrDash(row.OT_excused);
                   const otTotalLabel = formatMinutesOrDash(row.OT_total);
                   const nightDiffLabel = formatMinutesOrDash(row.ND_minutes);
                   return (
@@ -5299,6 +5422,11 @@ const applyColumnFilters = useCallback(
                         ) : (
                           statusLabel
                         )}
+                        {row.notes?.map((note, noteIndex) => (
+                          <p key={`${row.employeeId}-${row.dateISO}-note-${noteIndex}`} className="mt-1 text-[11px] text-muted-foreground">
+                            {note}
+                          </p>
+                        ))}
                       </td>
                       <td className="p-2 text-center">{row.earliest ?? ""}</td>
                       <td className="p-2 text-center">{row.latest ?? ""}</td>
@@ -5315,6 +5443,7 @@ const applyColumnFilters = useCallback(
                       <td className="p-2 text-center">{otPostLabel}</td>
                       <td className="p-2 text-center">{otRestdayLabel}</td>
                       <td className="p-2 text-center">{otHolidayLabel}</td>
+                      <td className="p-2 text-center">{otExcusedLabel}</td>
                       <td className="p-2 text-center">{otTotalLabel}</td>
                       <td className="p-2 text-center">{nightDiffLabel}</td>
                       <td className="p-2">

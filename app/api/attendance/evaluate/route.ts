@@ -49,6 +49,7 @@ const ManualExclusionSchema = z
       "OTHER",
     ]),
     note: z.string().trim().min(1).optional(),
+    otEligible: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.scope === "offices" && !(value.officeIds?.length)) {
@@ -68,6 +69,7 @@ const OvertimePolicySchema = z.object({
   mealTriggerMin: z.number().int().min(0).optional().nullable(),
   nightDiffEnabled: z.boolean().default(false),
   flexMode: z.enum(["strict", "soft"]).default("strict"),
+  overtimeOnExcused: z.boolean().default(true),
 });
 
 const EvaluationOptionsSchema = z

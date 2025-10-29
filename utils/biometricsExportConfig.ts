@@ -31,6 +31,7 @@ export type SummaryColumnKey =
   | "otPostMinutes"
   | "otRestdayMinutes"
   | "otHolidayMinutes"
+  | "otExcusedMinutes"
   | "nightDiffMinutes"
   | "resolvedEmployeeId"
   | "resolvedAt"
@@ -244,6 +245,15 @@ export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
     label: "Holiday OT",
     groupId: "attendance",
     description: "Overtime minutes accrued on holidays.",
+    type: "minutes",
+    width: "numeric",
+    defaultSelected: false,
+  },
+  {
+    key: "otExcusedMinutes",
+    label: "Excused OT",
+    groupId: "attendance",
+    description: "Overtime minutes credited on excused days.",
     type: "minutes",
     width: "numeric",
     defaultSelected: false,

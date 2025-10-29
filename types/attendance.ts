@@ -11,6 +11,7 @@ export interface OvertimePolicy {
   mealTriggerMin?: number;
   nightDiffEnabled: boolean;
   flexMode: FlexOTMode;
+  overtimeOnExcused: boolean;
 }
 
 export interface EvaluationOptions {

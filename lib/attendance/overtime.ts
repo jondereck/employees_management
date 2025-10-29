@@ -13,7 +13,9 @@ const ND_END = 6 * 60;
 
 type Interval = [number, number];
 
-type AnySchedule = (ScheduleFixed | ScheduleFlex | ScheduleShift) & { type: string };
+type ScheduleNone = { type: "NONE" };
+
+type AnySchedule = ScheduleNone | ((ScheduleFixed | ScheduleFlex | ScheduleShift) & { type: string });
 
 export type HolidayKind = "none" | "restday" | "holiday";
 
@@ -22,6 +24,7 @@ export type OvertimeComputation = {
   OT_post: number;
   OT_restday: number;
   OT_holiday: number;
+  OT_excused: number;
   OT_total: number;
   ND_minutes: number;
 };
@@ -186,6 +189,7 @@ const zeroResult: OvertimeComputation = {
   OT_post: 0,
   OT_restday: 0,
   OT_holiday: 0,
+  OT_excused: 0,
   OT_total: 0,
   ND_minutes: 0,
 };
@@ -314,7 +318,10 @@ export const computeOvertimeForDay = (input: ComputeOvertimeInput): OvertimeComp
   let postSegments: Interval[] = [];
   let generalSegments: Interval[] = [];
 
-  if (input.schedule.type === "FLEX") {
+  if (input.schedule.type === "NONE") {
+    otGeneralMinutes = sumIntervals(presence);
+    generalSegments = presence;
+  } else if (input.schedule.type === "FLEX") {
     const { minutes, segments } = computeFlexOvertime(input.schedule, presence, policy);
     otGeneralMinutes = minutes;
     generalSegments = segments;
@@ -359,6 +366,7 @@ export const computeOvertimeForDay = (input: ComputeOvertimeInput): OvertimeComp
     OT_post: postRounded,
     OT_restday: 0,
     OT_holiday: 0,
+    OT_excused: 0,
     OT_total: otTotal,
     ND_minutes: ndMinutes,
   };

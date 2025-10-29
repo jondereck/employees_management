@@ -98,6 +98,7 @@ export type PerDayRow = ParsedPerDayRow & {
   OT_post?: number | null;
   OT_restday?: number | null;
   OT_holiday?: number | null;
+  OT_excused?: number | null;
   OT_total?: number | null;
   ND_minutes?: number | null;
   absent?: boolean;
@@ -117,6 +118,7 @@ export type PerDayRow = ParsedPerDayRow & {
   weeklyExclusionMode?: string | null;
   weeklyExclusionIgnoreUntil?: string | null;
   weeklyExclusionId?: string | null;
+  notes?: string[];
 };
 
 export type PerEmployeeRow = {
@@ -144,6 +146,7 @@ export type PerEmployeeRow = {
   totalOTPostMinutes: number;
   totalOTRestdayMinutes: number;
   totalOTHolidayMinutes: number;
+  totalOTExcusedMinutes: number;
   totalNightDiffMinutes: number;
   totalRequiredMinutes: number;
   identityStatus: "matched" | "unmatched" | "ambiguous";
@@ -1083,6 +1086,7 @@ type AggregateRow = {
   totalOTPostMinutes: number;
   totalOTRestdayMinutes: number;
   totalOTHolidayMinutes: number;
+  totalOTExcusedMinutes: number;
   totalNightDiffMinutes: number;
   totalRequiredMinutes: number;
   scheduleTypes: Set<string>;
@@ -1272,6 +1276,13 @@ export function summarizePerEmployee(
       | "workedMinutes"
       | "absent"
       | "weeklyPatternApplied"
+      | "OT_total"
+      | "OT_pre"
+      | "OT_post"
+      | "OT_restday"
+      | "OT_holiday"
+      | "OT_excused"
+      | "ND_minutes"
     >
   >,
   options?: ScheduleSummaryOptions
@@ -1306,6 +1317,7 @@ export function summarizePerEmployee(
         totalOTPostMinutes: 0,
         totalOTRestdayMinutes: 0,
         totalOTHolidayMinutes: 0,
+        totalOTExcusedMinutes: 0,
         totalNightDiffMinutes: 0,
         totalRequiredMinutes: 0,
         scheduleTypes: new Set<string>(),
@@ -1365,6 +1377,8 @@ export function summarizePerEmployee(
     if (Number.isFinite(otRestday)) agg.totalOTRestdayMinutes += otRestday;
     const otHoliday = Number(row.OT_holiday ?? 0);
     if (Number.isFinite(otHoliday)) agg.totalOTHolidayMinutes += otHoliday;
+    const otExcused = Number(row.OT_excused ?? 0);
+    if (Number.isFinite(otExcused)) agg.totalOTExcusedMinutes += otExcused;
     const ndMinutes = Number(row.ND_minutes ?? 0);
     if (Number.isFinite(ndMinutes)) agg.totalNightDiffMinutes += ndMinutes;
     if (row.absent) {
@@ -1400,6 +1414,7 @@ export function summarizePerEmployee(
     totalOTPostMinutes: Math.round(entry.totalOTPostMinutes),
     totalOTRestdayMinutes: Math.round(entry.totalOTRestdayMinutes),
     totalOTHolidayMinutes: Math.round(entry.totalOTHolidayMinutes),
+    totalOTExcusedMinutes: Math.round(entry.totalOTExcusedMinutes),
     totalNightDiffMinutes: Math.round(entry.totalNightDiffMinutes),
     totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
     identityStatus: entry.identityStatus,
@@ -1595,6 +1610,7 @@ type PerDayColumnKey =
   | "OT_post"
   | "OT_restday"
   | "OT_holiday"
+  | "OT_excused"
   | "OT_total"
   | "ND_minutes"
   | "lateFlag"
@@ -1637,6 +1653,7 @@ const PER_DAY_COLUMNS: PerDayColumnDefinition[] = [
   { key: "OT_post", label: "OT (post)", type: "minutes", width: "numeric" },
   { key: "OT_restday", label: "Rest day OT", type: "minutes", width: "numeric" },
   { key: "OT_holiday", label: "Holiday OT", type: "minutes", width: "numeric" },
+  { key: "OT_excused", label: "Excused OT", type: "minutes", width: "numeric" },
   { key: "OT_total", label: "OT (min)", type: "minutes", width: "numeric" },
   { key: "ND_minutes", label: "Night diff", type: "minutes", width: "numeric" },
   { key: "lateFlag", label: "Late?", type: "text", width: "numeric" },
@@ -1782,6 +1799,7 @@ const computeSummaryRow = (
     otPostMinutes: row.totalOTPostMinutes ?? 0,
     otRestdayMinutes: row.totalOTRestdayMinutes ?? 0,
     otHolidayMinutes: row.totalOTHolidayMinutes ?? 0,
+    otExcusedMinutes: row.totalOTExcusedMinutes ?? 0,
     nightDiffMinutes: row.totalNightDiffMinutes ?? 0,
     resolvedEmployeeId: row.resolvedEmployeeId?.trim() || null,
     resolvedAt: null,
@@ -1804,6 +1822,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
   let totalOTPostMinutes = 0;
   let totalOTRestdayMinutes = 0;
   let totalOTHolidayMinutes = 0;
+  let totalOTExcusedMinutes = 0;
   let totalNightDiffMinutes = 0;
   let totalSourceFiles = 0;
 
@@ -1821,6 +1840,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
     totalOTPostMinutes += Number(row.otPostMinutes ?? 0);
     totalOTRestdayMinutes += Number(row.otRestdayMinutes ?? 0);
     totalOTHolidayMinutes += Number(row.otHolidayMinutes ?? 0);
+    totalOTExcusedMinutes += Number(row.otExcusedMinutes ?? 0);
     totalNightDiffMinutes += Number(row.nightDiffMinutes ?? 0);
     totalSourceFiles += Number(row.sourceFilesCount ?? 0);
   }
@@ -1838,6 +1858,7 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
   totals.otPostMinutes = totalOTPostMinutes;
   totals.otRestdayMinutes = totalOTRestdayMinutes;
   totals.otHolidayMinutes = totalOTHolidayMinutes;
+  totals.otExcusedMinutes = totalOTExcusedMinutes;
   totals.nightDiffMinutes = totalNightDiffMinutes;
   totals.sourceFilesCount = totalSourceFiles;
   totals.latePercent = totalDays > 0 ? totalLateDays / totalDays : null;
@@ -2102,6 +2123,8 @@ const buildPerDaySheet = (
           return row.OT_restday ?? null;
         case "OT_holiday":
           return row.OT_holiday ?? null;
+        case "OT_excused":
+          return row.OT_excused ?? null;
         case "OT_total":
           return row.OT_total ?? null;
         case "ND_minutes":
