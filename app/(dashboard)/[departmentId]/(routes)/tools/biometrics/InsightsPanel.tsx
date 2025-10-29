@@ -356,6 +356,9 @@ export default function InsightsPanel({
     if (filters.offices.length) {
       chips.push(`Offices (${filters.offices.length})`);
     }
+    if (filters.employeeTypes.length) {
+      chips.push(`Employee types (${filters.employeeTypes.length})`);
+    }
     if (filters.schedules.length) {
       chips.push(`Schedules (${filters.schedules.length})`);
     }

@@ -437,13 +437,20 @@ export async function evaluateAttendanceEntries(
           isHead: true,
           officeId: true,
           offices: { select: { id: true, name: true } },
+          employeeType: { select: { name: true } },
         },
       })
     : [];
 
   const employeeMetaById = new Map<
     string,
-    { employeeNo: string | null; isHead: boolean; officeId: string | null; officeName: string | null }
+    {
+      employeeNo: string | null;
+      isHead: boolean;
+      officeId: string | null;
+      officeName: string | null;
+      employeeType: string | null;
+    }
   >();
 
   for (const detail of employeeDetails) {
@@ -452,6 +459,7 @@ export async function evaluateAttendanceEntries(
       isHead: detail.isHead,
       officeId: detail.officeId || detail.offices?.id || null,
       officeName: detail.offices?.name?.trim() || null,
+      employeeType: detail.employeeType?.name?.trim() || null,
     });
   }
 
@@ -511,6 +519,7 @@ export async function evaluateAttendanceEntries(
     const details = resolvedEmployeeId ? employeeMetaById.get(resolvedEmployeeId) ?? null : null;
     const officeId = details?.officeId ?? row.officeId ?? null;
     const officeName = details?.officeName ?? row.officeName ?? null;
+    const employeeType = details?.employeeType ?? null;
 
     const exception = internalEmployeeId
       ? maps.exceptionsByEmployeeDate.get(`${internalEmployeeId}::${row.dateISO}`) ?? null
@@ -689,6 +698,7 @@ export async function evaluateAttendanceEntries(
       weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
       weeklyExclusionId: weeklyExclusion?.id ?? null,
       identityStatus: resolvedEmployeeId ? "matched" : "unmatched",
+      employeeType,
       notes: dayNotes.length ? dayNotes : undefined,
     };
 

@@ -22,6 +22,7 @@ type IdentityRecord = {
   isHead: boolean | null;
   candidates?: string[];
   missingOffice?: boolean;
+  employeeType?: string | null;
 };
 
 type EmployeeCandidate = {
@@ -34,6 +35,7 @@ type EmployeeCandidate = {
   suffix: string | null;
   updatedAt: Date;
   office: { id: string; name: string } | null;
+  employeeType?: string | null;
 };
 
 const UNKNOWN_RESULT: IdentityRecord = {
@@ -44,6 +46,7 @@ const UNKNOWN_RESULT: IdentityRecord = {
   officeName: UNKNOWN_OFFICE,
   employeeNo: null,
   isHead: null,
+  employeeType: null,
 };
 
 function formatName(candidate: EmployeeCandidate): string {
@@ -115,6 +118,7 @@ export async function POST(req: Request) {
               suffix: true,
               updatedAt: true,
               offices: { select: { id: true, name: true } },
+              employeeType: { select: { name: true } },
             },
           },
         },
@@ -139,6 +143,7 @@ export async function POST(req: Request) {
         suffix: employee.suffix,
         updatedAt: employee.updatedAt,
         office: employee.offices ? { id: employee.offices.id, name: employee.offices.name } : null,
+        employeeType: employee.employeeType?.name?.trim() || null,
       };
       results[mapping.token] = {
         status: "matched",
@@ -148,6 +153,7 @@ export async function POST(req: Request) {
         officeName,
         employeeNo: employee.employeeNo,
         isHead: employee.isHead,
+        employeeType: candidate.employeeType ?? null,
       };
     }
 
@@ -169,6 +175,7 @@ export async function POST(req: Request) {
           suffix: true,
           updatedAt: true,
           offices: { select: { id: true, name: true } },
+          employeeType: { select: { name: true } },
         },
       });
 
@@ -188,6 +195,7 @@ export async function POST(req: Request) {
           suffix: candidate.suffix,
           updatedAt: candidate.updatedAt,
           office: candidate.offices ?? null,
+          employeeType: candidate.employeeType?.name?.trim() || null,
         });
       }
     }
@@ -216,6 +224,7 @@ export async function POST(req: Request) {
         isHead: primary.isHead,
         candidates: status === "ambiguous" ? sorted.map(describeCandidate) : undefined,
         missingOffice: !primary.office,
+        employeeType: primary.employeeType ?? null,
       };
     }
 

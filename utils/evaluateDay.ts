@@ -409,6 +409,7 @@ export function evaluateDay(input: DayEvalInput) {
     lateMinutes = 0;
     undertimeMinutes = 0;
     worked = 0;
+    requiredMinutes = null;
   }
 
   return {
