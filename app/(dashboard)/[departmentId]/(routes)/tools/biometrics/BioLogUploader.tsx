@@ -1448,12 +1448,14 @@ const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord
       officeName: UNKNOWN_OFFICE_LABEL,
       employeeNo: null,
       isHead: null,
+      employeeType: null,
     };
   }
 
   const status = record.status ?? "matched";
   const employeeName = record.employeeName?.trim();
   const officeName = record.officeName?.trim();
+  const employeeType = record.employeeType?.trim();
 
   if (status === "unmatched") {
     return {
@@ -1464,6 +1466,7 @@ const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord
       officeName: UNKNOWN_OFFICE_LABEL,
       employeeNo: null,
       isHead: null,
+      employeeType: null,
     };
   }
 
@@ -1475,6 +1478,7 @@ const normalizeIdentityRecord = (record?: IdentityRecord | null): IdentityRecord
     officeName: officeName && officeName.length ? officeName : UNASSIGNED_OFFICE_LABEL,
     employeeNo: firstEmployeeNoToken(record.employeeNo) ?? null,
     isHead: typeof record.isHead === "boolean" ? record.isHead : null,
+    employeeType: employeeType && employeeType.length ? employeeType : null,
     candidates:
       status === "ambiguous" && record.candidates && record.candidates.length
         ? [...record.candidates]
@@ -1774,6 +1778,8 @@ function BioLogUploaderContent() {
     setHeads,
     setOffices,
     clearOffices,
+    setEmployeeTypes,
+    clearEmployeeTypes,
     setSchedules,
     clearSchedules,
     setShowUnmatched,
@@ -1784,6 +1790,7 @@ function BioLogUploaderContent() {
   } = useSummaryFilters();
   const {
     offices: selectedOffices,
+    employeeTypes: selectedEmployeeTypes,
     schedules: selectedScheduleTypes,
     heads: headsFilter,
     showUnmatched,
@@ -1857,6 +1864,7 @@ function BioLogUploaderContent() {
       filters.search.trim().length > 0 ||
       filters.heads !== DEFAULT_SUMMARY_FILTERS.heads ||
       filters.offices.length > 0 ||
+      filters.employeeTypes.length > 0 ||
       filters.schedules.length > 0 ||
       filters.showUnmatched !== DEFAULT_SUMMARY_FILTERS.showUnmatched ||
       filters.showNoPunch !== DEFAULT_SUMMARY_FILTERS.showNoPunch ||
@@ -1868,12 +1876,14 @@ function BioLogUploaderContent() {
     );
   }, [filters]);
   const hasAnyFilters = hasActiveSummaryFilters || hasActiveColumnFilters;
+  const hasEmployeeTypeFilter = selectedEmployeeTypes.length > 0;
 
   const handleClearAllFilters = useCallback(() => {
     setColumnFilters({});
     setSearch(DEFAULT_SUMMARY_FILTERS.search);
     setHeads(DEFAULT_SUMMARY_FILTERS.heads);
     clearOffices();
+    clearEmployeeTypes();
     clearSchedules();
     setShowUnmatched(DEFAULT_SUMMARY_FILTERS.showUnmatched);
     setShowNoPunch(DEFAULT_SUMMARY_FILTERS.showNoPunch);
@@ -1885,6 +1895,7 @@ function BioLogUploaderContent() {
       secondarySortDir: DEFAULT_SUMMARY_FILTERS.secondarySortDir,
     });
   }, [
+    clearEmployeeTypes,
     clearOffices,
     clearSchedules,
     setColumnFilters,
@@ -2400,6 +2411,7 @@ function BioLogUploaderContent() {
         : normalized.officeName ?? null;
       const officeId = isUnmatched ? null : normalized.officeId ?? null;
       const employeeId = isUnmatched ? token : row.employeeId;
+      const employeeType = isUnmatched ? null : normalized.employeeType ?? null;
 
       return {
         ...row,
@@ -2409,6 +2421,7 @@ function BioLogUploaderContent() {
         officeId,
         officeName,
         identityStatus: normalized.status,
+        employeeType,
       };
     });
     return sortPerDayRows(mapped.map((row) => toChronologicalRow(row)));
@@ -2896,6 +2909,82 @@ function BioLogUploaderContent() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [officeOptionMap]);
 
+  const employeeTypeCountMap = useMemo(() => {
+    const map = new Map<string, { label: string; count: number }>();
+    for (const row of dedupedPerEmployee) {
+      const type = row.employeeType?.trim();
+      if (!type) continue;
+      const normalized = type.toLowerCase();
+      const existing = map.get(normalized);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(normalized, { label: type, count: 1 });
+      }
+    }
+    return map;
+  }, [dedupedPerEmployee]);
+
+  const [remoteEmployeeTypes, setRemoteEmployeeTypes] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (!departmentId) {
+      setRemoteEmployeeTypes(null);
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    setRemoteEmployeeTypes(null);
+    const loadEmployeeTypes = async () => {
+      try {
+        const response = await fetch(`/api/${departmentId}/biometrics/employee-types`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || "Failed to fetch employee types");
+        }
+        const payload = (await response.json()) as { items?: string[] };
+        if (!active) return;
+        const values = Array.isArray(payload.items)
+          ? payload.items
+              .map((value) => value?.trim())
+              .filter((value): value is string => Boolean(value))
+          : [];
+        setRemoteEmployeeTypes(values);
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+        console.warn("Failed to load employee types", error);
+        if (active) {
+          setRemoteEmployeeTypes(null);
+        }
+      }
+    };
+    void loadEmployeeTypes();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [departmentId]);
+
+  const employeeTypeOptions = useMemo(() => {
+    const labelByKey = new Map<string, string>();
+    const countByKey = new Map<string, number>();
+    for (const [key, entry] of employeeTypeCountMap.entries()) {
+      labelByKey.set(key, entry.label);
+      countByKey.set(key, entry.count);
+    }
+    if (remoteEmployeeTypes?.length) {
+      for (const raw of remoteEmployeeTypes) {
+        const trimmed = raw?.trim();
+        if (!trimmed) continue;
+        labelByKey.set(trimmed.toLowerCase(), trimmed);
+      }
+    }
+    const sorted = Array.from(labelByKey.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+    return sorted.map(([key, label]) => ({ value: label, count: countByKey.get(key) ?? 0 }));
+  }, [employeeTypeCountMap, remoteEmployeeTypes]);
+
   const scheduleTypeOptions = useMemo<string[]>(() => {
     if (!dedupedPerEmployee.length) return [];
     const set = new Set<string>();
@@ -2958,6 +3047,9 @@ function BioLogUploaderContent() {
     if (!dedupedPerEmployee.length) return [] as PerEmployeeRow[];
     const officeKeys = selectedOffices.length ? new Set(selectedOffices) : null;
     const scheduleKeys = selectedScheduleTypes.length ? new Set(selectedScheduleTypes) : null;
+    const employeeTypeKeys = selectedEmployeeTypes.length
+      ? new Set(selectedEmployeeTypes.map((value) => value.trim().toLowerCase()))
+      : null;
     return dedupedPerEmployee.filter((row) => {
       if (officeKeys) {
         const key = makeOfficeKey(
@@ -2969,6 +3061,12 @@ function BioLogUploaderContent() {
       if (scheduleKeys) {
         const hasType = row.scheduleTypes?.some((type) => scheduleKeys.has(type)) ?? false;
         if (!hasType) return false;
+      }
+      if (employeeTypeKeys) {
+        const type = row.employeeType?.trim().toLowerCase();
+        if (!type || !employeeTypeKeys.has(type)) {
+          return false;
+        }
       }
       if (!showUnmatched && isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId)) {
         return false;
@@ -2984,6 +3082,7 @@ function BioLogUploaderContent() {
   }, [
     headsFilter,
     dedupedPerEmployee,
+    selectedEmployeeTypes,
     selectedOffices,
     selectedScheduleTypes,
     showUnmatched,
@@ -3170,6 +3269,9 @@ const applyColumnFilters = useCallback(
     if (!perDay) return [] as PerDayRow[];
     const officeKeys = selectedOffices.length ? new Set(selectedOffices) : null;
     const scheduleKeys = selectedScheduleTypes.length ? new Set(selectedScheduleTypes) : null;
+    const employeeTypeKeys = selectedEmployeeTypes.length
+      ? new Set(selectedEmployeeTypes.map((value) => value.trim().toLowerCase()))
+      : null;
     const query = employeeSearch.trim().toLowerCase();
     const hasQuery = query.length > 0;
     return perDay.filter((row) => {
@@ -3184,6 +3286,12 @@ const applyColumnFilters = useCallback(
         if (!scheduleKeys.has(row.scheduleType)) return false;
       } else if (scheduleKeys && !row.scheduleType) {
         return false;
+      }
+      if (employeeTypeKeys) {
+        const type = row.employeeType?.trim().toLowerCase();
+        if (!type || !employeeTypeKeys.has(type)) {
+          return false;
+        }
       }
       if (headsFilter === "heads" && row.isHead !== true) {
         return false;
@@ -3210,6 +3318,7 @@ const applyColumnFilters = useCallback(
     employeeSearch,
     headsFilter,
     perDay,
+    selectedEmployeeTypes,
     selectedOffices,
     selectedScheduleTypes,
     showUnmatched,
@@ -3229,6 +3338,15 @@ const applyColumnFilters = useCallback(
   }, [scheduleTypeOptions, selectedScheduleTypes, setSchedules]);
 
   useEffect(() => {
+    if (!selectedEmployeeTypes.length) return;
+    const available = new Set(employeeTypeOptions.map((option) => option.value));
+    const filtered = selectedEmployeeTypes.filter((value) => available.has(value));
+    if (filtered.length !== selectedEmployeeTypes.length) {
+      setEmployeeTypes(filtered);
+    }
+  }, [employeeTypeOptions, selectedEmployeeTypes, setEmployeeTypes]);
+
+  useEffect(() => {
     if (!selectedOffices.length) return;
     const available = new Set(officeOptions.map((option) => option.key));
     const filtered = selectedOffices.filter((key) => available.has(key));
@@ -3242,11 +3360,22 @@ const applyColumnFilters = useCallback(
       if (selectedOffices.length) {
         clearOffices();
       }
+      if (selectedEmployeeTypes.length) {
+        clearEmployeeTypes();
+      }
       if (selectedScheduleTypes.length) {
         clearSchedules();
       }
     }
-  }, [clearOffices, clearSchedules, perDay, selectedOffices.length, selectedScheduleTypes.length]);
+  }, [
+    clearEmployeeTypes,
+    clearOffices,
+    clearSchedules,
+    perDay,
+    selectedEmployeeTypes.length,
+    selectedOffices.length,
+    selectedScheduleTypes.length,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3313,9 +3442,9 @@ const applyColumnFilters = useCallback(
       const normalizedToken = normalizeBiometricToken(token);
       if (!normalizedToken) return;
 
-      const relevantRows = filteredPerDayRows.filter(
-        (row) => getNormalizedTokenForRow(row) === normalizedToken
-      );
+    const relevantRows = filteredPerDayRows.filter(
+      (row) => getNormalizedTokenForRow(row) === normalizedToken
+    );
 
       const manualKey =
         useManualPeriod && manualPeriodSelection
@@ -3343,15 +3472,16 @@ const applyColumnFilters = useCallback(
         return;
       }
 
-      const employeeName = identity?.employeeName ?? relevantRows[0]?.employeeName ?? null;
-      const resolvedEmployeeId = identity?.employeeId ?? relevantRows[0]?.resolvedEmployeeId ?? null;
-      const officeId = identity?.officeId ?? relevantRows[0]?.officeId ?? null;
-      const officeName = identity?.officeName ?? relevantRows[0]?.officeName ?? null;
-      const employeeNo =
-        firstEmployeeNoToken(identity?.employeeNo) ??
-        firstEmployeeNoToken(relevantRows[0]?.employeeNo) ??
-        null;
-      const isHead = identity?.isHead ?? relevantRows[0]?.isHead ?? null;
+    const employeeName = identity?.employeeName ?? relevantRows[0]?.employeeName ?? null;
+    const resolvedEmployeeId = identity?.employeeId ?? relevantRows[0]?.resolvedEmployeeId ?? null;
+    const officeId = identity?.officeId ?? relevantRows[0]?.officeId ?? null;
+    const officeName = identity?.officeName ?? relevantRows[0]?.officeName ?? null;
+    const employeeNo =
+      firstEmployeeNoToken(identity?.employeeNo) ??
+      firstEmployeeNoToken(relevantRows[0]?.employeeNo) ??
+      null;
+    const isHead = identity?.isHead ?? relevantRows[0]?.isHead ?? null;
+    const employeeType = identity?.employeeType ?? relevantRows[0]?.employeeType ?? null;
 
       const entries = relevantRows.map((row) => ({
         employeeId: row.employeeId,
@@ -3420,6 +3550,7 @@ const applyColumnFilters = useCallback(
           officeName,
           employeeNo,
           isHead,
+          employeeType,
         };
       });
       lastEvaluatedKey.current = makeEvaluationPayloadKey(
@@ -4762,15 +4893,43 @@ const applyColumnFilters = useCallback(
                 ) : null}
               </div>
             </div>
-            <SummaryFiltersBar officeOptions={officeOptions} scheduleOptions={scheduleTypeOptions} />
+            <SummaryFiltersBar
+              officeOptions={officeOptions}
+              employeeTypeOptions={employeeTypeOptions}
+              scheduleOptions={scheduleTypeOptions}
+            />
           </div>
-          <div className="overflow-x-auto rounded-xl border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="p-2 text-left">
-                    <div className="flex items-center gap-1">
-                      <span>Employee No</span>
+          {sortedPerEmployee.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-muted-foreground/40 bg-muted/30 p-8 text-center">
+              <p className="text-sm font-medium">No results match the current filters.</p>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
+                {hasEmployeeTypeFilter ? (
+                  <Button variant="outline" size="sm" onClick={clearEmployeeTypes}>
+                    Clear Employee Type filter
+                  </Button>
+                ) : null}
+                {hasAnyFilters ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="inline-flex items-center gap-1"
+                    onClick={handleClearAllFilters}
+                  >
+                    <XCircle className="h-4 w-4" aria-hidden="true" />
+                    Clear all filters
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="p-2 text-left">
+                      <div className="flex items-center gap-1">
+                        <span>Employee No</span>
                       <ColumnFilterControl columnKey="employeeId" {...columnFilterControlProps} />
                     </div>
                   </th>
@@ -5295,6 +5454,7 @@ const applyColumnFilters = useCallback(
               </tbody>
             </table>
           </div>
+          )}
 
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Per-Day Details</h2>

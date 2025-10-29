@@ -111,6 +111,7 @@ export type PerDayRow = ParsedPerDayRow & {
   scheduleEnd?: string | null;
   scheduleGraceMinutes?: number | null;
   identityStatus?: "matched" | "unmatched" | "ambiguous";
+  employeeType?: string | null;
   weeklyPatternApplied?: boolean;
   weeklyPatternWindows?: WeeklyPatternWindow[] | null;
   weeklyPatternPresence?: { start: string; end: string }[];
@@ -130,6 +131,7 @@ export type PerEmployeeRow = {
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
+  employeeType?: string | null;
   daysWithLogs: number;
   noPunchDays: number;
   absences: number;
@@ -1073,6 +1075,7 @@ type AggregateRow = {
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
+  employeeType?: string | null;
   daysWithLogs: number;
   noPunchDays: number;
   excusedDays: number;
@@ -1304,6 +1307,7 @@ export function summarizePerEmployee(
         resolvedEmployeeId: row.resolvedEmployeeId ?? null,
         officeId: row.officeId ?? null,
         officeName: row.officeName ?? null,
+        employeeType: row.employeeType?.trim()?.length ? row.employeeType.trim() : null,
         daysWithLogs: 0,
         noPunchDays: 0,
         excusedDays: 0,
@@ -1386,6 +1390,9 @@ export function summarizePerEmployee(
     }
     if (row.scheduleType) agg.scheduleTypes.add(row.scheduleType);
     if (row.scheduleSource) agg.scheduleSourceSet.add(row.scheduleSource);
+    if (!agg.employeeType && row.employeeType?.trim()) {
+      agg.employeeType = row.employeeType.trim();
+    }
   }
 
   return Array.from(map.values()).map((entry) => ({
@@ -1397,6 +1404,7 @@ export function summarizePerEmployee(
     resolvedEmployeeId: entry.resolvedEmployeeId ?? null,
     officeId: entry.officeId ?? null,
     officeName: entry.officeName ?? null,
+    employeeType: entry.employeeType ?? null,
     daysWithLogs: entry.daysWithLogs,
     noPunchDays: entry.noPunchDays,
     absences: entry.absences,
