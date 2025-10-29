@@ -607,7 +607,7 @@ const ManualExclusionDialog = ({
             <p className="text-xs text-muted-foreground">{activeScopeLabel}</p>
             {scope === "offices" ? (
               <div className="space-y-1">
-                <Popover open={officePopoverOpen} onOpenChange={setOfficePopoverOpen}>
+                <Popover modal={false} open={officePopoverOpen} onOpenChange={setOfficePopoverOpen}>
                   <PopoverTrigger asChild>
                     <Button type="button" variant="outline" className="w-full justify-between">
                       <span>
@@ -655,7 +655,11 @@ const ManualExclusionDialog = ({
             ) : null}
             {scope === "employees" ? (
               <div className="space-y-1">
-                <Popover open={employeePopoverOpen} onOpenChange={setEmployeePopoverOpen}>
+                <Popover
+                  modal={false}
+                  open={employeePopoverOpen}
+                  onOpenChange={setEmployeePopoverOpen}
+                >
                   <PopoverTrigger asChild>
                     <Button type="button" variant="outline" className="w-full justify-between">
                       <span>
