@@ -1341,6 +1341,7 @@ type IdentityRecord = {
   officeName: string;
   employeeNo: string | null;
   isHead: boolean | null;
+  employeeType?: string | null;
   candidates?: string[];
   missingOffice?: boolean;
 };

@@ -74,6 +74,7 @@ export type ParsedPerDayRow = {
   resolvedEmployeeId?: string | null;
   officeId?: string | null;
   officeName?: string | null;
+  employeeType?: string | null;
   dateISO: string;
   day: number;
   earliest: string | null;
@@ -1271,6 +1272,7 @@ export function summarizePerEmployee(
       | "scheduleType"
       | "scheduleSource"
       | "identityStatus"
+  | "employeeType"
       | "lateMinutes"
       | "undertimeMinutes"
       | "requiredMinutes"
