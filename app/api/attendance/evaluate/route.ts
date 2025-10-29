@@ -106,9 +106,21 @@ export async function POST(req: Request) {
       composedFromDayOnly: entry.composedFromDayOnly ?? false,
     }));
 
+    const normalizedOvertime =
+      evaluationOptions?.overtime == null
+        ? undefined
+        : {
+          ...evaluationOptions.overtime,
+          // convert nullable fields to undefined so types align
+          mealDeductMin:
+            evaluationOptions.overtime.mealDeductMin ?? undefined,
+          mealTriggerMin:
+            evaluationOptions.overtime.mealTriggerMin ?? undefined,
+        };
+
     const result = await evaluateAttendanceEntries(payloadEntries, {
       manualExclusions: manualExclusions as ManualExclusion[],
-      evaluationOptions: evaluationOptions ? { overtime: evaluationOptions.overtime } : undefined,
+      evaluationOptions: normalizedOvertime ? { overtime: normalizedOvertime } : undefined,
     });
     return NextResponse.json(result);
   } catch (error) {

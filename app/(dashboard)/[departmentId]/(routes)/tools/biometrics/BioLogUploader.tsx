@@ -157,7 +157,7 @@ const formatTimelineLabel = (segments: { start: string; end: string }[]) => {
   return segments.map((segment) => `${segment.start}–${segment.end}`).join(", ");
 };
 
-type OvertimePolicyState = OvertimePolicy & {
+type OvertimePolicyState = Omit<OvertimePolicy, "mealDeductMin" | "mealTriggerMin"> & {
   mealDeductMin: number | null;
   mealTriggerMin: number | null;
 };
@@ -771,7 +771,7 @@ const ManualExclusionDialog = ({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="xs"
+                    size="sm"
                     className="h-6 px-0 text-xs"
                     onClick={() => setOtEligible(null)}
                   >
@@ -2671,25 +2671,25 @@ function BioLogUploaderContent() {
   );
 
   const excusedOtWarnings = useMemo(() => {
-    if (!filteredPerDayRows.length) return [] as ParseWarning[];
-    const rows = filteredPerDayRows.filter((row) => (row.OT_excused ?? 0) > 0);
-    if (!rows.length) return [] as ParseWarning[];
-    const samples = rows.slice(0, MAX_WARNING_SAMPLE_COUNT).map((row) => {
-      const identifier = row.employeeName?.trim()
-        ? row.employeeName
-        : row.employeeId || row.employeeToken || "(unknown)";
-      return `${identifier} – ${row.dateISO}`;
-    });
-    return [
-      {
-        type: "GENERAL",
-        level: "info",
-        message: "Excused day with punches credited as OT (Excused)",
-        count: rows.length,
-        samples,
-      },
-    ] satisfies ParseWarning[];
-  }, [filteredPerDayRows]);
+  if (!perDay?.length) return [] as ParseWarning[];
+  const rows = perDay.filter((row) => (row.OT_excused ?? 0) > 0);
+  if (!rows.length) return [] as ParseWarning[];
+  const samples = rows.slice(0, MAX_WARNING_SAMPLE_COUNT).map((row) => {
+    const identifier = row.employeeName?.trim()
+      ? row.employeeName
+      : row.employeeId || row.employeeToken || "(unknown)";
+    return `${identifier} – ${row.dateISO}`;
+  });
+  return [
+    {
+      type: "GENERAL",
+      level: "info",
+      message: "Excused day with punches credited as OT (Excused)",
+      count: rows.length,
+      samples,
+    },
+  ] satisfies ParseWarning[];
+}, [perDay]);
 
   const aggregatedWarnings = useMemo(() => {
     const sources: ParseWarning[][] = [];

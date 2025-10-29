@@ -48,6 +48,7 @@ const SORT_FIELD_LABELS: Record<SummarySortField, string> = {
   undertimePercent: "UT %",
   lateMinutes: "Late (min)",
   undertimeMinutes: "UT (min)",
+  otTotalMinutes:"OT (min)"
 };
 
 const SORT_FIELD_OPTIONS: { value: SummarySortField; label: string }[] = (
