@@ -17,4 +17,5 @@ export type ManualExclusion = {
   employeeIds?: string[];
   reason: ManualExclusionReason;
   note?: string;
+  otEligible?: boolean;
 };

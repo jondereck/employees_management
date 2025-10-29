@@ -66,7 +66,7 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 const MINUTES_IN_DAY = 24 * 60;
 
-type MinuteInterval = { start: number; end: number };
+export type MinuteInterval = { start: number; end: number };
 
 const WEEKDAY_TABLE: WeekdayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
@@ -146,6 +146,7 @@ export function evaluateDay(input: DayEvalInput) {
 
   const e = input.earliest && isValidTime(input.earliest) ? toMin(input.earliest) : null;
   const l = input.latest && isValidTime(input.latest) ? toMin(input.latest) : null;
+  const presenceSegments = derivePresenceSegments(normalizedTimes, e, l);
 
   const breakMin =
     "breakMinutes" in input.schedule && input.schedule.breakMinutes
@@ -259,7 +260,6 @@ export function evaluateDay(input: DayEvalInput) {
         weeklyPatternApplied = true;
         weeklyPatternWindows = weeklyDay.windows;
 
-        const presenceSegments = derivePresenceSegments(normalizedTimes, e, l);
         const windowSegments = expandWindows(weeklyDay.windows);
         const clampedSegments = clampToWindows(presenceSegments, windowSegments);
         weeklyPatternPresence = toHHMMSegments(clampedSegments);
@@ -427,5 +427,6 @@ export function evaluateDay(input: DayEvalInput) {
     weeklyPatternWindows,
     weeklyPatternPresence,
     weeklyExclusionApplied,
+    presenceSegments,
   };
 }

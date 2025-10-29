@@ -94,6 +94,13 @@ export type PerDayRow = ParsedPerDayRow & {
   workedHHMM?: string | null;
   workedMinutes?: number | null;
   presenceMinutes?: number | null;
+  OT_pre?: number | null;
+  OT_post?: number | null;
+  OT_restday?: number | null;
+  OT_holiday?: number | null;
+  OT_excused?: number | null;
+  OT_total?: number | null;
+  ND_minutes?: number | null;
   absent?: boolean;
   scheduleType?: string;
   scheduleSource?: string;
@@ -111,6 +118,7 @@ export type PerDayRow = ParsedPerDayRow & {
   weeklyExclusionMode?: string | null;
   weeklyExclusionIgnoreUntil?: string | null;
   weeklyExclusionId?: string | null;
+  notes?: string[];
 };
 
 export type PerEmployeeRow = {
@@ -133,6 +141,13 @@ export type PerEmployeeRow = {
   scheduleSource?: string;
   totalLateMinutes: number;
   totalUndertimeMinutes: number;
+  totalOTMinutes: number;
+  totalOTPreMinutes: number;
+  totalOTPostMinutes: number;
+  totalOTRestdayMinutes: number;
+  totalOTHolidayMinutes: number;
+  totalOTExcusedMinutes: number;
+  totalNightDiffMinutes: number;
   totalRequiredMinutes: number;
   identityStatus: "matched" | "unmatched" | "ambiguous";
   weeklyPatternDayCount: number;
@@ -1066,6 +1081,13 @@ type AggregateRow = {
   undertimeDays: number;
   totalLateMinutes: number;
   totalUndertimeMinutes: number;
+  totalOTMinutes: number;
+  totalOTPreMinutes: number;
+  totalOTPostMinutes: number;
+  totalOTRestdayMinutes: number;
+  totalOTHolidayMinutes: number;
+  totalOTExcusedMinutes: number;
+  totalNightDiffMinutes: number;
   totalRequiredMinutes: number;
   scheduleTypes: Set<string>;
   scheduleSourceSet: Set<string>;
@@ -1254,6 +1276,13 @@ export function summarizePerEmployee(
       | "workedMinutes"
       | "absent"
       | "weeklyPatternApplied"
+      | "OT_total"
+      | "OT_pre"
+      | "OT_post"
+      | "OT_restday"
+      | "OT_holiday"
+      | "OT_excused"
+      | "ND_minutes"
     >
   >,
   options?: ScheduleSummaryOptions
@@ -1283,6 +1312,13 @@ export function summarizePerEmployee(
         undertimeDays: 0,
         totalLateMinutes: 0,
         totalUndertimeMinutes: 0,
+        totalOTMinutes: 0,
+        totalOTPreMinutes: 0,
+        totalOTPostMinutes: 0,
+        totalOTRestdayMinutes: 0,
+        totalOTHolidayMinutes: 0,
+        totalOTExcusedMinutes: 0,
+        totalNightDiffMinutes: 0,
         totalRequiredMinutes: 0,
         scheduleTypes: new Set<string>(),
         scheduleSourceSet: new Set<string>(),
@@ -1330,6 +1366,21 @@ export function summarizePerEmployee(
         agg.weeklyPatternDays += 1;
       }
     }
+
+    const otTotal = Number(row.OT_total ?? 0);
+    if (Number.isFinite(otTotal)) agg.totalOTMinutes += otTotal;
+    const otPre = Number(row.OT_pre ?? 0);
+    if (Number.isFinite(otPre)) agg.totalOTPreMinutes += otPre;
+    const otPost = Number(row.OT_post ?? 0);
+    if (Number.isFinite(otPost)) agg.totalOTPostMinutes += otPost;
+    const otRestday = Number(row.OT_restday ?? 0);
+    if (Number.isFinite(otRestday)) agg.totalOTRestdayMinutes += otRestday;
+    const otHoliday = Number(row.OT_holiday ?? 0);
+    if (Number.isFinite(otHoliday)) agg.totalOTHolidayMinutes += otHoliday;
+    const otExcused = Number(row.OT_excused ?? 0);
+    if (Number.isFinite(otExcused)) agg.totalOTExcusedMinutes += otExcused;
+    const ndMinutes = Number(row.ND_minutes ?? 0);
+    if (Number.isFinite(ndMinutes)) agg.totalNightDiffMinutes += ndMinutes;
     if (row.absent) {
       agg.absences += 1;
     }
@@ -1358,6 +1409,13 @@ export function summarizePerEmployee(
     scheduleSource: resolveScheduleSourceForAggregate(entry, options),
     totalLateMinutes: Math.round(entry.totalLateMinutes),
     totalUndertimeMinutes: Math.round(entry.totalUndertimeMinutes),
+    totalOTMinutes: Math.round(entry.totalOTMinutes),
+    totalOTPreMinutes: Math.round(entry.totalOTPreMinutes),
+    totalOTPostMinutes: Math.round(entry.totalOTPostMinutes),
+    totalOTRestdayMinutes: Math.round(entry.totalOTRestdayMinutes),
+    totalOTHolidayMinutes: Math.round(entry.totalOTHolidayMinutes),
+    totalOTExcusedMinutes: Math.round(entry.totalOTExcusedMinutes),
+    totalNightDiffMinutes: Math.round(entry.totalNightDiffMinutes),
     totalRequiredMinutes: Math.round(entry.totalRequiredMinutes),
     identityStatus: entry.identityStatus,
     weeklyPatternDayCount: entry.weeklyPatternDays,
@@ -1544,15 +1602,22 @@ type PerDayColumnKey =
   | "scheduleType"
   | "scheduleSource"
   | "date"
+  | "status"
   | "earliest"
   | "latest"
   | "workedMinutes"
+  | "OT_pre"
+  | "OT_post"
+  | "OT_restday"
+  | "OT_holiday"
+  | "OT_excused"
+  | "OT_total"
+  | "ND_minutes"
   | "lateFlag"
   | "lateMinutes"
   | "undertimeFlag"
   | "undertimeMinutes"
   | "requiredMinutes"
-  | "status"
   | "weeklyPattern"
   | "punches"
   | "sourceFiles";
@@ -1584,6 +1649,13 @@ const PER_DAY_COLUMNS: PerDayColumnDefinition[] = [
   { key: "earliest", label: "Earliest", type: "time", width: "time" },
   { key: "latest", label: "Latest", type: "time", width: "time" },
   { key: "workedMinutes", label: "Worked (min)", type: "minutes", width: "numeric" },
+  { key: "OT_pre", label: "OT (pre)", type: "minutes", width: "numeric" },
+  { key: "OT_post", label: "OT (post)", type: "minutes", width: "numeric" },
+  { key: "OT_restday", label: "Rest day OT", type: "minutes", width: "numeric" },
+  { key: "OT_holiday", label: "Holiday OT", type: "minutes", width: "numeric" },
+  { key: "OT_excused", label: "Excused OT", type: "minutes", width: "numeric" },
+  { key: "OT_total", label: "OT (min)", type: "minutes", width: "numeric" },
+  { key: "ND_minutes", label: "Night diff", type: "minutes", width: "numeric" },
   { key: "lateFlag", label: "Late?", type: "text", width: "numeric" },
   { key: "lateMinutes", label: "Late (min)", type: "minutes", width: "numeric" },
   { key: "undertimeFlag", label: "Undertime?", type: "text", width: "numeric" },
@@ -1722,6 +1794,13 @@ const computeSummaryRow = (
     undertimePercent: typeof row.undertimeRate === "number" ? row.undertimeRate / 100 : null,
     lateMinutes: row.totalLateMinutes ?? 0,
     undertimeMinutes: row.totalUndertimeMinutes ?? 0,
+    otTotalMinutes: row.totalOTMinutes ?? 0,
+    otPreMinutes: row.totalOTPreMinutes ?? 0,
+    otPostMinutes: row.totalOTPostMinutes ?? 0,
+    otRestdayMinutes: row.totalOTRestdayMinutes ?? 0,
+    otHolidayMinutes: row.totalOTHolidayMinutes ?? 0,
+    otExcusedMinutes: row.totalOTExcusedMinutes ?? 0,
+    nightDiffMinutes: row.totalNightDiffMinutes ?? 0,
     resolvedEmployeeId: row.resolvedEmployeeId?.trim() || null,
     resolvedAt: null,
     sourceFilesCount: sourceFileCounts.get(key) ?? null,
@@ -1738,6 +1817,13 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
   let totalUndertimeDays = 0;
   let totalLateMinutes = 0;
   let totalUndertimeMinutes = 0;
+  let totalOTMinutes = 0;
+  let totalOTPreMinutes = 0;
+  let totalOTPostMinutes = 0;
+  let totalOTRestdayMinutes = 0;
+  let totalOTHolidayMinutes = 0;
+  let totalOTExcusedMinutes = 0;
+  let totalNightDiffMinutes = 0;
   let totalSourceFiles = 0;
 
   for (const row of rows) {
@@ -1749,6 +1835,13 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
     totalUndertimeDays += Number(row.undertimeDays ?? 0);
     totalLateMinutes += Number(row.lateMinutes ?? 0);
     totalUndertimeMinutes += Number(row.undertimeMinutes ?? 0);
+    totalOTMinutes += Number(row.otTotalMinutes ?? 0);
+    totalOTPreMinutes += Number(row.otPreMinutes ?? 0);
+    totalOTPostMinutes += Number(row.otPostMinutes ?? 0);
+    totalOTRestdayMinutes += Number(row.otRestdayMinutes ?? 0);
+    totalOTHolidayMinutes += Number(row.otHolidayMinutes ?? 0);
+    totalOTExcusedMinutes += Number(row.otExcusedMinutes ?? 0);
+    totalNightDiffMinutes += Number(row.nightDiffMinutes ?? 0);
     totalSourceFiles += Number(row.sourceFilesCount ?? 0);
   }
 
@@ -1760,6 +1853,13 @@ const summarizeTotals = (rows: SummaryRowValues[]): SummaryTotals => {
   totals.undertimeDays = totalUndertimeDays;
   totals.lateMinutes = totalLateMinutes;
   totals.undertimeMinutes = totalUndertimeMinutes;
+  totals.otTotalMinutes = totalOTMinutes;
+  totals.otPreMinutes = totalOTPreMinutes;
+  totals.otPostMinutes = totalOTPostMinutes;
+  totals.otRestdayMinutes = totalOTRestdayMinutes;
+  totals.otHolidayMinutes = totalOTHolidayMinutes;
+  totals.otExcusedMinutes = totalOTExcusedMinutes;
+  totals.nightDiffMinutes = totalNightDiffMinutes;
   totals.sourceFilesCount = totalSourceFiles;
   totals.latePercent = totalDays > 0 ? totalLateDays / totalDays : null;
   totals.undertimePercent = totalDays > 0 ? totalUndertimeDays / totalDays : null;
@@ -2015,6 +2115,20 @@ const buildPerDaySheet = (
           return toExcelTimeNumber(row.latest ?? null);
         case "workedMinutes":
           return row.workedMinutes ?? null;
+        case "OT_pre":
+          return row.OT_pre ?? null;
+        case "OT_post":
+          return row.OT_post ?? null;
+        case "OT_restday":
+          return row.OT_restday ?? null;
+        case "OT_holiday":
+          return row.OT_holiday ?? null;
+        case "OT_excused":
+          return row.OT_excused ?? null;
+        case "OT_total":
+          return row.OT_total ?? null;
+        case "ND_minutes":
+          return row.ND_minutes ?? null;
         case "lateFlag": {
           if (evaluationStatus === "no_punch") return "No punches";
           if (evaluationStatus === "excused") return "Excused";

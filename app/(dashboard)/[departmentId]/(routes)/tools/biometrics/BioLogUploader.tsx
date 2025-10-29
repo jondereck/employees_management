@@ -32,6 +32,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { CheckedState } from "@radix-ui/react-checkbox";
 import {
   Command,
   CommandEmpty,
@@ -133,6 +134,13 @@ import {
   type MetricMode,
 } from "./insights-types";
 import { Switch } from "@/components/ui/switch";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import type { FlexOTMode, OvertimePolicy, OvertimeRounding } from "@/types/attendance";
 
 const PAGE_SIZE = 25;
 
@@ -148,6 +156,134 @@ const formatTimelineLabel = (segments: { start: string; end: string }[]) => {
   if (!segments.length) return "none";
   return segments.map((segment) => `${segment.start}–${segment.end}`).join(", ");
 };
+
+type OvertimePolicyState = Omit<OvertimePolicy, "mealDeductMin" | "mealTriggerMin"> & {
+  mealDeductMin: number | null;
+  mealTriggerMin: number | null;
+};
+
+type OvertimePolicyPayload = {
+  rounding: OvertimeRounding;
+  graceAfterEndMin: number;
+  countPreShift: boolean;
+  minBlockMin: number;
+  mealDeductMin: number | null;
+  mealTriggerMin: number | null;
+  nightDiffEnabled: boolean;
+  flexMode: FlexOTMode;
+  overtimeOnExcused: boolean;
+};
+
+const OVERTIME_STORAGE_PREFIX = "hrps.biometrics.overtimePolicy";
+
+const defaultOvertimePolicy: OvertimePolicyState = {
+  rounding: "nearest15",
+  graceAfterEndMin: 0,
+  countPreShift: false,
+  minBlockMin: 30,
+  mealDeductMin: 60,
+  mealTriggerMin: 300,
+  nightDiffEnabled: false,
+  flexMode: "strict",
+  overtimeOnExcused: true,
+};
+
+const OVERTIME_ROUNDING_OPTIONS: ReadonlyArray<{ value: OvertimeRounding; label: string }> = [
+  { value: "none", label: "No rounding" },
+  { value: "nearest15", label: "Nearest 15 minutes" },
+  { value: "nearest30", label: "Nearest 30 minutes" },
+];
+
+const FLEX_MODE_OPTIONS: ReadonlyArray<{ value: FlexOTMode; label: string; description: string }> = [
+  {
+    value: "strict",
+    label: "Strict",
+    description: "Only minutes outside the flex bandwidth count as overtime.",
+  },
+  {
+    value: "soft",
+    label: "Soft",
+    description: "Count overflow minutes beyond the required daily minutes even within the bandwidth.",
+  },
+];
+
+const toNonNegativeInt = (value: unknown, fallback: number): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.round(parsed));
+};
+
+const sanitizeOvertimePolicyState = (
+  policy: Partial<OvertimePolicyState> | null | undefined
+): OvertimePolicyState => {
+  const rounding: OvertimeRounding =
+    policy?.rounding === "none" || policy?.rounding === "nearest30" || policy?.rounding === "nearest15"
+      ? policy.rounding
+      : defaultOvertimePolicy.rounding;
+
+  const flexMode: FlexOTMode = policy?.flexMode === "soft" ? "soft" : "strict";
+
+  const graceAfterEndMin = toNonNegativeInt(
+    policy?.graceAfterEndMin,
+    defaultOvertimePolicy.graceAfterEndMin
+  );
+  const minBlockMin = toNonNegativeInt(policy?.minBlockMin, defaultOvertimePolicy.minBlockMin);
+
+  let mealDeductMin: number | null;
+  if (policy?.mealDeductMin === null) {
+    mealDeductMin = null;
+  } else if (policy?.mealDeductMin === undefined) {
+    mealDeductMin = defaultOvertimePolicy.mealDeductMin ?? null;
+  } else {
+    mealDeductMin = toNonNegativeInt(policy.mealDeductMin, defaultOvertimePolicy.mealDeductMin ?? 0);
+  }
+
+  let mealTriggerMin: number | null;
+  if (policy?.mealTriggerMin === null) {
+    mealTriggerMin = null;
+  } else if (policy?.mealTriggerMin === undefined) {
+    mealTriggerMin = defaultOvertimePolicy.mealTriggerMin ?? null;
+  } else {
+    mealTriggerMin = toNonNegativeInt(policy.mealTriggerMin, defaultOvertimePolicy.mealTriggerMin ?? 0);
+  }
+
+  return {
+    rounding,
+    graceAfterEndMin,
+    countPreShift: Boolean(policy?.countPreShift),
+    minBlockMin,
+    mealDeductMin,
+    mealTriggerMin,
+    nightDiffEnabled: Boolean(policy?.nightDiffEnabled),
+    flexMode,
+    overtimeOnExcused: policy?.overtimeOnExcused === false ? false : true,
+  } satisfies OvertimePolicyState;
+};
+
+const toOvertimePolicyPayload = (policy: OvertimePolicyState): OvertimePolicyPayload => ({
+  rounding: policy.rounding,
+  graceAfterEndMin: policy.graceAfterEndMin,
+  countPreShift: policy.countPreShift,
+  minBlockMin: policy.minBlockMin,
+  mealDeductMin: policy.mealDeductMin ?? null,
+  mealTriggerMin: policy.mealTriggerMin ?? null,
+  nightDiffEnabled: policy.nightDiffEnabled,
+  flexMode: policy.flexMode,
+  overtimeOnExcused: policy.overtimeOnExcused,
+});
+
+const serializeOvertimePolicy = (policy: OvertimePolicyPayload): string =>
+  [
+    policy.rounding,
+    policy.graceAfterEndMin,
+    policy.countPreShift ? 1 : 0,
+    policy.minBlockMin,
+    policy.mealDeductMin ?? "null",
+    policy.mealTriggerMin ?? "null",
+    policy.nightDiffEnabled ? 1 : 0,
+    policy.flexMode,
+    policy.overtimeOnExcused ? 1 : 0,
+  ].join(":");
 
 type ColumnFilterOperator = "=" | ">" | ">=" | "<" | "<=";
 
@@ -280,6 +416,7 @@ const ManualExclusionDialog = ({
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>(initial?.employeeIds ?? []);
   const [reason, setReason] = useState<ManualExclusionReason>(initial?.reason ?? "LEAVE");
   const [note, setNote] = useState<string>(initial?.note ?? "");
+  const [otEligible, setOtEligible] = useState<boolean | null>(initial?.otEligible ?? null);
   const [officePopoverOpen, setOfficePopoverOpen] = useState(false);
   const [employeePopoverOpen, setEmployeePopoverOpen] = useState(false);
 
@@ -291,6 +428,7 @@ const ManualExclusionDialog = ({
     setSelectedEmployees(initial?.employeeIds ?? []);
     setReason(initial?.reason ?? "LEAVE");
     setNote(initial?.note ?? "");
+    setOtEligible(initial?.otEligible ?? null);
   }, [initial, open]);
 
   const officeNameMap = useMemo(() => new Map(offices.map((office) => [office.id, office.name])), [offices]);
@@ -400,6 +538,9 @@ const ManualExclusionDialog = ({
     }
     if (scope === "employees") {
       payload.employeeIds = selectedEmployees.slice();
+    }
+    if (otEligible !== null) {
+      payload.otEligible = otEligible;
     }
     onSubmit(payload);
     onOpenChange(false);
@@ -603,6 +744,43 @@ const ManualExclusionDialog = ({
               rows={3}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="manual-exclusion-ot" className="text-sm font-medium">
+              Overtime credit
+            </Label>
+            <div className="flex items-start gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-3 py-2">
+              <Checkbox
+                id="manual-exclusion-ot"
+                checked={otEligible === null ? "indeterminate" : otEligible}
+                onCheckedChange={(value: CheckedState) => {
+                  if (value === "indeterminate") {
+                    setOtEligible(true);
+                    return;
+                  }
+                  setOtEligible(value === true);
+                }}
+              />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Count OT if worked</p>
+                <p className="text-xs text-muted-foreground">
+                  Override the global overtime policy for this exclusion. Leave unset to inherit the period default.
+                </p>
+                {otEligible === null ? (
+                  <p className="text-[11px] text-muted-foreground/80">Inheriting global setting.</p>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-0 text-xs"
+                    onClick={() => setOtEligible(null)}
+                  >
+                    Reset to inherit
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
         <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
@@ -658,6 +836,24 @@ const computeUndertimePercentMinutes = (row: PerEmployeeRow): number | null => {
 const formatPercentLabel = (value: number | null | undefined) => {
   if (value == null || Number.isNaN(value)) return "—";
   return `${value.toFixed(1)}%`;
+};
+
+const formatMinutesHM = (value: number): string => {
+  const total = Math.round(value);
+  const abs = Math.abs(total);
+  const hours = Math.floor(abs / 60);
+  const minutes = abs % 60;
+  const label = `${hours}:${minutes.toString().padStart(2, "0")}`;
+  return total < 0 ? `-${label}` : label;
+};
+
+const formatMinutesOrDash = (value: number | null | undefined): string => {
+  if (value == null) return "—";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "—";
+  const minutes = Math.max(0, Math.round(numeric));
+  if (minutes <= 0) return "—";
+  return formatMinutesHM(minutes);
 };
 
 const getEmployeeIdentifierSortKey = (
@@ -904,6 +1100,10 @@ const sanitizeManualExclusions = (value: unknown): ManualExclusion[] => {
     const employeeIds = scope === "employees" ? sanitizeManualIds((entry as ManualExclusion).employeeIds) : undefined;
     if (scope === "employees" && !employeeIds?.length) continue;
     const note = normalizeManualNote((entry as ManualExclusion).note);
+    const otEligible =
+      typeof (entry as ManualExclusion).otEligible === "boolean"
+        ? (entry as ManualExclusion).otEligible
+        : undefined;
     sanitized.push({
       id,
       scope,
@@ -912,6 +1112,7 @@ const sanitizeManualExclusions = (value: unknown): ManualExclusion[] => {
       officeIds,
       employeeIds,
       note,
+      otEligible,
     });
   }
   return sortManualExclusions(sanitized);
@@ -985,7 +1186,8 @@ const composeManualDate = (year: number, month: number, day: number): string | n
 const makeEvaluationPayloadKey = (
   manualKey: string,
   rows: ParsedPerDayRow[],
-  manualExclusions: ManualExclusion[] | null | undefined
+  manualExclusions: ManualExclusion[] | null | undefined,
+  overtimePolicy: OvertimePolicyPayload
 ) => {
   const manualFragment = manualExclusions && manualExclusions.length
     ? manualExclusions
@@ -1005,7 +1207,8 @@ const makeEvaluationPayloadKey = (
       return `${token}:${row.dateISO}:${row.allTimes.join("|")}:${row.employeeName}:${officeKey}`;
     })
     .join("#");
-  return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}`;
+  const policyFragment = serializeOvertimePolicy(overtimePolicy);
+  return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}::${policyFragment}`;
 };
 
 const getNormalizedTokenForRow = (row: {
@@ -1550,6 +1753,8 @@ function BioLogUploaderContent() {
   const [manualPeriodHydrated, setManualPeriodHydrated] = useState(false);
   const [manualExclusions, setManualExclusions] = useState<ManualExclusion[]>([]);
   const [manualExclusionsHydrated, setManualExclusionsHydrated] = useState(false);
+  const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicyState>(defaultOvertimePolicy);
+  const [overtimeHydrated, setOvertimeHydrated] = useState(false);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [manualDialogEditing, setManualDialogEditing] = useState<ManualExclusion | null>(null);
   const [identityState, setIdentityState] = useState<IdentityStatus>({
@@ -1598,6 +1803,11 @@ function BioLogUploaderContent() {
     }
     return rows;
   }, [perEmployee]);
+
+  const overtimePolicyPayload = useMemo(
+    () => toOvertimePolicyPayload(overtimePolicy),
+    [overtimePolicy]
+  );
 
   const [columnOrder, setColumnOrder] = useState<SummaryColumnKey[]>(initialColumnSettings.order);
   const [selectedColumnKeys, setSelectedColumnKeys] = useState<SummaryColumnKey[]>(
@@ -1715,6 +1925,7 @@ function BioLogUploaderContent() {
             draft.scope === "employees" && draft.employeeIds?.length
               ? [...draft.employeeIds]
               : undefined,
+          otEligible: draft.otEligible ?? undefined,
         };
         if (manualDialogEditing) {
           return sortManualExclusions(
@@ -2277,6 +2488,11 @@ function BioLogUploaderContent() {
     return `hrps.biometrics.manualExclusions.${activePeriod.year}-${pad2(activePeriod.month)}`;
   }, [activePeriod]);
 
+  const overtimePolicyStorageKey = useMemo(() => {
+    if (!activePeriod) return null;
+    return `${OVERTIME_STORAGE_PREFIX}.${activePeriod.year}-${pad2(activePeriod.month)}`;
+  }, [activePeriod]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!manualExclusionStorageKey) {
@@ -2315,6 +2531,45 @@ function BioLogUploaderContent() {
       console.warn("Failed to persist manual exclusions", error);
     }
   }, [manualExclusionStorageKey, manualExclusions, manualExclusionsHydrated]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!overtimePolicyStorageKey) {
+      setOvertimePolicy(sanitizeOvertimePolicyState(defaultOvertimePolicy));
+      setOvertimeHydrated(true);
+      return;
+    }
+    setOvertimeHydrated(false);
+    try {
+      const raw = window.localStorage.getItem(overtimePolicyStorageKey);
+      if (!raw) {
+        setOvertimePolicy(sanitizeOvertimePolicyState(defaultOvertimePolicy));
+      } else {
+        const parsed = JSON.parse(raw) as Partial<OvertimePolicyState>;
+        setOvertimePolicy(sanitizeOvertimePolicyState(parsed));
+      }
+    } catch (error) {
+      console.warn("Failed to load overtime policy", error);
+      setOvertimePolicy(sanitizeOvertimePolicyState(defaultOvertimePolicy));
+    } finally {
+      setOvertimeHydrated(true);
+    }
+  }, [overtimePolicyStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!overtimePolicyStorageKey || !overtimeHydrated) return;
+    try {
+      const payload = JSON.stringify({
+        ...overtimePolicy,
+        mealDeductMin: overtimePolicy.mealDeductMin ?? null,
+        mealTriggerMin: overtimePolicy.mealTriggerMin ?? null,
+      });
+      window.localStorage.setItem(overtimePolicyStorageKey, payload);
+    } catch (error) {
+      console.warn("Failed to persist overtime policy", error);
+    }
+  }, [overtimeHydrated, overtimePolicy, overtimePolicyStorageKey]);
 
   const manualExclusionContext = useMemo(() => {
     if (!manualExclusions.length) {
@@ -2415,6 +2670,27 @@ function BioLogUploaderContent() {
     [filteredPerDayRows, identityMap, identityState.status]
   );
 
+  const excusedOtWarnings = useMemo(() => {
+  if (!perDay?.length) return [] as ParseWarning[];
+  const rows = perDay.filter((row) => (row.OT_excused ?? 0) > 0);
+  if (!rows.length) return [] as ParseWarning[];
+  const samples = rows.slice(0, MAX_WARNING_SAMPLE_COUNT).map((row) => {
+    const identifier = row.employeeName?.trim()
+      ? row.employeeName
+      : row.employeeId || row.employeeToken || "(unknown)";
+    return `${identifier} – ${row.dateISO}`;
+  });
+  return [
+    {
+      type: "GENERAL",
+      level: "info",
+      message: "Excused day with punches credited as OT (Excused)",
+      count: rows.length,
+      samples,
+    },
+  ] satisfies ParseWarning[];
+}, [perDay]);
+
   const aggregatedWarnings = useMemo(() => {
     const sources: ParseWarning[][] = [];
     for (const file of parsedFiles) {
@@ -2428,9 +2704,12 @@ function BioLogUploaderContent() {
     if (identityWarnings.length) {
       sources.push(identityWarnings);
     }
+    if (excusedOtWarnings.length) {
+      sources.push(excusedOtWarnings);
+    }
     if (!sources.length) return [];
     return aggregateWarnings(sources);
-  }, [identityWarnings, mergeResult, parsedFiles]);
+  }, [excusedOtWarnings, identityWarnings, mergeResult, parsedFiles]);
 
   useEffect(() => {
     if (aggregatedWarnings.length === 0) {
@@ -2469,6 +2748,7 @@ function BioLogUploaderContent() {
     }
 
     if (!manualExclusionsHydrated) return;
+    if (!overtimeHydrated) return;
 
     const manualKey = manualPeriodSelection
       ? `${manualPeriodSelection.year}-${pad2(manualPeriodSelection.month)}`
@@ -2476,18 +2756,23 @@ function BioLogUploaderContent() {
 
     if (skipAutoEvaluateRef.current) return;
 
+    const manualPayload = manualExclusionContext.applicable;
+    const payloadKey = makeEvaluationPayloadKey(
+      manualKey,
+      filteredPerDayRows,
+      manualPayload,
+      overtimePolicyPayload
+    );
+
     if (!filteredPerDayRows.length) {
-      const emptyKey = `${manualKey}:empty`;
-      if (lastEvaluatedKey.current !== emptyKey) {
+      if (lastEvaluatedKey.current !== payloadKey) {
         setPerDay([]);
         setPerEmployee([]);
-        lastEvaluatedKey.current = emptyKey;
+        lastEvaluatedKey.current = payloadKey;
       }
       return;
     }
 
-    const manualPayload = manualExclusionContext.applicable;
-    const payloadKey = makeEvaluationPayloadKey(manualKey, filteredPerDayRows, manualPayload);
     if (payloadKey === lastEvaluatedKey.current) return;
 
     const controller = new AbortController();
@@ -2512,6 +2797,7 @@ function BioLogUploaderContent() {
             composedFromDayOnly: row.composedFromDayOnly,
           })),
           manualExclusions: manualPayload,
+          evaluationOptions: { overtime: overtimePolicyPayload },
         };
 
         const response = await timeout(
@@ -2574,6 +2860,8 @@ function BioLogUploaderContent() {
     manualSelectionValid,
     mergeResult,
     mixedMonthsContext.confirmed,
+    overtimeHydrated,
+    overtimePolicyPayload,
     toast,
     useManualPeriod,
   ]);
@@ -2740,6 +3028,20 @@ function BioLogUploaderContent() {
           return row.totalLateMinutes ?? 0;
         case "undertimeMinutes":
           return row.totalUndertimeMinutes ?? 0;
+        case "otTotalMinutes":
+          return row.totalOTMinutes ?? 0;
+        case "otPreMinutes":
+          return row.totalOTPreMinutes ?? 0;
+        case "otPostMinutes":
+          return row.totalOTPostMinutes ?? 0;
+        case "otRestdayMinutes":
+          return row.totalOTRestdayMinutes ?? 0;
+        case "otHolidayMinutes":
+          return row.totalOTHolidayMinutes ?? 0;
+        case "otExcusedMinutes":
+          return row.totalOTExcusedMinutes ?? 0;
+        case "nightDiffMinutes":
+          return row.totalNightDiffMinutes ?? 0;
         case "resolvedEmployeeId":
           return row.resolvedEmployeeId ?? "";
         default:
@@ -3031,7 +3333,8 @@ const applyColumnFilters = useCallback(
         lastEvaluatedKey.current = makeEvaluationPayloadKey(
           manualKey,
           filteredPerDayRows,
-          manualPayload
+          manualPayload,
+          overtimePolicyPayload
         );
         return;
       }
@@ -3118,7 +3421,8 @@ const applyColumnFilters = useCallback(
       lastEvaluatedKey.current = makeEvaluationPayloadKey(
         manualKey,
         updatedFilteredRows,
-        manualPayload
+        manualPayload,
+        overtimePolicyPayload
       );
 
       const hasResolvedEmployee = payload.perEmployee.some((row) => row.resolvedEmployeeId);
@@ -3136,6 +3440,7 @@ const applyColumnFilters = useCallback(
       setPerEmployee,
       toast,
       useManualPeriod,
+      overtimePolicyPayload,
     ]
   );
 
@@ -3721,6 +4026,7 @@ const applyColumnFilters = useCallback(
                     : `Employees (${employeeNames.length})`;
                 const scopeDetails = exclusion.scope === "offices" ? officeNames : employeeNames;
                 const outOfPeriod = manualOutOfPeriodMap.get(exclusion.id) ?? 0;
+                const effectiveOtEligible = (exclusion.otEligible ?? overtimePolicy.overtimeOnExcused) === true;
                 return (
                   <li
                     key={exclusion.id}
@@ -3747,6 +4053,11 @@ const applyColumnFilters = useCallback(
                         )}
                         {outOfPeriod > 0 ? ` • ${outOfPeriod} out of period` : null}
                       </p>
+                      {effectiveOtEligible ? (
+                        <Badge className="mt-1 border-emerald-500/70 bg-emerald-500/15 text-emerald-700" variant="outline">
+                          OT eligible
+                        </Badge>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-1">
                       <Button
@@ -3774,17 +4085,308 @@ const applyColumnFilters = useCallback(
           ) : (
             <p className="text-xs text-muted-foreground">No manual exclusions for this period.</p>
           )}
-          {manualOutOfPeriodTotal > 0 && manualActivePeriodLabel ? (
-            <p className="text-xs text-amber-600">
-              {manualOutOfPeriodTotal} date{manualOutOfPeriodTotal === 1 ? "" : "s"} outside {manualActivePeriodLabel}{" "}
-              will be ignored during evaluation.
-            </p>
-          ) : null}
-        </div>
+        {manualOutOfPeriodTotal > 0 && manualActivePeriodLabel ? (
+          <p className="text-xs text-amber-600">
+            {manualOutOfPeriodTotal} date{manualOutOfPeriodTotal === 1 ? "" : "s"} outside {manualActivePeriodLabel}{" "}
+            will be ignored during evaluation.
+          </p>
+        ) : null}
       </div>
+    </div>
 
-      <div
-        onDragOver={onDragOver}
+    <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-background/60">
+      <Accordion type="single" collapsible defaultValue="overtime-policy">
+        <AccordionItem value="overtime-policy" className="border-none">
+          <AccordionTrigger className="px-4 text-sm font-semibold">
+            ⚙️ Overtime policy
+          </AccordionTrigger>
+          <AccordionContent className="px-4">
+            {!overtimeHydrated ? (
+              <p className="text-xs text-muted-foreground">Loading overtime settings…</p>
+            ) : (
+              <div className="space-y-4 py-2">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-rounding" className="text-sm font-medium">
+                      Rounding
+                    </Label>
+                    <Select
+                      value={overtimePolicy.rounding}
+                      onValueChange={(value) =>
+                        setOvertimePolicy((prev) =>
+                          sanitizeOvertimePolicyState({
+                            ...prev,
+                            rounding: value as OvertimeRounding,
+                          })
+                        )
+                      }
+                      disabled={!overtimeHydrated}
+                    >
+                      <SelectTrigger id="ot-rounding" className="h-9">
+                        <SelectValue placeholder="Select rounding" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OVERTIME_ROUNDING_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Round each overtime bucket to the selected increment.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-min-block" className="text-sm font-medium">
+                      Minimum OT block (min)
+                    </Label>
+                    <Input
+                      id="ot-min-block"
+                      type="number"
+                      min={0}
+                      value={overtimePolicy.minBlockMin}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setOvertimePolicy((prev) =>
+                          sanitizeOvertimePolicyState({
+                            ...prev,
+                            minBlockMin: value === "" ? 0 : Number(value),
+                          })
+                        );
+                      }}
+                      disabled={!overtimeHydrated}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Discard overtime fragments shorter than this before rounding.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-grace-after" className="text-sm font-medium">
+                      Grace after end (min)
+                    </Label>
+                    <Input
+                      id="ot-grace-after"
+                      type="number"
+                      min={0}
+                      value={overtimePolicy.graceAfterEndMin}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setOvertimePolicy((prev) =>
+                          sanitizeOvertimePolicyState({
+                            ...prev,
+                            graceAfterEndMin: value === "" ? 0 : Number(value),
+                          })
+                        );
+                      }}
+                      disabled={!overtimeHydrated}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Allow this many minutes after shift end before post-shift overtime starts.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-count-pre" className="text-sm font-medium">
+                      Count pre-shift minutes
+                    </Label>
+                    <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-3 py-2">
+                      <p className="text-xs text-muted-foreground">
+                        Include minutes before the scheduled start as pre-shift overtime.
+                      </p>
+                      <Switch
+                        id="ot-count-pre"
+                        checked={overtimePolicy.countPreShift}
+                        onCheckedChange={(checked) =>
+                          setOvertimePolicy((prev) =>
+                            sanitizeOvertimePolicyState({
+                              ...prev,
+                              countPreShift: Boolean(checked),
+                            })
+                          )
+                        }
+                        disabled={!overtimeHydrated}
+                      />
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <div className="flex items-start justify-between gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-3 py-2">
+                      <div className="space-y-1 pr-3">
+                        <p className="flex items-center gap-1 text-sm font-medium text-foreground">
+                          Credit OT if worked on excused days
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex">
+                                <Info className="h-4 w-4 text-muted-foreground" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Late/UT/Absence stay 0. If punches exist, minutes are credited to OT (Excused).
+                            </TooltipContent>
+                          </Tooltip>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Applies to manual exclusions with punches, treating work as excused overtime.
+                        </p>
+                      </div>
+                      <Switch
+                        id="ot-excused"
+                        checked={overtimePolicy.overtimeOnExcused}
+                        onCheckedChange={(checked) =>
+                          setOvertimePolicy((prev) =>
+                            sanitizeOvertimePolicyState({
+                              ...prev,
+                              overtimeOnExcused: Boolean(checked),
+                            })
+                          )
+                        }
+                        disabled={!overtimeHydrated}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-flex-mode" className="text-sm font-medium">
+                      Flex mode rule
+                    </Label>
+                    <Select
+                      value={overtimePolicy.flexMode}
+                      onValueChange={(value) =>
+                        setOvertimePolicy((prev) =>
+                          sanitizeOvertimePolicyState({
+                            ...prev,
+                            flexMode: value as FlexOTMode,
+                          })
+                        )
+                      }
+                      disabled={!overtimeHydrated}
+                    >
+                      <SelectTrigger id="ot-flex-mode" className="h-9">
+                        <SelectValue placeholder="Select flex overtime rule" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FLEX_MODE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {
+                        (FLEX_MODE_OPTIONS.find((option) => option.value === overtimePolicy.flexMode) ??
+                          FLEX_MODE_OPTIONS[0]
+                        ).description
+                      }
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-night-diff" className="text-sm font-medium">
+                      Night differential window
+                    </Label>
+                    <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-3 py-2">
+                      <div className="space-y-1 pr-3">
+                        <p className="text-sm font-medium text-foreground">Track 22:00–06:00</p>
+                        <p className="text-xs text-muted-foreground">
+                          Report overtime minutes overlapping the night differential window.
+                        </p>
+                      </div>
+                      <Switch
+                        id="ot-night-diff"
+                        checked={overtimePolicy.nightDiffEnabled}
+                        onCheckedChange={(checked) =>
+                          setOvertimePolicy((prev) =>
+                            sanitizeOvertimePolicyState({
+                              ...prev,
+                              nightDiffEnabled: Boolean(checked),
+                            })
+                          )
+                        }
+                        disabled={!overtimeHydrated}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-meal-deduct" className="text-sm font-medium">
+                      Auto meal deduction (min)
+                    </Label>
+                    <Input
+                      id="ot-meal-deduct"
+                      type="number"
+                      min={0}
+                      value={overtimePolicy.mealDeductMin ?? ""}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setOvertimePolicy((prev) =>
+                          sanitizeOvertimePolicyState({
+                            ...prev,
+                            mealDeductMin: value === "" ? null : Number(value),
+                          })
+                        );
+                      }}
+                      placeholder="e.g. 60"
+                      disabled={!overtimeHydrated}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Subtract this many minutes once total overtime meets the trigger. Set to 0 or blank to disable.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-meal-trigger" className="text-sm font-medium">
+                      Meal deduction trigger (min)
+                    </Label>
+                    <Input
+                      id="ot-meal-trigger"
+                      type="number"
+                      min={0}
+                      value={overtimePolicy.mealTriggerMin ?? ""}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setOvertimePolicy((prev) =>
+                          sanitizeOvertimePolicyState({
+                            ...prev,
+                            mealTriggerMin: value === "" ? null : Number(value),
+                          })
+                        );
+                      }}
+                      placeholder="e.g. 300"
+                      disabled={!overtimeHydrated}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Apply the meal deduction once total overtime reaches this threshold. Matches daily totals.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setOvertimePolicy(sanitizeOvertimePolicyState(defaultOvertimePolicy))
+                    }
+                    disabled={!overtimeHydrated}
+                  >
+                    Reset to defaults
+                  </Button>
+                </div>
+              </div>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </div>
+
+    <div
+      onDragOver={onDragOver}
         onDrop={onDrop}
         onDragLeave={onDragLeave}
         className={cn(
@@ -4274,6 +4876,32 @@ const applyColumnFilters = useCallback(
                       <ColumnFilterControl columnKey="undertimeDays" {...columnFilterControlProps} />
                     </div>
                   </th>
+                  <th className="p-2 text-center">
+                    <div className="inline-flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("otTotalMinutes")}
+                        className="inline-flex items-center gap-1 font-semibold"
+                        aria-label="Sort by total overtime minutes"
+                      >
+                        OT (min)
+                        <ArrowUpDown
+                          className={cn(
+                            "h-3.5 w-3.5 transition-transform",
+                            sortBy === "otTotalMinutes" ? "opacity-100" : "opacity-40",
+                            sortBy === "otTotalMinutes" && sortDir === "asc" ? "rotate-180" : undefined
+                          )}
+                        />
+                      </button>
+                      <ColumnFilterControl columnKey="otTotalMinutes" {...columnFilterControlProps} />
+                    </div>
+                  </th>
+                  <th className="p-2 text-center">
+                    <div className="inline-flex items-center justify-center gap-1">
+                      <span>Night diff (min)</span>
+                      <ColumnFilterControl columnKey="nightDiffMinutes" {...columnFilterControlProps} />
+                    </div>
+                  </th>
                   <th
                     className="p-2 text-center"
                     aria-label={
@@ -4425,12 +5053,19 @@ const applyColumnFilters = useCallback(
                     : UNKNOWN_OFFICE_LABEL;
                   const totalLateMinutes = Math.max(0, Math.round(row.totalLateMinutes ?? 0));
                   const totalUndertimeMinutes = Math.max(0, Math.round(row.totalUndertimeMinutes ?? 0));
+                  const totalOTMinutes = Math.max(0, Math.round(row.totalOTMinutes ?? 0));
+                  const totalOTPreMinutes = Math.max(0, Math.round(row.totalOTPreMinutes ?? 0));
+                  const totalOTPostMinutes = Math.max(0, Math.round(row.totalOTPostMinutes ?? 0));
+                  const totalOTRestdayMinutes = Math.max(0, Math.round(row.totalOTRestdayMinutes ?? 0));
+                  const totalOTHolidayMinutes = Math.max(0, Math.round(row.totalOTHolidayMinutes ?? 0));
+                  const totalNightDiffMinutes = Math.max(0, Math.round(row.totalNightDiffMinutes ?? 0));
                   const lateMinutesLabel = Number.isFinite(totalLateMinutes)
                     ? totalLateMinutes.toLocaleString()
                     : "0";
                   const undertimeMinutesLabel = Number.isFinite(totalUndertimeMinutes)
                     ? totalUndertimeMinutes.toLocaleString()
                     : "0";
+                  const otMinutesLabel = formatMinutesHM(totalOTMinutes);
                   const latePercentValue =
                     metricMode === "minutes"
                       ? computeLatePercentMinutes(row)
@@ -4470,6 +5105,31 @@ const applyColumnFilters = useCallback(
                   }
                   if (undertimeTooltipLines.length && row.weeklyPatternDayCount > 0) {
                     undertimeTooltipLines.push("Evaluated with Weekly Pattern windows for this day.");
+                  }
+                  const otTooltipLines: string[] = [];
+                  if (totalOTMinutes > 0) {
+                    otTooltipLines.push(
+                      `${totalOTMinutes.toLocaleString()} overtime minute${totalOTMinutes === 1 ? "" : "s"}`
+                    );
+                    const bucketBreakdown: string[] = [];
+                    if (totalOTPreMinutes > 0) {
+                      bucketBreakdown.push(`Pre: ${totalOTPreMinutes.toLocaleString()}`);
+                    }
+                    if (totalOTPostMinutes > 0) {
+                      bucketBreakdown.push(`Post: ${totalOTPostMinutes.toLocaleString()}`);
+                    }
+                    if (totalOTRestdayMinutes > 0) {
+                      bucketBreakdown.push(`Rest day: ${totalOTRestdayMinutes.toLocaleString()}`);
+                    }
+                    if (totalOTHolidayMinutes > 0) {
+                      bucketBreakdown.push(`Holiday: ${totalOTHolidayMinutes.toLocaleString()}`);
+                    }
+                    if (bucketBreakdown.length) {
+                      otTooltipLines.push(bucketBreakdown.join(" • "));
+                    }
+                    if (totalNightDiffMinutes > 0) {
+                      otTooltipLines.push(`Night diff: ${totalNightDiffMinutes.toLocaleString()} min`);
+                    }
                   }
                   const lateMetricLabel =
                     metricMode === "minutes" ? lateMinutesLabel : formatPercentLabel(latePercentValue);
@@ -4552,12 +5212,33 @@ const applyColumnFilters = useCallback(
                   ) : null}
                   <td className="p-2 text-right font-medium">{row.absences}</td>
                   <td className="p-2 text-center">{row.lateDays}</td>
-                      <td className="p-2 text-center">{row.undertimeDays}</td>
-                      <td className="p-2 text-center">
-                        {lateTooltipLines.length ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="cursor-help font-medium">{lateMetricLabel}</span>
+                  <td className="p-2 text-center">{row.undertimeDays}</td>
+                  <td className="p-2 text-center">
+                    {otTooltipLines.length ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help font-medium">{otMinutesLabel}</span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs space-y-1 text-sm">
+                          {otTooltipLines.map((line, index) => (
+                            <p key={index}>{line}</p>
+                          ))}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span className="text-muted-foreground">{otMinutesLabel}</span>
+                    )}
+                  </td>
+                  <td className="p-2 text-center">
+                    {totalNightDiffMinutes > 0
+                      ? totalNightDiffMinutes.toLocaleString()
+                      : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="p-2 text-center">
+                    {lateTooltipLines.length ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help font-medium">{lateMetricLabel}</span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs space-y-1 text-sm">
                               {lateTooltipLines.map((line, index) => (
@@ -4649,6 +5330,13 @@ const applyColumnFilters = useCallback(
                   <th className="p-2 text-center">Earliest</th>
                   <th className="p-2 text-center">Latest</th>
                   <th className="p-2 text-center">Worked</th>
+                  <th className="p-2 text-center">OT (pre)</th>
+                  <th className="p-2 text-center">OT (post)</th>
+                  <th className="p-2 text-center">Rest day OT</th>
+                  <th className="p-2 text-center">Holiday OT</th>
+                  <th className="p-2 text-center">Excused OT</th>
+                  <th className="p-2 text-center">OT (min)</th>
+                  <th className="p-2 text-center">Night diff</th>
                   <th className="p-2 text-left">Schedule</th>
                   <th className="p-2 text-left">Timeline</th>
                   <th className="p-2 text-left">Source files</th>
@@ -4692,6 +5380,13 @@ const applyColumnFilters = useCallback(
                       : row.absent
                       ? "Absent"
                       : "Present";
+                  const otPreLabel = formatMinutesOrDash(row.OT_pre);
+                  const otPostLabel = formatMinutesOrDash(row.OT_post);
+                  const otRestdayLabel = formatMinutesOrDash(row.OT_restday);
+                  const otHolidayLabel = formatMinutesOrDash(row.OT_holiday);
+                  const otExcusedLabel = formatMinutesOrDash(row.OT_excused);
+                  const otTotalLabel = formatMinutesOrDash(row.OT_total);
+                  const nightDiffLabel = formatMinutesOrDash(row.ND_minutes);
                   return (
                     <tr
                       key={`${row.employeeId}-${row.employeeName}-${row.dateISO}-${index}`}
@@ -4727,6 +5422,11 @@ const applyColumnFilters = useCallback(
                         ) : (
                           statusLabel
                         )}
+                        {row.notes?.map((note, noteIndex) => (
+                          <p key={`${row.employeeId}-${row.dateISO}-note-${noteIndex}`} className="mt-1 text-[11px] text-muted-foreground">
+                            {note}
+                          </p>
+                        ))}
                       </td>
                       <td className="p-2 text-center">{row.earliest ?? ""}</td>
                       <td className="p-2 text-center">{row.latest ?? ""}</td>
@@ -4739,6 +5439,13 @@ const applyColumnFilters = useCallback(
                           row.workedHHMM ?? ""
                         )}
                       </td>
+                      <td className="p-2 text-center">{otPreLabel}</td>
+                      <td className="p-2 text-center">{otPostLabel}</td>
+                      <td className="p-2 text-center">{otRestdayLabel}</td>
+                      <td className="p-2 text-center">{otHolidayLabel}</td>
+                      <td className="p-2 text-center">{otExcusedLabel}</td>
+                      <td className="p-2 text-center">{otTotalLabel}</td>
+                      <td className="p-2 text-center">{nightDiffLabel}</td>
                       <td className="p-2">
                         {row.scheduleType ? (
                           <Badge variant="outline">{formatScheduleType(row.scheduleType)}</Badge>

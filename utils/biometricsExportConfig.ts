@@ -26,6 +26,13 @@ export type SummaryColumnKey =
   | "undertimePercent"
   | "lateMinutes"
   | "undertimeMinutes"
+  | "otTotalMinutes"
+  | "otPreMinutes"
+  | "otPostMinutes"
+  | "otRestdayMinutes"
+  | "otHolidayMinutes"
+  | "otExcusedMinutes"
+  | "nightDiffMinutes"
   | "resolvedEmployeeId"
   | "resolvedAt"
   | "sourceFilesCount";
@@ -196,6 +203,69 @@ export const SUMMARY_COLUMN_DEFINITIONS: SummaryColumnDefinition[] = [
     type: "minutes",
     width: "numeric",
     defaultSelected: true,
+  },
+  {
+    key: "otTotalMinutes",
+    label: "OT (min)",
+    groupId: "attendance",
+    description: "Total overtime minutes credited across all buckets.",
+    type: "minutes",
+    width: "numeric",
+    defaultSelected: true,
+  },
+  {
+    key: "otPreMinutes",
+    label: "Pre-shift OT",
+    groupId: "attendance",
+    description: "Minutes counted as pre-shift overtime.",
+    type: "minutes",
+    width: "numeric",
+    defaultSelected: false,
+  },
+  {
+    key: "otPostMinutes",
+    label: "Post-shift OT",
+    groupId: "attendance",
+    description: "Minutes counted as post-shift overtime.",
+    type: "minutes",
+    width: "numeric",
+    defaultSelected: false,
+  },
+  {
+    key: "otRestdayMinutes",
+    label: "Rest day OT",
+    groupId: "attendance",
+    description: "Overtime minutes accrued on rest days.",
+    type: "minutes",
+    width: "numeric",
+    defaultSelected: false,
+  },
+  {
+    key: "otHolidayMinutes",
+    label: "Holiday OT",
+    groupId: "attendance",
+    description: "Overtime minutes accrued on holidays.",
+    type: "minutes",
+    width: "numeric",
+    defaultSelected: false,
+  },
+  {
+    key: "otExcusedMinutes",
+    label: "Excused OT",
+    groupId: "attendance",
+    description: "Overtime minutes credited on excused days.",
+    type: "minutes",
+    width: "numeric",
+    defaultSelected: false,
+  },
+  {
+    key: "nightDiffMinutes",
+    label: "Night diff (min)",
+    groupId: "attendance",
+    description: "Night differential minutes overlapping overtime windows.",
+    type: "minutes",
+    width: "numeric",
+    defaultSelected: false,
   },
   {
     key: "resolvedEmployeeId",

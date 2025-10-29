@@ -49,6 +49,7 @@ const ManualExclusionSchema = z
       "OTHER",
     ]),
     note: z.string().trim().min(1).optional(),
+    otEligible: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.scope === "offices" && !(value.officeIds?.length)) {
@@ -59,15 +60,34 @@ const ManualExclusionSchema = z
     }
   });
 
+const OvertimePolicySchema = z.object({
+  rounding: z.enum(["none", "nearest15", "nearest30"]).default("nearest15"),
+  graceAfterEndMin: z.number().int().min(0).default(0),
+  countPreShift: z.boolean().default(false),
+  minBlockMin: z.number().int().min(0).default(0),
+  mealDeductMin: z.number().int().min(0).optional().nullable(),
+  mealTriggerMin: z.number().int().min(0).optional().nullable(),
+  nightDiffEnabled: z.boolean().default(false),
+  flexMode: z.enum(["strict", "soft"]).default("strict"),
+  overtimeOnExcused: z.boolean().default(true),
+});
+
+const EvaluationOptionsSchema = z
+  .object({
+    overtime: OvertimePolicySchema,
+  })
+  .optional();
+
 const Payload = z.object({
   entries: z.array(Row),
   manualExclusions: z.array(ManualExclusionSchema).optional(),
+  evaluationOptions: EvaluationOptionsSchema,
 });
 
 export async function POST(req: Request) {
   try {
     const json = await req.json();
-    const { entries, manualExclusions = [] } = Payload.parse(json);
+    const { entries, manualExclusions = [], evaluationOptions } = Payload.parse(json);
 
     const payloadEntries: EvaluationEntry[] = entries.map((entry) => ({
       employeeId: entry.employeeId,
@@ -86,8 +106,21 @@ export async function POST(req: Request) {
       composedFromDayOnly: entry.composedFromDayOnly ?? false,
     }));
 
+    const normalizedOvertime =
+      evaluationOptions?.overtime == null
+        ? undefined
+        : {
+          ...evaluationOptions.overtime,
+          // convert nullable fields to undefined so types align
+          mealDeductMin:
+            evaluationOptions.overtime.mealDeductMin ?? undefined,
+          mealTriggerMin:
+            evaluationOptions.overtime.mealTriggerMin ?? undefined,
+        };
+
     const result = await evaluateAttendanceEntries(payloadEntries, {
       manualExclusions: manualExclusions as ManualExclusion[],
+      evaluationOptions: normalizedOvertime ? { overtime: normalizedOvertime } : undefined,
     });
     return NextResponse.json(result);
   } catch (error) {

@@ -38,7 +38,8 @@ export type SummarySortField =
   | "latePercent"
   | "undertimePercent"
   | "lateMinutes"
-  | "undertimeMinutes";
+  | "undertimeMinutes"
+  | "otTotalMinutes";
 
 export type SortDirection = "asc" | "desc";
 
@@ -97,7 +98,8 @@ const isSortField = (value: unknown): value is SummarySortField =>
     value === "latePercent" ||
     value === "undertimePercent" ||
     value === "lateMinutes" ||
-    value === "undertimeMinutes"
+    value === "undertimeMinutes" ||
+    value === "otTotalMinutes"
   );
 
 const isSortDirection = (value: unknown): value is SortDirection =>

@@ -5,6 +5,7 @@ import {
   normalizeSchedule,
 } from "@/lib/schedules";
 import { findWeeklyExclusionForDate } from "@/lib/weeklyExclusions";
+import { computeOvertimeForDay, type OvertimeComputation } from "@/lib/attendance/overtime";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import {
   evaluateDay,
@@ -20,6 +21,7 @@ import {
   type PerEmployeeRow,
 } from "@/utils/parseBioAttendance";
 import { normalizeBiometricToken } from "@/utils/biometricsShared";
+import type { EvaluationOptions, OvertimePolicy } from "@/types/attendance";
 import type { ManualExclusion } from "@/types/manual-exclusion";
 
 const MINUTES_IN_DAY = 24 * 60;
@@ -74,6 +76,70 @@ const computeShiftPresenceMinutes = (
   const presence = clampedEnd - clampedStart;
   const breakMinutes = schedule.breakMinutes ?? 0;
   return Math.max(0, presence - breakMinutes);
+};
+
+const DEFAULT_OVERTIME_POLICY: OvertimePolicy = {
+  rounding: "nearest15",
+  graceAfterEndMin: 0,
+  countPreShift: false,
+  minBlockMin: 30,
+  mealDeductMin: 60,
+  mealTriggerMin: 300,
+  nightDiffEnabled: false,
+  flexMode: "strict",
+  overtimeOnExcused: true,
+};
+
+const normalizeOvertimePolicy = (policy?: OvertimePolicy | null): OvertimePolicy => {
+  const rounding =
+    policy?.rounding === "nearest30" || policy?.rounding === "nearest15" || policy?.rounding === "none"
+      ? policy.rounding
+      : DEFAULT_OVERTIME_POLICY.rounding;
+  const flexMode = policy?.flexMode === "soft" ? "soft" : "strict";
+
+  const graceValue = Number(policy?.graceAfterEndMin);
+  const graceAfterEndMin = Number.isFinite(graceValue) && graceValue >= 0 ? Math.round(graceValue) : DEFAULT_OVERTIME_POLICY.graceAfterEndMin;
+
+  const minBlockValue = Number(policy?.minBlockMin);
+  const minBlockMin = Number.isFinite(minBlockValue) && minBlockValue >= 0 ? Math.round(minBlockValue) : DEFAULT_OVERTIME_POLICY.minBlockMin;
+
+  const mealDeductRaw = policy?.mealDeductMin;
+  const mealDeductValue = Number(mealDeductRaw);
+  let mealDeductMin: number | undefined;
+  if (mealDeductRaw === undefined) {
+    mealDeductMin = DEFAULT_OVERTIME_POLICY.mealDeductMin;
+  } else if (Number.isFinite(mealDeductValue) && mealDeductValue > 0) {
+    mealDeductMin = Math.round(mealDeductValue);
+  } else {
+    mealDeductMin = undefined;
+  }
+
+  const mealTriggerRaw = policy?.mealTriggerMin;
+  const mealTriggerValue = Number(mealTriggerRaw);
+  let mealTriggerMin: number | undefined;
+  if (mealTriggerRaw === undefined) {
+    mealTriggerMin = DEFAULT_OVERTIME_POLICY.mealTriggerMin;
+  } else if (Number.isFinite(mealTriggerValue) && mealTriggerValue > 0) {
+    mealTriggerMin = Math.round(mealTriggerValue);
+  } else {
+    mealTriggerMin = undefined;
+  }
+
+  const countPreShift = Boolean(policy?.countPreShift);
+  const nightDiffEnabled = Boolean(policy?.nightDiffEnabled);
+  const overtimeOnExcused = policy?.overtimeOnExcused === false ? false : true;
+
+  return {
+    rounding,
+    graceAfterEndMin,
+    countPreShift,
+    minBlockMin,
+    mealDeductMin,
+    mealTriggerMin,
+    nightDiffEnabled,
+    flexMode,
+    overtimeOnExcused,
+  } satisfies OvertimePolicy;
 };
 
 export type EvaluationEntry = {
@@ -154,6 +220,10 @@ const normalizeManualExclusions = (exclusions: ManualExclusion[] | undefined | n
       continue;
     }
     const note = typeof exclusion.note === "string" && exclusion.note.trim().length ? exclusion.note.trim() : undefined;
+    const otEligible =
+      typeof (exclusion as ManualExclusion).otEligible === "boolean"
+        ? (exclusion as ManualExclusion).otEligible
+        : undefined;
     cleaned.push({
       id,
       dates: validDates,
@@ -162,6 +232,7 @@ const normalizeManualExclusions = (exclusions: ManualExclusion[] | undefined | n
       employeeIds,
       reason,
       note,
+      otEligible,
     });
   }
   return cleaned;
@@ -315,13 +386,14 @@ const buildMappingByToken = (
 
 export async function evaluateAttendanceEntries(
   entries: EvaluationEntry[],
-  options?: { manualExclusions?: ManualExclusion[] }
+  options?: { manualExclusions?: ManualExclusion[]; evaluationOptions?: EvaluationOptions }
 ): Promise<EvaluationResult> {
   if (!entries.length) {
     return { perDay: [], perEmployee: [] };
   }
 
   const manualExclusions = normalizeManualExclusions(options?.manualExclusions);
+  const overtimePolicy = normalizeOvertimePolicy(options?.evaluationOptions?.overtime);
 
   const bioIds = Array.from(new Set(entries.map((row) => row.employeeId)));
   const candidates: { id: string; employeeNo: string | null }[] = [];
@@ -475,7 +547,9 @@ export async function evaluateAttendanceEntries(
       manualExclusions
     );
     const nationalHoliday = (exceptionInfo?.type ?? null) === "HOLIDAY";
-    const excused = Boolean(manualExclusion) || nationalHoliday;
+    const manualExcused = Boolean(manualExclusion);
+    const isHoliday = nationalHoliday;
+    const excused = manualExcused || isHoliday;
 
     if (excused) {
       isLate = false;
@@ -490,7 +564,9 @@ export async function evaluateAttendanceEntries(
 
     let statusLabel: string;
     if (excused) {
-      if (manualExclusion) {
+      if (isHoliday) {
+        statusLabel = "Holiday";
+      } else if (manualExclusion) {
         const label = formatManualLabel(manualExclusion);
         statusLabel = `Excused - ${label}`;
       } else {
@@ -501,6 +577,69 @@ export async function evaluateAttendanceEntries(
     }
 
     const evaluationStatus: DayEvaluationStatus = excused ? "excused" : (evaluation.status as DayEvaluationStatus);
+
+    const presenceSegments = evaluation.presenceSegments ?? [];
+    const holidayKind = isHoliday ? "holiday" : requiredMinutes > 0 ? "none" : "restday";
+    const manualOtEligible = (manualExclusion?.otEligible ?? overtimePolicy.overtimeOnExcused) === true;
+    const mergedPresenceMinutes = presenceSegments.reduce(
+      (total, segment) => total + Math.max(0, segment.end - segment.start),
+      0
+    );
+    const hasPresence = mergedPresenceMinutes > 0;
+    const emptyOvertime: OvertimeComputation = {
+      OT_pre: 0,
+      OT_post: 0,
+      OT_restday: 0,
+      OT_holiday: 0,
+      OT_excused: 0,
+      OT_total: 0,
+      ND_minutes: 0,
+    };
+    let overtime: OvertimeComputation = emptyOvertime;
+    const dayNotes: string[] = [];
+
+    if (manualExcused) {
+      if (isHoliday) {
+        overtime = computeOvertimeForDay({
+          schedule: normalized,
+          presence: presenceSegments,
+          policy: overtimePolicy,
+          holiday: "holiday",
+        });
+      } else if (holidayKind === "restday") {
+        overtime = computeOvertimeForDay({
+          schedule: normalized,
+          presence: presenceSegments,
+          policy: overtimePolicy,
+          holiday: "restday",
+        });
+      } else if (manualOtEligible && hasPresence) {
+        const manualOvertime = computeOvertimeForDay({
+          schedule: { type: "NONE" },
+          presence: presenceSegments,
+          policy: overtimePolicy,
+          holiday: "none",
+        });
+        overtime = {
+          ...manualOvertime,
+          OT_pre: 0,
+          OT_post: 0,
+          OT_restday: 0,
+          OT_holiday: 0,
+          OT_excused: manualOvertime.OT_total,
+        };
+        if (manualOvertime.OT_total > 0) {
+          dayNotes.push("Excused day with punches → OT credited (Excused)");
+        }
+      }
+    } else {
+      overtime = computeOvertimeForDay({
+        schedule: normalized,
+        presence: presenceSegments,
+        policy: overtimePolicy,
+        holiday: holidayKind,
+      });
+    }
 
     const perDay: PerDayRow = {
       employeeId: row.employeeId,
@@ -526,6 +665,13 @@ export async function evaluateAttendanceEntries(
       workedHHMM: evaluation.workedHHMM,
       workedMinutes: evaluation.workedMinutes,
       presenceMinutes: clampedPresence,
+      OT_pre: overtime.OT_pre,
+      OT_post: overtime.OT_post,
+      OT_restday: overtime.OT_restday,
+      OT_holiday: overtime.OT_holiday,
+      OT_excused: overtime.OT_excused,
+      OT_total: overtime.OT_total,
+      ND_minutes: overtime.ND_minutes,
       absent,
       scheduleType: normalized.type,
       scheduleSource: scheduleRecord.source,
@@ -543,6 +689,7 @@ export async function evaluateAttendanceEntries(
       weeklyExclusionIgnoreUntil: weeklyExclusion?.ignoreUntilLabel ?? null,
       weeklyExclusionId: weeklyExclusion?.id ?? null,
       identityStatus: resolvedEmployeeId ? "matched" : "unmatched",
+      notes: dayNotes.length ? dayNotes : undefined,
     };
 
     evaluatedPerDay.push(perDay);

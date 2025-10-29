@@ -50,6 +50,7 @@ const ManualExclusionSchema = z
       "OTHER",
     ]),
     note: z.string().trim().min(1).optional(),
+    otEligible: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.scope === "offices" && !(value.officeIds?.length)) {
