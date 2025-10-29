@@ -55,6 +55,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectPortal,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -598,16 +599,23 @@ const ManualExclusionDialog = ({
               <SelectTrigger id="manual-exclusion-scope" className="h-9">
                 <SelectValue placeholder="Select scope" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All employees</SelectItem>
-                <SelectItem value="offices">Specific offices</SelectItem>
-                <SelectItem value="employees">Specific employees</SelectItem>
-              </SelectContent>
+              <SelectPortal>
+                <SelectContent
+                  position="popper"
+                  side="bottom"
+                  align="start"
+                  className="z-[1000]"
+                >
+                  <SelectItem value="all">All employees</SelectItem>
+                  <SelectItem value="offices">Specific offices</SelectItem>
+                  <SelectItem value="employees">Specific employees</SelectItem>
+                </SelectContent>
+              </SelectPortal>
             </Select>
             <p className="text-xs text-muted-foreground">{activeScopeLabel}</p>
             {scope === "offices" ? (
               <div className="space-y-1">
-                <Popover open={officePopoverOpen} onOpenChange={setOfficePopoverOpen}>
+                <Popover open={officePopoverOpen} onOpenChange={setOfficePopoverOpen} modal={false}>
                   <PopoverTrigger asChild>
                     <Button type="button" variant="outline" className="w-full justify-between">
                       <span>
@@ -617,7 +625,7 @@ const ManualExclusionDialog = ({
                       </span>
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[280px] p-0" align="start">
+                  <PopoverContent className="z-[1000] w-[280px] p-0" align="start">
                     <Command>
                       <CommandInput placeholder="Search offices" />
                       <CommandList>
@@ -655,7 +663,7 @@ const ManualExclusionDialog = ({
             ) : null}
             {scope === "employees" ? (
               <div className="space-y-1">
-                <Popover open={employeePopoverOpen} onOpenChange={setEmployeePopoverOpen}>
+                <Popover open={employeePopoverOpen} onOpenChange={setEmployeePopoverOpen} modal={false}>
                   <PopoverTrigger asChild>
                     <Button type="button" variant="outline" className="w-full justify-between">
                       <span>
@@ -665,7 +673,7 @@ const ManualExclusionDialog = ({
                       </span>
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[300px] p-0" align="start">
+                  <PopoverContent className="z-[1000] w-[300px] p-0" align="start">
                     <Command>
                       <CommandInput placeholder="Search employees" />
                       <CommandList>
@@ -713,28 +721,42 @@ const ManualExclusionDialog = ({
               <SelectTrigger id="manual-exclusion-reason" className="h-9">
                 <SelectValue placeholder="Select reason" />
               </SelectTrigger>
-              <SelectContent>
-                {MANUAL_REASON_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+              <SelectPortal>
+                <SelectContent
+                  position="popper"
+                  side="bottom"
+                  align="start"
+                  className="z-[1000]"
+                >
+                  {MANUAL_REASON_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </SelectPortal>
             </Select>
             {reason === "LEAVE" ? (
               <Select value={leaveSelectValue} onValueChange={handleLeaveSubtypeChange}>
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="Leave subtype" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No subtype</SelectItem>
-                  {LEAVE_NOTE_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">Custom (use note)</SelectItem>
-                </SelectContent>
+                <SelectPortal>
+                  <SelectContent
+                    position="popper"
+                    side="bottom"
+                    align="start"
+                    className="z-[1000]"
+                  >
+                    <SelectItem value="none">No subtype</SelectItem>
+                    {LEAVE_NOTE_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="custom">Custom (use note)</SelectItem>
+                  </SelectContent>
+                </SelectPortal>
               </Select>
             ) : null}
             <Textarea
