@@ -737,7 +737,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [officeSearch, setOfficeSearch] = useState("");
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
-  const [showPhotos, setShowPhotos] = useState(true);
+  const [showPhotos, setShowPhotos] = useState(false);
     const [focusTrigger, setFocusTrigger] = useState(0);
     const [tool, setTool] = useState<Tool>("select");
     const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
