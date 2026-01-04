@@ -204,6 +204,19 @@ export default function PublicSelfServiceActions({
             wmRotationDeg={0}
 
           />
+
+            <SimplePdfLinkTile
+            title="Panunumpa ng Lingkod Bayan"
+            description="A formal oath expressing the values, responsibilities, and ethical standards expected of every public servant."
+            pdfUrl="/_pdf/panunumpa.pdf"
+            watermarkText="Municipality of Lingayen"
+            watermarkImageUrl="/logo.png"
+            downloadFileName="Panunumpa-ng-Lingkod-Bayan"
+            wmSize={200}
+            wmOpacity={0.12}
+            wmRotationDeg={0}
+
+          />
         </div>
       </section>
   )}
