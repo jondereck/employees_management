@@ -7,7 +7,8 @@
 // npm run seed:all
 import ora from "ora";
 import { PrismaClient } from "@prisma/client";
-import { salarySchedule } from "../utils/salarySchedule";
+import { salarySchedule } from "@/utils/salarySchedule";
+
 
 const prisma = new PrismaClient();
 

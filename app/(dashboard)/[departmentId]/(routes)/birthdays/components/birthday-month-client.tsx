@@ -141,21 +141,9 @@ function monthName(m: number) {
   ][m];
 }
 function safeDate(d: string | Date) {
-  if (!d) return null;
-
   const dt = new Date(d);
-  if (isNaN(dt.getTime())) return null;
-
-  // ⚠️ TEMP FIX: reverse UTC→local shift (UTC+8)
-  const fixed = new Date(dt.getTime() + 8 * 60 * 60 * 1000);
-
-  return new Date(
-    fixed.getFullYear(),
-    fixed.getMonth(),
-    fixed.getDate()
-  );
+  return isNaN(dt.getTime()) ? null : dt;
 }
-
 function displayName(p: Person) {
   const nick = (p.nickname ?? "").trim();
   if (nick) return nick.toUpperCase();
