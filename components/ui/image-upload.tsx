@@ -63,27 +63,48 @@ export default function ImageUpload({
   // under other useState hooks
   async function removeBgInModal() {
     if (!targetUrl) return;
+
+    const toastId = toast.loading("Removing background...");
+
     try {
       setIsProcessing(true);
+
       const res = await fetch("/api/tools/rembg", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ imageUrl: targetUrl }),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Background removal failed");
 
-      // show new image inside modal
-      setTargetUrl(data.url);            // Cloudinary secure_url preferred
+      // 🔁 Replace preview
+      setTargetUrl(data.url);
+
+      // 🔁 Replace existing image
+      if (editingOriginalUrl) onRemove(editingOriginalUrl);
       onChange(data.url);
-      toast.success("Background removed", { description: "Preview updated.", duration: 2000 });
+
+      toast.success("Background removed", {
+        id: toastId,
+        description: "Image updated",
+      });
+
+      // ✅ AUTO-CLOSE MODAL AFTER DONE
+      setIsCropping(false);
+      setIsAddingNew(false);
+      setEditingOriginalUrl(null);
+
     } catch (err: any) {
-      console.error(err);
-      toast.error("Background removal failed", { description: err?.message ?? "Please try again." });
+      toast.error("Background removal failed", {
+        id: toastId,
+        description: err?.message ?? "Please try again.",
+      });
     } finally {
       setIsProcessing(false);
     }
   }
+
 
 
 
@@ -142,15 +163,14 @@ export default function ImageUpload({
 
     const finalUrl = addTransform(targetUrl, cropTx);
 
-    if (isAddingNew) {
-      // ✅ ADD to list (your parent does field.onChange([...field.value, { url }]))
-      onChange(finalUrl);
-    } else {
-      // ✅ REPLACE the original we were editing
-      if (editingOriginalUrl) onRemove(editingOriginalUrl);
-      onChange(finalUrl);
-    }
+    // 🔁 REMOVE OLD IMAGE IF EDITING OR RE-UPLOADING
+    if (editingOriginalUrl) onRemove(editingOriginalUrl);
 
+    onChange(finalUrl);
+
+    toast.success("Image updated");
+
+    // ✅ CLOSE MODAL
     setIsCropping(false);
     setIsAddingNew(false);
     setEditingOriginalUrl(null);
@@ -250,11 +270,17 @@ export default function ImageUpload({
           if (res?.event === "success" && res.info && typeof res.info === "object") {
             const raw = (res.info as any).secure_url as string | undefined;
             if (raw) {
-              // 🔁 NEW: open editor for NEW photo
+              // 🧹 REMOVE OLD IMAGE FIRST
+              if (value.length > 0) {
+                value.forEach((url) => onRemove(url));
+              }
+
+              // 🔁 Open cropper as ADD (fresh image)
               openCropper(raw, "add");
             }
           }
         }}
+
         onError={(err) => console.error("Cloudinary upload error:", err)}
       >
         {({ open }) => (
@@ -299,7 +325,7 @@ export default function ImageUpload({
 
               <div className="flex items-center justify-between gap-2">
                 {/* Left: processing indicator if needed */}
-          
+
 
                 {/* Right: controls */}
                 <div className="flex gap-2">
