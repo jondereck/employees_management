@@ -191,14 +191,30 @@ const Info = ({
             )}
           </h1>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <p className="text-lg font-semibold text-gray-800">{data.position}</p>
-            {Number(data.salaryGrade) > 0 && !isJobOrder(data.employeeType) && (
-              <Badge variant="secondary" className="text-sm px-3 py-1">
-                S.G. {data.salaryGrade}
-              </Badge>
-            )}
-          </div>
+         <div className="flex flex-col">
+  {/* Position row */}
+  <div className="flex flex-wrap items-center">
+    <p className="text-xl font-bold text-gray-900 tracking-tight">
+      {data.position}
+    </p>
+
+    {Number(data.salaryGrade) > 0 && !isJobOrder(data.employeeType) && (
+      <Badge
+        variant="secondary"
+        className="text-xs font-medium px-2 py-0.5 opacity-80"
+      >
+        S.G. {data.salaryGrade}
+      </Badge>
+    )}
+  </div>
+
+  {/* Note */}
+  {hasText(data?.note) && (
+    <p className="text-xs font-light text-gray-500 whitespace-pre-wrap">
+      {data.note}
+    </p>
+  )}
+</div>
 
           <div className="text-gray-700 space-y-2 mt-4">
             <div className="flex items-center gap-2">
@@ -215,12 +231,6 @@ const Info = ({
               <span className="text-muted-foreground">{data?.offices?.name}</span>
             </div>
 
-            {hasText(data?.note) && (
-              <DetailItem
-                label="HR Note"
-                value={<span className="whitespace-pre-wrap">{data!.note as string}</span>}
-              />
-            )}
           </div>
 
 

@@ -16,7 +16,15 @@ const MODE_STYLES: Record<string, { label: string; badge: string; ring: string; 
   pos:  { label: "Position search", badge: "bg-purple-100 text-purple-700", ring: "focus:ring-purple-500", bg: "bg-purple-50", border: "border-purple-300" },
   nick: { label: "Nickname search", badge: "bg-green-100 text-green-700",  ring: "focus:ring-green-500",  bg: "bg-green-50",  border: "border-green-300"  },
   off:  { label: "Office search",    badge: "bg-sky-100 text-sky-700",     ring: "focus:ring-sky-500",    bg: "bg-sky-50",    border: "border-sky-300"   },
-  type: { label: "Appointment",      badge: "bg-amber-100 text-amber-700", ring: "focus:ring-amber-500",  bg: "bg-amber-50",  border: "border-amber-300" },
+  type: { label: "Appointment",      badge: "bg-amber-100 text-amber-700", ring: "focus:ring-amber-500",  bg: "bg-amber-50",  border: 
+    "border-amber-300" },
+    note: {
+    label: "Note search",
+    badge: "bg-teal-100 text-teal-700",
+    ring: "focus:ring-teal-500",
+    bg: "bg-teal-50",
+    border: "border-teal-300",
+  },
 };
 
 const detectMode = (q: string) => {

@@ -222,35 +222,64 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
 
 
   const filteredData = useMemo(() => {
-    const raw = debouncedSearchTerm || "";
-    const q = raw.trim();
+  const raw = debouncedSearchTerm || "";
+  const q = raw.trim();
 
-    const isPosSearch = q.toLowerCase().startsWith("?pos");
-    const posQuery = isPosSearch ? norm(q.replace(/^(\?pos)\s*/i, "")) : "";
+  const lowerQ = norm(q);
 
-    return filteredEmployees.filter((employee) => {
-      if (isPosSearch) {
-        const terms = posQuery.split(",").map((t) => norm(t)).filter(Boolean);
-        const pos = norm(employee.position);
-        return terms.length === 0 ? true : terms.some((t) => pos.includes(t));
-      }
+  // Command detection
+  const isPosSearch = lowerQ.startsWith("?pos");
+  const isNoteSearch = lowerQ.startsWith("?note");
 
-      const lower = norm(q);
-      const fullName = norm(`${employee.firstName} ${employee.lastName}`);
-      const reversedName = norm(`${employee.lastName} ${employee.firstName}`);
-      const contactNumber = norm(employee.contactNumber);
-      const nickname = norm(employee.nickname);
-      const employeeNo = norm(employee.employeeNo);
+  const posQuery = isPosSearch
+    ? norm(q.replace(/^(\?pos)\s*/i, ""))
+    : "";
 
-      return (
-        fullName.includes(lower) ||
-        reversedName.includes(lower) ||
-        contactNumber.includes(lower) ||
-        nickname.includes(lower) ||
-        employeeNo.includes(lower)
-      );
-    });
-  }, [filteredEmployees, debouncedSearchTerm]);
+  const noteQuery = isNoteSearch
+    ? norm(q.replace(/^(\?note)\s*/i, ""))
+    : "";
+
+  return filteredEmployees.filter((employee) => {
+    /** =========================
+     * POSITION SEARCH
+     ========================== */
+    if (isPosSearch) {
+      const terms = posQuery
+        .split(",")
+        .map((t) => norm(t))
+        .filter(Boolean);
+
+      const pos = norm(employee.position);
+
+      return terms.length === 0 ? true : terms.some((t) => pos.includes(t));
+    }
+
+    /** =========================
+     * NOTE SEARCH
+     ========================== */
+    if (isNoteSearch) {
+      const note = norm(employee.note);
+      return noteQuery === "" ? true : note.includes(noteQuery);
+    }
+
+    /** =========================
+     * DEFAULT SEARCH
+     ========================== */
+    const fullName = norm(`${employee.firstName} ${employee.lastName}`);
+    const reversedName = norm(`${employee.lastName} ${employee.firstName}`);
+    const contactNumber = norm(employee.contactNumber);
+    const nickname = norm(employee.nickname);
+    const employeeNo = norm(employee.employeeNo);
+
+    return (
+      fullName.includes(lowerQ) ||
+      reversedName.includes(lowerQ) ||
+      contactNumber.includes(lowerQ) ||
+      nickname.includes(lowerQ) ||
+      employeeNo.includes(lowerQ)
+    );
+  });
+}, [filteredEmployees, debouncedSearchTerm]);
 
 
 
