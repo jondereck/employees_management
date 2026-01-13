@@ -102,7 +102,7 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   const logoSize = Math.round(size * 0.2);
 
   return (
-    <div className="hidden md:block">
+    <div className="">
       {/* Small preview (click to enlarge) */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogTrigger asChild>
