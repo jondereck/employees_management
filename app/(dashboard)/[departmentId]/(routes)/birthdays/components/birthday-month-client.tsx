@@ -140,9 +140,26 @@ function monthName(m: number) {
   ][m];
 }
 function safeDate(d: string | Date) {
+  if (!d) return null;
+
+  // If already a Date object, normalize it
+  if (d instanceof Date) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  // Handle "YYYY-MM-DD" safely
+  if (typeof d === "string") {
+    const parts = d.split("T")[0].split("-");
+    if (parts.length === 3) {
+      const [y, m, day] = parts.map(Number);
+      return new Date(y, m - 1, day); // <-- LOCAL DATE, NO TIMEZONE SHIFT
+    }
+  }
+
   const dt = new Date(d);
   return isNaN(dt.getTime()) ? null : dt;
 }
+
 function displayName(p: Person) {
   const nick = (p.nickname ?? "").trim();
   if (nick) return nick.toUpperCase();
