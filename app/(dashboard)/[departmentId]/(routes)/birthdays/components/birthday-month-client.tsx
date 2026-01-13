@@ -48,6 +48,7 @@ type Person = {
 const SHOW_DATES_STORAGE_KEY = "birthdays.showDates";
 const THEME_MODE_STORAGE_KEY = "birthdays.themeMode";
 const EXPORT_SAFE_STORAGE_KEY = "birthdays.exportSafe";
+
 type HeadsFilter = "all" | "heads-only";
 
 
@@ -142,22 +143,17 @@ function monthName(m: number) {
 function safeDate(d: string | Date) {
   if (!d) return null;
 
-  // If already a Date object, normalize it
-  if (d instanceof Date) {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  }
-
-  // Handle "YYYY-MM-DD" safely
-  if (typeof d === "string") {
-    const parts = d.split("T")[0].split("-");
-    if (parts.length === 3) {
-      const [y, m, day] = parts.map(Number);
-      return new Date(y, m - 1, day); // <-- LOCAL DATE, NO TIMEZONE SHIFT
-    }
-  }
-
   const dt = new Date(d);
-  return isNaN(dt.getTime()) ? null : dt;
+  if (isNaN(dt.getTime())) return null;
+
+  // ⚠️ TEMP FIX: reverse UTC→local shift (UTC+8)
+  const fixed = new Date(dt.getTime() + 8 * 60 * 60 * 1000);
+
+  return new Date(
+    fixed.getFullYear(),
+    fixed.getMonth(),
+    fixed.getDate()
+  );
 }
 
 function displayName(p: Person) {
