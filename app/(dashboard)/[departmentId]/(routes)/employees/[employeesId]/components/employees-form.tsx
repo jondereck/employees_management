@@ -490,14 +490,17 @@ export const EmployeesForm = ({
         const suggested = suggestions[0].candidate.toUpperCase();
         const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
         form.setValue("employeeNo", joinEmployeeNo(suggested, emp), { shouldDirty: true, shouldTouch: true, shouldValidate: true });
-        toast.success(`Suggested BIO: ${suggested}`, { id: toastId });
+        toast.success(`Suggested BIO: ${suggested}`, { 
+          id: toastId,
+          duration: 3000,
+        });
         return;
       }
 
       setBioOptions(suggestions);
-      toast.success("Suggestions ready ✔", { id: toastId });
+      toast.success("Suggestion ready ✔", { id: toastId, duration: 3000  });
     } catch (e: any) {
-      toast.error(e?.message ?? "Unable to suggest bio number.", { id: toastId });
+      toast.error(e?.message ?? "Unable to suggest bio number.", { id: toastId, duration: 3000 });
     } finally {
       setSuggesting(false);
     }

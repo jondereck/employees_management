@@ -1,5 +1,5 @@
 "use client";
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { Eligibility, EmployeeType, EmployeesColumn, Offices, columns } from "./columns";
 
@@ -16,7 +16,7 @@ import ApiList from "@/components/ui/api-list";
 import ApiHeading from "@/components/ui/api-heading";
 import Footer from "../../(frontend)/view/components/footer";
 import DownloadEmployeeBackup from "@/components/download-button";
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import SearchFilter from "@/components/search-filter";
 import BirthdayNotifications from "./notifications";
 import Notifications from "./notifications";
@@ -66,6 +66,13 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
     }
   });
 
+  const [isPending, startTransition] = useTransition();
+
+  const onAdd = () => {
+    startTransition(() => {
+      router.push(`/${params.departmentId}/employees/new`);
+    });
+  };
   // persist on change
   useEffect(() => {
     try {
@@ -222,64 +229,64 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
 
 
   const filteredData = useMemo(() => {
-  const raw = debouncedSearchTerm || "";
-  const q = raw.trim();
+    const raw = debouncedSearchTerm || "";
+    const q = raw.trim();
 
-  const lowerQ = norm(q);
+    const lowerQ = norm(q);
 
-  // Command detection
-  const isPosSearch = lowerQ.startsWith("?pos");
-  const isNoteSearch = lowerQ.startsWith("?note");
+    // Command detection
+    const isPosSearch = lowerQ.startsWith("?pos");
+    const isNoteSearch = lowerQ.startsWith("?note");
 
-  const posQuery = isPosSearch
-    ? norm(q.replace(/^(\?pos)\s*/i, ""))
-    : "";
+    const posQuery = isPosSearch
+      ? norm(q.replace(/^(\?pos)\s*/i, ""))
+      : "";
 
-  const noteQuery = isNoteSearch
-    ? norm(q.replace(/^(\?note)\s*/i, ""))
-    : "";
+    const noteQuery = isNoteSearch
+      ? norm(q.replace(/^(\?note)\s*/i, ""))
+      : "";
 
-  return filteredEmployees.filter((employee) => {
-    /** =========================
-     * POSITION SEARCH
-     ========================== */
-    if (isPosSearch) {
-      const terms = posQuery
-        .split(",")
-        .map((t) => norm(t))
-        .filter(Boolean);
+    return filteredEmployees.filter((employee) => {
+      /** =========================
+       * POSITION SEARCH
+       ========================== */
+      if (isPosSearch) {
+        const terms = posQuery
+          .split(",")
+          .map((t) => norm(t))
+          .filter(Boolean);
 
-      const pos = norm(employee.position);
+        const pos = norm(employee.position);
 
-      return terms.length === 0 ? true : terms.some((t) => pos.includes(t));
-    }
+        return terms.length === 0 ? true : terms.some((t) => pos.includes(t));
+      }
 
-    /** =========================
-     * NOTE SEARCH
-     ========================== */
-    if (isNoteSearch) {
-      const note = norm(employee.note);
-      return noteQuery === "" ? true : note.includes(noteQuery);
-    }
+      /** =========================
+       * NOTE SEARCH
+       ========================== */
+      if (isNoteSearch) {
+        const note = norm(employee.note);
+        return noteQuery === "" ? true : note.includes(noteQuery);
+      }
 
-    /** =========================
-     * DEFAULT SEARCH
-     ========================== */
-    const fullName = norm(`${employee.firstName} ${employee.lastName}`);
-    const reversedName = norm(`${employee.lastName} ${employee.firstName}`);
-    const contactNumber = norm(employee.contactNumber);
-    const nickname = norm(employee.nickname);
-    const employeeNo = norm(employee.employeeNo);
+      /** =========================
+       * DEFAULT SEARCH
+       ========================== */
+      const fullName = norm(`${employee.firstName} ${employee.lastName}`);
+      const reversedName = norm(`${employee.lastName} ${employee.firstName}`);
+      const contactNumber = norm(employee.contactNumber);
+      const nickname = norm(employee.nickname);
+      const employeeNo = norm(employee.employeeNo);
 
-    return (
-      fullName.includes(lowerQ) ||
-      reversedName.includes(lowerQ) ||
-      contactNumber.includes(lowerQ) ||
-      nickname.includes(lowerQ) ||
-      employeeNo.includes(lowerQ)
-    );
-  });
-}, [filteredEmployees, debouncedSearchTerm]);
+      return (
+        fullName.includes(lowerQ) ||
+        reversedName.includes(lowerQ) ||
+        contactNumber.includes(lowerQ) ||
+        nickname.includes(lowerQ) ||
+        employeeNo.includes(lowerQ)
+      );
+    });
+  }, [filteredEmployees, debouncedSearchTerm]);
 
 
 
@@ -310,12 +317,20 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
         />
         <div className="flex items-center gap-3">
           <Button
-            onClick={() => router.push(`/${params.departmentId}/employees/new`)}
-            className="flex items-center gap-2 px-4 py-2"
+         onClick={onAdd}
+  disabled={isPending}
+  className="flex w-[88px] items-center justify-center gap-2 px-4 py-2"
           >
-            <Plus className="h-4 w-4" />
-            Add
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin"  aria-label="Loading" /> 
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                Add
+              </>
+            )}
           </Button>
+
           {/* Optional: Notification bell or badge here */}
         </div>
       </div>
