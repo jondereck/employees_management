@@ -27,7 +27,7 @@ type CelebrationViewProps = {
   description?: string;
   emptyMessage: string;
   people: CelebrationEntry[];
-  employeeTypes: EmployeeType[];
+  employeeTypes: EmployeeType[] | undefined
   defaultFilter?: FilterValue;
 };
 
@@ -50,7 +50,8 @@ export function CelebrationView({
   const previewModal = usePreviewModal();
 
   const [employeeType, setEmployeeType] = useState<string>("all");
-
+  const safeEmployeeTypes = employeeTypes ?? [];
+  const showFilters = safeEmployeeTypes.length > 0;
 
   const activePeople = useMemo(() => {
     return people.filter(
@@ -131,7 +132,7 @@ export function CelebrationView({
           </ToggleGroup>
 
           {/* Employee Type Filter */}
-          <ToggleGroup
+          {showFilters && (<ToggleGroup
             type="single"
             value={employeeType}
             onValueChange={(value) => {
@@ -149,24 +150,24 @@ export function CelebrationView({
               All Types
             </ToggleGroupItem>
 
-            {employeeTypes.map((type) => (
+            {safeEmployeeTypes.map((type) => (
               <ToggleGroupItem
                 key={type.id}
                 value={type.value}
                 className="px-3 text-xs font-medium uppercase tracking-wide
-  text-muted-foreground
-  transition-all
-  data-[state=on]:bg-primary/10
-  data-[state=on]:text-primary
-  data-[state=on]:border
-  data-[state=on]:border-primary/30
-  data-[state=on]:shadow-sm"
+                  text-muted-foreground
+                  transition-all
+                  data-[state=on]:bg-primary/10
+                  data-[state=on]:text-primary
+                  data-[state=on]:border
+                  data-[state=on]:border-primary/30
+                  data-[state=on]:shadow-sm"
 
               >
                 {type.name}
               </ToggleGroupItem>
             ))}
-          </ToggleGroup>
+          </ToggleGroup>)}
         </div>
 
       </div>

@@ -242,6 +242,7 @@ export default async function RetirementsPage({
         description="Review who is scheduled to retire so you can plan endorsements, clearances, and turnover activities."
         emptyMessage="No matching retirements. Check birth dates or explore the Completed tab for retirement history."
         people={sorted}
+        employeeTypes={[]}
         defaultFilter="upcoming"
       />
     </div>

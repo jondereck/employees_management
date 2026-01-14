@@ -218,7 +218,7 @@ const employeeTypes = await prismadb.employeeType.findMany({
         description="Monitor landmark years of service so you can plan recognition activities ahead of time."
         emptyMessage="No milestone anniversaries detected for this period. Update employee hire dates to track key milestones."
         people={sorted}
-          employeeTypes={employeeTypes}
+        employeeTypes={employeeTypes}
         defaultFilter="upcoming"
       />
     </div>
