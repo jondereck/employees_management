@@ -109,6 +109,8 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
   updatedAt: employee.updatedAt ? employee.updatedAt.toISOString() : null,
 });
 
+
+
 export const revalidate = 1800;
 
 export default async function AnniversariesPage({
@@ -119,6 +121,16 @@ export default async function AnniversariesPage({
   const { departmentId } = params;
   const today = new Date();
   const currentYear = today.getFullYear();
+
+  
+const employeeTypes = await prismadb.employeeType.findMany({
+  where: {
+    departmentId,
+  },
+  orderBy: {
+    name: "asc",
+  },
+});
 
   const employees = await prismadb.employee.findMany({
     where: { departmentId },
@@ -206,6 +218,7 @@ export default async function AnniversariesPage({
         description="Monitor landmark years of service so you can plan recognition activities ahead of time."
         emptyMessage="No milestone anniversaries detected for this period. Update employee hire dates to track key milestones."
         people={sorted}
+          employeeTypes={employeeTypes}
         defaultFilter="upcoming"
       />
     </div>

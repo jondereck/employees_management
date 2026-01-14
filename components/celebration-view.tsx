@@ -12,6 +12,13 @@ export type CelebrationEntry = CelebrationPerson & {
   previewData: EmployeesColumn;
 };
 
+type EmployeeType = {
+  id: string;
+  name: string;
+  value: string;
+};
+
+
 type FilterValue = "upcoming" | "completed" | "all";
 
 type CelebrationViewProps = {
@@ -20,6 +27,7 @@ type CelebrationViewProps = {
   description?: string;
   emptyMessage: string;
   people: CelebrationEntry[];
+  employeeTypes: EmployeeType[];
   defaultFilter?: FilterValue;
 };
 
@@ -35,23 +43,46 @@ export function CelebrationView({
   description,
   emptyMessage,
   people,
+  employeeTypes,
   defaultFilter = "upcoming",
 }: CelebrationViewProps) {
   const [filter, setFilter] = useState<FilterValue>(defaultFilter);
   const previewModal = usePreviewModal();
 
+  const [employeeType, setEmployeeType] = useState<string>("all");
+
+
+  const activePeople = useMemo(() => {
+    return people.filter(
+      (person) => !(person as CelebrationEntry).previewData?.isArchived
+    );
+  }, [people]);
+
+
   const counts = useMemo(
     () => ({
-      upcoming: people.filter((person) => person.status === "upcoming").length,
-      completed: people.filter((person) => person.status === "completed").length,
+      upcoming: activePeople.filter((p) => p.status === "upcoming").length,
+      completed: activePeople.filter((p) => p.status === "completed").length,
     }),
-    [people]
+    [activePeople]
   );
 
   const filtered = useMemo(() => {
-    if (filter === "all") return people;
-    return people.filter((person) => person.status === filter);
-  }, [filter, people]);
+    let base =
+      filter === "all"
+        ? activePeople
+        : activePeople.filter((p) => p.status === filter);
+
+    if (employeeType !== "all") {
+      base = base.filter(
+        (p) => p.previewData.employeeType.value === employeeType
+      );
+    }
+
+    return base;
+  }, [filter, employeeType, activePeople]);
+
+
 
   const handlePersonClick = (person: CelebrationPerson) => {
     const entry = person as CelebrationEntry;
@@ -63,7 +94,8 @@ export function CelebrationView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2">
+          {/* Status Filter */}
           <ToggleGroup
             type="single"
             value={filter}
@@ -78,20 +110,65 @@ export function CelebrationView({
                   ? counts.upcoming
                   : option.value === "completed"
                     ? counts.completed
-                    : people.length;
+                    : activePeople.length;
+
               return (
                 <ToggleGroupItem
                   key={option.value}
                   value={option.value}
-                  className="px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground data-[state=on]:bg-background data-[state=on]:text-foreground"
+                  className="px-3 text-xs font-medium uppercase tracking-wide
+            text-muted-foreground
+            data-[state=on]:bg-background
+            data-[state=on]:text-foreground"
                 >
                   {option.label}
-                  <span className="ml-1 text-[10px] text-muted-foreground/80">({count})</span>
+                  <span className="ml-1 text-[10px] text-muted-foreground/80">
+                    ({count})
+                  </span>
                 </ToggleGroupItem>
               );
             })}
           </ToggleGroup>
+
+          {/* Employee Type Filter */}
+          <ToggleGroup
+            type="single"
+            value={employeeType}
+            onValueChange={(value) => {
+              if (value) setEmployeeType(value);
+            }}
+            className="rounded-lg border bg-muted/40 p-1"
+          >
+            <ToggleGroupItem
+              value="all"
+              className="px-3 text-xs font-medium uppercase tracking-wide
+        text-muted-foreground
+        data-[state=on]:bg-background
+        data-[state=on]:text-foreground"
+            >
+              All Types
+            </ToggleGroupItem>
+
+            {employeeTypes.map((type) => (
+              <ToggleGroupItem
+                key={type.id}
+                value={type.value}
+                className="px-3 text-xs font-medium uppercase tracking-wide
+  text-muted-foreground
+  transition-all
+  data-[state=on]:bg-primary/10
+  data-[state=on]:text-primary
+  data-[state=on]:border
+  data-[state=on]:border-primary/30
+  data-[state=on]:shadow-sm"
+
+              >
+                {type.name}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </div>
+
       </div>
 
       <CelebrationGrid
