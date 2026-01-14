@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import axios from "axios";
 import { useRouter, useParams } from "next/navigation";
@@ -514,18 +514,14 @@ export const EmployeesForm = ({
     });
   };
   const onSubmit = async (values: EmployeesFormValues) => {
-
-
     const contact = (values.contactNumber ?? "").trim();
     setLoading(true);
+
+         const toastId = toast.loading("Processing...", {
+    description: "Please wait while we save your data.",
+  });
+
     try {
-      const toastId = toast.loading("Processing...", {
-        description: "Please wait while we save your data.",
-        action: {
-          label: "Dismiss",
-          onClick: () => toast.dismiss(toastId), // manually close
-        },
-      });
       const payload = {
         ...values,
         salaryGrade: String(values.salaryGrade ?? ""),
@@ -561,8 +557,11 @@ export const EmployeesForm = ({
       toast.success("Success!", { id: toastId, description: initialData ? "Employee updated." : "Employee created." });
     } catch (error: any) {
       toast.error("Uh oh! Something went wrong.", {
-        description: error?.response?.data?.error ?? "There was a problem with your request.",
-      });
+      id: toastId,
+      description:
+        error?.response?.data?.error ??
+        "There was a problem with your request.",
+    });
     } finally {
       setLoading(false);
     }
