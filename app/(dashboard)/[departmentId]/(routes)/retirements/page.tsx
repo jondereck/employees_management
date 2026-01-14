@@ -243,6 +243,7 @@ export default async function RetirementsPage({
         emptyMessage="No matching retirements. Check birth dates or explore the Completed tab for retirement history."
         people={sorted}
         employeeTypes={[]}
+         enableDownload={true}
         defaultFilter="upcoming"
       />
     </div>

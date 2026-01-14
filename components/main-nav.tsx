@@ -79,7 +79,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
     },
     {
       href: `/${departmentId}/anniversaries`,
-      label: "Anniversaries",
+      label: "Loyalty Awards",
       description: "Celebrate milestone years of service and loyalty.",
       active: pathname === `/${departmentId}/anniversaries`,
     },

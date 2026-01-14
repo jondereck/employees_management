@@ -208,17 +208,18 @@ const employeeTypes = await prismadb.employeeType.findMany({
       <Breadcrumbs
         items={[
           { label: "Employees", href: `/${departmentId}/employees` },
-          { label: "Anniversaries" },
+          { label: "Loyalty Awards" },
         ]}
       />
 
       <CelebrationView
-        title="Milestone Anniversaries"
+        title="Loyalty Awardees"
         subtitle={subtitle}
         description="Monitor landmark years of service so you can plan recognition activities ahead of time."
-        emptyMessage="No milestone anniversaries detected for this period. Update employee hire dates to track key milestones."
+        emptyMessage="No milestone Loyalty Awardees detected for this period. Update employee hire dates to track key milestones."
         people={sorted}
         employeeTypes={employeeTypes}
+        enableDownload={true}
         defaultFilter="upcoming"
       />
     </div>

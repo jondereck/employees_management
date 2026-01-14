@@ -5,6 +5,9 @@ import { CelebrationGrid, type CelebrationPerson } from "./celebration-grid";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { EmployeesColumn } from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/columns";
 import usePreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/hooks/use-preview-modal";
+import { Button } from "./ui/button";
+import * as XLSX from "xlsx";
+
 
 export type CelebrationEntry = CelebrationPerson & {
   status: "upcoming" | "completed";
@@ -29,6 +32,7 @@ type CelebrationViewProps = {
   people: CelebrationEntry[];
   employeeTypes: EmployeeType[] | undefined
   defaultFilter?: FilterValue;
+  enableDownload?: boolean;
 };
 
 const FILTER_OPTIONS: { value: FilterValue; label: string }[] = [
@@ -44,6 +48,7 @@ export function CelebrationView({
   emptyMessage,
   people,
   employeeTypes,
+  enableDownload = false,
   defaultFilter = "upcoming",
 }: CelebrationViewProps) {
   const [filter, setFilter] = useState<FilterValue>(defaultFilter);
@@ -92,30 +97,62 @@ export function CelebrationView({
     }
   };
 
+
+  const handleDownload = () => {
+    if (!filtered.length) return;
+
+    const rows = filtered.map((p) => ({
+      Name: `${p.previewData.firstName} ${p.previewData.lastName}`,
+      "Employee No": p.previewData.employeeNo,
+      Position: p.previewData.position,
+      "Employee Type": p.previewData.employeeType.name,
+      "Event Date": p.eventDate,
+      Status: p.status.toUpperCase(),
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Anniversaries");
+
+    const fileNameParts = [
+      "anniversaries",
+      filter,
+      employeeType !== "all" ? employeeType : null,
+    ].filter(Boolean);
+
+    XLSX.writeFile(
+      workbook,
+      `${fileNameParts.join("_")}.xlsx`
+    );
+  };
+
+
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-    <div className="flex flex-col gap-3">
-  {/* ================= STATUS FILTER ================= */}
-  <ToggleGroup
-    type="single"
-    value={filter}
-    onValueChange={(value) => value && setFilter(value as FilterValue)}
-    className="inline-flex w-fit rounded-lg border bg-muted/40 p-1"
-  >
-    {FILTER_OPTIONS.map((option) => {
-      const count =
-        option.value === "upcoming"
-          ? counts.upcoming
-          : option.value === "completed"
-          ? counts.completed
-          : activePeople.length;
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-col gap-3">
+          {/* ================= STATUS FILTER ================= */}
+          <ToggleGroup
+            type="single"
+            value={filter}
+            onValueChange={(value) => value && setFilter(value as FilterValue)}
+            className="inline-flex w-fit rounded-lg border bg-muted/40 p-1"
+          >
+            {FILTER_OPTIONS.map((option) => {
+              const count =
+                option.value === "upcoming"
+                  ? counts.upcoming
+                  : option.value === "completed"
+                    ? counts.completed
+                    : activePeople.length;
 
-      return (
-        <ToggleGroupItem
-          key={option.value}
-          value={option.value}
-          className="
+              return (
+                <ToggleGroupItem
+                  key={option.value}
+                  value={option.value}
+                  className="
             relative px-4 py-1.5 text-xs font-semibold uppercase tracking-wide
             text-muted-foreground transition-all
             hover:text-foreground
@@ -123,47 +160,47 @@ export function CelebrationView({
             data-[state=on]:text-foreground
             data-[state=on]:shadow-sm
           "
-        >
-          {option.label}
-          <span className="ml-1 text-[10px] opacity-70">
-            {count}
-          </span>
-        </ToggleGroupItem>
-      );
-    })}
-  </ToggleGroup>
+                >
+                  {option.label}
+                  <span className="ml-1 text-[10px] opacity-70">
+                    {count}
+                  </span>
+                </ToggleGroupItem>
+              );
+            })}
+          </ToggleGroup>
 
-  {/* ================= EMPLOYEE TYPE FILTER ================= */}
-  {showFilters && safeEmployeeTypes.length > 0 && (
-    <div className="relative">
-      <ToggleGroup
-        type="single"
-        value={employeeType}
-        onValueChange={(value) => value && setEmployeeType(value)}
-        className="
+          {/* ================= EMPLOYEE TYPE FILTER ================= */}
+          {showFilters && safeEmployeeTypes.length > 0 && (
+            <div className="relative">
+              <ToggleGroup
+                type="single"
+                value={employeeType}
+                onValueChange={(value) => value && setEmployeeType(value)}
+                className="
           flex gap-2 overflow-x-auto no-scrollbar
           rounded-lg border bg-muted/30 p-2
         "
-      >
-        {/* All Types → treated as reset */}
-        <ToggleGroupItem
-          value="all"
-          className="
+              >
+                {/* All Types → treated as reset */}
+                <ToggleGroupItem
+                  value="all"
+                  className="
             rounded-full px-4 py-1.5 text-xs font-medium uppercase
             text-muted-foreground transition-all
             hover:bg-muted
             data-[state=on]:bg-foreground
             data-[state=on]:text-background
           "
-        >
-          All
-        </ToggleGroupItem>
+                >
+                  All
+                </ToggleGroupItem>
 
-        {safeEmployeeTypes.map((type) => (
-          <ToggleGroupItem
-            key={type.id}
-            value={type.value}
-            className="
+                {safeEmployeeTypes.map((type) => (
+                  <ToggleGroupItem
+                    key={type.id}
+                    value={type.value}
+                    className="
               rounded-full px-4 py-1.5 text-xs font-medium uppercase
               text-muted-foreground transition-all
               hover:bg-muted
@@ -174,15 +211,26 @@ export function CelebrationView({
               data-[state=on]:border-primary/30
               data-[state=on]:shadow-sm
             "
-          >
-            {type.name}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-    </div>
-  )}
-</div>
+                  >
+                    {type.name}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+          )}
 
+          
+        </div>
+
+        {enableDownload && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownload}
+          >
+            Download Excel
+          </Button>
+        )}
 
       </div>
 
