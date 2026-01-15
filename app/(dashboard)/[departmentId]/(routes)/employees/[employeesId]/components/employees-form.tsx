@@ -1366,7 +1366,6 @@ export const EmployeesForm = ({
                       field={field}                 // ✅ pass RHF field
                       fromYear={fromYear}           // e.g. currentYear - 75
                       toYear={currentYear}
-                      disableFuture                 // optional: block future dates
                       description="Date hired is used to calculate years of service."
                       disabled={loading}
                       required
