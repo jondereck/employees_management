@@ -152,18 +152,31 @@ const employeeTypes = await prismadb.employeeType.findMany({
 
   const entries: CelebrationEntry[] = [];
 
-  for (const employee of employees) {
-    if (!employee.dateHired) continue;
+ for (const employee of employees) {
+  if (!employee.dateHired) continue;
 
-    const hireDate = new Date(employee.dateHired);
-    if (Number.isNaN(hireDate.getTime())) continue;
+  const hireDate = new Date(employee.dateHired);
+  if (Number.isNaN(hireDate.getTime())) continue;
 
-    const milestoneYears = currentYear - hireDate.getFullYear();
-    if (!MILESTONE_YEARS.includes(milestoneYears)) continue;
+  for (const milestone of MILESTONE_YEARS) {
+    const milestoneYear = hireDate.getFullYear() + milestone;
 
-    const milestoneThisYear = new Date(currentYear, hireDate.getMonth(), hireDate.getDate());
-    const status: "upcoming" | "completed" = milestoneThisYear >= today ? "upcoming" : "completed";
-    const highlight = status === "completed" ? "Completed" : shortDateFormatter.format(milestoneThisYear);
+    // do not create future milestones
+    if (milestoneYear > currentYear) continue;
+
+    const milestoneDate = new Date(
+      milestoneYear,
+      hireDate.getMonth(),
+      hireDate.getDate()
+    );
+
+    const status: "upcoming" | "completed" =
+      milestoneDate >= today ? "upcoming" : "completed";
+
+    const highlight =
+      status === "completed"
+        ? "Completed"
+        : shortDateFormatter.format(milestoneDate);
 
     const displayName = employee.nickname
       ? `${employee.firstName} "${employee.nickname}" ${employee.lastName}`
@@ -171,26 +184,29 @@ const employeeTypes = await prismadb.employeeType.findMany({
 
     const primaryLabel =
       status === "completed"
-        ? `${milestoneYears}-year milestone celebrated`
-        : `${milestoneYears}-year milestone`;
+        ? `${milestone}-year milestone celebrated`
+        : `${milestone}-year milestone`;
 
-    const secondaryLabel = `${status === "completed" ? "Celebrated on" : "Scheduled for"} ${milestoneDateFormatter.format(
-      milestoneThisYear
-    )} • Hired ${milestoneDateFormatter.format(hireDate)}`;
+    const secondaryLabel = `${
+      status === "completed" ? "Celebrated on" : "Scheduled for"
+    } ${milestoneDateFormatter.format(milestoneDate)} • Hired ${milestoneDateFormatter.format(
+      hireDate
+    )}`;
 
     entries.push({
-      id: employee.id,
+      id: `${employee.id}-${milestoneYear}`, // 👈 unique per year
       fullName: displayName,
       primaryLabel,
       secondaryLabel,
-      badge: `${milestoneYears} ${milestoneYears === 1 ? "Year" : "Years"}`,
+      badge: `${milestone} Years`,
       highlight,
       status,
-      eventDate: milestoneThisYear.toISOString(),
+      eventDate: milestoneDate.toISOString(),
       imageUrl: employee.images[0]?.url ?? null,
       previewData: mapEmployeeToColumn(employee),
     });
   }
+}
 
   const sorted = entries.sort(
     (a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime()

@@ -3,6 +3,14 @@
 import { useMemo, useState } from "react";
 import { CelebrationGrid, type CelebrationPerson } from "./celebration-grid";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 import { EmployeesColumn } from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/columns";
 import usePreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/hooks/use-preview-modal";
 import { Button } from "./ui/button";
@@ -58,6 +66,17 @@ export function CelebrationView({
   const safeEmployeeTypes = employeeTypes ?? [];
   const showFilters = safeEmployeeTypes.length > 0;
 
+
+
+  const [year, setYear] = useState<number>(() => {
+    const years = Array.from(
+      new Set(people.map(p => new Date(p.eventDate).getFullYear()))
+    ).sort((a, b) => b - a);
+
+    return years[0] ?? new Date().getFullYear();
+  });
+
+  const isCurrentYear = year === new Date().getFullYear();
   const activePeople = useMemo(() => {
     return people.filter(
       (person) => !(person as CelebrationEntry).previewData?.isArchived
@@ -65,13 +84,19 @@ export function CelebrationView({
   }, [people]);
 
 
-  const counts = useMemo(
-    () => ({
-      upcoming: activePeople.filter((p) => p.status === "upcoming").length,
-      completed: activePeople.filter((p) => p.status === "completed").length,
-    }),
-    [activePeople]
-  );
+  const counts = useMemo(() => {
+    const yearFiltered = activePeople.filter(
+      (p) => new Date(p.eventDate).getFullYear() === year
+    );
+
+    return {
+      upcoming: yearFiltered.filter((p) => p.status === "upcoming").length,
+      completed: yearFiltered.filter((p) => p.status === "completed").length,
+    };
+  }, [activePeople, year]);
+
+
+
 
   const filtered = useMemo(() => {
     let base =
@@ -79,14 +104,22 @@ export function CelebrationView({
         ? activePeople
         : activePeople.filter((p) => p.status === filter);
 
+    // Employee Type filter
     if (employeeType !== "all") {
       base = base.filter(
         (p) => p.previewData.employeeType.value === employeeType
       );
     }
 
+    // ✅ YEAR FILTER — based on PRECOMPUTED milestone year
+    base = base.filter(
+      (p) => new Date(p.eventDate).getFullYear() === year
+    );
+
     return base;
-  }, [filter, employeeType, activePeople]);
+  }, [filter, employeeType, year, activePeople]);
+
+
 
 
 
@@ -127,12 +160,38 @@ export function CelebrationView({
     );
   };
 
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+
+    people.forEach((p) => {
+      years.add(new Date(p.eventDate).getFullYear());
+    });
+
+    return Array.from(years).sort((a, b) => b - a);
+  }, [people]);
 
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-3">
+          <Select
+            value={year.toString()}
+            onValueChange={(value) => setYear(Number(value))}
+          >
+            <SelectTrigger className="w-[120px]">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+
+            <SelectContent>
+              {availableYears.map((y) => (
+                <SelectItem key={y} value={y.toString()}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           {/* ================= STATUS FILTER ================= */}
           <ToggleGroup
             type="single"
@@ -140,34 +199,42 @@ export function CelebrationView({
             onValueChange={(value) => value && setFilter(value as FilterValue)}
             className="inline-flex w-fit rounded-lg border bg-muted/40 p-1"
           >
-            {FILTER_OPTIONS.map((option) => {
-              const count =
-                option.value === "upcoming"
-                  ? counts.upcoming
-                  : option.value === "completed"
-                    ? counts.completed
-                    : activePeople.length;
+            {FILTER_OPTIONS
+              .filter((option) => {
+                if (option.value === "upcoming" && !isCurrentYear) {
+                  return false;
+                }
+                return true;
+              })
+              .map((option) => {
+                const count =
+                  option.value === "upcoming"
+                    ? counts.upcoming
+                    : option.value === "completed"
+                      ? counts.completed
+                      : counts.upcoming + counts.completed;
 
-              return (
-                <ToggleGroupItem
-                  key={option.value}
-                  value={option.value}
-                  className="
-            relative px-4 py-1.5 text-xs font-semibold uppercase tracking-wide
-            text-muted-foreground transition-all
-            hover:text-foreground
-            data-[state=on]:bg-background
-            data-[state=on]:text-foreground
-            data-[state=on]:shadow-sm
-          "
-                >
-                  {option.label}
-                  <span className="ml-1 text-[10px] opacity-70">
-                    {count}
-                  </span>
-                </ToggleGroupItem>
-              );
-            })}
+                return (
+                  <ToggleGroupItem
+                    key={option.value}
+                    value={option.value}
+                    className="
+          relative px-4 py-1.5 text-xs font-semibold uppercase tracking-wide
+          text-muted-foreground transition-all
+          hover:text-foreground
+          data-[state=on]:bg-background
+          data-[state=on]:text-foreground
+          data-[state=on]:shadow-sm
+        "
+                  >
+                    {option.label}
+                    <span className="ml-1 text-[10px] opacity-70">
+                      {count}
+                    </span>
+                  </ToggleGroupItem>
+                );
+              })}
+
           </ToggleGroup>
 
           {/* ================= EMPLOYEE TYPE FILTER ================= */}
@@ -219,7 +286,7 @@ export function CelebrationView({
             </div>
           )}
 
-          
+
         </div>
 
         {enableDownload && (
