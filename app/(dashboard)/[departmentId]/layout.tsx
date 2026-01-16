@@ -5,6 +5,7 @@ import { auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import ModalProvider from "./(routes)/(frontend)/providers/modal-provider";
 import { Toaster } from "@/components/ui/toaster";
+import { AskGenio } from "@/components/ai/ask-genio";
 
 export default async function DashboardLayout({
   children,
@@ -35,9 +36,9 @@ export default async function DashboardLayout({
       <div>
         <ModalProvider />
         <Navbar />
-        
+        <AskGenio />
         {children}
-        <Toaster/>
+        <Toaster />
       </div>
     </>
   )
