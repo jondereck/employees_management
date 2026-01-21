@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Bot, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GenioChat } from "./genio-chat";
-
+import PreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/preview";
+import Image from "next/image";
 
 export const AskGenio = () => {
   const [open, setOpen] = useState(false);
@@ -12,24 +13,28 @@ export const AskGenio = () => {
   return (
     <>
       {/* Floating Button */}
-      <Button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg"
-      >
-        <Bot className="h-6 w-6" />
-      </Button>
+      {!open && (
+       <Button
+       variant={"outline"}
+  onClick={() => setOpen(true)}
+  className="fixed bottom-6 right-6 z-40 h-16 w-16 rounded-full p-0 overflow-hidden shadow-lg items-center justify-center flex bg-purple-200 "
+>
+  <Image
+    src="/genio/genio-avatar.png"
+    alt="Genio AI"
+    fill
+    className="object-cover"
+    priority
+  />
+</Button>
 
-      {/* Chat Drawer */}
+      )}
+
+      {/* Chat Panel */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-[360px] rounded-xl border bg-background shadow-xl">
-          <div className="flex items-center justify-between border-b p-3">
-            <span className="font-semibold">Ask Genio</span>
-            <Button size="icon" variant="ghost" onClick={() => setOpen(false)}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <GenioChat />
+        <div className="fixed bottom-6 right-6 z-50">
+          <GenioChat onClose={() => setOpen(false)} />
+          <PreviewModal />
         </div>
       )}
     </>
