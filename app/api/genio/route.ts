@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { Gender } from "@prisma/client";
 import OpenAI from "openai";
 import { buildEmployeeAIContext, getEmployeesForAI } from "@/src/genio/ai-data";
+import { resolveOffice } from "@/src/genio/resolve-office";
 
 
 const openai = new OpenAI({
@@ -74,8 +75,110 @@ export async function POST(req: Request) {
   const { message, context } = await req.json();
   const question = message.toLowerCase();
 
+
   let newContext = context ?? {};
   let viewProfileEmployeeId: string | null = null;
+
+const wantsCount =
+  question.includes("how many") ||
+  question.includes("number of");
+
+const wantsGenderBreakdown =
+  question.includes("gender") ||
+  (question.includes("male") && question.includes("female"));
+
+let officeId: string | null = null;
+let officeName: string | null = null;
+
+/* ================= THIS OFFICE (CONTEXT) ================= */
+
+if (question.includes("this office") && context?.lastEmployeeId) {
+  const employee = await prisma.employee.findUnique({
+    where: { id: context.lastEmployeeId },
+    select: {
+      offices: { select: { id: true, name: true } },
+    },
+  });
+
+  officeId = employee?.offices?.id ?? null;
+  officeName = employee?.offices?.name ?? null;
+}
+
+if (question.includes("this office") && !officeId) {
+  return streamReply(
+    "I’m not sure which office you mean. Please specify an employee or office.",
+    context,
+    null
+  );
+}
+
+/* ================= NAMED OFFICE (HR, HRMO, ETC) ================= */
+
+if (!officeId) {
+  const offices = await prisma.offices.findMany({
+    select: { id: true, name: true },
+  });
+
+  const normalizedQuestion = normalize(question);
+
+  const matchedOffice = offices.find((o) =>
+    normalizedQuestion.includes(normalize(o.name))
+  );
+
+  if (matchedOffice) {
+    officeId = matchedOffice.id;
+    officeName = matchedOffice.name;
+  }
+}
+
+/* ================= COUNT ================= */
+
+if (wantsCount && !wantsGenderBreakdown) {
+  const count = await prisma.employee.count({
+    where: {
+      isArchived: false,
+      ...(officeId && { officeId }),
+    },
+  });
+
+  return streamReply(
+    `There are **${count} employees**${
+      officeName ? ` in ${officeName}` : ""
+    }.`,
+    context,
+    null
+  );
+}
+
+/* ================= GENDER BREAKDOWN ================= */
+
+if (wantsGenderBreakdown) {
+  const [male, female] = await Promise.all([
+    prisma.employee.count({
+      where: {
+        isArchived: false,
+        gender: Gender.Male,
+        ...(officeId && { officeId }),
+      },
+    }),
+    prisma.employee.count({
+      where: {
+        isArchived: false,
+        gender: Gender.Female,
+        ...(officeId && { officeId }),
+      },
+    }),
+  ]);
+
+  return streamReply(
+    `Here is the gender distribution${
+      officeName ? ` in ${officeName}` : ""
+    }:\n\n**Male:** ${male}\n**Female:** ${female}`,
+    context,
+    null
+  );
+}
+
 
   /* ============================================================
      FOLLOW-UP: HOW OLD IS HE / SHE
@@ -130,20 +233,41 @@ if (flexibleQuestions) {
   const contextText = buildEmployeeAIContext(employees);
 
   const prompt = `
-You are Genio, an HR assistant.
+You are Genio, a helpful and professional HR assistant for a local government unit.
 
+Follow these rules strictly:
 
-You may only explain results that are already computed.
-Do NOT invent numbers or names.
+1. For questions involving numbers, counts, names of employees, offices, or statistics:
+   - Use ONLY the data provided below.
+   - Do NOT invent or estimate numbers.
+   - Do NOT guess names, offices, or totals.
+   - If the information is missing or unclear, clearly say so.
 
-Use ONLY the data below.
-If the data is insufficient, say so.
+2. For basic or general HR questions (definitions, explanations, clarifications):
+   - You may answer using common HR knowledge.
+   - Keep answers concise and professional.
+   - Do NOT reference specific employees or offices unless data is provided.
 
+3. When an office or employee is mentioned:
+   - Assume the closest matching office name if it is clearly implied (e.g., HR, HRMO, Human Resource).
+   - Do NOT list all offices unless the user explicitly asks.
+
+4. If the user asks a follow-up like “this office” or “this employee”:
+   - Use the most recent relevant context if available.
+   - If no context exists, ask for clarification.
+
+5. If the question cannot be answered safely with the available data:
+   - Respond honestly that the information is not available.
+
+Use a clear, friendly, and professional tone.
+
+Data:
 ${contextText}
 
 Question:
 ${message}
 `;
+
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -191,14 +315,19 @@ ${message}
       select: { id: true, name: true },
     });
 
-    const normalizedQuestion = normalize(question);
+    const matchedOffice = resolveOffice(question, offices);
 
-    const officeMatch = offices.find((o) =>
-      normalize(o.name).includes(normalizedQuestion) ||
-      normalizedQuestion.includes(normalize(o.name))
-    );
+if (matchedOffice) {
+  officeId = matchedOffice.id;
+  officeName = matchedOffice.name;
 
-    if (question.includes("office") && !officeMatch) {
+  newContext = {
+    ...context,
+    lastOfficeId: officeId,
+    lastOfficeName: officeName,
+  };
+}
+    if (question.includes("office") && !matchedOffice) {
       return streamReply(
         "I couldn’t identify which office you mean. Please use the full office name.",
         newContext,
@@ -209,7 +338,7 @@ ${message}
     const where: any = {
       isArchived: false,
       ...(employeeTypeId && { employeeTypeId }),
-      ...(officeMatch && { officeId: officeMatch.id }),
+      ...(matchedOffice && { officeId: matchedOffice.id }),
     };
 
     // Male + Female
@@ -225,7 +354,7 @@ ${message}
 
       return streamReply(
         `Here is the gender distribution${
-          officeMatch ? ` in ${officeMatch.name}` : ""
+          matchedOffice ? ` in ${matchedOffice.name}` : ""
         }:\n\n**Male:** ${male}\n**Female:** ${female}`,
         newContext,
         null
@@ -243,7 +372,7 @@ ${message}
       return streamReply(
         `There are **${count} ${
           wantsMale ? "male" : "female"
-        } employees**${officeMatch ? ` in ${officeMatch.name}` : ""}.`,
+        } employees**${matchedOffice ? ` in ${matchedOffice.name}` : ""}.`,
         newContext,
         null
       );
@@ -254,7 +383,7 @@ ${message}
 
     return streamReply(
       `There are **${count} employees**${
-        officeMatch ? ` in ${officeMatch.name}` : ""
+        matchedOffice ? ` in ${matchedOffice.name}` : ""
       }.`,
       newContext,
       null
