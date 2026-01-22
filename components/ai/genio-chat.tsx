@@ -4,6 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import usePreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/hooks/use-preview-modal";
+import { FiRefreshCcw } from "react-icons/fi";
+
+import {
+  loadGenioCache,
+  saveGenioCache,
+  clearGenioCache,
+} from "@/lib/genio-cache";
+
 
 import { nanoid } from "nanoid";
 
@@ -27,10 +35,14 @@ type GenioContext = {
 };
 export const GenioChat = ({
   onClose,
-  departmentId
+
+  departmentId,
+  hidden
 }: {
+
   onClose: () => void;
   departmentId: string;
+  hidden: boolean;
 }) => {
   const previewModal = usePreviewModal();
 
@@ -40,6 +52,8 @@ export const GenioChat = ({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [lastContext, setLastContext] = useState<GenioContext | null>(null);
+
+
 
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -126,9 +140,49 @@ export const GenioChat = ({
   };
 
 
+useEffect(() => {
+  if (typeof window === "undefined") return;
+
+  const cached = loadGenioCache();
+  if (!cached) return;
+
+  setMessages(cached.messages ?? []);
+  setLastContext(cached.context ?? null);
+  setInput(cached.input ?? "");
+}, []);
+
+  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
+
+useEffect(() => {
+
+  if (typeof window === "undefined") return;
+
+  if (saveTimeout.current) {
+    clearTimeout(saveTimeout.current);
+  }
+
+  saveTimeout.current = setTimeout(() => {
+    console.log("CACHE SAVE CONFIRMED", messages.length);
+    saveGenioCache({
+      messages,
+      context: lastContext,
+      input,
+    });
+  }, 300);
+
+  return () => {
+    if (saveTimeout.current) {
+      clearTimeout(saveTimeout.current);
+    }
+  };
+}, [messages, lastContext, input]);
 
   return (
-    <div className="flex h-[520px] w-[380px] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
+    <div
+      className={`flex h-[520px] w-[380px] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl
+  ${hidden ? "hidden" : ""}`}
+    >
+
 
       {/* HEADER */}
       <div className="flex items-center justify-between border-b px-4 py-3">
@@ -136,14 +190,15 @@ export const GenioChat = ({
 
 
           <div className="relative h-12 w-12 overflow-hidden rounded-full bg-purple-300">
-  <Image
-    src="/genio/genio-avatar.png"
-    alt="Genio AI"
-    fill
-    className="rounded-full object-contain"
-    priority
-  />
-</div>
+            <Image
+              src="/genio/genio-avatar.png"
+              alt="Genio AI"
+              fill
+              className="rounded-full object-contain"
+              priority
+            />
+          </div>
+
           <div>
             <p className="text-sm font-semibold">Genio</p>
             <p className="flex items-center gap-1 text-xs text-green-500">
@@ -152,12 +207,30 @@ export const GenioChat = ({
             </p>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          ✕
-        </button>
+
+        <div className="flex gap-2">
+          {/* Reset*/}
+
+          <button
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              clearGenioCache();
+              setMessages([]);
+              setLastContext(null);
+              setInput("");
+            }}
+          >
+            <FiRefreshCcw className="h-4 w-4" />
+          </button>
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
+            title="Close"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* MESSAGES */}
@@ -176,8 +249,8 @@ export const GenioChat = ({
           >
             <div
               className={`max-w-[85%] rounded-2xl px-4 py-2 ${m.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted"
                 }`}
             >
               {m.content === "__thinking__" ? (
@@ -200,9 +273,9 @@ export const GenioChat = ({
                   variant="outline"
                   className="mt-2"
                   onClick={async () => {
-                   const res = await fetch(
-  `/api/${departmentId}/employees/${m.employeeId}`
-);
+                    const res = await fetch(
+                      `/api/${departmentId}/employees/${m.employeeId}`
+                    );
 
                     const emp = await res.json();
                     previewModal.onOpen(emp);
@@ -217,14 +290,14 @@ export const GenioChat = ({
 
         <div ref={bottomRef} />
       </div>
-      
+
 
       {/* INPUT */}
-    <div className="border-t border-white/10 px-3 py-2">
+      <div className="border-t border-white/10 px-3 py-2">
 
-  <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-2 py-1">
-    <Input
-      className="
+        <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-2 py-1">
+          <Input
+            className="
         h-6
         px-1.5
         text-[11px]
@@ -234,70 +307,80 @@ export const GenioChat = ({
         focus-visible:ring-offset-0
         placeholder:text-muted-foreground
       "
-      placeholder="Ask Genio anything..."
-      value={input}
-      onChange={(e) => setInput(e.target.value)}
-      onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-      disabled={isLoading}
-    />
+            placeholder="Ask Genio anything..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            disabled={isLoading}
+          />
 
-    <Button
-      size="sm"
-      className="
+          <Button
+            size="sm"
+            className="
         h-6
         rounded-md
         px-2
         text-[11px]
       "
-      onClick={() => sendMessage()}
-      disabled={isLoading}
-    >
-      Send →
-    </Button>
-  </div>
-         {/* QUICK ACTIONS */}
-  <div className="mt-2 flex gap-2">
-    <button
-      className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
-      onClick={() => sendMessage('How many employees are there?')}
-    >
-      Total Employees
-    </button>
+            onClick={() => sendMessage()}
+            disabled={isLoading}
+          >
+            Send →
+          </Button>
+        </div>
+        {/* QUICK ACTIONS */}
 
-    <button
-      className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
-      onClick={() => sendMessage('How many female employees are there?')}
-    >
-      Female Count
-    </button>
+        <div className="mt-2 flex gap-2">
 
-    <button
-      className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
-      onClick={() => sendMessage('Show HR department details')}
-    >
-      HR Details
-    </button>
-  </div>
+          <button
+            className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
+            onClick={() => sendMessage('How many employees are there?')}
+          >
+            Total Employees
+          </button>
 
-</div>
-{/* FOOTER */}
-<div className="border-t border-black/10 px-4 py-2 text-center text-[11px] text-black">
-  <div className="flex justify-center gap-3">
-    <button className="hover:text-black/80 transition">
-      Privacy
-    </button>
-    <span className="text-black/40">·</span>
-    <button className="hover:text-black/80 transition">
-      Terms
-    </button>
-    <span className="text-black/40">·</span>
-    <button className="hover:text-black/80 transition">
-      Feedback
-    </button>
-  </div>
-</div>
+          <button
+            className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
+            onClick={() => sendMessage('How many female employees are there?')}
+          >
+            Female Count
+          </button>
 
-      
+          <Button
+            size="sm"
+            variant="ghost"
+            className="mt-2 text-xs text-red-500"
+            onClick={() => {
+              clearGenioCache();
+              setMessages([]);
+              setLastContext(null);
+              setInput("");
+            }}
+          >
+            Clear Memory
+          </Button>
+
+        </div>
+
+      </div>
+      {/* FOOTER */}
+      <div className="border-t border-black/10 px-4 py-2 text-center text-[11px] text-black">
+        <div className="flex justify-center gap-3">
+          <button className="hover:text-black/80 transition">
+            Privacy
+          </button>
+          <span className="text-black/40">·</span>
+          <button className="hover:text-black/80 transition">
+            Terms
+          </button>
+          <span className="text-black/40">·</span>
+          <button className="hover:text-black/80 transition">
+            Feedback
+          </button>
+        </div>
+      </div>
+
+
     </div>
   );
 };
