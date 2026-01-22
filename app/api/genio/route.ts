@@ -10,6 +10,7 @@ import { Gender } from "@prisma/client";
 import OpenAI from "openai";
 import { buildEmployeeAIContext, getEmployeesForAI } from "@/src/genio/ai-data";
 import { resolveOffice } from "@/src/genio/resolve-office";
+import { OFFICE_ALIASES } from "@/src/genio/office-aliases";
 
 
 const openai = new OpenAI({
@@ -69,290 +70,106 @@ function extractField(block: string, label: string) {
   return match ? match[1].trim() : null;
 }
 
+function resolveOfficeWithAliases(
+  question: string,
+  offices: { id: string; name: string }[]
+) {
+  const q = normalize(question);
+
+  for (const office of offices) {
+    const officeNorm = normalize(office.name);
+
+    // 1️⃣ direct name match
+    if (q.includes(officeNorm)) {
+      return office;
+    }
+
+    // 2️⃣ alias match (normalize aliases too)
+    for (const [key, aliases] of Object.entries(OFFICE_ALIASES)) {
+      if (normalize(key) !== officeNorm) continue;
+
+      for (const alias of aliases) {
+        if (q.includes(normalize(alias))) {
+          return office;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+
+/* ================= POST ================= */
+
 /* ================= POST ================= */
 
 export async function POST(req: Request) {
   const { message, context } = await req.json();
   const question = message.toLowerCase();
 
-
   let newContext = context ?? {};
   let viewProfileEmployeeId: string | null = null;
 
   /* ============================================================
-     WHO IS → EXCEL + AI (STORE CONTEXT)
+     WHO IS (STRICT)
      ============================================================ */
-
   if (question.startsWith("who is")) {
-    const employees = loadEmployeesFromExcel();
-    const knowledgeText = buildEmployeeKnowledgeText(employees);
-    const chunks = knowledgeText.split("\n---\n");
+    const cleaned = question
+      .replace("who is", "")
+      .replace(/[^a-z\s]/gi, "")
+      .trim();
 
-    const tokens = question
-      .toUpperCase()
-      .replace("WHO IS", "")
-      .replace(/[^A-Z\s]/g, "")
-      .trim()
-      .split(" ");
-
-    const matches = chunks.filter((chunk) =>
-      tokens.every((t:string) => chunk.toUpperCase().includes(t))
-    );
-
-    if (matches.length > 0) {
-      const prompt = `
-You are Genio, an HR assistant.
-Use ONLY the employee record below.
-
-Employee Record:
-${matches[0]}
-
-Question:
-${message}
-`;
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      // Match employee in Prisma for follow-ups
-      const fullName = extractField(matches[0], "Name");
-      const parts = fullName?.split(" ") ?? [];
-
-      const firstName = parts[0];
-      const lastName = parts[parts.length - 1];
-
-      const prismaEmployee = await prisma.employee.findFirst({
-        where: {
-          firstName: { contains: firstName, mode: "insensitive" },
-          lastName: { contains: lastName, mode: "insensitive" },
-          isArchived: false,
-        },
-        select: { id: true },
-      });
-
-      if (prismaEmployee) {
-        newContext = {
-          ...newContext,
-          lastEmployeeId: prismaEmployee.id,
-        };
-      }
-
-return streamReply(
-  completion.choices[0].message.content ??
-    "I couldn’t interpret the employee record.",
-  newContext,
-  prismaEmployee?.id ?? null
-);
-
+    const parts = cleaned.split(/\s+/);
+    if (parts.length < 2) {
+      return streamReply("Please provide the employee’s full name.", newContext, null);
     }
-  }
 
+    const firstName = parts[0];
+    const lastName = parts[parts.length - 1];
 
-const wantsCount =
-  question.includes("how many") ||
-  question.includes("number of");
-
-const wantsGenderBreakdown =
-  question.includes("gender") ||
-  (question.includes("male") && question.includes("female"));
-
-let officeId: string | null = null;
-let officeName: string | null = null;
-
-/* ================= THIS OFFICE (CONTEXT) ================= */
-
-if (question.includes("this office") && context?.lastEmployeeId) {
-  const employee = await prisma.employee.findUnique({
-    where: { id: context.lastEmployeeId },
-    select: {
-      offices: { select: { id: true, name: true } },
-    },
-  });
-
-  officeId = employee?.offices?.id ?? null;
-  officeName = employee?.offices?.name ?? null;
-}
-
-if (question.includes("this office") && !officeId) {
-  return streamReply(
-    "I’m not sure which office you mean. Please specify an employee or office.",
-    context,
-    null
-  );
-}
-
-/* ================= NAMED OFFICE (HR, HRMO, ETC) ================= */
-
-if (!officeId) {
-  const offices = await prisma.offices.findMany({
-    select: { id: true, name: true },
-  });
-
-  const normalizedQuestion = normalize(question);
-
-  const matchedOffice = offices.find((o) =>
-    normalizedQuestion.includes(normalize(o.name))
-  );
-
-  if (matchedOffice) {
-    officeId = matchedOffice.id;
-    officeName = matchedOffice.name;
-  }
-}
-
-/* ================= COUNT ================= */
-
-if (wantsCount && !wantsGenderBreakdown) {
-  const count = await prisma.employee.count({
-    where: {
-      isArchived: false,
-      ...(officeId && { officeId }),
-    },
-  });
-
-  return streamReply(
-    `There are **${count} employees**${
-      officeName ? ` in ${officeName}` : ""
-    }.`,
-    context,
-    null
-  );
-}
-
-/* ================= GENDER BREAKDOWN ================= */
-
-if (wantsGenderBreakdown) {
-  const [male, female] = await Promise.all([
-    prisma.employee.count({
+    const employees = await prisma.employee.findMany({
       where: {
         isArchived: false,
-        gender: Gender.Male,
-        ...(officeId && { officeId }),
+        firstName: { contains: firstName, mode: "insensitive" },
+        lastName: { equals: lastName, mode: "insensitive" },
       },
-    }),
-    prisma.employee.count({
-      where: {
-        isArchived: false,
-        gender: Gender.Female,
-        ...(officeId && { officeId }),
-      },
-    }),
-  ]);
-
-  return streamReply(
-    `Here is the gender distribution${
-      officeName ? ` in ${officeName}` : ""
-    }:\n\n**Male:** ${male}\n**Female:** ${female}`,
-    context,
-    null
-  );
-}
-
-
-  /* ============================================================
-     FOLLOW-UP: HOW OLD IS HE / SHE
-     ============================================================ */
-
-  const isHowOld =
-    question.includes("how old") &&
-    (question.includes("he") || question.includes("she"));
-
-  if (isHowOld && context?.lastEmployeeId) {
-    const employee = await prisma.employee.findUnique({
-      where: { id: context.lastEmployeeId },
-      select: {
-        firstName: true,
-        lastName: true,
-        birthday: true,
-        id: true,
+      include: {
+        offices: true,
+        employeeType: true,
       },
     });
 
-    if (!employee || !employee.birthday) {
+    if (employees.length === 0) {
+      return streamReply("I couldn’t find an employee with that name.", newContext, null);
+    }
+
+    if (employees.length > 1) {
       return streamReply(
-        "I don’t have the birthdate information for this employee.",
+        "I found multiple employees with that name. Please provide more details.",
         newContext,
         null
       );
     }
 
-    const age = calculateAge(employee.birthday);
+    const emp = employees[0];
+
+    newContext = {
+      ...newContext,
+      lastEmployeeId: emp.id,
+      lastOfficeId: emp.officeId,
+      lastOfficeName: emp.offices.name,
+    };
 
     return streamReply(
-      `${employee.firstName} ${employee.lastName} is **${age} years old**.`,
+      `${emp.firstName} ${emp.lastName} is a **${emp.position}** assigned to **${emp.offices.name}**.`,
       newContext,
-      employee.id
+      emp.id
     );
   }
 
   /* ============================================================
-   FLEXIBLE AI MODE (SAFE DB ACCESS)
-   ============================================================ */
-
-const flexibleQuestions =
-  question.includes("oldest") ||
-  question.includes("youngest") ||
-  question.includes("department") ||
-  question.includes("works in") ||
-  question.includes("most employees");
-
-if (flexibleQuestions) {
-  const employees = await getEmployeesForAI();
-  const contextText = buildEmployeeAIContext(employees);
-
-  const prompt = `
-You are Genio, a helpful and professional HR assistant for a local government unit.
-
-Follow these rules strictly:
-
-1. For questions involving numbers, counts, names of employees, offices, or statistics:
-   - Use ONLY the data provided below.
-   - Do NOT invent or estimate numbers.
-   - Do NOT guess names, offices, or totals.
-   - If the information is missing or unclear, clearly say so.
-
-2. For basic or general HR questions (definitions, explanations, clarifications):
-   - You may answer using common HR knowledge.
-   - Keep answers concise and professional.
-   - Do NOT reference specific employees or offices unless data is provided.
-
-3. When an office or employee is mentioned:
-   - Assume the closest matching office name if it is clearly implied (e.g., HR, HRMO, Human Resource).
-   - Do NOT list all offices unless the user explicitly asks.
-
-4. If the user asks a follow-up like “this office” or “this employee”:
-   - Use the most recent relevant context if available.
-   - If no context exists, ask for clarification.
-
-5. If the question cannot be answered safely with the available data:
-   - Respond honestly that the information is not available.
-
-Use a clear, friendly, and professional tone.
-
-Data:
-${contextText}
-
-Question:
-${message}
-`;
-
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  return streamReply(
-    completion.choices[0].message.content ?? "I couldn't determine the answer.",
-    newContext,
-    null
-  );
-}
-
-  /* ============================================================
-     COUNT QUESTIONS → PRISMA ONLY
+     COUNT / STATS (PRISMA ONLY)
      ============================================================ */
 
   const isCountQuestion =
@@ -361,116 +178,144 @@ ${message}
     question.includes("number of") ||
     question.includes("total");
 
-  if (isCountQuestion) {
-    const wantsMale = question.includes("male");
-    const wantsFemale = question.includes("female");
-
-    // Employee type
-    const EMPLOYEE_TYPES = ["permanent", "casual", "job order"];
-    const employeeTypeQuery = EMPLOYEE_TYPES.find((t) =>
-      question.includes(t)
-    );
-
-    let employeeTypeId: string | undefined;
-
-    if (employeeTypeQuery) {
-      const employeeType = await prisma.employeeType.findFirst({
-        where: { name: { equals: employeeTypeQuery, mode: "insensitive" } },
-      });
-      employeeTypeId = employeeType?.id;
-    }
-
-    // Office resolution
-    const offices = await prisma.offices.findMany({
-      select: { id: true, name: true },
-    });
-
-    const matchedOffice = resolveOffice(question, offices);
-
-if (matchedOffice) {
-  officeId = matchedOffice.id;
-  officeName = matchedOffice.name;
-
-  newContext = {
-    ...context,
-    lastOfficeId: officeId,
-    lastOfficeName: officeName,
-  };
-}
-    if (question.includes("office") && !matchedOffice) {
-      return streamReply(
-        "I couldn’t identify which office you mean. Please use the full office name.",
-        newContext,
-        null
-      );
-    }
-
-    const where: any = {
-      isArchived: false,
-      ...(employeeTypeId && { employeeTypeId }),
-      ...(matchedOffice && { officeId: matchedOffice.id }),
-    };
-
-    // Male + Female
-    if (wantsMale && wantsFemale) {
-      const [male, female] = await Promise.all([
-        prisma.employee.count({
-          where: { ...where, gender: Gender.Male },
-        }),
-        prisma.employee.count({
-          where: { ...where, gender: Gender.Female },
-        }),
-      ]);
-
-      return streamReply(
-        `Here is the gender distribution${
-          matchedOffice ? ` in ${matchedOffice.name}` : ""
-        }:\n\n**Male:** ${male}\n**Female:** ${female}`,
-        newContext,
-        null
-      );
-    }
-
-    // Single gender
-    if (wantsMale || wantsFemale) {
-      const gender = wantsMale ? Gender.Male : Gender.Female;
-
-      const count = await prisma.employee.count({
-        where: { ...where, gender },
-      });
-
-      return streamReply(
-        `There are **${count} ${
-          wantsMale ? "male" : "female"
-        } employees**${matchedOffice ? ` in ${matchedOffice.name}` : ""}.`,
-        newContext,
-        null
-      );
-    }
-
-    // Total
-    const count = await prisma.employee.count({ where });
-
+  if (!isCountQuestion) {
     return streamReply(
-      `There are **${count} employees**${
-        matchedOffice ? ` in ${matchedOffice.name}` : ""
-      }.`,
+      "Please specify an employee, office, or ask a count-related question.",
       newContext,
       null
     );
   }
 
-  
+  /* ---------- Gender intent ---------- */
+  const hasMale = question.includes("male");
+  const hasFemale = question.includes("female");
+
+  const wantsGenderDistribution =
+    question.includes("gender") || (hasMale && hasFemale);
+
+  const wantsSingleGender =
+    (hasMale || hasFemale) && !wantsGenderDistribution;
+
+  /* ---------- Employee type ---------- */
+  const EMPLOYEE_TYPES = ["permanent", "casual", "job order"];
+  const employeeTypeQuery = EMPLOYEE_TYPES.find((t) =>
+    question.includes(t)
+  );
+
+  let employeeTypeId: string | undefined;
+  if (employeeTypeQuery) {
+    const type = await prisma.employeeType.findFirst({
+      where: { name: { equals: employeeTypeQuery, mode: "insensitive" } },
+    });
+    employeeTypeId = type?.id;
+  }
+
+  /* ---------- Office resolution ---------- */
+  const offices = await prisma.offices.findMany({
+    select: { id: true, name: true },
+  });
+
+  let officeId: string | undefined;
+  let officeName: string | undefined;
+
+  const matchedOffice =
+    resolveOfficeWithAliases(question, offices) ??
+    resolveOffice(question, offices);
+
+  if (matchedOffice) {
+    officeId = matchedOffice.id;
+    officeName = matchedOffice.name;
+
+    newContext = {
+      ...newContext,
+      lastOfficeId: officeId,
+      lastOfficeName: officeName,
+    };
+  } else if (question.includes("this office") && context?.lastOfficeId) {
+    officeId = context.lastOfficeId;
+    officeName = context.lastOfficeName;
+  }
+
+  /* ---------- WHERE CLAUSE ---------- */
+  const where: any = {
+    isArchived: false,
+    ...(employeeTypeId && { employeeTypeId }),
+    ...(officeId && { officeId }),
+  };
+
   /* ============================================================
-     FALLBACK
+     SINGLE GENDER (TOP PRIORITY)
      ============================================================ */
+  if (wantsSingleGender) {
+    const gender = hasMale ? Gender.Male : Gender.Female;
+
+    const count = await prisma.employee.count({
+      where: { ...where, gender },
+    });
+
+    return streamReply(
+      `There are **${count} ${gender === Gender.Male ? "male" : "female"}${
+        employeeTypeQuery ? ` ${employeeTypeQuery}` : ""
+      } employees**${officeName ? ` in ${officeName}` : ""}.`,
+      newContext,
+      null
+    );
+  }
+
+  /* ============================================================
+     GENDER DISTRIBUTION
+     ============================================================ */
+  if (wantsGenderDistribution) {
+    const [male, female] = await Promise.all([
+      prisma.employee.count({ where: { ...where, gender: Gender.Male } }),
+      prisma.employee.count({ where: { ...where, gender: Gender.Female } }),
+    ]);
+
+    return streamReply(
+      `Here is the gender distribution${
+        officeName ? ` in ${officeName}` : ""
+      }:\n\n**Male:** ${male}\n**Female:** ${female}`,
+      newContext,
+      null
+    );
+  }
+
+  /* ============================================================
+     EMPLOYEE TYPE BREAKDOWN
+     ============================================================ */
+  if (
+    question.includes("employee type") ||
+    question.includes("employee types")
+  ) {
+    const types = await prisma.employeeType.findMany({
+      include: {
+        _count: { select: { employee: true } },
+      },
+    });
+
+    const lines = types.map(
+      (t) => `**${t.name}:** ${t._count.employee}`
+    );
+
+    return streamReply(
+      `Here is the employee type distribution:\n\n${lines.join("\n")}`,
+      newContext,
+      null
+    );
+  }
+
+  /* ============================================================
+     TOTAL COUNT (LAST)
+     ============================================================ */
+  const count = await prisma.employee.count({ where });
 
   return streamReply(
-    "Please specify an employee, office, or ask a count-related question.",
+    `There are **${count} employees**${officeName ? ` in ${officeName}` : ""}.`,
     newContext,
     null
   );
 }
+
 
 /* ================= GET ================= */
 
