@@ -31,7 +31,7 @@ const CameraScannerWrapper = () => {
 
   return (
     <>
-      {/* Floating Button */}
+      {/* Floating Button
       <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 sm:hidden">
         <button
           onClick={handleOpen}
@@ -41,7 +41,7 @@ const CameraScannerWrapper = () => {
           <ScanLine className="h-6 w-6" />
           <span className="sr-only">Open QR Scanner</span>
         </button>
-      </div>
+      </div> */}
 
       {/* Modal with Fullscreen Scanner */}
       <ModalCamera

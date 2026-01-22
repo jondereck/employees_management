@@ -182,7 +182,7 @@ export default function EmployeeFilters({
         Filter
       </Button>
 
-      <div className="fixed bottom-6 right-6 z-50 md:hidden">
+      <div className="fixed bottom-6 left-6 z-50 md:hidden">
         <Button onClick={() => setIsOpen(true)} className="rounded-full shadow-lg px-4 py-3">
           Filter
         </Button>

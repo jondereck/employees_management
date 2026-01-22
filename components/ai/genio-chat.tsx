@@ -27,8 +27,10 @@ type GenioContext = {
 };
 export const GenioChat = ({
   onClose,
+  departmentId
 }: {
   onClose: () => void;
+  departmentId: string;
 }) => {
   const previewModal = usePreviewModal();
 
@@ -198,9 +200,10 @@ export const GenioChat = ({
                   variant="outline"
                   className="mt-2"
                   onClick={async () => {
-                    const res = await fetch(
-                      `/api/employees/${m.employeeId}`
-                    );
+                   const res = await fetch(
+  `/api/${departmentId}/employees/${m.employeeId}`
+);
+
                     const emp = await res.json();
                     previewModal.onOpen(emp);
                   }}
@@ -214,50 +217,87 @@ export const GenioChat = ({
 
         <div ref={bottomRef} />
       </div>
+      
 
       {/* INPUT */}
-      <div className="border-t p-3">
-        <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-2">
-          <Input
-            className="border-0 bg-transparent focus-visible:ring-0"
-            placeholder="Ask Genio anything..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            disabled={isLoading}
-          />
-          <Button
-            size="sm"
-            className="rounded-full"
-            onClick={() => sendMessage()}
-            disabled={isLoading}
-          >
-            Send →
-          </Button>
-        </div>
+    <div className="border-t border-white/10 px-3 py-2">
 
-        {/* QUICK ACTIONS */}
-        <div className="mt-3 flex gap-2">
-          <button
-            className="flex-1 rounded-full bg-muted px-3 py-1 text-xs"
-            onClick={() => sendMessage("How many employees are there?")}
-          >
-            Total Employees
-          </button>
-          <button
-            className="flex-1 rounded-full bg-muted px-3 py-1 text-xs"
-            onClick={() => sendMessage("How many female employees are there?")}
-          >
-            Female Count
-          </button>
-          <button
-            className="flex-1 rounded-full bg-muted px-3 py-1 text-xs"
-            onClick={() => sendMessage("Show HR department details")}
-          >
-            HR Details
-          </button>
-        </div>
-      </div>
+  <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-2 py-1">
+    <Input
+      className="
+        h-6
+        px-1.5
+        text-[11px]
+        border-0
+        bg-transparent
+        focus-visible:ring-0
+        focus-visible:ring-offset-0
+        placeholder:text-muted-foreground
+      "
+      placeholder="Ask Genio anything..."
+      value={input}
+      onChange={(e) => setInput(e.target.value)}
+      onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+      disabled={isLoading}
+    />
+
+    <Button
+      size="sm"
+      className="
+        h-6
+        rounded-md
+        px-2
+        text-[11px]
+      "
+      onClick={() => sendMessage()}
+      disabled={isLoading}
+    >
+      Send →
+    </Button>
+  </div>
+         {/* QUICK ACTIONS */}
+  <div className="mt-2 flex gap-2">
+    <button
+      className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
+      onClick={() => sendMessage('How many employees are there?')}
+    >
+      Total Employees
+    </button>
+
+    <button
+      className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
+      onClick={() => sendMessage('How many female employees are there?')}
+    >
+      Female Count
+    </button>
+
+    <button
+      className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
+      onClick={() => sendMessage('Show HR department details')}
+    >
+      HR Details
+    </button>
+  </div>
+
+</div>
+{/* FOOTER */}
+<div className="border-t border-black/10 px-4 py-2 text-center text-[11px] text-black">
+  <div className="flex justify-center gap-3">
+    <button className="hover:text-black/80 transition">
+      Privacy
+    </button>
+    <span className="text-black/40">·</span>
+    <button className="hover:text-black/80 transition">
+      Terms
+    </button>
+    <span className="text-black/40">·</span>
+    <button className="hover:text-black/80 transition">
+      Feedback
+    </button>
+  </div>
+</div>
+
+      
     </div>
   );
 };

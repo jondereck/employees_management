@@ -321,12 +321,13 @@ ${message}
         };
       }
 
-      return streamReply(
-        completion.choices[0].message.content ??
-          "I couldn’t interpret the employee record.",
-        newContext,
-        null
-      );
+return streamReply(
+  completion.choices[0].message.content ??
+    "I couldn’t interpret the employee record.",
+  newContext,
+  prismaEmployee?.id ?? null
+);
+
     }
   }
 
