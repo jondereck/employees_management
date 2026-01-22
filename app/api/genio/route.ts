@@ -79,6 +79,77 @@ export async function POST(req: Request) {
   let newContext = context ?? {};
   let viewProfileEmployeeId: string | null = null;
 
+  /* ============================================================
+     WHO IS → EXCEL + AI (STORE CONTEXT)
+     ============================================================ */
+
+  if (question.startsWith("who is")) {
+    const employees = loadEmployeesFromExcel();
+    const knowledgeText = buildEmployeeKnowledgeText(employees);
+    const chunks = knowledgeText.split("\n---\n");
+
+    const tokens = question
+      .toUpperCase()
+      .replace("WHO IS", "")
+      .replace(/[^A-Z\s]/g, "")
+      .trim()
+      .split(" ");
+
+    const matches = chunks.filter((chunk) =>
+      tokens.every((t:string) => chunk.toUpperCase().includes(t))
+    );
+
+    if (matches.length > 0) {
+      const prompt = `
+You are Genio, an HR assistant.
+Use ONLY the employee record below.
+
+Employee Record:
+${matches[0]}
+
+Question:
+${message}
+`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      // Match employee in Prisma for follow-ups
+      const fullName = extractField(matches[0], "Name");
+      const parts = fullName?.split(" ") ?? [];
+
+      const firstName = parts[0];
+      const lastName = parts[parts.length - 1];
+
+      const prismaEmployee = await prisma.employee.findFirst({
+        where: {
+          firstName: { contains: firstName, mode: "insensitive" },
+          lastName: { contains: lastName, mode: "insensitive" },
+          isArchived: false,
+        },
+        select: { id: true },
+      });
+
+      if (prismaEmployee) {
+        newContext = {
+          ...newContext,
+          lastEmployeeId: prismaEmployee.id,
+        };
+      }
+
+return streamReply(
+  completion.choices[0].message.content ??
+    "I couldn’t interpret the employee record.",
+  newContext,
+  prismaEmployee?.id ?? null
+);
+
+    }
+  }
+
+
 const wantsCount =
   question.includes("how many") ||
   question.includes("number of");
@@ -224,7 +295,6 @@ const flexibleQuestions =
   question.includes("oldest") ||
   question.includes("youngest") ||
   question.includes("department") ||
-  question.includes("office") ||
   question.includes("works in") ||
   question.includes("most employees");
 
@@ -390,76 +460,7 @@ if (matchedOffice) {
     );
   }
 
-  /* ============================================================
-     WHO IS → EXCEL + AI (STORE CONTEXT)
-     ============================================================ */
-
-  if (question.startsWith("who is")) {
-    const employees = loadEmployeesFromExcel();
-    const knowledgeText = buildEmployeeKnowledgeText(employees);
-    const chunks = knowledgeText.split("\n---\n");
-
-    const tokens = question
-      .toUpperCase()
-      .replace("WHO IS", "")
-      .replace(/[^A-Z\s]/g, "")
-      .trim()
-      .split(" ");
-
-    const matches = chunks.filter((chunk) =>
-      tokens.every((t:string) => chunk.toUpperCase().includes(t))
-    );
-
-    if (matches.length > 0) {
-      const prompt = `
-You are Genio, an HR assistant.
-Use ONLY the employee record below.
-
-Employee Record:
-${matches[0]}
-
-Question:
-${message}
-`;
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      // Match employee in Prisma for follow-ups
-      const fullName = extractField(matches[0], "Name");
-      const parts = fullName?.split(" ") ?? [];
-
-      const firstName = parts[0];
-      const lastName = parts[parts.length - 1];
-
-      const prismaEmployee = await prisma.employee.findFirst({
-        where: {
-          firstName: { contains: firstName, mode: "insensitive" },
-          lastName: { contains: lastName, mode: "insensitive" },
-          isArchived: false,
-        },
-        select: { id: true },
-      });
-
-      if (prismaEmployee) {
-        newContext = {
-          ...newContext,
-          lastEmployeeId: prismaEmployee.id,
-        };
-      }
-
-return streamReply(
-  completion.choices[0].message.content ??
-    "I couldn’t interpret the employee record.",
-  newContext,
-  prismaEmployee?.id ?? null
-);
-
-    }
-  }
-
+  
   /* ============================================================
      FALLBACK
      ============================================================ */
