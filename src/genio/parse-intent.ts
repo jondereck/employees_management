@@ -1,50 +1,133 @@
-import OpenAI from "openai";
-import { GenioIntent } from "./intent-schema";
+import { GenioIntent } from "./type";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
 
 export async function parseGenioIntent(
-  message: string
+  message: string,
+  context?: any
 ): Promise<GenioIntent> {
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0,
-    messages: [
-      {
-        role: "system",
-        content: `
-You are an HR intent parser.
-Return ONLY valid JSON matching this schema:
+  const text = message.toLowerCase();
 
-{
-  "action": "count | list | profile | unknown",
-  "filters": {
-    "gender": "Male | Female | undefined",
-    "employeeType": "string | undefined",
-    "office": "string | undefined",
-    "hired": "this_year | recent | any | undefined",
-    "age": { "min": number, "max": number } | undefined
-  }
+  const intent: GenioIntent = {
+    action: "unknown",
+    filters: {},
+  };
+
+  /* ===============================
+     FOLLOW-UP DETECTION
+     =============================== */
+     // COUNT fallback (Taglish + short forms)
+if (
+  /\b(how many|ilan|ilang)\b/.test(text)
+) {
+  intent.action = "count";
 }
 
-Rules:
-- Use "count" for "how many"
-- Use "list" for "who are they", "show me"
-- Use "profile" for "who is <name>"
-- If unsure, use "unknown"
-- DO NOT guess values
-        `,
-      },
-      {
-        role: "user",
-        content: message,
-      },
-    ],
-  });
+  if (
+    /\b(who are they|list them|show them|those employees)\b/.test(text)
+  ) {
+    intent.action = "list";
+    intent.followUp = true;
+    return intent;
+  }
 
-  return JSON.parse(
-    completion.choices[0].message.content || "{}"
-  );
+  if (
+    /\b(show profile|open profile|view profile)\b/.test(text)
+  ) {
+    intent.action = "show_profile";
+    intent.followUp = true;
+    return intent;
+  }
+
+  /* ===============================
+     WHO IS (EMPLOYEE)
+     =============================== */
+  if (text.startsWith("who is")) {
+    intent.action = "describe_employee";
+    intent.target = "employee";
+    return intent;
+  }
+
+  /* ===============================
+     COUNT / TOTAL
+     =============================== */
+  if (
+    /\b(how many|count|number of|total)\b/.test(text)
+  ) {
+    intent.action = "count";
+  }
+
+  /* ===============================
+     DISTRIBUTION
+     =============================== */
+  if (
+    /\b(distribution|breakdown|ratio)\b/.test(text)
+  ) {
+    intent.action = "distribution";
+  }
+
+// LIST OFFICES
+if (
+  /\b(list|show|display)\b/.test(text) &&
+  /\boffice(s)?\b/.test(text)
+) {
+  return {
+    action: "list_offices",
+    filters: {},
+  };
+}
+
+  if (
+  /\b(why is|why does|why are)\b/.test(text)
+) {
+  intent.action = "insight";
+
+  if (text.includes("office")) intent.target = "office";
+  if (text.includes("department")) intent.target = "department";
+
+  return intent;
+}
+
+// Employee type keywords (natural language)
+if (/\bcasual\b/.test(text)) {
+  intent.filters.employeeType = "casual";
+}
+
+if (/\b(permanent|regular)\b/.test(text)) {
+  intent.filters.employeeType = "permanent";
+}
+
+if (/\b(contract|cos)\b/.test(text)) {
+  intent.filters.employeeType = "contract";
+}
+
+
+
+  /* ===============================
+     FILTERS
+     =============================== */
+
+  // Gender
+  if (/\bfemale\b/.test(text)) intent.filters.gender = "Female";
+  if (/\bmale\b/.test(text)) intent.filters.gender = "Male";
+
+  // Age
+  const above = text.match(/(above|older than)\s*(\d+)/);
+  const below = text.match(/(below|younger than)\s*(\d+)/);
+
+  if (above) intent.filters.age = { min: Number(above[2]) };
+  if (below) intent.filters.age = { max: Number(below[2]) - 1 };
+
+  // Hired time
+  if (text.includes("this year")) {
+    intent.filters.hired = "this_year";
+  }
+
+  if (text.includes("recent")) {
+    intent.filters.hired = "recent";
+  }
+
+  /* ===============================
+     FALLBACK
+     =============================== */
+  return intent;
 }

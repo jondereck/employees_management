@@ -87,7 +87,7 @@ export const OFFICE_ALIASES: Record<string, string[]> = {
     "health unit 2",
   ],
 
-  "human resource (hrmo)": [
+  "human resource": [
     "hr",
     "hrmo",
     "human resource",

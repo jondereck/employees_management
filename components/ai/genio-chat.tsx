@@ -52,6 +52,9 @@ export const GenioChat = ({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [lastContext, setLastContext] = useState<GenioContext | null>(null);
+  const [expandedMessages, setExpandedMessages] = useState<
+  Record<string, boolean>
+>({});
 
 
 
@@ -193,6 +196,17 @@ export const GenioChat = ({
     };
   }, [messages, lastContext, input]);
 
+
+  const MAX_VISIBLE_LINES = 8;
+
+const toggleExpand = (id: string) => {
+  setExpandedMessages((prev) => ({
+    ...prev,
+    [id]: !prev[id],
+  }));
+};
+
+
   return (
     <div
       className={`flex h-[520px] w-[380px] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl
@@ -269,19 +283,42 @@ export const GenioChat = ({
                 : "bg-muted"
                 }`}
             >
-              {m.content === "__thinking__" ? (
-                <div className="flex gap-1">
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.1s]" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.2s]" />
-                </div>
-              ) : m.role === "ai" ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {m.content}
-                </ReactMarkdown>
-              ) : (
-                <div className="whitespace-pre-wrap">{m.content}</div>
-              )}
+   {m.content === "__thinking__" ? (
+  <div className="flex gap-1">
+    <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+    <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.1s]" />
+    <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.2s]" />
+  </div>
+) : m.role === "ai" ? (() => {
+  const lines = m.content.split("\n");
+  const isLong = lines.length > MAX_VISIBLE_LINES;
+  const isExpanded = expandedMessages[m.id];
+
+  const visibleText =
+    isExpanded || !isLong
+      ? m.content
+      : lines.slice(0, MAX_VISIBLE_LINES).join("\n");
+
+  return (
+    <div>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        {visibleText}
+      </ReactMarkdown>
+
+      {isLong && (
+        <button
+          onClick={() => toggleExpand(m.id)}
+          className="mt-1 text-xs text-primary hover:underline"
+        >
+          {isExpanded ? "See less ▲" : "See more ▼"}
+        </button>
+      )}
+    </div>
+  );
+})() : (
+  <div className="whitespace-pre-wrap">{m.content}</div>
+)}
+
 
               {m.role === "ai" && m.employeeId && (
                 <Button

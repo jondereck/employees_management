@@ -15,6 +15,7 @@
     "incremental": true,
     "types": ["node", "react", "react-dom"],   // ← add this line
     "plugins": [{ "name": "next" }],
+    "baseUrl": ".",
     "paths": { "@/*": ["./*"] }
   },
   "include": [
