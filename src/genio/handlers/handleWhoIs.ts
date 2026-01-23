@@ -1,7 +1,5 @@
-// src/genio/handlers/handleWhoIs.ts
 import { prisma } from "@/lib/prisma";
 import { streamReply } from "../utils";
-
 
 export async function handleWhoIs(
   message: string,
@@ -10,26 +8,28 @@ export async function handleWhoIs(
   const cleaned = message
     .toLowerCase()
     .replace("who is", "")
-    .replace(/[^a-z\s]/gi, "")
+    .replace(/[^a-z\s]/g, "")
     .trim();
 
-  const parts = cleaned.split(/\s+/);
-  if (parts.length < 2) {
+  if (!cleaned) {
     return streamReply(
-      "Please provide the employee’s full name.",
+      "Please tell me the employee’s name.",
       context,
       null
     );
   }
 
-  const firstName = parts[0];
-  const lastName = parts[parts.length - 1];
+  // 🔍 Search token (first name / last name / nickname)
+  const search = cleaned;
 
   const employees = await prisma.employee.findMany({
     where: {
       isArchived: false,
-      firstName: { contains: firstName, mode: "insensitive" },
-      lastName: { equals: lastName, mode: "insensitive" },
+      OR: [
+        { firstName: { contains: search, mode: "insensitive" } },
+        { lastName: { contains: search, mode: "insensitive" } },
+        { nickname: { contains: search, mode: "insensitive" } },
+      ],
     },
     include: {
       offices: true,
@@ -37,6 +37,7 @@ export async function handleWhoIs(
     },
   });
 
+  // ❌ No match
   if (employees.length === 0) {
     return streamReply(
       "I couldn’t find an employee with that name.",
@@ -45,28 +46,38 @@ export async function handleWhoIs(
     );
   }
 
+  // ⚠️ Multiple matches → ask to clarify
   if (employees.length > 1) {
+    const list = employees
+      .slice(0, 5)
+      .map(
+        (e) =>
+          `• ${e.firstName} ${e.lastName}${
+            e.nickname ? ` (${e.nickname})` : ""
+          }`
+      )
+      .join("\n");
+
     return streamReply(
-      "I found multiple employees with that name. Please add more details.",
+      `I found multiple employees with that name. Who do you mean?\n\n${list}`,
       context,
       null
     );
   }
 
+  // ✅ Single match
   const emp = employees[0];
 
-  const newContext = {
+  context = {
     ...context,
-    focus: {
-      type: "employee",
-      id: emp.id,
-      name: `${emp.firstName} ${emp.lastName}`,
-    },
+    lastEmployeeId: emp.id,
+    lastOfficeId: emp.officeId,
+    lastOfficeName: emp.offices?.name,
   };
 
   return streamReply(
-    `${emp.firstName} ${emp.lastName} is a **${emp.position}** assigned to **${emp.offices.name}**.`,
-    newContext,
+    `${emp.firstName} ${emp.lastName} is a **${emp.position}** in **${emp.offices?.name}**.`,
+    context,
     emp.id
   );
 }

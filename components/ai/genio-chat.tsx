@@ -58,6 +58,7 @@ export const GenioChat = ({
 
 
 
+const inputRef = useRef<HTMLInputElement | null>(null);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -65,7 +66,11 @@ export const GenioChat = ({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-
+useEffect(() => {
+  if (!isLoading) {
+    inputRef.current?.focus();
+  }
+}, [isLoading]);
 
   /* ================= SEND MESSAGE ================= */
 
@@ -209,9 +214,14 @@ const toggleExpand = (id: string) => {
 
   return (
     <div
-      className={`flex h-[520px] w-[380px] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl
-  ${hidden ? "hidden" : ""}`}
-    >
+  className={`
+    flex flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl
+    h-[100dvh] w-full
+    sm:h-[520px] sm:w-[380px]
+    ${hidden ? "hidden" : ""}
+  `}
+>
+
 
 
       {/* HEADER */}
@@ -349,23 +359,29 @@ const toggleExpand = (id: string) => {
       <div className="border-t border-white/10 px-3 py-2">
 
         <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-2 py-1">
-          <Input
-            className="
-        h-6
-        px-1.5
-        text-[11px]
-        border-0
-        bg-transparent
-        focus-visible:ring-0
-        focus-visible:ring-offset-0
-        placeholder:text-muted-foreground
-      "
-            placeholder="Ask Genio anything..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            disabled={isLoading}
-          />
+        <Input
+  ref={inputRef}
+  className="
+    h-10
+    px-3
+    text-sm
+    border-0
+    bg-transparent
+    focus-visible:ring-0
+    focus-visible:ring-offset-0
+    placeholder:text-muted-foreground
+  "
+  placeholder="Ask Genio anything..."
+  value={input}
+  onChange={(e) => setInput(e.target.value)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      sendMessage();
+    }
+  }}
+  disabled={isLoading}
+/>
 
           <Button
             size="sm"
