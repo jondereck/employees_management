@@ -99,8 +99,23 @@ function resolveOfficeWithAliases(
   return null;
 }
 
+async function countWithAgeFilter(where: any, ageFilter: { min?: number; max?: number }) {
+  const employees = await prisma.employee.findMany({
+    where,
+    select: { birthday: true },
+  });
 
-/* ================= POST ================= */
+  return employees.filter((e) => {
+    if (!e.birthday) return false;
+
+    const age = calculateAge(e.birthday);
+
+    if (ageFilter.min !== undefined && age < ageFilter.min) return false;
+    if (ageFilter.max !== undefined && age > ageFilter.max) return false;
+
+    return true;
+  }).length;
+}
 
 /* ================= POST ================= */
 
@@ -109,7 +124,105 @@ export async function POST(req: Request) {
   const question = message.toLowerCase();
 
   let newContext = context ?? {};
-  let viewProfileEmployeeId: string | null = null;
+
+ /* ============================================================
+     FOLLOW-UP: "WHO ARE THEY?"
+     ============================================================ */
+  const isWhoAreThey =
+    /\bwho are they\b/.test(question) ||
+    /\blist them\b/.test(question) ||
+    /\bshow them\b/.test(question);
+
+  if (isWhoAreThey) {
+    if (!context?.lastQuery) {
+      return streamReply(
+        "Please ask a count question first (e.g. 'How many employees hired this year?').",
+        newContext,
+        null
+      );
+    }
+
+    const { where, ageFilter } = context.lastQuery;
+
+    let employees;
+
+    if (ageFilter) {
+      const all = await prisma.employee.findMany({
+        where,
+        select: { firstName: true, lastName: true, birthday: true },
+        take: 20,
+      });
+
+      employees = all.filter((e) => {
+        const age = calculateAge(e.birthday);
+        if (ageFilter.min && age < ageFilter.min) return false;
+        if (ageFilter.max && age > ageFilter.max) return false;
+        return true;
+      });
+    } else {
+      employees = await prisma.employee.findMany({
+        where,
+        select: { firstName: true, lastName: true },
+        take: 20,
+      });
+    }
+
+    if (!employees.length) {
+      return streamReply("I couldn’t find any employees.", newContext, null);
+    }
+
+    const names = employees
+      .map((e, i) => `${i + 1}. ${e.firstName} ${e.lastName}`)
+      .join("\n");
+
+    return streamReply(`Here they are:\n\n${names}`, newContext, null);
+  }
+
+
+  
+  /* ============================================================
+   AGE INTENT
+   ============================================================ */
+
+let ageFilter: { min?: number; max?: number } | null = null;
+
+const ageMatch =
+  question.match(/age\s*(\d+)/) ||
+  question.match(/above\s*(\d+)/) ||
+  question.match(/older than\s*(\d+)/) ||
+  question.match(/below\s*(\d+)/) ||
+  question.match(/younger than\s*(\d+)/);
+
+if (ageMatch) {
+  const age = parseInt(ageMatch[1]);
+
+  if (/below|younger/.test(question)) {
+    ageFilter = { max: age - 1 };
+  } else {
+    ageFilter = { min: age };
+  }
+}
+
+/* ============================================================
+   HIRED THIS YEAR INTENT
+   ============================================================ */
+
+const wantsHiredThisYear =
+  /\bhired this year\b/.test(question) ||
+  /\bemployed this year\b/.test(question);
+
+let hiredDateFilter: { gte: Date; lt: Date } | null = null;
+
+if (wantsHiredThisYear) {
+  const now = new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const startNextYear = new Date(now.getFullYear() + 1, 0, 1);
+
+  hiredDateFilter = {
+    gte: startOfYear,
+    lt: startNextYear,
+  };
+}
 
   /* ============================================================
      WHO IS (STRICT)
@@ -168,153 +281,204 @@ export async function POST(req: Request) {
     );
   }
 
-  /* ============================================================
-     COUNT / STATS (PRISMA ONLY)
-     ============================================================ */
-
-  const isCountQuestion =
-    question.includes("how many") ||
-    question.includes("count") ||
-    question.includes("number of") ||
-    question.includes("total");
-
-  if (!isCountQuestion) {
-    return streamReply(
-      "Please specify an employee, office, or ask a count-related question.",
-      newContext,
-      null
-    );
-  }
-
-  /* ---------- Gender intent ---------- */
-  const hasMale = question.includes("male");
-  const hasFemale = question.includes("female");
-
-  const wantsGenderDistribution =
-    question.includes("gender") || (hasMale && hasFemale);
-
-  const wantsSingleGender =
-    (hasMale || hasFemale) && !wantsGenderDistribution;
-
-  /* ---------- Employee type ---------- */
-  const EMPLOYEE_TYPES = ["permanent", "casual", "job order"];
-  const employeeTypeQuery = EMPLOYEE_TYPES.find((t) =>
-    question.includes(t)
-  );
-
-  let employeeTypeId: string | undefined;
-  if (employeeTypeQuery) {
-    const type = await prisma.employeeType.findFirst({
-      where: { name: { equals: employeeTypeQuery, mode: "insensitive" } },
-    });
-    employeeTypeId = type?.id;
-  }
-
-  /* ---------- Office resolution ---------- */
-  const offices = await prisma.offices.findMany({
-    select: { id: true, name: true },
-  });
-
-  let officeId: string | undefined;
-  let officeName: string | undefined;
-
-  const matchedOffice =
-    resolveOfficeWithAliases(question, offices) ??
-    resolveOffice(question, offices);
-
-  if (matchedOffice) {
-    officeId = matchedOffice.id;
-    officeName = matchedOffice.name;
-
-    newContext = {
-      ...newContext,
-      lastOfficeId: officeId,
-      lastOfficeName: officeName,
-    };
-  } else if (question.includes("this office") && context?.lastOfficeId) {
-    officeId = context.lastOfficeId;
-    officeName = context.lastOfficeName;
-  }
-
-  /* ---------- WHERE CLAUSE ---------- */
-  const where: any = {
-    isArchived: false,
-    ...(employeeTypeId && { employeeTypeId }),
-    ...(officeId && { officeId }),
-  };
 
   /* ============================================================
-     SINGLE GENDER (TOP PRIORITY)
-     ============================================================ */
-  if (wantsSingleGender) {
-    const gender = hasMale ? Gender.Male : Gender.Female;
+   COUNT / STATS (PRISMA ONLY)
+   ============================================================ */
 
-    const count = await prisma.employee.count({
-      where: { ...where, gender },
-    });
+const isCountQuestion =
+  question.includes("how many") ||
+  question.includes("count") ||
+  question.includes("number of") ||
+  question.includes("total");
 
-    return streamReply(
-      `There are **${count} ${gender === Gender.Male ? "male" : "female"}${
-        employeeTypeQuery ? ` ${employeeTypeQuery}` : ""
-      } employees**${officeName ? ` in ${officeName}` : ""}.`,
-      newContext,
-      null
-    );
-  }
-
-  /* ============================================================
-     GENDER DISTRIBUTION
-     ============================================================ */
-  if (wantsGenderDistribution) {
-    const [male, female] = await Promise.all([
-      prisma.employee.count({ where: { ...where, gender: Gender.Male } }),
-      prisma.employee.count({ where: { ...where, gender: Gender.Female } }),
-    ]);
-
-    return streamReply(
-      `Here is the gender distribution${
-        officeName ? ` in ${officeName}` : ""
-      }:\n\n**Male:** ${male}\n**Female:** ${female}`,
-      newContext,
-      null
-    );
-  }
-
-  /* ============================================================
-     EMPLOYEE TYPE BREAKDOWN
-     ============================================================ */
-  if (
-    question.includes("employee type") ||
-    question.includes("employee types")
-  ) {
-    const types = await prisma.employeeType.findMany({
-      include: {
-        _count: { select: { employee: true } },
-      },
-    });
-
-    const lines = types.map(
-      (t) => `**${t.name}:** ${t._count.employee}`
-    );
-
-    return streamReply(
-      `Here is the employee type distribution:\n\n${lines.join("\n")}`,
-      newContext,
-      null
-    );
-  }
-
-  /* ============================================================
-     TOTAL COUNT (LAST)
-     ============================================================ */
-  const count = await prisma.employee.count({ where });
-
+if (!isCountQuestion) {
   return streamReply(
-    `There are **${count} employees**${officeName ? ` in ${officeName}` : ""}.`,
+    "Please specify an employee, office, or ask a count-related question.",
     newContext,
     null
   );
 }
+
+/* ---------- SAFE gender detection (WORD-BOUNDARY) ---------- */
+const hasMale = /\bmale\b/.test(question);
+const hasFemale = /\bfemale\b/.test(question);
+
+const wantsGenderDistribution =
+  question.includes("gender") || (hasMale && hasFemale);
+
+const wantsSingleGender =
+  (hasMale || hasFemale) && !wantsGenderDistribution;
+
+
+/* ---------- Employee Type (DB-driven) ---------- */
+const employeeTypes = await prisma.employeeType.findMany({
+  select: { id: true, name: true, value: true },
+});
+
+let employeeTypeId: string | undefined;
+let employeeTypeName: string | undefined;
+
+const normalizedQuestion = question
+  .replace(/[^a-z\s]/gi, "")
+  .toLowerCase();
+
+for (const type of employeeTypes) {
+  const candidates = [
+    type.name,
+    type.value,
+  ]
+    .filter(Boolean)
+    .map(v => v.toLowerCase());
+
+  if (candidates.some(v => normalizedQuestion.includes(v))) {
+    employeeTypeId = type.id;
+    employeeTypeName = type.name;
+    break;
+  }
+}
+
+const employeeTypeQuery = employeeTypeName
+
+/* ---------- Office resolution ---------- */
+const offices = await prisma.offices.findMany({
+  select: { id: true, name: true },
+});
+
+let officeId: string | undefined;
+let officeName: string | undefined;
+
+const matchedOffice =
+  resolveOfficeWithAliases(question, offices) ??
+  resolveOffice(question, offices);
+
+if (matchedOffice) {
+  officeId = matchedOffice.id;
+  officeName = matchedOffice.name;
+
+  newContext = {
+    ...newContext,
+    lastOfficeId: officeId,
+    lastOfficeName: officeName,
+  };
+} else if (question.includes("this office") && context?.lastOfficeId) {
+  officeId = context.lastOfficeId;
+  officeName = context.lastOfficeName;
+}
+
+/* ---------- WHERE clause ---------- */
+const where: any = {
+  isArchived: false,
+  ...(employeeTypeId && { employeeTypeId }),
+  ...(officeId && { officeId }),
+  ...(hiredDateFilter && { dateHired: hiredDateFilter }),
+};
+
+
+/* ============================================================
+   SINGLE GENDER (HIGHEST PRIORITY)
+   Example: "How many female casual employees in HR"
+   ============================================================ */
+if (wantsSingleGender) {
+  const gender = hasMale ? Gender.Male : Gender.Female;
+
+ const count = ageFilter
+  ? await countWithAgeFilter({ ...where, gender }, ageFilter)
+  : await prisma.employee.count({ where: { ...where, gender } });
+
+  newContext = {
+  ...newContext,
+  lastQuery: {
+    where,
+    ageFilter,
+    hiredDateFilter,
+  },
+};
+
+
+  return streamReply(
+    `There are **${count} ${gender === Gender.Male ? "male" : "female"}${
+      employeeTypeQuery ? ` ${employeeTypeQuery}` : ""
+    } employees**${officeName ? ` in ${officeName}` : ""}.`,
+    newContext,
+    null
+  );
+}
+
+/* ============================================================
+   GENDER DISTRIBUTION
+   Example: "Show gender distribution in HR"
+   ============================================================ */
+if (wantsGenderDistribution) {
+ const male = ageFilter
+  ? await countWithAgeFilter({ ...where, gender: Gender.Male }, ageFilter)
+  : await prisma.employee.count({ where: { ...where, gender: Gender.Male } });
+
+const female = ageFilter
+  ? await countWithAgeFilter({ ...where, gender: Gender.Female }, ageFilter)
+  : await prisma.employee.count({ where: { ...where, gender: Gender.Female } });
+
+
+  return streamReply(
+    `Here is the gender distribution${
+      officeName ? ` in ${officeName}` : ""
+    }:\n\n**Male:** ${male}\n**Female:** ${female}`,
+    newContext,
+    null
+  );
+}
+
+/* ============================================================
+   EMPLOYEE TYPE BREAKDOWN
+   Example: "Show employee type count"
+   ============================================================ */
+if (
+  question.includes("employee type") ||
+  question.includes("employee types") ||
+  question.includes("employment type")
+) {
+  const types = await prisma.employeeType.findMany({
+    include: {
+      _count: { select: { employee: true } },
+    },
+  });
+
+  const lines = types.map(
+    (t) => `**${t.name}:** ${t._count.employee}`
+  );
+
+  return streamReply(
+    `Here is the employee type distribution:\n\n${lines.join("\n")}`,
+    newContext,
+    null
+  );
+}
+
+/* ============================================================
+   TOTAL COUNT (LAST FALLBACK)
+   ============================================================ */
+const count = ageFilter
+  ? await countWithAgeFilter(where, ageFilter)
+  : await prisma.employee.count({ where });
+
+newContext = {
+  ...newContext,
+  lastQuery: {
+    where,
+    ageFilter,
+    hiredDateFilter,
+  },
+};
+
+
+return streamReply(
+  `There are **${count} employees**${officeName ? ` in ${officeName}` : ""}.`,
+  newContext,
+  null
+);
+}
+
+
 
 
 /* ================= GET ================= */

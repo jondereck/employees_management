@@ -91,7 +91,11 @@ export const GenioChat = ({
       const res = await fetch("/api/genio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({
+          message: text,
+          context: lastContext, // 👈 THIS IS THE KEY
+        }),
+
       });
 
       const reader = res.body?.getReader();
@@ -112,8 +116,17 @@ export const GenioChat = ({
           )
         );
       }
+         const ctx = res.headers.get("x-genio-context");
+      if (ctx) {
+        try {
+          setLastContext(JSON.parse(ctx));
+        } catch (e) {
+          console.error("Failed to parse genio context", e);
+        }
+      }
 
       const meta = res.headers.get("x-genio-meta");
+
       if (meta) {
         const parsed = JSON.parse(meta);
         if (parsed.viewProfileEmployeeId) {
@@ -126,6 +139,9 @@ export const GenioChat = ({
           );
         }
       }
+
+   
+
     } catch (err) {
       setMessages((prev) =>
         prev.map((m) =>
@@ -140,42 +156,42 @@ export const GenioChat = ({
   };
 
 
-useEffect(() => {
-  if (typeof window === "undefined") return;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-  const cached = loadGenioCache();
-  if (!cached) return;
+    const cached = loadGenioCache();
+    if (!cached) return;
 
-  setMessages(cached.messages ?? []);
-  setLastContext(cached.context ?? null);
-  setInput(cached.input ?? "");
-}, []);
+    setMessages(cached.messages ?? []);
+    setLastContext(cached.context ?? null);
+    setInput(cached.input ?? "");
+  }, []);
 
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
-useEffect(() => {
+  useEffect(() => {
 
-  if (typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
 
-  if (saveTimeout.current) {
-    clearTimeout(saveTimeout.current);
-  }
-
-  saveTimeout.current = setTimeout(() => {
-    console.log("CACHE SAVE CONFIRMED", messages.length);
-    saveGenioCache({
-      messages,
-      context: lastContext,
-      input,
-    });
-  }, 300);
-
-  return () => {
     if (saveTimeout.current) {
       clearTimeout(saveTimeout.current);
     }
-  };
-}, [messages, lastContext, input]);
+
+    saveTimeout.current = setTimeout(() => {
+      console.log("CACHE SAVE CONFIRMED", messages.length);
+      saveGenioCache({
+        messages,
+        context: lastContext,
+        input,
+      });
+    }, 300);
+
+    return () => {
+      if (saveTimeout.current) {
+        clearTimeout(saveTimeout.current);
+      }
+    };
+  }, [messages, lastContext, input]);
 
   return (
     <div
