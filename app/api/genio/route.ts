@@ -11,6 +11,7 @@ import OpenAI from "openai";
 import { buildEmployeeAIContext, getEmployeesForAI } from "@/src/genio/ai-data";
 import { resolveOffice } from "@/src/genio/resolve-office";
 import { OFFICE_ALIASES } from "@/src/genio/office-aliases";
+import { parseGenioIntent } from "@/src/genio/parse-intent";
 
 
 const openai = new OpenAI({
@@ -117,11 +118,14 @@ async function countWithAgeFilter(where: any, ageFilter: { min?: number; max?: n
   }).length;
 }
 
+
+
 /* ================= POST ================= */
 
 export async function POST(req: Request) {
   const { message, context } = await req.json();
   const question = message.toLowerCase();
+const intent = await parseGenioIntent(message);
 
   let newContext = context ?? {};
 
@@ -287,6 +291,7 @@ if (wantsHiredThisYear) {
    ============================================================ */
 
 const isCountQuestion =
+  intent.action === "count" ||
   question.includes("how many") ||
   question.includes("count") ||
   question.includes("number of") ||
@@ -305,10 +310,11 @@ const hasMale = /\bmale\b/.test(question);
 const hasFemale = /\bfemale\b/.test(question);
 
 const wantsGenderDistribution =
-  question.includes("gender") || (hasMale && hasFemale);
+  intent.filters.gender === undefined &&
+  question.includes("gender");
 
 const wantsSingleGender =
-  (hasMale || hasFemale) && !wantsGenderDistribution;
+  intent.filters.gender !== undefined;
 
 
 /* ---------- Employee Type (DB-driven) ---------- */
@@ -374,26 +380,81 @@ const where: any = {
   ...(hiredDateFilter && { dateHired: hiredDateFilter }),
 };
 
+if (intent.filters.employeeType) {
+  const matched = employeeTypes.find((t) =>
+    t.name.toLowerCase().includes(
+      intent.filters.employeeType!.toLowerCase()
+    )
+  );
+
+  if (matched) {
+    where.employeeTypeId = matched.id;
+  }
+}
+
+/* ============================================================
+   APPLY OPENAI INTENT FILTERS
+   ============================================================ */
+
+// Gender
+if (intent.filters.gender) {
+  where.gender =
+    intent.filters.gender === "Male"
+      ? Gender.Male
+      : Gender.Female;
+}
+
+// Office (reuse existing resolver)
+if (intent.filters.office) {
+  const office = resolveOfficeWithAliases(
+    intent.filters.office,
+    offices
+  );
+  if (office) {
+    where.officeId = office.id;
+  }
+}
+
+// Hired time
+if (intent.filters.hired === "this_year") {
+  const now = new Date();
+  where.dateHired = {
+    gte: new Date(now.getFullYear(), 0, 1),
+    lt: new Date(now.getFullYear() + 1, 0, 1),
+  };
+}
+
+if (intent.filters.hired === "recent") {
+  const now = new Date();
+  where.dateHired = {
+    gte: new Date(now.setMonth(now.getMonth() - 6)),
+  };
+}
+
 
 /* ============================================================
    SINGLE GENDER (HIGHEST PRIORITY)
    Example: "How many female casual employees in HR"
    ============================================================ */
-if (wantsSingleGender) {
-  const gender = hasMale ? Gender.Male : Gender.Female;
+if (wantsSingleGender && where.gender) {
+  const gender = where.gender;
 
- const count = ageFilter
-  ? await countWithAgeFilter({ ...where, gender }, ageFilter)
-  : await prisma.employee.count({ where: { ...where, gender } });
+  const count = ageFilter
+    ? await countWithAgeFilter(where, ageFilter)
+    : await prisma.employee.count({ where });
 
-  newContext = {
+
+newContext = {
   ...newContext,
   lastQuery: {
-    where,
+    where: {
+      ...where,
+      gender, // ✅ SAVE GENDER
+    },
     ageFilter,
-    hiredDateFilter,
   },
 };
+
 
 
   return streamReply(
