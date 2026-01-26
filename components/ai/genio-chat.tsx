@@ -158,8 +158,16 @@ export const GenioChat = ({
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+  const handler = (e: KeyboardEvent) => {
+    if (e.key === "Escape") setIsFullscreen(false);
+  };
+  window.addEventListener("keydown", handler);
+  return () => window.removeEventListener("keydown", handler);
+}, []);
 
-  const inputRef = useRef<HTMLInputElement | null>(null);
+const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -380,6 +388,7 @@ export const GenioChat = ({
 
 
           <div className="relative h-12 w-12 overflow-hidden rounded-full bg-purple-300">
+            
             <Image
               src="/genio/genio-avatar.png"
               alt="Genio AI"
@@ -590,70 +599,68 @@ export const GenioChat = ({
             </div>
           )}
 
-          <Input
-
-            ref={inputRef}
-            className="
-    h-10
-    px-3
-    text-sm
-    border-0
-    bg-transparent
-    focus-visible:ring-0
-    focus-visible:ring-offset-0
+          <textarea
+  ref={inputRef}
+  rows={1}
+  value={input}
+  placeholder="Ask Genio anything..."
+  disabled={isLoading}
+  className="
+    w-full resize-none bg-transparent px-3 py-2 text-sm
+    outline-none border-0
     placeholder:text-muted-foreground
+    max-h-[160px] overflow-y-auto
   "
-            placeholder="Ask Genio anything..."
-            value={input}
-            onChange={(e) => {
-              const val = e.target.value;
-              setInput(val);
-              setShowCommands(val.startsWith("/"));
-            }}
+  onChange={(e) => {
+    const el = e.target;
+    setInput(el.value);
+    setShowCommands(el.value.startsWith("/"));
 
-            onKeyDown={(e) => {
-              if (showCommands && filteredCommands.length > 0) {
-                // TAB → select command
-                if (e.key === "Tab") {
-                  e.preventDefault();
-                  const cmd = filteredCommands[activeCommandIndex];
-                  if (cmd) {
-                    setInput(cmd.template);
-                    setShowCommands(false);
-                    inputRef.current?.focus();
-                  }
-                  return;
-                }
+    // 🔥 auto resize
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }}
+  onKeyDown={(e) => {
+    if (showCommands && filteredCommands.length > 0) {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const cmd = filteredCommands[activeCommandIndex];
+        if (cmd) {
+          setInput(cmd.template);
+          setShowCommands(false);
+        }
+        return;
+      }
 
-                // ↓ Arrow
-                if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  setActiveCommandIndex((i) =>
-                    Math.min(i + 1, filteredCommands.length - 1)
-                  );
-                  return;
-                }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveCommandIndex((i) =>
+          Math.min(i + 1, filteredCommands.length - 1)
+        );
+        return;
+      }
 
-                // ↑ Arrow
-                if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  setActiveCommandIndex((i) =>
-                    Math.max(i - 1, 0)
-                  );
-                  return;
-                }
-              }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveCommandIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+    }
 
-              // ENTER → send message
-              if (e.key === "Enter") {
-                e.preventDefault();
-                sendMessage();
-                setShowCommands(false); // 👈 close menu after sending
-              }
-            }}
+    // ✅ ENTER = send
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+      setShowCommands(false);
 
-            disabled={isLoading}
-          />
+      // reset height
+      const el = e.currentTarget;
+      el.style.height = "auto";
+    }
+  }}
+/>
+
+
 
           <Button
             size="sm"
