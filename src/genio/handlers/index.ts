@@ -10,5 +10,7 @@ export { handleWhoIsHead } from "./handleWhoIsHead";
 export { handleIsHead } from "./handleIsHead";
 export { handleListHeads } from "./handleListHeads";
 export { handleOfficesNoHead } from "./handleOfficesNoHead";
+export { handleListFromLastCount } from "@/src/genio/handlers/handleListFromLastCount";
+
 
 

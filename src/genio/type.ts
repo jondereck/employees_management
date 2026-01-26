@@ -7,6 +7,7 @@ export type GenioIntent = {
     | "show_profile"
     | "distribution"
      | "list_offices"
+     | "list_from_last_count"
     | "insight"
     | "unknown";
 

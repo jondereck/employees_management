@@ -7,7 +7,7 @@ export async function handleWhoIs(
 ) {
   const cleaned = message
     .toLowerCase()
-    .replace("who is", "")
+    .replace(/^who is/i, "")
     .replace(/[^a-z\s]/g, "")
     .trim();
 
@@ -19,17 +19,20 @@ export async function handleWhoIs(
     );
   }
 
-  // 🔍 Search token (first name / last name / nickname)
-  const search = cleaned;
+  // 🔹 Split full name into tokens
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
 
   const employees = await prisma.employee.findMany({
     where: {
       isArchived: false,
-      OR: [
-        { firstName: { contains: search, mode: "insensitive" } },
-        { lastName: { contains: search, mode: "insensitive" } },
-        { nickname: { contains: search, mode: "insensitive" } },
-      ],
+      AND: tokens.map((token) => ({
+        OR: [
+          { firstName: { contains: token, mode: "insensitive" } },
+          { middleName: { contains: token, mode: "insensitive" } },
+          { lastName: { contains: token, mode: "insensitive" } },
+          { nickname: { contains: token, mode: "insensitive" } },
+        ],
+      })),
     },
     include: {
       offices: true,
@@ -40,26 +43,27 @@ export async function handleWhoIs(
   // ❌ No match
   if (employees.length === 0) {
     return streamReply(
-      "I couldn’t find an employee with that name.",
+      `I couldn’t find an employee named **${cleaned}**.`,
       context,
       null
     );
   }
 
-  // ⚠️ Multiple matches → ask to clarify
+  // ⚠️ Multiple matches
   if (employees.length > 1) {
     const list = employees
       .slice(0, 5)
       .map(
         (e) =>
-          `• ${e.firstName} ${e.lastName}${
-            e.nickname ? ` (${e.nickname})` : ""
-          }`
+          `• ${e.firstName} ${e.middleName} ${e.lastName}`.replace(
+            /\s+/g,
+            " "
+          )
       )
       .join("\n");
 
     return streamReply(
-      `I found multiple employees with that name. Who do you mean?\n\n${list}`,
+      `I found multiple employees matching **${cleaned}**. Who do you mean?\n\n${list}`,
       context,
       null
     );

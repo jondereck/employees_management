@@ -33,6 +33,85 @@ type GenioContext = {
   employeeTypeName?: string;
   year?: number;
 };
+
+const GENIO_COMMANDS = [
+  /* ================= EMPLOYEES ================= */
+
+  {
+    label: "Who is an employee",
+    value: "/whois",
+    template: "Who is ",
+  },
+  {
+    label: "Check if employee is office head",
+    value: "/ishead",
+    template: "Is [name] the head of [office]?",
+  },
+
+  /* ================= COUNTS ================= */
+
+  {
+    label: "Total employees",
+    value: "/count",
+    template: "How many employees are there?",
+  },
+  {
+    label: "Count by gender",
+    value: "/count-gender",
+    template: "How many female employees are there?",
+  },
+  {
+    label: "Count by employee type",
+    value: "/count-type",
+    template: "How many regular employees are there?",
+  },
+
+  /* ================= LISTS ================= */
+
+  {
+    label: "List all employees",
+    value: "/list",
+    template: "List all employees",
+  },
+  {
+    label: "List all offices",
+    value: "/offices",
+    template: "List all offices",
+  },
+  {
+    label: "List office heads",
+    value: "/list-heads",
+    template: "List all office heads",
+  },
+  {
+    label: "Offices without head",
+    value: "/no-head",
+    template: "Which offices don’t have a head?",
+  },
+
+  /* ================= OFFICES ================= */
+
+  {
+    label: "Head of an office",
+    value: "/head",
+    template: "Who is the head of ",
+  },
+
+  /* ================= ANALYTICS ================= */
+
+  {
+    label: "Employee distribution",
+    value: "/distribution",
+    template: "Show employee distribution",
+  },
+  {
+    label: "Employee insights",
+    value: "/insight",
+    template: "Give me insights about employees",
+  },
+];
+
+
 export const GenioChat = ({
   onClose,
 
@@ -53,12 +132,16 @@ export const GenioChat = ({
   const [isLoading, setIsLoading] = useState(false);
   const [lastContext, setLastContext] = useState<GenioContext | null>(null);
   const [expandedMessages, setExpandedMessages] = useState<
-  Record<string, boolean>
->({});
+    Record<string, boolean>
+  >({});
+  const [showCommands, setShowCommands] = useState(false);
+  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
 
 
 
-const inputRef = useRef<HTMLInputElement | null>(null);
+
+
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -66,11 +149,11 @@ const inputRef = useRef<HTMLInputElement | null>(null);
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-useEffect(() => {
-  if (!isLoading) {
-    inputRef.current?.focus();
-  }
-}, [isLoading]);
+  useEffect(() => {
+    if (!isLoading) {
+      inputRef.current?.focus();
+    }
+  }, [isLoading]);
 
   /* ================= SEND MESSAGE ================= */
 
@@ -124,7 +207,7 @@ useEffect(() => {
           )
         );
       }
-         const ctx = res.headers.get("x-genio-context");
+      const ctx = res.headers.get("x-genio-context");
       if (ctx) {
         try {
           setLastContext(JSON.parse(ctx));
@@ -148,7 +231,7 @@ useEffect(() => {
         }
       }
 
-   
+
 
     } catch (err) {
       setMessages((prev) =>
@@ -204,23 +287,27 @@ useEffect(() => {
 
   const MAX_VISIBLE_LINES = 8;
 
-const toggleExpand = (id: string) => {
-  setExpandedMessages((prev) => ({
-    ...prev,
-    [id]: !prev[id],
-  }));
-};
+  const toggleExpand = (id: string) => {
+    setExpandedMessages((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  const filteredCommands = GENIO_COMMANDS.filter(cmd =>
+    cmd.value.startsWith(input)
+  );
 
 
   return (
     <div
-  className={`
+      className={`
     flex flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl
     h-[100dvh] w-full
     sm:h-[520px] sm:w-[380px]
     ${hidden ? "hidden" : ""}
   `}
->
+    >
 
 
 
@@ -293,41 +380,41 @@ const toggleExpand = (id: string) => {
                 : "bg-muted"
                 }`}
             >
-   {m.content === "__thinking__" ? (
-  <div className="flex gap-1">
-    <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
-    <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.1s]" />
-    <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.2s]" />
-  </div>
-) : m.role === "ai" ? (() => {
-  const lines = m.content.split("\n");
-  const isLong = lines.length > MAX_VISIBLE_LINES;
-  const isExpanded = expandedMessages[m.id];
+              {m.content === "__thinking__" ? (
+                <div className="flex gap-1">
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.1s]" />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.2s]" />
+                </div>
+              ) : m.role === "ai" ? (() => {
+                const lines = m.content.split("\n");
+                const isLong = lines.length > MAX_VISIBLE_LINES;
+                const isExpanded = expandedMessages[m.id];
 
-  const visibleText =
-    isExpanded || !isLong
-      ? m.content
-      : lines.slice(0, MAX_VISIBLE_LINES).join("\n");
+                const visibleText =
+                  isExpanded || !isLong
+                    ? m.content
+                    : lines.slice(0, MAX_VISIBLE_LINES).join("\n");
 
-  return (
-    <div>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {visibleText}
-      </ReactMarkdown>
+                return (
+                  <div>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {visibleText}
+                    </ReactMarkdown>
 
-      {isLong && (
-        <button
-          onClick={() => toggleExpand(m.id)}
-          className="mt-1 text-xs text-primary hover:underline"
-        >
-          {isExpanded ? "See less ▲" : "See more ▼"}
-        </button>
-      )}
-    </div>
-  );
-})() : (
-  <div className="whitespace-pre-wrap">{m.content}</div>
-)}
+                    {isLong && (
+                      <button
+                        onClick={() => toggleExpand(m.id)}
+                        className="mt-1 text-xs text-primary hover:underline"
+                      >
+                        {isExpanded ? "See less ▲" : "See more ▼"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })() : (
+                <div className="whitespace-pre-wrap">{m.content}</div>
+              )}
 
 
               {m.role === "ai" && m.employeeId && (
@@ -356,12 +443,45 @@ const toggleExpand = (id: string) => {
 
 
       {/* INPUT */}
-      <div className="border-t border-white/10 px-3 py-2">
+      <div className="relative border-t border-white/10 px-3 py-2">
+
 
         <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-2 py-1">
-        <Input
-  ref={inputRef}
-  className="
+
+          {showCommands && (
+
+            <div className="absolute bottom-full left-3 right-3 mb-2 z-50 rounded-lg border bg-background shadow-lg">
+              <div className="max-h-48 overflow-y-auto">
+               {filteredCommands.map((cmd, index) => (
+  <button
+    key={cmd.value}
+    className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm
+      ${index === activeCommandIndex ? "bg-muted" : "hover:bg-muted"}
+    `}
+    onClick={() => {
+      setInput(cmd.template);
+      setShowCommands(false);
+      setActiveCommandIndex(0); // reset
+      inputRef.current?.focus();
+    }}
+  >
+    <span className="font-mono text-xs text-primary">
+      {cmd.value}
+    </span>
+    <span className="text-muted-foreground">
+      {cmd.label}
+    </span>
+  </button>
+))}
+
+              </div>
+            </div>
+          )}
+
+          <Input
+
+            ref={inputRef}
+            className="
     h-10
     px-3
     text-sm
@@ -371,17 +491,57 @@ const toggleExpand = (id: string) => {
     focus-visible:ring-offset-0
     placeholder:text-muted-foreground
   "
-  placeholder="Ask Genio anything..."
-  value={input}
-  onChange={(e) => setInput(e.target.value)}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      sendMessage();
-    }
-  }}
-  disabled={isLoading}
-/>
+            placeholder="Ask Genio anything..."
+            value={input}
+            onChange={(e) => {
+              const val = e.target.value;
+              setInput(val);
+              setShowCommands(val.startsWith("/"));
+            }}
+
+            onKeyDown={(e) => {
+              if (showCommands && filteredCommands.length > 0) {
+                // TAB → select command
+                if (e.key === "Tab") {
+                  e.preventDefault();
+                  const cmd = filteredCommands[activeCommandIndex];
+                  if (cmd) {
+                    setInput(cmd.template);
+                    setShowCommands(false);
+                    inputRef.current?.focus();
+                  }
+                  return;
+                }
+
+                // ↓ Arrow
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setActiveCommandIndex((i) =>
+                    Math.min(i + 1, filteredCommands.length - 1)
+                  );
+                  return;
+                }
+
+                // ↑ Arrow
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setActiveCommandIndex((i) =>
+                    Math.max(i - 1, 0)
+                  );
+                  return;
+                }
+              }
+
+              // ENTER → send message
+              if (e.key === "Enter") {
+                e.preventDefault();
+                sendMessage();
+                setShowCommands(false); // 👈 close menu after sending
+              }
+            }}
+
+            disabled={isLoading}
+          />
 
           <Button
             size="sm"

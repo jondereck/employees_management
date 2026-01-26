@@ -12,14 +12,78 @@ export async function parseGenioIntent(
     filters: {},
   };
 
-  /* ===============================
-     FOLLOW-UP DETECTION
-     =============================== */
-     // COUNT fallback (Taglish + short forms)
+
+  
+
+/* ===============================
+   FOLLOW-UP INTENT (CONTEXT-AWARE)
+   =============================== */
+
+
+   /* ===============================
+   FOLLOW-UP: WHO IS IT / WHO ARE THEY
+   =============================== */
+   
+
 if (
-  /\b(how many|ilan|ilang)\b/.test(text)
+  context?.lastCountQuery &&
+  /\b(who is it|who are they|sino sila|sino siya)\b/.test(text)
 ) {
+  return {
+    action: "list_from_last_count",
+    filters: {},
+    followUp: true,
+  };
+}
+
+
+if (context?.lastCountQuery) {
+  // Gender-only follow-ups
+  if (/\b(male|men|man|female|women|woman|lalaki|babae)\b/.test(text)) {
+    return {
+      action: "count",
+      filters: {},
+      followUp: true,
+    };
+  }
+
+  // Short count follow-ups (Taglish)
+  if (
+    /\b(ilan|ilang|how many)\b/.test(text) &&
+    !/\boffice|department|division\b/.test(text)
+  ) {
+    return {
+      action: "count",
+      filters: {},
+      followUp: true,
+    };
+  }
+
+  // “What about …”
+  if (/\b(what about|paano naman|kamusta naman)\b/.test(text)) {
+    return {
+      action: "count",
+      filters: {},
+      followUp: true,
+    };
+  }
+}
+
+
+     
+if (/\b(how many|ilan|ilang|count|number of|total)\b/.test(text)) {
   intent.action = "count";
+
+if (
+  context?.lastCountQuery &&
+  /\b(in|sa)\s+[a-z]/.test(text)
+) {
+  return {
+    action: "count",
+    filters: {},
+    followUp: true,
+  };
+}
 }
 
   if (
@@ -107,8 +171,14 @@ if (/\b(contract|cos)\b/.test(text)) {
      =============================== */
 
   // Gender
-  if (/\bfemale\b/.test(text)) intent.filters.gender = "Female";
-  if (/\bmale\b/.test(text)) intent.filters.gender = "Male";
+ if (/\b(female|women|woman|babae)\b/.test(text)) {
+  intent.filters.gender = "Female";
+}
+
+if (/\b(male|men|man|lalaki)\b/.test(text)) {
+  intent.filters.gender = "Male";
+}
+
 
   // Age
   const above = text.match(/(above|older than)\s*(\d+)/);

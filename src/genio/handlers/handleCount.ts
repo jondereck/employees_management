@@ -13,149 +13,153 @@ export async function handleCount(
 ) {
   const where: any = { isArchived: false };
 
-/* ===============================
-   OFFICE (AUTO-APPLY SINGLE SUGGESTION ✅)
-   =============================== */
-const offices = await prisma.offices.findMany({
-  select: { id: true, name: true },
-});
+  /* ===============================
+     NATURAL GENDER PHRASES
+     =============================== */
+const genderFromText =
+  /\b(female|women|woman|girls?)\b/i.test(message)
+    ? Gender.Female
+    : /\b(male|men|man|boys?)\b/i.test(message)
+    ? Gender.Male
+    : null;
 
-let office = resolveOfficeWithAliases(message, offices);
 
-// 🔁 AUTO-SUGGEST FLOW
-if (!office) {
-  const suggestions = suggestOffices(message, offices);
+  /* ===============================
+     OFFICE (REMEMBER + OVERRIDE)
+     =============================== */
+  const mentionsOffice = /office|department|division|unit|section|in\s+/i.test(
+    message
+  );
 
-  // ✅ AUTO-APPLY if only ONE suggestion
-  if (suggestions.length === 1) {
-    office = suggestions[0];
+  let office =
+    context?.lastCountQuery?.officeId && !mentionsOffice
+      ? {
+          id: context.lastCountQuery.officeId,
+          name: context.lastCountQuery.officeName,
+        }
+      : null;
 
-    context = {
-      ...context,
-      autoAppliedOffice: office.name,
-      focus: {
-        type: "office",
-        id: office.id,
-        name: office.name,
-      },
-    };
+  if (mentionsOffice) {
+    const offices = await prisma.offices.findMany({
+      select: { id: true, name: true },
+    });
+
+    office = resolveOfficeWithAliases(message, offices);
+
+    if (!office) {
+      const suggestions = suggestOffices(message, offices);
+
+      if (suggestions.length === 1) {
+        office = suggestions[0];
+      } else if (suggestions.length > 1) {
+        return streamReply(
+          `Which office did you mean?\n\n${suggestions
+            .map((o) => `• ${o.name}`)
+            .join("\n")}`,
+          context,
+          null
+        );
+      } else {
+        return streamReply(
+          "I couldn’t identify the office. You can say **“list all offices”**.",
+          context,
+          null
+        );
+      }
+    }
   }
-
-  // ❓ MULTIPLE suggestions → ask user
-  else if (suggestions.length > 1) {
-    const list = suggestions
-      .map((o, i) => `${i + 1}. ${o.name}`)
-      .join("\n");
-
-    return streamReply(
-      `I couldn’t clearly identify the office you meant.\n\nDid you mean one of these?\n\n${list}\n\nYou can reply with the office name.`,
-      context,
-      null
-    );
-  }
-
-  // ❌ No suggestions
-  else {
-    return streamReply(
-      "I couldn’t identify the office.\nYou can say **“list all offices”** to see available options.",
-      context,
-      null
-    );
-  }
-}
-
-// ✅ Apply office filter
-where.officeId = office.id;
-
-
 
   if (office) {
     where.officeId = office.id;
-    context = {
-      ...context,
-      focus: {
-        type: "office",
-        id: office.id,
-        name: office.name,
-      },
-    };
   }
 
   /* ===============================
-     GENDER
+     GENDER (FOLLOW-UP AWARE)
      =============================== */
-  if (intent.filters.gender) {
+  if (genderFromText) {
+    where.gender = genderFromText;
+  } else if (intent.filters.gender) {
     where.gender =
       intent.filters.gender === "Male"
         ? Gender.Male
         : Gender.Female;
   }
 
+/* ===============================
+   EMPLOYEE TYPE
+   =============================== */
+if (intent.filters.employeeType) {
+  const employeeTypes = await prisma.employee.findMany({
+    where,
+    select: {
+      employeeType: {
+        select: { id: true, name: true, value: true },
+      },
+    },
+  });
+
+  const uniqueTypes = Array.from(
+    new Map(
+      employeeTypes
+        .map((e) => e.employeeType)
+        .filter(Boolean)
+        .map((t) => [t.id, t])
+    ).values()
+  );
+
+  const matchedType = resolveEmployeeType(
+    intent.filters.employeeType,
+    uniqueTypes
+  );
+
+  if (!matchedType) {
+    return streamReply(
+      `I couldn’t find a "${intent.filters.employeeType}" employee type.`,
+      context,
+      null
+    );
+  }
+
+  where.employeeTypeId = matchedType.id;
+}
+
+
   /* ===============================
-     EMPLOYEE TYPE (SAFE & CORRECT)
+     COUNT + BREAKDOWN
      =============================== */
-  if (intent.filters.employeeType) {
-    // Resolve employeeType ONLY among employees in this office
-    const employeeTypesInOffice = await prisma.employee.findMany({
-      where: {
-        ...where,
-        officeId: where.officeId,
-      },
-      select: {
-        employeeType: {
-          select: { id: true, name: true, value: true },
-        },
-      },
-    });
+  let reply = "";
 
-    const uniqueTypes = Array.from(
-      new Map(
-        employeeTypesInOffice
-          .map((e) => e.employeeType)
-          .filter(Boolean)
-          .map((t) => [t.id, t])
-      ).values()
-    );
+  if (!where.gender) {
+    const [total, male, female] = await Promise.all([
+      prisma.employee.count({ where }),
+      prisma.employee.count({ where: { ...where, gender: Gender.Male } }),
+      prisma.employee.count({ where: { ...where, gender: Gender.Female } }),
+    ]);
 
-    const matchedType = resolveEmployeeType(
-      intent.filters.employeeType,
-      uniqueTypes
-    );
-
-    if (!matchedType) {
-      return streamReply(
-        `I couldn’t find a "${intent.filters.employeeType}" employee type in that office.`,
-        context,
-        null
-      );
-    }
-
-    where.employeeTypeId = matchedType.id;
+    reply =
+      `There are **${total} employees**` +
+      (office ? ` in **${office.name}**` : "") +
+      `.\n\n• **${male} male**\n• **${female} female**`;
+  } else {
+    const count = await prisma.employee.count({ where });
+    reply =
+      `There are **${count} ${
+        where.gender === Gender.Female ? "female" : "male"
+      } employees**` + (office ? ` in **${office.name}**` : "");
   }
 
   /* ===============================
-     DEBUG (KEEP THIS)
+     SAVE CONTEXT
      =============================== */
-  console.log("GENIO COUNT FILTER:", where);
-
-  /* ===============================
-     COUNT
-     =============================== */
-  const count = await prisma.employee.count({ where });
-
   context = {
     ...context,
-    lastQuery: { type: "count", where },
+    lastCountQuery: {
+      officeId: office?.id,
+      officeName: office?.name,
+      employeeTypeId: where.employeeTypeId,
+      gender: where.gender,
+    },
   };
 
-  const autoOfficeNote = context?.autoAppliedOffice
-  ? `*Assuming you meant **${context.autoAppliedOffice}***\n\n`
-  : "";
-
-  return streamReply(
-  `${autoOfficeNote}There are **${count} employees** in ${office.name}.`,
-  context,
-  null
-);
-
+  return streamReply(reply, context, null);
 }
