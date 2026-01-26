@@ -161,5 +161,11 @@ if (intent.filters.employeeType) {
     },
   };
 
-  return streamReply(reply, context, null);
+  return streamReply(
+  reply,
+  context,
+  null,
+  { canExport: true }
+);
+
 }

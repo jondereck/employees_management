@@ -1,11 +1,8 @@
-// src/genio/handlers/handleDistribution.ts
 import { prisma } from "@/lib/prisma";
-
+import { Gender } from "@prisma/client";
 import { streamReply } from "../utils";
 import { GenioIntent } from "../type";
 import { resolveOfficeWithAliases } from "../resolve-office";
-
-
 
 export async function handleDistribution(
   intent: GenioIntent,
@@ -19,7 +16,7 @@ export async function handleDistribution(
   });
 
   const office =
-    resolveOfficeWithAliases (message, offices) ??
+    resolveOfficeWithAliases(message, offices) ??
     (context?.focus?.type === "office"
       ? offices.find((o) => o.id === context.focus.id)
       : null);
@@ -37,18 +34,30 @@ export async function handleDistribution(
     };
   }
 
-  const male = await prisma.employee.count({
-    where: { ...where, gender: "Male" },
-  });
+  const [male, female] = await Promise.all([
+    prisma.employee.count({
+      where: { ...where, gender: Gender.Male },
+    }),
+    prisma.employee.count({
+      where: { ...where, gender: Gender.Female },
+    }),
+  ]);
 
-  const female = await prisma.employee.count({
-    where: { ...where, gender: "Female" },
-  });
+  const total = male + female;
+
+  context = {
+    ...context,
+    lastDistributionQuery: {
+      officeId: office?.id,
+      officeName: office?.name,
+    },
+  };
 
   return streamReply(
-    `Gender distribution${
-      office ? ` in ${office.name}` : ""
-    }:\n\n**Male:** ${male}\n**Female:** ${female}`,
+    `Gender distribution${office ? ` in **${office.name}**` : ""}:\n\n` +
+      `• **Male:** ${male}\n` +
+      `• **Female:** ${female}\n` +
+      `• **Total:** ${total}`,
     context,
     null
   );

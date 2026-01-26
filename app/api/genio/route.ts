@@ -1,82 +1,105 @@
 
-  import { parseGenioIntent } from "@/src/genio/parse-intent";
-  import {
-    handleWhoIs,
-    handleShowProfile,
-    handleDistribution,
-    handleInsight,
-    handleCount,
-    handleListOffices,
-    handleWhoIsHead,
-    handleIsHead,
-    handleListHeads,
-    handleOfficesNoHead,
-    handleListFromLastCount
-  } from "@/src/genio/handlers";
-  import { streamReply } from "@/src/genio/utils";
-  import { handleList } from "@/src/genio/handlers/handleList";
+import { parseGenioIntent } from "@/src/genio/parse-intent";
 
 
-  export async function POST(req: Request, { params }: { params: { departmentId: string } }) {
-    const { message, context } = await req.json();
+import {
+  handleWhoIs,
+  handleShowProfile,
+  handleDistribution,
+  handleInsight,
+  handleCount,
+  handleListOffices,
+  handleWhoIsHead,
+  handleIsHead,
+  handleListHeads,
+  handleOfficesNoHead,
+  handleListFromLastCount,
+  handleExport,
+  handleCompareOffices,
+  handleSmallestOffice,
+  handleTopOffices,
+  handleCompareEmployeeTypes,
+
+} from "@/src/genio/handlers";
+import { streamReply } from "@/src/genio/utils";
+import { handleList } from "@/src/genio/handlers/handleList";
+import { handleAIAnswer } from "@/src/genio/handlers/handleAiAnswers";
+import { classifyGenioIntent } from "@/src/genio/ai/classifyGenioIntent";
 
 
-    if (/who is the head of/i.test(message)) {
+export async function POST(req: Request, { params }: { params: { departmentId: string } }) {
+  const { message, context } = await req.json();
+
+
+
+
+  const { intent, confidence } = parseGenioIntent(message, context);
+  if (confidence < 2) {
+    const aiAction = await classifyGenioIntent(message);
+    intent.action = aiAction;
+  }
+  switch (intent.action) {
+
+
+    case "describe_employee":
+      return handleWhoIs(message, context);
+
+    case "who_is_head":
       return handleWhoIsHead(message, context);
-    }
 
-    if (/^is .* the head of /i.test(message)) {
-    return handleIsHead(message, context);
-  }
+    case "is_head":
+      return handleIsHead(message, context);
 
-    // 🏢 Which offices don't have a head?
-    if (/which offices.*(dont|do not).*head/i.test(message)) {
-      return handleOfficesNoHead(context);
-    }
-
-    // 🧑‍💼 List all office heads
-    if (/list all office heads/i.test(message)) {
+    case "list_heads":
       return handleListHeads(context);
-    }
+
+    case "offices_no_head":
+      return handleOfficesNoHead(context);
+    case "count":
+      return handleCount(intent, context, message);
+
+
+    case "list":
+      return handleList(context);
+
+    case "show_profile":
+      return handleShowProfile(context);
+
+    case "distribution":
+      return handleDistribution(intent, context, message);
+
+
+    case "insight":
+      return handleInsight(message, context);
+
+    case "list_offices":
+      return handleListOffices(context);
+
+    case "list_from_last_count":
+      return handleListFromLastCount(context);
+
+    case "insight":
+      return handleAIAnswer(message, context);
+
+    case "export":
+      return handleExport(context);
+
+    case "compare_offices":
+      return handleCompareOffices(message, context);
+
+    case "top_offices":
+      return handleTopOffices(context);
+
+    case "smallest_office":
+      return handleSmallestOffice(context);
+
+    case "compare_employee_types":
+      return handleCompareEmployeeTypes(message, context);
 
 
 
-    const intent = await parseGenioIntent(message, context);
-    switch (intent.action) {
-      case "describe_employee":
-        return handleWhoIs(message, context);
+    default:
+      return handleAIAnswer(message, context);
 
-
-      case "count":
-        return handleCount(intent, context, message);
-
-
-      case "list":
-        return handleList(context);
-
-      case "show_profile":
-        return handleShowProfile(context);
-
-      case "distribution":
-        return handleDistribution(intent, context, message);
-
-
-      case "insight":
-        return handleInsight(message, context);
-
-      case "list_offices":
-        return handleListOffices(context);
-
-        case "list_from_last_count":
-  return handleListFromLastCount(context);
-
-
-
-      default:
-        return streamReply(
-          "I’m not sure what you want to do yet.",
-          context,
-          null
-        );
-    }
   }
+}

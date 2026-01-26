@@ -82,6 +82,7 @@ export async function handleWhoIs(
   return streamReply(
     `${emp.firstName} ${emp.lastName} is a **${emp.position}** in **${emp.offices?.name}**.`,
     context,
-    emp.id
+    emp.id,
+      { canExport: true }
   );
 }

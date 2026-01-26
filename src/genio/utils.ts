@@ -2,7 +2,10 @@
 export function streamReply(
   reply: string,
   context: any,
-  viewProfileEmployeeId: string | null
+  viewProfileEmployeeId?: string | null,
+  meta?: {
+    canExport?: boolean;
+  }
 ) {
   const encoder = new TextEncoder();
 
@@ -20,9 +23,10 @@ export function streamReply(
     headers: {
       "Content-Type": "text/plain",
       "x-genio-context": JSON.stringify(context),
-      "x-genio-meta": JSON.stringify(
-        viewProfileEmployeeId ? { viewProfileEmployeeId } : {}
-      ),
+      "x-genio-meta": JSON.stringify({
+        ...(viewProfileEmployeeId && { viewProfileEmployeeId }),
+        ...(meta?.canExport && { canExport: true }),
+      }),
     },
   });
 }

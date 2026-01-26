@@ -26,6 +26,7 @@ type GenioMessage = {
 
   content: string;
   employeeId?: string;
+  canExport?: boolean;
 };
 
 type GenioContext = {
@@ -184,11 +185,41 @@ export const GenioChat = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          context: lastContext, // 👈 THIS IS THE KEY
+          context: lastContext,
         }),
-
       });
 
+      /* ===============================
+         📦 CSV EXPORT (MUST BE FIRST)
+         =============================== */
+      if (
+        res.headers
+          .get("content-type")
+          ?.includes(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          )
+      ) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "employees-export.xlsx";
+        a.click();
+
+        window.URL.revokeObjectURL(url);
+
+        setMessages((prev) =>
+          prev.filter((m) => m.id !== aiId)
+        );
+
+        return;
+      }
+
+
+      /* ===============================
+         💬 STREAMING RESPONSE
+         =============================== */
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No response body");
 
@@ -207,6 +238,10 @@ export const GenioChat = ({
           )
         );
       }
+
+      /* ===============================
+         🧠 CONTEXT
+         =============================== */
       const ctx = res.headers.get("x-genio-context");
       if (ctx) {
         try {
@@ -216,22 +251,25 @@ export const GenioChat = ({
         }
       }
 
-      const meta = res.headers.get("x-genio-meta");
+      /* ===============================
+         🧾 META (View Profile)
+         =============================== */
+const meta = res.headers.get("x-genio-meta");
+if (meta) {
+  const parsed = JSON.parse(meta);
 
-      if (meta) {
-        const parsed = JSON.parse(meta);
-        if (parsed.viewProfileEmployeeId) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiId
-                ? { ...m, employeeId: parsed.viewProfileEmployeeId }
-                : m
-            )
-          );
-        }
-      }
-
-
+  setMessages((prev) =>
+    prev.map((m) =>
+      m.id === aiId
+        ? {
+            ...m,
+            employeeId: parsed.viewProfileEmployeeId,
+            canExport: parsed.canExport,
+          }
+        : m
+    )
+  );
+}
 
     } catch (err) {
       setMessages((prev) =>
@@ -245,6 +283,7 @@ export const GenioChat = ({
       setIsLoading(false);
     }
   };
+
 
 
   useEffect(() => {
@@ -416,6 +455,17 @@ export const GenioChat = ({
                 <div className="whitespace-pre-wrap">{m.content}</div>
               )}
 
+              {m.role === "ai" && m.canExport && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 mr-2"
+                  onClick={() => sendMessage("Export this")}
+                >
+                  Export to Excel
+                </Button>
+              )}
+
 
               {m.role === "ai" && m.employeeId && (
                 <Button
@@ -452,27 +502,27 @@ export const GenioChat = ({
 
             <div className="absolute bottom-full left-3 right-3 mb-2 z-50 rounded-lg border bg-background shadow-lg">
               <div className="max-h-48 overflow-y-auto">
-               {filteredCommands.map((cmd, index) => (
-  <button
-    key={cmd.value}
-    className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm
+                {filteredCommands.map((cmd, index) => (
+                  <button
+                    key={cmd.value}
+                    className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm
       ${index === activeCommandIndex ? "bg-muted" : "hover:bg-muted"}
     `}
-    onClick={() => {
-      setInput(cmd.template);
-      setShowCommands(false);
-      setActiveCommandIndex(0); // reset
-      inputRef.current?.focus();
-    }}
-  >
-    <span className="font-mono text-xs text-primary">
-      {cmd.value}
-    </span>
-    <span className="text-muted-foreground">
-      {cmd.label}
-    </span>
-  </button>
-))}
+                    onClick={() => {
+                      setInput(cmd.template);
+                      setShowCommands(false);
+                      setActiveCommandIndex(0); // reset
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    <span className="font-mono text-xs text-primary">
+                      {cmd.value}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {cmd.label}
+                    </span>
+                  </button>
+                ))}
 
               </div>
             </div>
