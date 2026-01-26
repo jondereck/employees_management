@@ -112,6 +112,8 @@ const GENIO_COMMANDS = [
   },
 ];
 
+const isMobile = typeof window !== "undefined" &&
+  window.matchMedia("(max-width: 640px)").matches;
 
 
 const messagesLoad = [
@@ -144,8 +146,26 @@ export const GenioChat = ({
   const [showCommands, setShowCommands] = useState(false);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
+useEffect(() => {
+  const media = window.matchMedia("(max-width: 640px)");
 
+  const handleChange = () => {
+    setIsMobile(media.matches);
+  };
+
+  handleChange(); // init
+  media.addEventListener("change", handleChange);
+
+  return () => media.removeEventListener("change", handleChange);
+}, []);
+
+useEffect(() => {
+  if (isMobile) {
+    setIsFullscreen(true);
+  }
+}, [isMobile]);
 
 
   const [index, setIndex] = useState(0);

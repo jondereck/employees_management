@@ -18,6 +18,7 @@ interface EmployeeFiltersProps {
   eligibilities: Option[];
   employeeTypes: Option[];
   positions: Option[];
+  isGenioOpen: boolean;
   onFilterChange: (filters: {
     offices: string[];
     eligibilities: string[];
@@ -34,6 +35,7 @@ export default function EmployeeFilters({
   eligibilities,
   employeeTypes,
   positions,
+  isGenioOpen,
   onFilterChange,
 }: EmployeeFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -182,11 +184,17 @@ export default function EmployeeFilters({
         Filter
       </Button>
 
-      <div className="fixed bottom-6 left-6 z-50 md:hidden">
-        <Button onClick={() => setIsOpen(true)} className="rounded-full shadow-lg px-4 py-3">
-          Filter
-        </Button>
-      </div>
+   {!isGenioOpen && (
+  <div className="fixed bottom-6 left-6 z-40 md:hidden">
+    <Button
+      onClick={() => setIsOpen(true)}
+      className="rounded-full shadow-lg px-4 py-3"
+    >
+      Filter
+    </Button>
+  </div>
+)}
+
 
       {/* Active chips */}
       <div className="flex gap-2 mt-2 flex-wrap">

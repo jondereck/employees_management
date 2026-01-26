@@ -66,6 +66,8 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
     }
   });
 
+  const [isGenioOpen, setIsGenioOpen] = useState(false);
+
   const [isPending, startTransition] = useTransition();
 
   const onAdd = () => {
@@ -356,6 +358,7 @@ export const EmployeesClient = ({ departmentId, data, offices, positions, eligib
               offices={offices}
               eligibilities={eligibilities}
               employeeTypes={employeeTypes}
+               isGenioOpen={isGenioOpen}
               onFilterChange={setFilters}
               positions={activePositionOptions}
             />
