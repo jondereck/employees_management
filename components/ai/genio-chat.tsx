@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import usePreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/hooks/use-preview-modal";
-import { FiRefreshCcw } from "react-icons/fi";
+import { FiMaximize2, FiMinimize, FiMinimize2, FiRefreshCcw } from "react-icons/fi";
 
 import {
   loadGenioCache,
@@ -113,6 +113,12 @@ const GENIO_COMMANDS = [
 ];
 
 
+
+const messagesLoad = [
+  "Analyzing HR records…",
+  "Cross-checking employee data…",
+  "Reviewing department insights…",
+];
 export const GenioChat = ({
   onClose,
 
@@ -137,9 +143,20 @@ export const GenioChat = ({
   >({});
   const [showCommands, setShowCommands] = useState(false);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
 
 
+
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % messagesLoad.length);
+    }, 2000); // change every 2 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
 
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -254,22 +271,22 @@ export const GenioChat = ({
       /* ===============================
          🧾 META (View Profile)
          =============================== */
-const meta = res.headers.get("x-genio-meta");
-if (meta) {
-  const parsed = JSON.parse(meta);
+      const meta = res.headers.get("x-genio-meta");
+      if (meta) {
+        const parsed = JSON.parse(meta);
 
-  setMessages((prev) =>
-    prev.map((m) =>
-      m.id === aiId
-        ? {
-            ...m,
-            employeeId: parsed.viewProfileEmployeeId,
-            canExport: parsed.canExport,
-          }
-        : m
-    )
-  );
-}
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiId
+              ? {
+                ...m,
+                employeeId: parsed.viewProfileEmployeeId,
+                canExport: parsed.canExport,
+              }
+              : m
+          )
+        );
+      }
 
     } catch (err) {
       setMessages((prev) =>
@@ -338,15 +355,22 @@ if (meta) {
   );
 
 
+
+
   return (
     <div
       className={`
-    flex flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl
-    h-[100dvh] w-full
-    sm:h-[520px] sm:w-[380px]
+    flex flex-col overflow-hidden border bg-background shadow-2xl
+    transition-all duration-300
     ${hidden ? "hidden" : ""}
+
+    ${isFullscreen
+          ? "fixed inset-0 z-[100] h-screen w-screen rounded-none"
+          : "rounded-2xl h-[100dvh] w-full sm:h-[520px] sm:w-[380px]"
+        }
   `}
     >
+
 
 
 
@@ -375,6 +399,14 @@ if (meta) {
         </div>
 
         <div className="flex gap-2">
+          {/* Fullscreen*/}
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {isFullscreen ? <FiMinimize2 /> : <FiMaximize2 />}
+          </button>
+
           {/* Reset*/}
 
           <button
@@ -398,6 +430,15 @@ if (meta) {
           </button>
         </div>
       </div>
+      {lastContext && (
+        <div className="border-b bg-muted/40 px-4 py-2 text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">Context:</span>{" "}
+          {lastContext.employeeTypeName && (
+            <>Employee Type: {lastContext.employeeTypeName}</>
+          )}
+          {lastContext.year && <> · Year: {lastContext.year}</>}
+        </div>
+      )}
 
       {/* MESSAGES */}
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4 text-sm">
@@ -420,11 +461,15 @@ if (meta) {
                 }`}
             >
               {m.content === "__thinking__" ? (
-                <div className="flex gap-1">
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.1s]" />
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.2s]" />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex gap-1">
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-primary" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:0.15s]" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:0.3s]" />
+                  </div>
+                  <span className="italic">{messagesLoad[index]}</span>
                 </div>
+
               ) : m.role === "ai" ? (() => {
                 const lines = m.content.split("\n");
                 const isLong = lines.length > MAX_VISIBLE_LINES;
@@ -464,6 +509,23 @@ if (meta) {
                 >
                   Export to Excel
                 </Button>
+              )}
+              {m.role === "ai" && m.content !== "__thinking__" && (
+                <div className="mt-2 flex gap-3 text-[11px] text-muted-foreground">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(m.content)}
+                    className="hover:text-foreground"
+                  >
+                    📋 Copy
+                  </button>
+
+                  <button
+                    className="hover:text-foreground"
+                    onClick={() => sendMessage("Why did you answer this?")}
+                  >
+                    🧠 Why?
+                  </button>
+                </div>
               )}
 
 

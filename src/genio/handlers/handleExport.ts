@@ -12,22 +12,17 @@ export async function handleExport(context: any) {
     );
   }
 
-  const employees = await prisma.employee.findMany({
-    where: {
-      isArchived: false,
-      officeId: last.officeId,
-      gender: last.gender,
-      employeeTypeId: last.employeeTypeId,
+ const employees = await prisma.employee.findMany({
+  where: last.where, // 🔥 USE EXACT SAME FILTERS AS CHAT
+  include: {
+    offices: {
+      select: { name: true },
     },
-    select: {
-      employeeNo: true,
-      firstName: true,
-      middleName: true,
-      lastName: true,
-      position: true,
-      gender: true,
+    employeeType: {
+      select: { name: true },
     },
-  });
+  },
+});
 
   if (employees.length === 0) {
     return NextResponse.json(
@@ -36,17 +31,46 @@ export async function handleExport(context: any) {
     );
   }
 
-  const rows = employees.map((e) => ({
-    EmployeeNo: e.employeeNo,
-    Name: [e.firstName, e.middleName, e.lastName]
-      .filter(Boolean)
-      .join(" "),
-    Position: e.position,
-    Gender: e.gender,
-  }));
+const rows = employees.map((e) => ({
+  "Employee No": e.employeeNo,
+  "Last Name": e.lastName,
+  "First Name": e.firstName,
+  "M.I.": e.middleName ? e.middleName.charAt(0) : "",
+  Suffix: e.suffix ?? "",
+  Position: e.position,
+  Office: e.offices?.name ?? "",
+  "Employee Type": e.employeeType?.name ?? "",
+  Gender: e.gender,
+}));
+
 
   // 🧾 Create workbook
-  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const worksheet = XLSX.utils.json_to_sheet(rows, {
+  skipHeader: false,
+});
+
+const headerCells = Object.keys(rows[0]) as Array<keyof typeof rows[0]>;
+
+
+
+
+headerCells.forEach((_, colIndex) => {
+  const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIndex });
+  if (worksheet[cellAddress]) {
+    worksheet[cellAddress].s = {
+      font: { bold: true },
+      alignment: { vertical: "center" },
+    };
+  }
+});
+
+
+worksheet["!cols"] = headerCells.map((header) => ({
+  wch: Math.max(
+    header.length,
+    ...rows.map((row) => String(row[header] ?? "").length)
+  ) + 2,
+}));
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Employees");
 

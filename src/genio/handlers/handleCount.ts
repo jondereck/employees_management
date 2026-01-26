@@ -158,6 +158,7 @@ if (intent.filters.employeeType) {
       officeName: office?.name,
       employeeTypeId: where.employeeTypeId,
       gender: where.gender,
+      where,
     },
   };
 

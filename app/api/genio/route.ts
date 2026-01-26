@@ -19,6 +19,8 @@ import {
   handleSmallestOffice,
   handleTopOffices,
   handleCompareEmployeeTypes,
+  handleAgeAnalysis,
+  handleTenureAnalysis,
 
 } from "@/src/genio/handlers";
 import { streamReply } from "@/src/genio/utils";
@@ -30,14 +32,13 @@ import { classifyGenioIntent } from "@/src/genio/ai/classifyGenioIntent";
 export async function POST(req: Request, { params }: { params: { departmentId: string } }) {
   const { message, context } = await req.json();
 
-
-
-
   const { intent, confidence } = parseGenioIntent(message, context);
+
   if (confidence < 2) {
     const aiAction = await classifyGenioIntent(message);
     intent.action = aiAction;
   }
+  
   switch (intent.action) {
 
 
@@ -96,6 +97,11 @@ export async function POST(req: Request, { params }: { params: { departmentId: s
     case "compare_employee_types":
       return handleCompareEmployeeTypes(message, context);
 
+    case "age_analysis":
+      return handleAgeAnalysis(intent, context);
+
+    case "tenure_analysis":
+      return handleTenureAnalysis(intent, context);
 
 
     default:

@@ -4,7 +4,11 @@ export function parseGenioIntent(
   message: string,
   context?: any
 ): { intent: GenioIntent; confidence: number } {
-  const text = message.toLowerCase();
+ const text = message
+  .toLowerCase()
+  .replace(/[^\w\s]/g, ""); // ← REQUIRED
+
+
   let confidence = 0;
 
   const intent: GenioIntent = {
@@ -207,21 +211,35 @@ if (/list all office heads/i.test(text)) {
     confidence += 1;
   }
 
+
   /* ===============================
-     AGE FILTERS
-     =============================== */
-  const above = text.match(/(above|older than)\s*(\d+)/);
-  const below = text.match(/(below|younger than)\s*(\d+)/);
+   AGE FILTER (FIXED)
+   =============================== */
 
-  if (above) {
-    intent.filters.age = { min: Number(above[2]) };
-    confidence += 1;
-  }
 
-  if (below) {
-    intent.filters.age = { max: Number(below[2]) - 1 };
-    confidence += 1;
-  }
+
+/* ===============================
+   TENURE ANALYSIS
+   =============================== */
+if (
+  /\b(years of service|tenure|served|years in service|employed for)\b/.test(text)
+) {
+  const above = text.match(/(more than|over|above)\s*(\d+)/);
+  const below = text.match(/(less than|under|below)\s*(\d+)/);
+
+  return {
+    intent: {
+      action: "tenure_analysis",
+      filters: {
+        tenure: {
+          ...(above && { min: Number(above[2]) }),
+          ...(below && { max: Number(below[2]) }),
+        },
+      },
+    },
+    confidence: 4,
+  };
+}
 
   /* ===============================
      COMPARE OFFICES
@@ -277,6 +295,27 @@ if (/list all office heads/i.test(text)) {
       confidence: 4,
     };
   }
+
+  /* ===============================
+   AGE FILTER (FINAL – CORRECT)
+   =============================== */
+const aboveAge = text.match(/(above|older than|over|more than)\s*(\d+)/);
+const belowAge = text.match(/(below|younger than|under|less than)\s*(\d+)/);
+
+if (aboveAge || belowAge) {
+  return {
+    intent: {
+      action: "age_analysis",
+      filters: {
+        age: {
+          ...(aboveAge && { min: Number(aboveAge[2]) }),
+          ...(belowAge && { max: Number(belowAge[2]) }),
+        },
+      },
+    },
+    confidence: 5,
+  };
+}
 
   /* ===============================
      FINAL RETURN
