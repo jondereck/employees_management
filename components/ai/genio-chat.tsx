@@ -311,6 +311,24 @@ const isMobile = typeof window !== "undefined" &&
   window.matchMedia("(max-width: 640px)").matches;
 
 
+
+  const COMMAND_GROUPS = {
+  Employees: GENIO_COMMANDS.filter(c =>
+    ["whois", "profile", "ishead"].includes(c.value.replace("/", ""))
+  ),
+  Offices: GENIO_COMMANDS.filter(c =>
+    c.value.includes("office")
+  ),
+  Counts: GENIO_COMMANDS.filter(c =>
+    c.value.includes("count")
+  ),
+  Analytics: GENIO_COMMANDS.filter(c =>
+    ["distribution", "age", "tenure", "insight"].some(k =>
+      c.value.includes(k)
+    )
+  ),
+};
+
 const messagesLoad = [
   "Analyzing HR records…",
   "Cross-checking employee data…",
@@ -345,6 +363,8 @@ export const GenioChat = ({
   const [selectionText, setSelectionText] = useState("");
   const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
   const [visibleChips, setVisibleChips] = useState<typeof GENIO_COMMANDS>([]);
+  const [showCommandSheet, setShowCommandSheet] = useState(false);
+
 
   useEffect(() => {
     const handleSelection = () => {
@@ -417,6 +437,10 @@ export const GenioChat = ({
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
+
+const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+const longPressTriggered = useRef(false);
+
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -693,11 +717,41 @@ export const GenioChat = ({
     return shuffled.slice(0, 2);
   };
 
-  useEffect(() => {
-    if (!hidden) {
-      setVisibleChips(getRandomCommands());
-    }
-  }, [hidden]);
+
+
+
+useEffect(() => {
+  if (hidden) return;
+  setVisibleChips(getRandomCommands());
+}, [hidden]);
+
+
+const handleRefreshClick = () => {
+  // if long-press already triggered, do nothing
+  if (longPressTriggered.current) {
+    longPressTriggered.current = false;
+    return;
+  }
+
+  setShowCommandSheet(false);
+  setVisibleChips(getRandomCommands());
+};
+
+const handleLongPressStart = () => {
+  longPressTriggered.current = false;
+
+  longPressTimer.current = setTimeout(() => {
+    longPressTriggered.current = true;
+    setShowCommandSheet(true);
+  }, 500); // ⏱ long press threshold
+};
+
+const handleLongPressEnd = () => {
+  if (longPressTimer.current) {
+    clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  }
+};
 
 
   const handleChipClick = (cmd: typeof GENIO_COMMANDS[number]) => {
@@ -931,29 +985,60 @@ export const GenioChat = ({
       {/* INPUT */}
       <div className="border-t bg-background px-3 py-3">
         {/* QUICK COMMAND CHIPS */}
-        {visibleChips.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-2">
-            {visibleChips.map((cmd) => (
-              <button
-                key={cmd.value}
+    {visibleChips.length > 0 && (
+  <div className="mb-2 flex items-center justify-between gap-2">
+    {/* LEFT: COMMAND CHIPS */}
+    <div className="flex flex-wrap gap-2">
+      {visibleChips.map((cmd) => (
+        <button
+          key={cmd.value}
+          className="
+            rounded-full border px-3 py-1
+            text-xs text-muted-foreground
+            hover:bg-muted transition
+          "
+          onClick={() => handleChipClick(cmd)}
+        >
+          {cmd.label}
+        </button>
+      ))}
+    </div>
 
-                className="
-          rounded-full
-          border
-          px-3
-          py-1
-          text-xs
-          text-muted-foreground
-          hover:bg-muted
-          transition
-        "
-                onClick={() => handleChipClick(cmd)}
-              >
-                {cmd.label}
-              </button>
-            ))}
-          </div>
-        )}
+    {/* RIGHT: REFRESH BUTTON */}
+    <button
+  title={showCommandSheet ? "Showing all commands" : "Refresh suggestions"}
+  onMouseDown={handleLongPressStart}
+  onMouseUp={handleLongPressEnd}
+  onMouseLeave={handleLongPressEnd}
+  onTouchStart={handleLongPressStart}
+  onTouchEnd={handleLongPressEnd}
+  onClick={handleRefreshClick}
+  className="
+    flex h-7 w-7 items-center justify-center
+    rounded-full border
+    text-muted-foreground
+    hover:bg-muted hover:text-foreground
+    transition
+    active:scale-95
+  "
+>
+  <FiRefreshCcw
+    className={`h-3.5 w-3.5 transition-transform ${
+      showCommandSheet ? "rotate-180 text-primary" : ""
+    }`}
+  />
+</button>
+
+  </div>
+)}
+
+{showCommandSheet && (
+  <p className="mt-1 text-[10px] text-muted-foreground">
+    Long-press 🔄 to toggle suggestions
+  </p>
+)}
+
+
 
         <div
           className="relative flex items-center gap-2 rounded-full border bg-white px-3 py-2 shadow-sm"
@@ -1128,6 +1213,58 @@ export const GenioChat = ({
 
 
       </div>
+
+      {showCommandSheet && (
+  <div className="fixed inset-0 z-[120] bg-black/30">
+    <div className="
+      absolute bottom-0 left-0 right-0
+      max-h-[70vh]
+      rounded-t-2xl
+      bg-white
+      p-4
+      shadow-xl
+      overflow-y-auto
+    ">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">What can Genio do?</h3>
+        <button
+          onClick={() => setShowCommandSheet(false)}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          Close
+        </button>
+      </div>
+
+      {Object.entries(COMMAND_GROUPS).map(([group, cmds]) => (
+        <div key={group} className="mb-4">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
+            {group}
+          </p>
+
+          <div className="space-y-1">
+            {cmds.map(cmd => (
+              <button
+                key={cmd.value}
+                className="
+                  w-full rounded-lg px-3 py-2
+                  text-left text-sm
+                  hover:bg-muted
+                "
+                onClick={() => {
+                  handleChipClick(cmd);
+                  setShowCommandSheet(false);
+                }}
+              >
+                {cmd.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
       {/* FOOTER */}
       <div className="border-t border-black/10 px-4 py-2 text-center text-[11px] text-black">
         <div className="flex justify-center gap-3 italic">
