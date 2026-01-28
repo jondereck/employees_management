@@ -1,5 +1,17 @@
 // src/genio/utils.ts
 
+
+export function extractStats(text: string) {
+  const total = text.match(/There are \*\*(\d+)/i)?.[1];
+
+  const male = text.match(/\*\*(\d+)\s+male/i)?.[1];
+  const female = text.match(/\*\*(\d+)\s+female/i)?.[1];
+
+  if (!total && !male && !female) return null;
+
+  return { total, male, female };
+}
+
 export function formatGenioMessage(text: string) {
   return text
     // normalize line spacing

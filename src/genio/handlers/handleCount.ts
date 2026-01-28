@@ -8,36 +8,52 @@ import { resolveOfficeWithAliases } from "../resolve-office";
 import { Gender } from "@prisma/client";
 import { GenioIntent } from "../type";
 import { suggestOffices } from "../suggest-office";
-
-
+import { handleAgeAnalysis } from "./handleAgeAnalysis";
 
 export async function handleCount(
   intent: GenioIntent,
   context: any,
   message: string
 ) {
+  /* ===============================
+     🚨 AGE → DELEGATE EARLY
+     =============================== */
+  const hasAgeFilter =
+    typeof intent.filters.age?.min === "number" ||
+    typeof intent.filters.age?.max === "number";
+
+  if (hasAgeFilter) {
+    return handleAgeAnalysis(intent, context);
+  }
+
   const where: any = { isArchived: false };
 
   /* ===============================
-     GENDER
+     ✅ GENDER (ALWAYS APPLY)
      =============================== */
-  const genderFromText =
-    /\b(female|women|woman|girls?)\b/i.test(message)
-      ? Gender.Female
-      : /\b(male|men|man|boys?)\b/i.test(message)
-      ? Gender.Male
-      : null;
+  if (intent.filters.gender) {
+    where.gender =
+      intent.filters.gender === "Male"
+        ? Gender.Male
+        : Gender.Female;
+  } else {
+    const genderFromText =
+      /\b(female|women|woman|girls?)\b/i.test(message)
+        ? Gender.Female
+        : /\b(male|men|man|boys?)\b/i.test(message)
+        ? Gender.Male
+        : null;
 
-  if (genderFromText) {
-    where.gender = genderFromText;
+    if (genderFromText) {
+      where.gender = genderFromText;
+    }
   }
 
   /* ===============================
-     OFFICE
+     ✅ OFFICE
      =============================== */
-  const mentionsOffice = /office|department|division|unit|section|in\s+/i.test(
-    message
-  );
+  const mentionsOffice =
+    /office|department|division|unit|section|in\s+|sa\s+/i.test(message);
 
   let office =
     context?.lastCountQuery?.officeId && !mentionsOffice
@@ -81,54 +97,43 @@ export async function handleCount(
     where.officeId = office.id;
   }
 
-/* ===============================
-   ✅ EMPLOYEE TYPE (SAFE)
-   =============================== */
-const hasAgeFilter =
-  typeof intent.filters.age?.min === "number" ||
-  typeof intent.filters.age?.max === "number";
+  /* ===============================
+     ✅ EMPLOYEE TYPE (SMART)
+     =============================== */
+  const rawEmployeeTypeText =
+    intent.filters.employeeType ??
+    extractEmployeeTypeKeyword(message);
 
-const hasGenderFilter = Boolean(where.gender);
+  if (rawEmployeeTypeText) {
+    const employeeTypes = await prisma.employeeType.findMany({
+      select: { id: true, name: true, value: true },
+    });
 
-// 🚫 DO NOT resolve employee type if gender or age is present
-const employeeTypeText =
-  !hasAgeFilter && !hasGenderFilter
-    ? intent.filters.employeeType ??
-      extractEmployeeTypeKeyword(message)
-    : null;
-
-if (employeeTypeText) {
-  const employeeTypes = await prisma.employeeType.findMany({
-    select: { id: true, name: true, value: true },
-  });
-
-  const matchedType = resolveEmployeeType(
-    employeeTypeText,
-    employeeTypes
-  );
-
-  if (!matchedType) {
-    return streamReply(
-      `I couldn’t find a "${employeeTypeText}" employee type.`,
-      context,
-      null
+    const matchedType = resolveEmployeeType(
+      rawEmployeeTypeText,
+      employeeTypes
     );
+
+    // ✅ apply ONLY if valid
+    if (matchedType) {
+      where.employeeTypeId = matchedType.id;
+    }
   }
 
-  where.employeeTypeId = matchedType.id;
-}
-
-
   /* ===============================
-     COUNT
+     ✅ COUNT
      =============================== */
   let reply = "";
 
   if (!where.gender) {
     const [total, male, female] = await Promise.all([
       prisma.employee.count({ where }),
-      prisma.employee.count({ where: { ...where, gender: Gender.Male } }),
-      prisma.employee.count({ where: { ...where, gender: Gender.Female } }),
+      prisma.employee.count({
+        where: { ...where, gender: Gender.Male },
+      }),
+      prisma.employee.count({
+        where: { ...where, gender: Gender.Female },
+      }),
     ]);
 
     reply =
@@ -137,9 +142,10 @@ if (employeeTypeText) {
       `.\n\n• **${male} male**\n• **${female} female**`;
   } else {
     const count = await prisma.employee.count({ where });
+
     reply =
       `There are **${count} ${
-        where.gender === Gender.Female ? "female" : "male"
+        where.gender === Gender.Male ? "male" : "female"
       } employees**` +
       (office ? ` in **${office.name}**` : "");
   }

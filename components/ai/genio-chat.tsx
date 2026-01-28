@@ -19,7 +19,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Image from "next/image";
 import { ArrowUp, Mic, Plus, Square, Trash } from "lucide-react";
-import { formatGenioMessage } from "@/src/genio/utils";
+import { extractStats, formatGenioMessage } from "@/src/genio/utils";
+import { AnimatedMarkdown } from "@/src/genio/components/AnimatedMarkdown";
+import { GenioStatCard } from "@/src/genio/components/GenioStatCard";
 
 
 type GenioMessage = {
@@ -845,8 +847,17 @@ export const GenioChat = ({
                     ? m.content
                     : lines.slice(0, MAX_VISIBLE_LINES).join("\n");
 
+                     const stats = extractStats(m.content);
                 return (
                   <div>
+                    {/* 📊 STAT CARD GOES HERE */}
+      {stats && (
+        <GenioStatCard
+          total={stats.total}
+          male={stats.male}
+          female={stats.female}
+        />
+      )}
                     <div
                       className="
     prose prose-sm
@@ -859,27 +870,7 @@ export const GenioChat = ({
     max-w-none
   "
                     >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          p: ({ children }) => (
-                            <p className="my-1 leading-relaxed">{children}</p>
-                          ),
-                          ul: ({ children }) => (
-                            <ul className="my-1 list-disc pl-4">{children}</ul>
-                          ),
-                          li: ({ children }) => (
-                            <li className="my-0">{children}</li>
-                          ),
-                          strong: ({ children }) => (
-                            <strong className="font-semibold text-foreground">
-                              {children}
-                            </strong>
-                          ),
-                        }}
-                      >
-                        {formatGenioMessage(visibleText)}
-                      </ReactMarkdown>
+                     <AnimatedMarkdown content={visibleText} />
 
                     </div>
 

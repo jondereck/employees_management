@@ -9,11 +9,29 @@ function normalize(text: string) {
 }
 
 export function extractEmployeeTypeKeyword(message: string) {
-  return normalize(
-    message
-      .replace(/how many|count|number of|\?/gi, "")
+  let text = message.toLowerCase();
+
+  // remove question phrases
+  text = text.replace(/how many|count|number of|\?/gi, "");
+
+  // remove employee words
+  text = text.replace(/employees?|employee|staff|workers?/gi, "");
+
+  // 🚫 remove gender words
+  text = text.replace(
+    /\b(male|men|man|female|women|woman|girls?|boys?)\b/gi,
+    ""
   );
+
+  // 🚫 remove office phrases
+  text = text.replace(/\b(in|sa)\s+[a-z\s]+/gi, "");
+
+  // normalize spaces
+  text = text.replace(/\s+/g, " ").trim();
+
+  return text;
 }
+
 
 export function resolveEmployeeType(
   keyword: string,
