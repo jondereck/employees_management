@@ -36,7 +36,7 @@ export default async function DashboardLayout({
       <div>
         <ModalProvider />
         <Navbar />
-       <AskGenio departmentId={params.departmentId}  />
+       <AskGenio departmentId={params.departmentId}    />
         {children}
         <Toaster />
       </div>

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import usePreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/hooks/use-preview-modal";
-import { FiMaximize2, FiMinimize, FiMinimize2, FiRefreshCcw } from "react-icons/fi";
+import { FiMaximize, FiMaximize2, FiMinimize, FiMinimize2, FiRefreshCcw } from "react-icons/fi";
 
 import {
   loadGenioCache,
@@ -18,12 +18,13 @@ import { nanoid } from "nanoid";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Image from "next/image";
+import { ArrowUp, Mic, Plus, Square, Trash } from "lucide-react";
 
 
 type GenioMessage = {
   id: string;
   role: "user" | "ai";
-
+context?: GenioContext;
   content: string;
   employeeId?: string;
   canExport?: boolean;
@@ -34,19 +35,108 @@ type GenioContext = {
   employeeTypeName?: string;
   year?: number;
 };
-
-const GENIO_COMMANDS = [
-  /* ================= EMPLOYEES ================= */
+export const GENIO_COMMANDS = [
+  /* ================= EMPLOYEE LOOKUP ================= */
 
   {
     label: "Who is an employee",
     value: "/whois",
-    template: "Who is ",
+    template: "Who is [employee name]?",
+    quickChip: true,
+    examples: [
+      "Who is Juan Dela Cruz?",
+      "Sino si Maria Santos?",
+    ],
   },
+
+  {
+    label: "Show employee profile",
+    value: "/profile",
+    template: "Show profile",
+    quickChip: true,
+    examples: [
+      "Show profile",
+      "Ipakita ang profile",
+    ],
+  },
+
   {
     label: "Check if employee is office head",
     value: "/ishead",
     template: "Is [name] the head of [office]?",
+    quickChip: true,
+    examples: [
+      "Is Juan Dela Cruz the head of HRMO?",
+      "Head ba si Maria Santos ng Accounting?",
+    ],
+  },
+
+  {
+    label: "Who is the head of an office",
+    value: "/headoffice",
+    template: "Who is the head of [office]?",
+    quickChip: true,
+    examples: [
+      "Who is the head of HRMO?",
+      "Sino ang head ng Engineering?",
+    ],
+  },
+
+  /* ================= OFFICE STRUCTURE ================= */
+
+  {
+    label: "List all offices",
+    value: "/offices",
+    template: "List all offices",
+    quickChip: true,
+    examples: [
+      "List all offices",
+      "Anong mga opisina meron?",
+    ],
+  },
+
+  {
+    label: "List office heads",
+    value: "/list-heads",
+    template: "List all office heads",
+    quickChip: true,
+    examples: [
+      "List all office heads",
+      "Sino-sino ang mga department heads?",
+    ],
+  },
+
+  {
+    label: "Offices without a head",
+    value: "/no-head",
+    template: "Which offices don’t have a head?",
+    quickChip: true,
+    examples: [
+      "Which offices have no head?",
+      "Aling opisina ang walang head?",
+    ],
+  },
+
+  {
+    label: "Top offices by size",
+    value: "/top-offices",
+    template: "Top offices by number of employees",
+    quickChip: true,
+    examples: [
+      "Top offices by size",
+      "Pinakamalaking opisina?",
+    ],
+  },
+
+  {
+    label: "Smallest office",
+    value: "/smallest-office",
+    template: "Which is the smallest office?",
+    quickChip: true,
+    examples: [
+      "Smallest office",
+      "Pinakamaliit na opisina?",
+    ],
   },
 
   /* ================= COUNTS ================= */
@@ -55,60 +145,162 @@ const GENIO_COMMANDS = [
     label: "Total employees",
     value: "/count",
     template: "How many employees are there?",
+    quickChip: true,
+    examples: [
+      "How many employees are there?",
+      "Ilan ang empleyado?",
+    ],
   },
+
+  {
+    label: "Count by office",
+    value: "/count-office",
+    template: "How many employees are in [office]?",
+    quickChip: true,
+    examples: [
+      "How many employees are in HRMO?",
+      "Ilan ang empleyado sa Accounting?",
+    ],
+  },
+
   {
     label: "Count by gender",
     value: "/count-gender",
-    template: "How many female employees are there?",
+    template: "How many [male/female] employees are there?",
+    quickChip: true,
+    examples: [
+      "How many female employees?",
+      "Ilan ang lalaki?",
+    ],
   },
+
   {
     label: "Count by employee type",
     value: "/count-type",
-    template: "How many regular employees are there?",
+    template: "How many [employee type] employees are there?",
+    quickChip: true,
+    examples: [
+      "How many regular employees?",
+      "Ilan ang COS?",
+    ],
   },
 
-  /* ================= LISTS ================= */
+  /* ================= LISTING ================= */
 
   {
-    label: "List all employees",
+    label: "List employees from last count",
     value: "/list",
-    template: "List all employees",
-  },
-  {
-    label: "List all offices",
-    value: "/offices",
-    template: "List all offices",
-  },
-  {
-    label: "List office heads",
-    value: "/list-heads",
-    template: "List all office heads",
-  },
-  {
-    label: "Offices without head",
-    value: "/no-head",
-    template: "Which offices don’t have a head?",
+    template: "List them",
+    quickChip: true,
+    examples: [
+      "List them",
+      "Ilista sila",
+    ],
   },
 
-  /* ================= OFFICES ================= */
-
   {
-    label: "Head of an office",
-    value: "/head",
-    template: "Who is the head of ",
+    label: "List employees from last result",
+    value: "/list-last",
+    template: "Show employees from last count",
+    quickChip: true,
+    examples: [
+      "Show employees from last count",
+      "Sino-sino yung nasa bilang?",
+    ],
   },
 
   /* ================= ANALYTICS ================= */
 
   {
-    label: "Employee distribution",
+    label: "Gender distribution",
     value: "/distribution",
-    template: "Show employee distribution",
+    template: "Show gender distribution",
+    quickChip: true,
+    examples: [
+      "Gender distribution",
+      "Ilan ang lalaki at babae?",
+    ],
   },
+
   {
-    label: "Employee insights",
+    label: "Office insights",
     value: "/insight",
-    template: "Give me insights about employees",
+    template: "Give insights about [office]",
+    quickChip: true,
+    examples: [
+      "Why is HR understaffed?",
+      "Bigyan mo ako ng insight sa Accounting",
+    ],
+  },
+
+  {
+    label: "Age analysis",
+    value: "/age",
+    template: "How many employees are [above/below] [age]?",
+    quickChip: true,
+    examples: [
+      "How many employees above 40?",
+      "Ilan ang below 30?",
+    ],
+  },
+
+  {
+    label: "Tenure analysis",
+    value: "/tenure",
+    template: "How many employees have more than [years] years of service?",
+    quickChip: true,
+    examples: [
+      "Employees with more than 10 years",
+      "Ilan ang may 20 years sa serbisyo?",
+    ],
+  },
+
+  /* ================= COMPARISONS ================= */
+
+  {
+    label: "Compare offices",
+    value: "/compare-offices",
+    template: "Compare [office A] and [office B]",
+    quickChip: true,
+    examples: [
+      "Compare HR and Accounting",
+      "HR vs Engineering",
+    ],
+  },
+
+  {
+    label: "Compare employee types",
+    value: "/compare-types",
+    template: "Compare employee types of [office A] and [office B]",
+    quickChip: true,
+    examples: [
+      "Compare employee types of HR and Accounting",
+      "COS vs Regular in Finance and Admin",
+    ],
+  },
+
+  /* ================= EXPORT ================= */
+
+  {
+    label: "Export last result",
+    value: "/export",
+    template: "Export this to Excel",
+    examples: [
+      "Export this",
+      "I-export ang data",
+    ],
+  },
+
+  /* ================= AI / GENERAL ================= */
+
+  {
+    label: "Ask Genio (AI)",
+    value: "/ask",
+    template: "Ask a general HR question",
+    examples: [
+      "Why is workforce balance important?",
+      "Ano ang ibig sabihin ng understaffed?",
+    ],
   },
 ];
 
@@ -139,7 +331,6 @@ export const GenioChat = ({
   const [messages, setMessages] = useState<GenioMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [lastContext, setLastContext] = useState<GenioContext | null>(null);
   const [expandedMessages, setExpandedMessages] = useState<
     Record<string, boolean>
   >({});
@@ -148,24 +339,53 @@ export const GenioChat = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-useEffect(() => {
-  const media = window.matchMedia("(max-width: 640px)");
+  const [selectionText, setSelectionText] = useState("");
+const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
+const [visibleChips, setVisibleChips] = useState<typeof GENIO_COMMANDS>([]);
 
-  const handleChange = () => {
-    setIsMobile(media.matches);
+useEffect(() => {
+  const handleSelection = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      setSelectionText("");
+      setSelectionRect(null);
+      return;
+    }
+
+    const text = selection.toString().trim();
+    if (!text) return;
+
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+
+    setSelectionText(text);
+    setSelectionRect(rect);
   };
 
-  handleChange(); // init
-  media.addEventListener("change", handleChange);
-
-  return () => media.removeEventListener("change", handleChange);
+  document.addEventListener("selectionchange", handleSelection);
+  return () =>
+    document.removeEventListener("selectionchange", handleSelection);
 }, []);
 
-useEffect(() => {
-  if (isMobile) {
-    setIsFullscreen(true);
-  }
-}, [isMobile]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 640px)");
+
+    const handleChange = () => {
+      setIsMobile(media.matches);
+    };
+
+    handleChange(); // init
+    media.addEventListener("change", handleChange);
+
+    return () => media.removeEventListener("change", handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) {
+      setIsFullscreen(true);
+    }
+  }, [isMobile]);
 
 
   const [index, setIndex] = useState(0);
@@ -179,17 +399,21 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
-  const handler = (e: KeyboardEvent) => {
-    if (e.key === "Escape") setIsFullscreen(false);
-  };
-  window.addEventListener("keydown", handler);
-  return () => window.removeEventListener("keydown", handler);
-}, []);
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullscreen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
-const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
+const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -201,6 +425,13 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
     }
   }, [isLoading]);
 
+  useEffect(() => {
+    resizeTextarea();
+  }, [input]);
+
+
+
+
   /* ================= SEND MESSAGE ================= */
 
   const sendMessage = async (preset?: string) => {
@@ -210,6 +441,11 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
     setInput("");
     setIsLoading(true);
 
+
+    
+  const controller = new AbortController();
+  abortControllerRef.current = controller;
+  
     const userMsg: GenioMessage = {
       id: nanoid(),
       role: "user",
@@ -218,21 +454,53 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
     const aiId = nanoid();
 
-    setMessages((prev) => [
-      ...prev,
-      userMsg,
-      { id: aiId, role: "ai", content: "__thinking__" },
-    ]);
+  setMessages((prev) => [
+  ...prev,
+  userMsg,
+  {
+    id: aiId,
+    role: "ai",
+    content: "__thinking__",
+    context: undefined, // 👈 add this
+  },
+]);
 
+const lastAIContext =
+  [...messages]
+    .reverse()
+    .find((m) => m.role === "ai" && m.context)?.context ?? null;
     try {
       const res = await fetch("/api/genio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          context: lastContext,
+          context: lastAIContext,
         }),
+
+        signal: controller.signal,
       });
+
+const ctx = res.headers.get("x-genio-context");
+
+if (ctx) {
+  try {
+    const parsed = JSON.parse(ctx);
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === aiId ? { ...m, context: parsed } : m
+      )
+    );
+
+   
+  } catch (e) {
+    console.error("Failed to parse genio context", e);
+  }
+}
+
+
+
 
       /* ===============================
          📦 CSV EXPORT (MUST BE FIRST)
@@ -268,6 +536,8 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No response body");
 
+      readerRef.current = reader;
+
       const decoder = new TextDecoder();
       let aiText = "";
 
@@ -279,22 +549,11 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === aiId ? { ...m, content: aiText } : m
+            m.id === aiId ? { ...m, content: aiText} : m
           )
         );
       }
 
-      /* ===============================
-         🧠 CONTEXT
-         =============================== */
-      const ctx = res.headers.get("x-genio-context");
-      if (ctx) {
-        try {
-          setLastContext(JSON.parse(ctx));
-        } catch (e) {
-          console.error("Failed to parse genio context", e);
-        }
-      }
 
       /* ===============================
          🧾 META (View Profile)
@@ -315,6 +574,7 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
           )
         );
       }
+console.log("CTX HEADER:", res.headers.get("x-genio-context"));
 
     } catch (err) {
       setMessages((prev) =>
@@ -326,6 +586,8 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
       );
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
+    readerRef.current = null;
     }
   };
 
@@ -338,7 +600,7 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
     if (!cached) return;
 
     setMessages(cached.messages ?? []);
-    setLastContext(cached.context ?? null);
+  
     setInput(cached.input ?? "");
   }, []);
 
@@ -356,7 +618,6 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
       console.log("CACHE SAVE CONFIRMED", messages.length);
       saveGenioCache({
         messages,
-        context: lastContext,
         input,
       });
     }, 300);
@@ -366,7 +627,7 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
         clearTimeout(saveTimeout.current);
       }
     };
-  }, [messages, lastContext, input]);
+  }, [messages, input]);
 
 
   const MAX_VISIBLE_LINES = 8;
@@ -377,14 +638,82 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
       [id]: !prev[id],
     }));
   };
+  const filteredCommands = input.startsWith("/")
+    ? GENIO_COMMANDS.filter(cmd =>
+      cmd.value.startsWith(input.trim())
+    )
+    : [];
 
-  const filteredCommands = GENIO_COMMANDS.filter(cmd =>
-    cmd.value.startsWith(input)
-  );
+
+
+  const resizeTextarea = () => {
+    const el = inputRef.current;
+    if (!el) return;
+
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  };
+
+
+  useEffect(() => {
+    if (!showCommands) return;
+
+    const el = commandRefs.current[activeCommandIndex];
+    if (!el) return;
+
+    el.scrollIntoView({
+      block: "nearest",
+      behavior: "smooth",
+    });
+  }, [activeCommandIndex, showCommands]);
 
 
 
+  useEffect(() => {
+    commandRefs.current = new Array(filteredCommands.length);
+    setActiveCommandIndex(0);
+  }, [filteredCommands.length]);
 
+
+  const stopGenerating = () => {
+  abortControllerRef.current?.abort();
+  readerRef.current?.cancel();
+
+  abortControllerRef.current = null;
+  readerRef.current = null;
+
+  setIsLoading(false);
+};
+
+const getRandomCommands = () => {
+  const shuffled = [...GENIO_COMMANDS].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, 2);
+};
+
+useEffect(() => {
+  if (!hidden) {
+    setVisibleChips(getRandomCommands());
+  }
+}, [hidden]);
+
+
+const handleChipClick = (cmd: typeof GENIO_COMMANDS[number]) => {
+  setInput(cmd.template);          // put text in input
+  setShowCommands(false);          // hide dropdown if any
+
+  requestAnimationFrame(() => {
+    inputRef.current?.focus();     // focus input
+    resizeTextarea();              // adjust height
+  });
+};
+
+const latestAIContext =
+  [...messages]
+    .reverse()
+    .find((m) => m.role === "ai" && m.context)?.context;
+
+
+    
   return (
     <div
       className={`
@@ -408,7 +737,7 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
 
           <div className="relative h-12 w-12 overflow-hidden rounded-full bg-purple-300">
-            
+
             <Image
               src="/genio/genio-avatar.png"
               alt="Genio AI"
@@ -428,13 +757,7 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
         </div>
 
         <div className="flex gap-2">
-          {/* Fullscreen*/}
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            {isFullscreen ? <FiMinimize2 /> : <FiMaximize2 />}
-          </button>
+       
 
           {/* Reset*/}
 
@@ -443,11 +766,18 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
             onClick={() => {
               clearGenioCache();
               setMessages([]);
-              setLastContext(null);
+           
               setInput("");
             }}
           >
-            <FiRefreshCcw className="h-4 w-4" />
+            <Trash className="h-4 w-4 text-red-500 hover:text-red-700" />
+          </button>
+             {/* Fullscreen*/}
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {isFullscreen ? <FiMinimize /> : <FiMaximize />}
           </button>
           {/* Close */}
           <button
@@ -459,15 +789,18 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
           </button>
         </div>
       </div>
-      {lastContext && (
-        <div className="border-b bg-muted/40 px-4 py-2 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">Context:</span>{" "}
-          {lastContext.employeeTypeName && (
-            <>Employee Type: {lastContext.employeeTypeName}</>
-          )}
-          {lastContext.year && <> · Year: {lastContext.year}</>}
-        </div>
-      )}
+
+      {/* {latestAIContext && (
+  <div className="border-b bg-muted/40 px-4 py-2 text-[11px]">
+    <span className="font-medium">Context:</span>
+    {latestAIContext.employeeTypeName && (
+      <> Employee Type: {latestAIContext.employeeTypeName}</>
+    )}
+    {latestAIContext.year && <> · Year: {latestAIContext.year}</>}
+  </div>
+)} */}
+
+      
 
       {/* MESSAGES */}
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4 text-sm">
@@ -489,6 +822,8 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
                 : "bg-muted"
                 }`}
             >
+
+              
               {m.content === "__thinking__" ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <div className="flex gap-1">
@@ -539,24 +874,7 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
                   Export to Excel
                 </Button>
               )}
-              {m.role === "ai" && m.content !== "__thinking__" && (
-                <div className="mt-2 flex gap-3 text-[11px] text-muted-foreground">
-                  <button
-                    onClick={() => navigator.clipboard.writeText(m.content)}
-                    className="hover:text-foreground"
-                  >
-                    📋 Copy
-                  </button>
-
-                  <button
-                    className="hover:text-foreground"
-                    onClick={() => sendMessage("Why did you answer this?")}
-                  >
-                    🧠 Why?
-                  </button>
-                </div>
-              )}
-
+ 
 
               {m.role === "ai" && m.employeeId && (
                 <Button
@@ -583,27 +901,72 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
       </div>
 
 
+
+
       {/* INPUT */}
-      <div className="relative border-t border-white/10 px-3 py-2">
+      <div className="border-t bg-background px-3 py-3">
+      {/* QUICK COMMAND CHIPS */}
+{visibleChips.length > 0 && (
+  <div className="mb-2 flex flex-wrap gap-2">
+    {visibleChips.map((cmd) => (
+      <button
+        key={cmd.value}
+        
+        className="
+          rounded-full
+          border
+          px-3
+          py-1
+          text-xs
+          text-muted-foreground
+          hover:bg-muted
+          transition
+        "
+         onClick={() => handleChipClick(cmd)}
+      >
+        {cmd.label}
+      </button>
+    ))}
+  </div>
+)}
+
+        <div
+          className="relative flex items-center gap-2 rounded-full border bg-white px-3 py-2 shadow-sm"
+          onClick={() => inputRef.current?.focus()}
+        >
 
 
-        <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-2 py-1">
+          {/* ➕ PLUS */}
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            title="More options"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
 
-          {showCommands && (
 
-            <div className="absolute bottom-full left-3 right-3 mb-2 z-50 rounded-lg border bg-background shadow-lg">
-              <div className="max-h-48 overflow-y-auto">
+          {/* COMMANDS DROPDOWN */}
+          {showCommands && filteredCommands.length > 0 && (
+            <div className="absolute bottom-full left-0 right-0 mb-2 z-50 rounded-xl border bg-white shadow-lg">
+              <div className="max-h-48 overflow-y-auto py-1">
                 {filteredCommands.map((cmd, index) => (
                   <button
                     key={cmd.value}
+                    ref={(el) => (commandRefs.current[index] = el)}
+                    type="button"
                     className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm
-      ${index === activeCommandIndex ? "bg-muted" : "hover:bg-muted"}
-    `}
+            ${index === activeCommandIndex
+                        ? "bg-muted"
+                        : "hover:bg-muted"}
+          `}
                     onClick={() => {
                       setInput(cmd.template);
                       setShowCommands(false);
-                      setActiveCommandIndex(0); // reset
-                      inputRef.current?.focus();
+                      setActiveCommandIndex(0);
+                      requestAnimationFrame(() =>
+                        inputRef.current?.focus()
+                      );
                     }}
                   >
                     <span className="font-mono text-xs text-primary">
@@ -614,139 +977,165 @@ const inputRef = useRef<HTMLTextAreaElement | null>(null);
                     </span>
                   </button>
                 ))}
-
               </div>
             </div>
           )}
 
+
+          {/* TEXTAREA */}
           <textarea
-  ref={inputRef}
-  rows={1}
-  value={input}
-  placeholder="Ask Genio anything..."
-  disabled={isLoading}
-  className="
-    w-full resize-none bg-transparent px-3 py-2 text-sm
-    outline-none border-0
-    placeholder:text-muted-foreground
-    max-h-[160px] overflow-y-auto
-  "
-  onChange={(e) => {
-    const el = e.target;
-    setInput(el.value);
-    setShowCommands(el.value.startsWith("/"));
-
-    // 🔥 auto resize
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }}
-  onKeyDown={(e) => {
-    if (showCommands && filteredCommands.length > 0) {
-      if (e.key === "Tab") {
-        e.preventDefault();
-        const cmd = filteredCommands[activeCommandIndex];
-        if (cmd) {
-          setInput(cmd.template);
-          setShowCommands(false);
-        }
-        return;
-      }
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveCommandIndex((i) =>
-          Math.min(i + 1, filteredCommands.length - 1)
-        );
-        return;
-      }
-
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveCommandIndex((i) => Math.max(i - 1, 0));
-        return;
-      }
-    }
-
-    // ✅ ENTER = send
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-      setShowCommands(false);
-
-      // reset height
-      const el = e.currentTarget;
-      el.style.height = "auto";
-    }
-  }}
-/>
-
-
-
-          <Button
-            size="sm"
+            ref={inputRef}
+            rows={1}
+            value={input}
+            placeholder="Ask anything"
+            disabled={isLoading && messages.length > 0}
             className="
-        h-6
-        rounded-md
-        px-2
-        text-[11px]
+        flex-1 resize-none bg-transparent text-sm
+        outline-none placeholder:text-muted-foreground
+        max-h-[120px] overflow-y-auto
       "
-            onClick={() => sendMessage()}
-            disabled={isLoading}
-          >
-            Send →
-          </Button>
-        </div>
-        {/* QUICK ACTIONS */}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setShowCommands(e.target.value.trim().startsWith("/"));
 
-        <div className="mt-2 flex gap-2">
-
-          <button
-            className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
-            onClick={() => sendMessage('How many employees are there?')}
-          >
-            Total Employees
-          </button>
-
-          <button
-            className="flex-1 rounded-md bg-muted/60 px-2 py-1 text-[11px] hover:bg-muted transition"
-            onClick={() => sendMessage('How many female employees are there?')}
-          >
-            Female Count
-          </button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            className="mt-2 text-xs text-red-500"
-            onClick={() => {
-              clearGenioCache();
-              setMessages([]);
-              setLastContext(null);
-              setInput("");
+              resizeTextarea();
             }}
+            onKeyDown={(e) => {
+              if (showCommands && filteredCommands.length > 0) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setActiveCommandIndex((i) =>
+                    Math.min(i + 1, filteredCommands.length - 1)
+                  );
+                  return;
+                }
+
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setActiveCommandIndex((i) => Math.max(i - 1, 0));
+                  return;
+                }
+
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const cmd = filteredCommands[activeCommandIndex];
+                  if (cmd) {
+                    setInput(cmd.template);
+                    setShowCommands(false);
+                  }
+                  return;
+                }
+
+                 if (e.key === "Tab") {
+                  e.preventDefault();
+                  const cmd = filteredCommands[activeCommandIndex];
+                  if (cmd) {
+                    setInput(cmd.template);
+                    setShowCommands(false);
+                  }
+                  return;
+                }
+              }
+
+              if (e.key === "Enter" && !e.shiftKey) {
+                if (showCommands && filteredCommands.length > 0) {
+                  e.preventDefault();
+                  const cmd = filteredCommands[activeCommandIndex];
+                  if (cmd) {
+                    setInput(cmd.template);
+                    setShowCommands(false);
+                  }
+                  return;
+                }
+
+                e.preventDefault();
+                sendMessage();
+              }
+
+            }}
+          />
+
+          {/* 🎤 MIC */}
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            title="Voice input"
           >
-            Clear Memory
-          </Button>
+            <Mic className="h-5 w-5" />
+          </button>
+
+          {/* ⬆ SEND */}
+         {!isLoading ? (
+  <button
+    type="button"
+    onClick={() => sendMessage()}
+    disabled={!input.trim()}
+    className="
+      flex h-8 w-8 items-center justify-center
+      rounded-full bg-black text-white
+      transition hover:opacity-90
+      disabled:opacity-40
+    "
+    title="Send"
+  >
+    <ArrowUp className="h-4 w-4" />
+  </button>
+) : (
+  <button
+    type="button"
+    onClick={stopGenerating}
+    className="
+      flex h-9 w-9 items-center justify-center
+      rounded-full
+      border border-black/10
+      bg-white
+      text-black
+      transition
+      hover:bg-black/5
+    "
+    title="Stop generating"
+  >
+    <Square className="h-4 w-4 fill-black" />
+  </button>
+)}
 
         </div>
+
 
       </div>
       {/* FOOTER */}
       <div className="border-t border-black/10 px-4 py-2 text-center text-[11px] text-black">
-        <div className="flex justify-center gap-3">
+        <div className="flex justify-center gap-3 italic">
           <button className="hover:text-black/80 transition">
-            Privacy
+            Genio AI can make mistakes. Check important info.
           </button>
-          <span className="text-black/40">·</span>
-          <button className="hover:text-black/80 transition">
-            Terms
-          </button>
-          <span className="text-black/40">·</span>
-          <button className="hover:text-black/80 transition">
-            Feedback
-          </button>
+
         </div>
       </div>
+{selectionRect && (
+  <button
+    onClick={() => {
+      navigator.clipboard.writeText(selectionText);
+      setSelectionText("");
+      setSelectionRect(null);
+      window.getSelection()?.removeAllRanges();
+    }}
+    className="
+      fixed z-50
+      rounded-md border bg-white px-3 py-1.5
+      text-xs font-medium
+      shadow-md
+      hover:bg-muted
+    "
+    style={{
+      top: selectionRect.top - 36,
+      left: selectionRect.left + selectionRect.width / 2,
+      transform: "translateX(-50%)",
+    }}
+  >
+    Copy
+  </button>
+)}
 
 
     </div>
