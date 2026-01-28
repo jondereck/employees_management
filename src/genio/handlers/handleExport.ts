@@ -58,6 +58,7 @@ const rows = employees.map((e) => ({
   Office: e.offices?.name ?? "",
   "Employee Type": e.employeeType?.name ?? "",
   Gender: e.gender,
+  Status: e.isArchived ? "Archived" : "Active",
 }));
 
 
