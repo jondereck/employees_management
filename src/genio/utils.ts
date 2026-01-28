@@ -1,4 +1,15 @@
 // src/genio/utils.ts
+
+export function formatGenioMessage(text: string) {
+  return text
+    // normalize line spacing
+    .replace(/\n{3,}/g, "\n\n")
+    // bullet consistency
+    .replace(/^•/gm, "-")
+    // emphasize numbers
+    .replace(/\*\*(\d+)\*\*/g, "**$1**");
+}
+
 export function streamReply(
   reply: string,
   context: any,

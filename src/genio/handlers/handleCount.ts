@@ -9,6 +9,8 @@ import { Gender } from "@prisma/client";
 import { GenioIntent } from "../type";
 import { suggestOffices } from "../suggest-office";
 
+
+
 export async function handleCount(
   intent: GenioIntent,
   context: any,
@@ -79,33 +81,43 @@ export async function handleCount(
     where.officeId = office.id;
   }
 
-  /* ===============================
-     ✅ EMPLOYEE TYPE (FIXED)
-     =============================== */
-  const employeeTypeText =
-    intent.filters.employeeType ??
-    extractEmployeeTypeKeyword(message);
+/* ===============================
+   ✅ EMPLOYEE TYPE (SAFE)
+   =============================== */
+const hasAgeFilter =
+  typeof intent.filters.age?.min === "number" ||
+  typeof intent.filters.age?.max === "number";
 
-  if (employeeTypeText) {
-    const employeeTypes = await prisma.employeeType.findMany({
-      select: { id: true, name: true, value: true },
-    });
+const hasGenderFilter = Boolean(where.gender);
 
-    const matchedType = resolveEmployeeType(
-      employeeTypeText,
-      employeeTypes
+// 🚫 DO NOT resolve employee type if gender or age is present
+const employeeTypeText =
+  !hasAgeFilter && !hasGenderFilter
+    ? intent.filters.employeeType ??
+      extractEmployeeTypeKeyword(message)
+    : null;
+
+if (employeeTypeText) {
+  const employeeTypes = await prisma.employeeType.findMany({
+    select: { id: true, name: true, value: true },
+  });
+
+  const matchedType = resolveEmployeeType(
+    employeeTypeText,
+    employeeTypes
+  );
+
+  if (!matchedType) {
+    return streamReply(
+      `I couldn’t find a "${employeeTypeText}" employee type.`,
+      context,
+      null
     );
-
-    if (!matchedType) {
-      return streamReply(
-        `I couldn’t find a "${employeeTypeText}" employee type.`,
-        context,
-        null
-      );
-    }
-
-    where.employeeTypeId = matchedType.id;
   }
+
+  where.employeeTypeId = matchedType.id;
+}
+
 
   /* ===============================
      COUNT

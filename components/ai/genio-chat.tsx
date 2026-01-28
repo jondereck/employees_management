@@ -19,12 +19,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Image from "next/image";
 import { ArrowUp, Mic, Plus, Square, Trash } from "lucide-react";
+import { formatGenioMessage } from "@/src/genio/utils";
 
 
 type GenioMessage = {
   id: string;
   role: "user" | "ai";
-context?: GenioContext;
+  context?: GenioContext;
   content: string;
   employeeId?: string;
   canExport?: boolean;
@@ -340,32 +341,32 @@ export const GenioChat = ({
   const [isMobile, setIsMobile] = useState(false);
 
   const [selectionText, setSelectionText] = useState("");
-const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
-const [visibleChips, setVisibleChips] = useState<typeof GENIO_COMMANDS>([]);
+  const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
+  const [visibleChips, setVisibleChips] = useState<typeof GENIO_COMMANDS>([]);
 
-useEffect(() => {
-  const handleSelection = () => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) {
-      setSelectionText("");
-      setSelectionRect(null);
-      return;
-    }
+  useEffect(() => {
+    const handleSelection = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) {
+        setSelectionText("");
+        setSelectionRect(null);
+        return;
+      }
 
-    const text = selection.toString().trim();
-    if (!text) return;
+      const text = selection.toString().trim();
+      if (!text) return;
 
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
 
-    setSelectionText(text);
-    setSelectionRect(rect);
-  };
+      setSelectionText(text);
+      setSelectionRect(rect);
+    };
 
-  document.addEventListener("selectionchange", handleSelection);
-  return () =>
-    document.removeEventListener("selectionchange", handleSelection);
-}, []);
+    document.addEventListener("selectionchange", handleSelection);
+    return () =>
+      document.removeEventListener("selectionchange", handleSelection);
+  }, []);
 
 
   useEffect(() => {
@@ -411,9 +412,9 @@ useEffect(() => {
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  
+
   const abortControllerRef = useRef<AbortController | null>(null);
-const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
+  const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -442,10 +443,10 @@ const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
     setIsLoading(true);
 
 
-    
-  const controller = new AbortController();
-  abortControllerRef.current = controller;
-  
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const userMsg: GenioMessage = {
       id: nanoid(),
       role: "user",
@@ -454,21 +455,21 @@ const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
 
     const aiId = nanoid();
 
-  setMessages((prev) => [
-  ...prev,
-  userMsg,
-  {
-    id: aiId,
-    role: "ai",
-    content: "__thinking__",
-    context: undefined, // 👈 add this
-  },
-]);
+    setMessages((prev) => [
+      ...prev,
+      userMsg,
+      {
+        id: aiId,
+        role: "ai",
+        content: "__thinking__",
+        context: undefined, // 👈 add this
+      },
+    ]);
 
-const lastAIContext =
-  [...messages]
-    .reverse()
-    .find((m) => m.role === "ai" && m.context)?.context ?? null;
+    const lastAIContext =
+      [...messages]
+        .reverse()
+        .find((m) => m.role === "ai" && m.context)?.context ?? null;
     try {
       const res = await fetch("/api/genio", {
         method: "POST",
@@ -481,23 +482,23 @@ const lastAIContext =
         signal: controller.signal,
       });
 
-const ctx = res.headers.get("x-genio-context");
+      const ctx = res.headers.get("x-genio-context");
 
-if (ctx) {
-  try {
-    const parsed = JSON.parse(ctx);
+      if (ctx) {
+        try {
+          const parsed = JSON.parse(ctx);
 
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === aiId ? { ...m, context: parsed } : m
-      )
-    );
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiId ? { ...m, context: parsed } : m
+            )
+          );
 
-   
-  } catch (e) {
-    console.error("Failed to parse genio context", e);
-  }
-}
+
+        } catch (e) {
+          console.error("Failed to parse genio context", e);
+        }
+      }
 
 
 
@@ -549,7 +550,7 @@ if (ctx) {
 
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === aiId ? { ...m, content: aiText} : m
+            m.id === aiId ? { ...m, content: aiText } : m
           )
         );
       }
@@ -574,7 +575,7 @@ if (ctx) {
           )
         );
       }
-console.log("CTX HEADER:", res.headers.get("x-genio-context"));
+      console.log("CTX HEADER:", res.headers.get("x-genio-context"));
 
     } catch (err) {
       setMessages((prev) =>
@@ -587,7 +588,7 @@ console.log("CTX HEADER:", res.headers.get("x-genio-context"));
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
-    readerRef.current = null;
+      readerRef.current = null;
     }
   };
 
@@ -600,7 +601,7 @@ console.log("CTX HEADER:", res.headers.get("x-genio-context"));
     if (!cached) return;
 
     setMessages(cached.messages ?? []);
-  
+
     setInput(cached.input ?? "");
   }, []);
 
@@ -676,44 +677,44 @@ console.log("CTX HEADER:", res.headers.get("x-genio-context"));
 
 
   const stopGenerating = () => {
-  abortControllerRef.current?.abort();
-  readerRef.current?.cancel();
+    abortControllerRef.current?.abort();
+    readerRef.current?.cancel();
 
-  abortControllerRef.current = null;
-  readerRef.current = null;
+    abortControllerRef.current = null;
+    readerRef.current = null;
 
-  setIsLoading(false);
-};
+    setIsLoading(false);
+  };
 
-const getRandomCommands = () => {
-  const shuffled = [...GENIO_COMMANDS].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, 2);
-};
+  const getRandomCommands = () => {
+    const shuffled = [...GENIO_COMMANDS].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, 2);
+  };
 
-useEffect(() => {
-  if (!hidden) {
-    setVisibleChips(getRandomCommands());
-  }
-}, [hidden]);
-
-
-const handleChipClick = (cmd: typeof GENIO_COMMANDS[number]) => {
-  setInput(cmd.template);          // put text in input
-  setShowCommands(false);          // hide dropdown if any
-
-  requestAnimationFrame(() => {
-    inputRef.current?.focus();     // focus input
-    resizeTextarea();              // adjust height
-  });
-};
-
-const latestAIContext =
-  [...messages]
-    .reverse()
-    .find((m) => m.role === "ai" && m.context)?.context;
+  useEffect(() => {
+    if (!hidden) {
+      setVisibleChips(getRandomCommands());
+    }
+  }, [hidden]);
 
 
-    
+  const handleChipClick = (cmd: typeof GENIO_COMMANDS[number]) => {
+    setInput(cmd.template);          // put text in input
+    setShowCommands(false);          // hide dropdown if any
+
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();     // focus input
+      resizeTextarea();              // adjust height
+    });
+  };
+
+  const latestAIContext =
+    [...messages]
+      .reverse()
+      .find((m) => m.role === "ai" && m.context)?.context;
+
+
+
   return (
     <div
       className={`
@@ -757,7 +758,7 @@ const latestAIContext =
         </div>
 
         <div className="flex gap-2">
-       
+
 
           {/* Reset*/}
 
@@ -766,13 +767,13 @@ const latestAIContext =
             onClick={() => {
               clearGenioCache();
               setMessages([]);
-           
+
               setInput("");
             }}
           >
             <Trash className="h-4 w-4 text-red-500 hover:text-red-700" />
           </button>
-             {/* Fullscreen*/}
+          {/* Fullscreen*/}
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
             className="text-muted-foreground hover:text-foreground"
@@ -800,7 +801,7 @@ const latestAIContext =
   </div>
 )} */}
 
-      
+
 
       {/* MESSAGES */}
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4 text-sm">
@@ -823,7 +824,7 @@ const latestAIContext =
                 }`}
             >
 
-              
+
               {m.content === "__thinking__" ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <div className="flex gap-1">
@@ -846,9 +847,42 @@ const latestAIContext =
 
                 return (
                   <div>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {visibleText}
-                    </ReactMarkdown>
+                    <div
+                      className="
+    prose prose-sm
+    prose-p:my-1
+    prose-ul:my-1
+    prose-li:my-0
+    prose-strong:text-foreground
+    prose-headings:mb-1
+    prose-headings:mt-2
+    max-w-none
+  "
+                    >
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          p: ({ children }) => (
+                            <p className="my-1 leading-relaxed">{children}</p>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="my-1 list-disc pl-4">{children}</ul>
+                          ),
+                          li: ({ children }) => (
+                            <li className="my-0">{children}</li>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-semibold text-foreground">
+                              {children}
+                            </strong>
+                          ),
+                        }}
+                      >
+                        {formatGenioMessage(visibleText)}
+                      </ReactMarkdown>
+
+                    </div>
+
 
                     {isLong && (
                       <button
@@ -874,7 +908,7 @@ const latestAIContext =
                   Export to Excel
                 </Button>
               )}
- 
+
 
               {m.role === "ai" && m.employeeId && (
                 <Button
@@ -905,14 +939,14 @@ const latestAIContext =
 
       {/* INPUT */}
       <div className="border-t bg-background px-3 py-3">
-      {/* QUICK COMMAND CHIPS */}
-{visibleChips.length > 0 && (
-  <div className="mb-2 flex flex-wrap gap-2">
-    {visibleChips.map((cmd) => (
-      <button
-        key={cmd.value}
-        
-        className="
+        {/* QUICK COMMAND CHIPS */}
+        {visibleChips.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {visibleChips.map((cmd) => (
+              <button
+                key={cmd.value}
+
+                className="
           rounded-full
           border
           px-3
@@ -922,13 +956,13 @@ const latestAIContext =
           hover:bg-muted
           transition
         "
-         onClick={() => handleChipClick(cmd)}
-      >
-        {cmd.label}
-      </button>
-    ))}
-  </div>
-)}
+                onClick={() => handleChipClick(cmd)}
+              >
+                {cmd.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div
           className="relative flex items-center gap-2 rounded-full border bg-white px-3 py-2 shadow-sm"
@@ -1026,7 +1060,7 @@ const latestAIContext =
                   return;
                 }
 
-                 if (e.key === "Tab") {
+                if (e.key === "Tab") {
                   e.preventDefault();
                   const cmd = filteredCommands[activeCommandIndex];
                   if (cmd) {
@@ -1065,26 +1099,26 @@ const latestAIContext =
           </button>
 
           {/* ⬆ SEND */}
-         {!isLoading ? (
-  <button
-    type="button"
-    onClick={() => sendMessage()}
-    disabled={!input.trim()}
-    className="
+          {!isLoading ? (
+            <button
+              type="button"
+              onClick={() => sendMessage()}
+              disabled={!input.trim()}
+              className="
       flex h-8 w-8 items-center justify-center
       rounded-full bg-black text-white
       transition hover:opacity-90
       disabled:opacity-40
     "
-    title="Send"
-  >
-    <ArrowUp className="h-4 w-4" />
-  </button>
-) : (
-  <button
-    type="button"
-    onClick={stopGenerating}
-    className="
+              title="Send"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={stopGenerating}
+              className="
       flex h-9 w-9 items-center justify-center
       rounded-full
       border border-black/10
@@ -1093,11 +1127,11 @@ const latestAIContext =
       transition
       hover:bg-black/5
     "
-    title="Stop generating"
-  >
-    <Square className="h-4 w-4 fill-black" />
-  </button>
-)}
+              title="Stop generating"
+            >
+              <Square className="h-4 w-4 fill-black" />
+            </button>
+          )}
 
         </div>
 
@@ -1112,30 +1146,30 @@ const latestAIContext =
 
         </div>
       </div>
-{selectionRect && (
-  <button
-    onClick={() => {
-      navigator.clipboard.writeText(selectionText);
-      setSelectionText("");
-      setSelectionRect(null);
-      window.getSelection()?.removeAllRanges();
-    }}
-    className="
+      {selectionRect && (
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(selectionText);
+            setSelectionText("");
+            setSelectionRect(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+          className="
       fixed z-50
       rounded-md border bg-white px-3 py-1.5
       text-xs font-medium
       shadow-md
       hover:bg-muted
     "
-    style={{
-      top: selectionRect.top - 36,
-      left: selectionRect.left + selectionRect.width / 2,
-      transform: "translateX(-50%)",
-    }}
-  >
-    Copy
-  </button>
-)}
+          style={{
+            top: selectionRect.top - 36,
+            left: selectionRect.left + selectionRect.width / 2,
+            transform: "translateX(-50%)",
+          }}
+        >
+          Copy
+        </button>
+      )}
 
 
     </div>
