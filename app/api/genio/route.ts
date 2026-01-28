@@ -21,6 +21,7 @@ import {
   handleCompareEmployeeTypes,
   handleAgeAnalysis,
   handleTenureAnalysis,
+  handleCurrentEmployeesByYear,
 
 } from "@/src/genio/handlers";
 import { streamReply } from "@/src/genio/utils";
@@ -99,6 +100,11 @@ export async function POST(req: Request, { params }: { params: { departmentId: s
     case "tenure_analysis":
       return handleTenureAnalysis(intent, context);
 
+      case "current_employees_by_year":
+  return handleCurrentEmployeesByYear(
+    intent.filters?.year,
+    context
+  );
 
     default:
       return handleAIAnswer(message, context);

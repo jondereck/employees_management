@@ -12,17 +12,34 @@ export async function handleExport(context: any) {
     );
   }
 
- const employees = await prisma.employee.findMany({
-  where: last.where, // 🔥 USE EXACT SAME FILTERS AS CHAT
+  
+
+let employees = await prisma.employee.findMany({
+  where: last.where,
   include: {
-    offices: {
-      select: { name: true },
-    },
-    employeeType: {
-      select: { name: true },
-    },
+    offices: { select: { name: true } },
+    employeeType: { select: { name: true } },
   },
 });
+
+// 🔥 APPLY POST FILTER (CURRENT EMPLOYEES BY YEAR)
+if (last.postFilter?.excludeTerminatedOnOrBefore) {
+  const year = last.postFilter.excludeTerminatedOnOrBefore;
+  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+
+  employees = employees.filter((e) => {
+    if (!e.terminateDate) return true;
+
+    const [m, d, y] = e.terminateDate.split("/").map(Number);
+    if (!m || !d || !y) return true;
+
+    const termination = new Date(y, m - 1, d);
+    return termination > yearEnd;
+  });
+}
+
+
+
 
   if (employees.length === 0) {
     return NextResponse.json(

@@ -464,6 +464,7 @@ const longPressTriggered = useRef(false);
   const sendMessage = async (preset?: string) => {
     const text = preset ?? input;
     if (!text.trim() || isLoading) return;
+    
 
     setInput("");
     setIsLoading(true);

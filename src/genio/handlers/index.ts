@@ -20,6 +20,7 @@ export { handleSmallestOffice } from "@/src/genio/handlers/handleSmallestOffice"
 export { handleCompareEmployeeTypes } from "@/src/genio/handlers/handleCompareEmployeeTypes";
 export { handleAgeAnalysis } from "@/src/genio/handlers/handleAgeAnalysis";
 export { handleTenureAnalysis } from "@/src/genio/handlers/handleTenureAnalysis";
+export { handleCurrentEmployeesByYear } from "@/src/genio/handlers/handleCurrentEmployeesByYear";
 
 
 

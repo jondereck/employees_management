@@ -17,6 +17,28 @@ export function parseGenioIntent(
   };
 
 
+
+    /* ===============================
+     CURRENT EMPLOYEES (BY YEAR)
+     =============================== */
+
+  if (
+    /\b(current|active)\b/.test(text) &&
+    /\b(employee|employees|staff)\b/.test(text)
+  ) {
+    const yearMatch = text.match(/\b(19|20)\d{2}\b/);
+
+    return {
+      intent: {
+        action: "current_employees_by_year",
+        filters: {
+          ...(yearMatch && { year: Number(yearMatch[0]) }),
+        },
+      },
+      confidence: 5,
+    };
+  }
+
   /* ===============================
    OFFICE HEAD INTENTS
    =============================== */
