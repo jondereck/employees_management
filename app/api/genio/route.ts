@@ -78,10 +78,6 @@ export async function POST(req: Request, { params }: { params: { departmentId: s
 
     case "list_from_last_count":
       return handleListFromLastCount(context);
-
-    case "insight":
-      return handleAIAnswer(message, context);
-
     case "export":
       return handleExport(context);
 

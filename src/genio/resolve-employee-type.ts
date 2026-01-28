@@ -3,8 +3,16 @@
 function normalize(text: string) {
   return text
     .toLowerCase()
-    .replace(/employees?|staff|worker/g, "")
+    .replace(/employees?|employee|staff|workers?|officials?/g, "")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+export function extractEmployeeTypeKeyword(message: string) {
+  return normalize(
+    message
+      .replace(/how many|count|number of|\?/gi, "")
+  );
 }
 
 export function resolveEmployeeType(
@@ -13,33 +21,38 @@ export function resolveEmployeeType(
 ) {
   const normalized = normalize(keyword);
 
-  // 1️⃣ EXACT value match (highest priority)
+  if (!normalized) return null;
+
+  // 1️⃣ Exact value match
   const exactValue = employeeTypes.find(
     (t) => normalize(t.value) === normalized
   );
   if (exactValue) return exactValue;
 
-  // 2️⃣ EXACT name match
+  // 2️⃣ Exact name match
   const exactName = employeeTypes.find(
     (t) => normalize(t.name) === normalized
   );
   if (exactName) return exactName;
 
-  // 3️⃣ Alias-style fallback (controlled)
+  // 3️⃣ Alias matching
   const aliasMap: Record<string, string[]> = {
-    casual: ["casual"],
     permanent: ["permanent", "regular"],
+    casual: ["casual"],
     contract: ["contract", "cos", "contract of service"],
+    elected: ["elected", "elected employee", "elected official"],
+    coterminous: ["coterm", "coterminous"],
+    "job order": ["jo", "job order", "job-order"],
   };
 
   for (const type of employeeTypes) {
-    const aliases = aliasMap[normalized];
-    if (!aliases) continue;
+    const typeName = normalize(type.name);
+    const typeValue = normalize(type.value);
 
-    for (const alias of aliases) {
+    for (const aliases of Object.values(aliasMap)) {
       if (
-        normalize(type.name) === alias ||
-        normalize(type.value) === alias
+        aliases.includes(normalized) &&
+        (aliases.includes(typeName) || aliases.includes(typeValue))
       ) {
         return type;
       }

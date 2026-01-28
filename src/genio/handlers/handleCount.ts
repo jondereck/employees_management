@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { streamReply } from "../utils";
-import { resolveEmployeeType } from "../resolve-employee-type";
+import {
+  resolveEmployeeType,
+  extractEmployeeTypeKeyword,
+} from "../resolve-employee-type";
 import { resolveOfficeWithAliases } from "../resolve-office";
 import { Gender } from "@prisma/client";
 import { GenioIntent } from "../type";
@@ -14,18 +17,21 @@ export async function handleCount(
   const where: any = { isArchived: false };
 
   /* ===============================
-     NATURAL GENDER PHRASES
+     GENDER
      =============================== */
-const genderFromText =
-  /\b(female|women|woman|girls?)\b/i.test(message)
-    ? Gender.Female
-    : /\b(male|men|man|boys?)\b/i.test(message)
-    ? Gender.Male
-    : null;
+  const genderFromText =
+    /\b(female|women|woman|girls?)\b/i.test(message)
+      ? Gender.Female
+      : /\b(male|men|man|boys?)\b/i.test(message)
+      ? Gender.Male
+      : null;
 
+  if (genderFromText) {
+    where.gender = genderFromText;
+  }
 
   /* ===============================
-     OFFICE (REMEMBER + OVERRIDE)
+     OFFICE
      =============================== */
   const mentionsOffice = /office|department|division|unit|section|in\s+/i.test(
     message
@@ -61,7 +67,7 @@ const genderFromText =
         );
       } else {
         return streamReply(
-          "I couldn’t identify the office. You can say **“list all offices”**.",
+          "I couldn’t identify the office.",
           context,
           null
         );
@@ -74,58 +80,35 @@ const genderFromText =
   }
 
   /* ===============================
-     GENDER (FOLLOW-UP AWARE)
+     ✅ EMPLOYEE TYPE (FIXED)
      =============================== */
-  if (genderFromText) {
-    where.gender = genderFromText;
-  } else if (intent.filters.gender) {
-    where.gender =
-      intent.filters.gender === "Male"
-        ? Gender.Male
-        : Gender.Female;
-  }
+  const employeeTypeText =
+    intent.filters.employeeType ??
+    extractEmployeeTypeKeyword(message);
 
-/* ===============================
-   EMPLOYEE TYPE
-   =============================== */
-if (intent.filters.employeeType) {
-  const employeeTypes = await prisma.employee.findMany({
-    where,
-    select: {
-      employeeType: {
-        select: { id: true, name: true, value: true },
-      },
-    },
-  });
+  if (employeeTypeText) {
+    const employeeTypes = await prisma.employeeType.findMany({
+      select: { id: true, name: true, value: true },
+    });
 
-  const uniqueTypes = Array.from(
-    new Map(
+    const matchedType = resolveEmployeeType(
+      employeeTypeText,
       employeeTypes
-        .map((e) => e.employeeType)
-        .filter(Boolean)
-        .map((t) => [t.id, t])
-    ).values()
-  );
-
-  const matchedType = resolveEmployeeType(
-    intent.filters.employeeType,
-    uniqueTypes
-  );
-
-  if (!matchedType) {
-    return streamReply(
-      `I couldn’t find a "${intent.filters.employeeType}" employee type.`,
-      context,
-      null
     );
+
+    if (!matchedType) {
+      return streamReply(
+        `I couldn’t find a "${employeeTypeText}" employee type.`,
+        context,
+        null
+      );
+    }
+
+    where.employeeTypeId = matchedType.id;
   }
-
-  where.employeeTypeId = matchedType.id;
-}
-
 
   /* ===============================
-     COUNT + BREAKDOWN
+     COUNT
      =============================== */
   let reply = "";
 
@@ -145,7 +128,8 @@ if (intent.filters.employeeType) {
     reply =
       `There are **${count} ${
         where.gender === Gender.Female ? "female" : "male"
-      } employees**` + (office ? ` in **${office.name}**` : "");
+      } employees**` +
+      (office ? ` in **${office.name}**` : "");
   }
 
   /* ===============================
@@ -162,11 +146,5 @@ if (intent.filters.employeeType) {
     },
   };
 
-  return streamReply(
-  reply,
-  context,
-  null,
-  { canExport: true }
-);
-
+  return streamReply(reply, context, null, { canExport: true });
 }
