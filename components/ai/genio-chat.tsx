@@ -64,6 +64,33 @@ export const GENIO_COMMANDS = [
     ],
   },
 
+   /* ================= MULTIPLE / ADVANCED LOOKUP ================= */
+
+  {
+    label: "Who are employees",
+    value: "/whoare",
+    template: "Who are [employee names or numbers]?",
+    quickChip: true,
+    examples: [
+      "Who are Juan Dela Cruz and Maria Santos?",
+      "Who are 7150042, 7150084?",
+      "Sino sina Juan at Maria?",
+    ],
+  },
+
+  {
+    label: "Who has note",
+    value: "/whonote",
+    template: "Who has note: [keyword, keyword]",
+    quickChip: true,
+    examples: [
+      "Who has note: angelie",
+      "Who has note: payroll, leave",
+      "May note na angelie",
+    ],
+  },
+
+
   {
     label: "Check if employee is office head",
     value: "/ishead",
@@ -329,7 +356,7 @@ const isMobile = typeof window !== "undefined" &&
 
   const COMMAND_GROUPS = {
   Employees: GENIO_COMMANDS.filter(c =>
-    ["whois", "profile", "ishead"].includes(c.value.replace("/", ""))
+    ["whois", "whoare", "whonote", "profile", "ishead"].includes(c.value.replace("/", ""))
   ),
   Offices: GENIO_COMMANDS.filter(c =>
     c.value.includes("office")
