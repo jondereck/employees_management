@@ -7,26 +7,108 @@ export async function handleWhoIs(
   context: any,
   intent?: GenioIntent
 ) {
-const cleaned =
-  intent?.filters?.name ??
-  message
-    .toLowerCase()
-    .replace(
-      /who is|tell me about|sino si|impormasyon ni|who's|whos/gi,
-      ""
-    )
-    .replace(/[^a-z\s]/g, "")
-    .trim();
+  const raw =
+    intent?.filters?.name ??
+    message
+      .toLowerCase()
+      .replace(
+        /who is|who are|tell me about|sino si|impormasyon ni|who's|whos/gi,
+        ""
+      )
+      .trim();
 
-  if (!cleaned) {
+  if (!raw) {
     return streamReply(
-      "Please tell me the employee’s name.",
+      "Please provide an employee name or employee number.",
       context,
       null
     );
   }
 
-  // 🔹 Split full name into tokens
+  /* ===============================
+     EMPLOYEE NUMBER LOOKUP (FIRST)
+     =============================== */
+
+  const employeeNumbers = raw.match(/\b\d{6,10}\b/g);
+
+  if (employeeNumbers && employeeNumbers.length > 0) {
+    const employees = await prisma.employee.findMany({
+      where: {
+        isArchived: false,
+        OR: employeeNumbers.map((num) => ({
+          employeeNo: {
+            contains: num,
+            mode: "insensitive",
+          },
+        })),
+      },
+      include: {
+        offices: true,
+        employeeType: true,
+      },
+    });
+
+
+    if (employees.length === 0) {
+      return streamReply(
+        "I couldn’t find any employees with the provided employee number(s).",
+        context,
+        null
+      );
+    }
+
+    if (employees.length > 1) {
+      const list = employees
+        .map(
+          (e, i) =>
+            `${i + 1}. ${e.employeeNo} – ${e.firstName} ${e.lastName} (${e.offices?.name})`
+        )
+        .join("\n");
+
+      context = {
+        ...context,
+        lastListQuery: {
+          type: "employee_lookup",
+          where: {
+            id: {
+              in: employees.map((e) => e.id),
+            },
+          },
+        },
+      };
+
+
+      return streamReply(
+        `Here are the employees you asked for:\n\n${list}`,
+        context,
+        null,
+        { canExport: true }
+      );
+    }
+
+    const emp = employees[0];
+
+    context = {
+      ...context,
+      lastEmployeeId: emp.id,
+      lastOfficeId: emp.officeId,
+      lastOfficeName: emp.offices?.name,
+    };
+
+    return streamReply(
+      `${emp.firstName} ${emp.lastName} is a **${emp.position}** in **${emp.offices?.name}**.`,
+      context,
+      emp.id,
+      { canExport: true }
+    );
+  }
+
+  /* ===============================
+     NAME-BASED LOOKUP (SECOND)
+     =============================== */
+
+  const cleaned = raw.replace(/[^a-z\s]/g, "").trim();
+
   const tokens = cleaned.split(/\s+/).filter(Boolean);
 
   const employees = await prisma.employee.findMany({
@@ -47,7 +129,6 @@ const cleaned =
     },
   });
 
-  // ❌ No match
   if (employees.length === 0) {
     return streamReply(
       `I couldn’t find an employee named **${cleaned}**.`,
@@ -56,7 +137,6 @@ const cleaned =
     );
   }
 
-  // ⚠️ Multiple matches
   if (employees.length > 1) {
     const list = employees
       .slice(0, 5)
@@ -76,7 +156,6 @@ const cleaned =
     );
   }
 
-  // ✅ Single match
   const emp = employees[0];
 
   context = {
@@ -90,6 +169,5 @@ const cleaned =
     `${emp.firstName} ${emp.lastName} is a **${emp.position}** in **${emp.offices?.name}**.`,
     context,
     emp.id,
-      { canExport: true }
   );
 }
