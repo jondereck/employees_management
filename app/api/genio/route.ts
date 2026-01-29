@@ -28,6 +28,8 @@ import { streamReply } from "@/src/genio/utils";
 import { handleList } from "@/src/genio/handlers/handleList";
 import { handleAIAnswer } from "@/src/genio/handlers/handleAiAnswers";
 import { classifyGenioIntent } from "@/src/genio/ai/classifyGenioIntent";
+import { matchNLPatterns } from "@/src/genio/natural-language-map";
+
 
 
 export async function POST(req: Request, { params }: { params: { departmentId: string } }) {
@@ -35,10 +37,17 @@ export async function POST(req: Request, { params }: { params: { departmentId: s
 
   const { intent, confidence } = parseGenioIntent(message, context);
 
-  if (confidence < 2) {
+if (confidence < 2) {
+  const nlAction = matchNLPatterns(message);
+
+  if (nlAction) {
+    intent.action = nlAction;
+  } else {
     const aiAction = await classifyGenioIntent(message);
     intent.action = aiAction;
   }
+}
+
   
   switch (intent.action) {
 

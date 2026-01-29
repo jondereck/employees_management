@@ -22,6 +22,7 @@ import { ArrowUp, Mic, Plus, Square, Trash } from "lucide-react";
 import { extractStats, formatGenioMessage } from "@/src/genio/utils";
 import { AnimatedMarkdown } from "@/src/genio/components/AnimatedMarkdown";
 import { GenioStatCard } from "@/src/genio/components/GenioStatCard";
+import { Avatar } from "../ui/avatar";
 
 
 type GenioMessage = {
@@ -187,6 +188,20 @@ export const GENIO_COMMANDS = [
       "Ilan ang COS?",
     ],
   },
+
+  {
+  label: "Current employees by year",
+  value: "/count-current-by-year",
+  template: "How many current employees as of [year]?",
+  quickChip: true,
+  examples: [
+    "How many current employees as of 2024?",
+    "Employees as of year 2022",
+    "Ilan ang empleyado noong 2023?",
+    "Current employees by year",
+  ],
+},
+
 
   /* ================= LISTING ================= */
 
@@ -794,15 +809,18 @@ const handleLongPressEnd = () => {
         <div className="flex items-center gap-2">
 
 
-          <div className="relative h-12 w-12 overflow-hidden rounded-full bg-purple-300">
+       
 
-            <Image
-              src="/genio/genio-avatar.png"
-              alt="Genio AI"
-              fill
-              className="rounded-full object-contain"
-              priority
-            />
+           <div className="relative w-12 h-12">
+  <Image
+    src="/genio/genio-avatar.png"
+    alt="Genio AI"
+    fill
+    className="rounded-full object-contain absolute top-2 left-2"
+    priority
+  />
+
+
           </div>
 
           <div>

@@ -1,13 +1,20 @@
 import { prisma } from "@/lib/prisma";
 import { streamReply } from "../utils";
+import { GenioIntent } from "../intent-schema";
 
 export async function handleWhoIs(
   message: string,
-  context: any
+  context: any,
+  intent?: GenioIntent
 ) {
-  const cleaned = message
+const cleaned =
+  intent?.filters?.name ??
+  message
     .toLowerCase()
-    .replace(/^who is/i, "")
+    .replace(
+      /who is|tell me about|sino si|impormasyon ni|who's|whos/gi,
+      ""
+    )
     .replace(/[^a-z\s]/g, "")
     .trim();
 

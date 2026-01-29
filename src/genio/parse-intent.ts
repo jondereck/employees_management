@@ -1,4 +1,17 @@
-import { GenioIntent } from "./type";
+import { GENIO_NL_PATTERNS } from "./natural-language-map";
+import { GenioAction, GenioIntent } from "./type";
+
+function matchNLPatterns(text: string): GenioAction | null {
+  for (const entry of GENIO_NL_PATTERNS) {
+    for (const phrase of entry.patterns) {
+      if (text.includes(phrase)) {
+        return entry.action;
+      }
+    }
+  }
+  return null;
+}
+
 
 export function parseGenioIntent(
   message: string,
@@ -16,6 +29,49 @@ export function parseGenioIntent(
     filters: {},
   };
 
+/* ===============================
+   NATURAL LANGUAGE MAP (PRIMARY)
+   =============================== */
+
+const matchedAction = matchNLPatterns(text);
+
+if (matchedAction) {
+  // special handling for year-based queries
+  if (matchedAction === "current_employees_by_year") {
+    const yearMatch = text.match(/\b(19|20)\d{2}\b/);
+    const now = new Date().getFullYear();
+
+    let year: number | undefined = yearMatch
+      ? Number(yearMatch[0])
+      : undefined;
+
+    if (/\blast year\b|\bnakaraang taon\b/.test(text)) {
+      year = now - 1;
+    }
+
+    if (/\bthis year\b|\bngayong taon\b/.test(text)) {
+      year = now;
+    }
+
+    return {
+      intent: {
+        action: matchedAction,
+        filters: {
+          ...(year && { year }),
+        },
+      },
+      confidence: 5,
+    };
+  }
+
+  return {
+    intent: {
+      action: matchedAction,
+      filters: {},
+    },
+    confidence: 4,
+  };
+}
 
 
     /* ===============================
