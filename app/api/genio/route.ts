@@ -47,13 +47,15 @@ if (confidence < 2) {
     intent.action = aiAction;
   }
 }
+console.log("INTENT:", intent);
 
   
   switch (intent.action) {
 
 
-    case "describe_employee":
-      return handleWhoIs(message, context);
+  case "describe_employee":
+  return handleWhoIs(message, context, intent);
+
 
     case "who_is_head":
       return handleWhoIsHead(message, context);

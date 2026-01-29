@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { streamReply } from "../utils";
-import { GenioIntent } from "../intent-schema";
+import { formatEmployees, streamReply } from "../utils";
+import { GenioIntent } from "../type";
+
 
 export async function handleWhoIs(
   message: string,
@@ -25,8 +26,68 @@ export async function handleWhoIs(
     );
   }
 
+ /* ===============================
+     NOTE-BASED LOOKUP (ABSOLUTE FIRST)
+     =============================== */
+  if (intent?.filters?.note) {
+    const keywords = intent.filters.note
+      .split(",")
+      .map(k => k.trim())
+      .filter(Boolean);
+
+    const employees = await prisma.employee.findMany({
+      where: {
+        isArchived: false,
+        OR: keywords.map(k => ({
+          note: {
+            contains: k,
+            mode: "insensitive",
+          },
+        })),
+      },
+      include: {
+        offices: true,
+        employeeType: true,
+      },
+    });
+
+    if (employees.length === 0) {
+      return streamReply(
+        `No employees found with notes containing **${keywords.join(", ")}**.`,
+        context,
+        null
+      );
+    }
+
+    const list = employees
+      .map(
+        e =>
+          `• ${e.firstName} ${e.lastName} — ${e.offices?.name ?? "No office"}`
+      )
+      .join("\n");
+
+    context = {
+      ...context,
+      lastListQuery: {
+        type: "note_search",
+        where: {
+          OR: keywords.map(k => ({
+            note: { contains: k, mode: "insensitive" },
+          })),
+        },
+      },
+    };
+
+    return streamReply(
+      `Here are the employees with notes containing **${keywords.join(", ")}**:\n\n${list}`,
+      context,
+      null,
+      { canExport: true }
+    );
+  }
+
   /* ===============================
-     EMPLOYEE NUMBER LOOKUP (FIRST)
+     EMPLOYEE NUMBER LOOKUP
      =============================== */
 
   const employeeNumbers = raw.match(/\b\d{6,10}\b/g);
@@ -48,7 +109,6 @@ export async function handleWhoIs(
       },
     });
 
-
     if (employees.length === 0) {
       return streamReply(
         "I couldn’t find any employees with the provided employee number(s).",
@@ -57,6 +117,7 @@ export async function handleWhoIs(
       );
     }
 
+    // 🔹 Multiple employees → list + export
     if (employees.length > 1) {
       const list = employees
         .map(
@@ -77,7 +138,6 @@ export async function handleWhoIs(
         },
       };
 
-
       return streamReply(
         `Here are the employees you asked for:\n\n${list}`,
         context,
@@ -86,7 +146,12 @@ export async function handleWhoIs(
       );
     }
 
+    // 🔹 Single employee → profile (NO export)
     const emp = employees[0];
+
+    const noteText = emp.note
+      ? `\n\n📝 **Note:** ${emp.note}`
+      : "";
 
     context = {
       ...context,
@@ -96,19 +161,17 @@ export async function handleWhoIs(
     };
 
     return streamReply(
-      `${emp.firstName} ${emp.lastName} is a **${emp.position}** in **${emp.offices?.name}**.`,
+      `${emp.firstName} ${emp.lastName} (**${emp.employeeNo}**) is a **${emp.position}** in **${emp.offices?.name}**.${noteText}`,
       context,
-      emp.id,
-      { canExport: true }
+      emp.id
     );
   }
 
   /* ===============================
-     NAME-BASED LOOKUP (SECOND)
+     NAME-BASED LOOKUP
      =============================== */
 
   const cleaned = raw.replace(/[^a-z\s]/g, "").trim();
-
   const tokens = cleaned.split(/\s+/).filter(Boolean);
 
   const employees = await prisma.employee.findMany({
@@ -158,6 +221,10 @@ export async function handleWhoIs(
 
   const emp = employees[0];
 
+  const noteText = emp.note
+    ? `\n\n📝 **Note:** ${emp.note}`
+    : "";
+
   context = {
     ...context,
     lastEmployeeId: emp.id,
@@ -166,8 +233,8 @@ export async function handleWhoIs(
   };
 
   return streamReply(
-    `${emp.firstName} ${emp.lastName} is a **${emp.position}** in **${emp.offices?.name}**.`,
+    `${emp.firstName} ${emp.lastName} is a **${emp.position}** in **${emp.offices?.name}**.${noteText}`,
     context,
-    emp.id,
+    emp.id
   );
 }

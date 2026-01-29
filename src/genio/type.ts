@@ -29,7 +29,10 @@ export type GenioIntent = {
   target?: "employee" | "office" | "department";
 
   filters: {
+    name?: string;
     gender?: "Male" | "Female";
+    note?: string;
+    notes?: string[];
     office?: string;
     employeeType?: string;
     age?: { min?: number; max?: number };

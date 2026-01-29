@@ -17,23 +17,66 @@ export function parseGenioIntent(
   message: string,
   context?: any
 ): { intent: GenioIntent; confidence: number } {
- const text = message
-  .toLowerCase()
-  .replace(/[^\w\s]/g, ""); // ← REQUIRED
-
+ 
 
   let confidence = 0;
 
-  const intent: GenioIntent = {
-    action: "unknown",
-    filters: {},
-  };
+const text = message
+  .toLowerCase()
+  .replace(/[^\w\s,]/g, "");
+
+
+const intent: GenioIntent = {
+  action: "unknown",
+  filters: {},
+};
+
+if (/\bnote\b/.test(text)) {
+  const noteMatch =
+    text.match(/\bnote\s+(.*)$/i) ||
+    text.match(/may note na\s+(.*)$/i);
+
+  if (noteMatch?.[1]) {
+    const notes = noteMatch[1]
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
+
+    return {
+      intent: {
+        action: "describe_employee",
+        filters: {
+          note: notes.join(","), // store as CSV or array (see below)
+        },
+      },
+      confidence: 10,
+    };
+  }
+}
+
 
 /* ===============================
    NATURAL LANGUAGE MAP (PRIMARY)
    =============================== */
 
 const matchedAction = matchNLPatterns(text);
+if (matchedAction) {
+  return {
+    intent: {
+      action: matchedAction,
+      filters: {},
+    },
+    confidence: 4,
+  };
+}
+
+
+  
+/* ===============================
+   NATURAL LANGUAGE MAP (PRIMARY)
+   =============================== */
+
+
 
 if (matchedAction) {
   // special handling for year-based queries

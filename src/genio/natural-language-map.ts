@@ -11,6 +11,8 @@ export const GENIO_NL_PATTERNS: {
     action: "describe_employee",
     patterns: [
       "who is",
+      "who are",
+      "who has",
       "sino si",
       "tell me about",
       "impormasyon ni",

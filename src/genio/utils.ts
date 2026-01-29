@@ -1,6 +1,50 @@
 // src/genio/utils.ts
 
 
+type FormatOptions = {
+  style?: "bullet" | "numbered";
+  showEmployeeNo?: boolean;
+  showOffice?: boolean;
+  showPosition?: boolean;
+};
+
+export function formatEmployees(
+  employees: any[],
+  options: FormatOptions = {}
+) {
+  const {
+    style = "bullet",
+    showEmployeeNo = false,
+    showOffice = true,
+    showPosition = false,
+  } = options;
+
+  return employees
+    .map((e, i) => {
+      const prefix = style === "numbered" ? `${i + 1}.` : "•";
+      const office = e.offices?.name ?? "No office";
+
+      let line = `${prefix} ${e.firstName} ${e.lastName}`;
+
+      if (showEmployeeNo && e.employeeNo) {
+        line += ` (${e.employeeNo})`;
+      }
+
+      if (showOffice) {
+        line += ` — ${office}`;
+      }
+
+      if (showPosition && e.position) {
+        line += `\n  🧑‍💼 ${e.position}`;
+      }
+
+      return line;
+    })
+    .join("\n");
+}
+
+
+
 export function extractStats(text: string) {
   const total = text.match(/There are \*\*(\d+)/i)?.[1];
 
