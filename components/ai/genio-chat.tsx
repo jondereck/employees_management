@@ -65,19 +65,19 @@ export const GENIO_COMMANDS = [
   },
 
   {
-  label: "Employees by employee number prefix",
-  value: "/who-bio",
-  template: "Who are employees starting with BIO[number]",
-  quickChip: true,
-  examples: [
-    "Who are employees starting with BIO715",
-    "Who are employees start with bio 715",
-    "BIO715",
-  ],
-},
+    label: "Employees by employee number prefix",
+    value: "/who-bio",
+    template: "Who are employees starting with BIO[number]",
+    quickChip: true,
+    examples: [
+      "Who are employees starting with BIO715",
+      "Who are employees start with bio 715",
+      "BIO715",
+    ],
+  },
 
 
-   /* ================= MULTIPLE / ADVANCED LOOKUP ================= */
+  /* ================= MULTIPLE / ADVANCED LOOKUP ================= */
 
   {
     label: "Who are employees",
@@ -230,17 +230,17 @@ export const GENIO_COMMANDS = [
   },
 
   {
-  label: "Current employees by year",
-  value: "/count-current-by-year",
-  template: "How many current employees as of [year]?",
-  quickChip: true,
-  examples: [
-    "How many current employees as of 2024?",
-    "Employees as of year 2022",
-    "Ilan ang empleyado noong 2023?",
-    "Current employees by year",
-  ],
-},
+    label: "Current employees by year",
+    value: "/count-current-by-year",
+    template: "How many current employees as of [year]?",
+    quickChip: true,
+    examples: [
+      "How many current employees as of 2024?",
+      "Employees as of year 2022",
+      "Ilan ang empleyado noong 2023?",
+      "Current employees by year",
+    ],
+  },
 
 
   /* ================= LISTING ================= */
@@ -367,7 +367,7 @@ const isMobile = typeof window !== "undefined" &&
 
 
 
-  const COMMAND_GROUPS = {
+const COMMAND_GROUPS = {
   Employees: GENIO_COMMANDS.filter(c =>
     ["whois", "whoare", "whonote", "profile", "ishead"].includes(c.value.replace("/", ""))
   ),
@@ -420,6 +420,10 @@ export const GenioChat = ({
   const [visibleChips, setVisibleChips] = useState<typeof GENIO_COMMANDS>([]);
   const [showCommandSheet, setShowCommandSheet] = useState(false);
 
+
+
+  const isExportRequest = (text: string) =>
+    /\b(export|download|export this|export to excel)\b/i.test(text);
 
   useEffect(() => {
     const handleSelection = () => {
@@ -493,8 +497,8 @@ export const GenioChat = ({
   const abortControllerRef = useRef<AbortController | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
 
-const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-const longPressTriggered = useRef(false);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const longPressTriggered = useRef(false);
 
 
   useEffect(() => {
@@ -519,7 +523,7 @@ const longPressTriggered = useRef(false);
   const sendMessage = async (preset?: string) => {
     const text = preset ?? input;
     if (!text.trim() || isLoading) return;
-    
+
 
     setInput("");
     setIsLoading(true);
@@ -537,16 +541,22 @@ const longPressTriggered = useRef(false);
 
     const aiId = nanoid();
 
-    setMessages((prev) => [
-      ...prev,
-      userMsg,
-      {
-        id: aiId,
-        role: "ai",
-        content: "__thinking__",
-        context: undefined, // 👈 add this
-      },
-    ]);
+    setMessages((prev) => [...prev, userMsg]);
+
+    const shouldShowAI = !isExportRequest(text);
+
+    if (shouldShowAI) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: aiId,
+          role: "ai",
+          content: "__thinking__",
+          context: undefined,
+        },
+      ]);
+    }
+
 
     const lastAIContext =
       [...messages]
@@ -776,38 +786,38 @@ const longPressTriggered = useRef(false);
 
 
 
-useEffect(() => {
-  if (hidden) return;
-  setVisibleChips(getRandomCommands());
-}, [hidden]);
+  useEffect(() => {
+    if (hidden) return;
+    setVisibleChips(getRandomCommands());
+  }, [hidden]);
 
 
-const handleRefreshClick = () => {
-  // if long-press already triggered, do nothing
-  if (longPressTriggered.current) {
+  const handleRefreshClick = () => {
+    // if long-press already triggered, do nothing
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      return;
+    }
+
+    setShowCommandSheet(false);
+    setVisibleChips(getRandomCommands());
+  };
+
+  const handleLongPressStart = () => {
     longPressTriggered.current = false;
-    return;
-  }
 
-  setShowCommandSheet(false);
-  setVisibleChips(getRandomCommands());
-};
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      setShowCommandSheet(true);
+    }, 500); // ⏱ long press threshold
+  };
 
-const handleLongPressStart = () => {
-  longPressTriggered.current = false;
-
-  longPressTimer.current = setTimeout(() => {
-    longPressTriggered.current = true;
-    setShowCommandSheet(true);
-  }, 500); // ⏱ long press threshold
-};
-
-const handleLongPressEnd = () => {
-  if (longPressTimer.current) {
-    clearTimeout(longPressTimer.current);
-    longPressTimer.current = null;
-  }
-};
+  const handleLongPressEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
 
   const handleChipClick = (cmd: typeof GENIO_COMMANDS[number]) => {
@@ -849,16 +859,16 @@ const handleLongPressEnd = () => {
         <div className="flex items-center gap-2">
 
 
-       
 
-           <div className="relative w-12 h-12">
-  <Image
-    src="/genio/genio-avatar.png"
-    alt="Genio AI"
-    fill
-    className="rounded-full object-contain absolute top-2 left-2"
-    priority
-  />
+
+          <div className="relative w-12 h-12">
+            <Image
+              src="/genio/genio-avatar.png"
+              alt="Genio AI"
+              fill
+              className="rounded-full object-contain absolute top-2 left-2"
+              priority
+            />
 
 
           </div>
@@ -960,17 +970,17 @@ const handleLongPressEnd = () => {
                     ? m.content
                     : lines.slice(0, MAX_VISIBLE_LINES).join("\n");
 
-                     const stats = extractStats(m.content);
+                const stats = extractStats(m.content);
                 return (
                   <div>
                     {/* 📊 STAT CARD GOES HERE */}
-      {stats && (
-        <GenioStatCard
-          total={stats.total}
-          male={stats.male}
-          female={stats.female}
-        />
-      )}
+                    {stats && (
+                      <GenioStatCard
+                        total={stats.total}
+                        male={stats.male}
+                        female={stats.female}
+                      />
+                    )}
                     <div
                       className="
     prose prose-sm
@@ -983,7 +993,7 @@ const handleLongPressEnd = () => {
     max-w-none
   "
                     >
-                     <AnimatedMarkdown content={visibleText} />
+                      <AnimatedMarkdown content={visibleText} />
 
                     </div>
 
@@ -1044,35 +1054,35 @@ const handleLongPressEnd = () => {
       {/* INPUT */}
       <div className="border-t bg-background px-3 py-3">
         {/* QUICK COMMAND CHIPS */}
-    {visibleChips.length > 0 && (
-  <div className="mb-2 flex items-center justify-between gap-2">
-    {/* LEFT: COMMAND CHIPS */}
-    <div className="flex flex-wrap gap-2">
-      {visibleChips.map((cmd) => (
-        <button
-          key={cmd.value}
-          className="
+        {visibleChips.length > 0 && (
+          <div className="mb-2 flex items-center justify-between gap-2">
+            {/* LEFT: COMMAND CHIPS */}
+            <div className="flex flex-wrap gap-2">
+              {visibleChips.map((cmd) => (
+                <button
+                  key={cmd.value}
+                  className="
             rounded-full border px-3 py-1
             text-xs text-muted-foreground
             hover:bg-muted transition
           "
-          onClick={() => handleChipClick(cmd)}
-        >
-          {cmd.label}
-        </button>
-      ))}
-    </div>
+                  onClick={() => handleChipClick(cmd)}
+                >
+                  {cmd.label}
+                </button>
+              ))}
+            </div>
 
-    {/* RIGHT: REFRESH BUTTON */}
-    <button
-  title={showCommandSheet ? "Showing all commands" : "Refresh suggestions"}
-  onMouseDown={handleLongPressStart}
-  onMouseUp={handleLongPressEnd}
-  onMouseLeave={handleLongPressEnd}
-  onTouchStart={handleLongPressStart}
-  onTouchEnd={handleLongPressEnd}
-  onClick={handleRefreshClick}
-  className="
+            {/* RIGHT: REFRESH BUTTON */}
+            <button
+              title={showCommandSheet ? "Showing all commands" : "Refresh suggestions"}
+              onMouseDown={handleLongPressStart}
+              onMouseUp={handleLongPressEnd}
+              onMouseLeave={handleLongPressEnd}
+              onTouchStart={handleLongPressStart}
+              onTouchEnd={handleLongPressEnd}
+              onClick={handleRefreshClick}
+              className="
     flex h-7 w-7 items-center justify-center
     rounded-full border
     text-muted-foreground
@@ -1080,22 +1090,21 @@ const handleLongPressEnd = () => {
     transition
     active:scale-95
   "
->
-  <FiRefreshCcw
-    className={`h-3.5 w-3.5 transition-transform ${
-      showCommandSheet ? "rotate-180 text-primary" : ""
-    }`}
-  />
-</button>
+            >
+              <FiRefreshCcw
+                className={`h-3.5 w-3.5 transition-transform ${showCommandSheet ? "rotate-180 text-primary" : ""
+                  }`}
+              />
+            </button>
 
-  </div>
-)}
+          </div>
+        )}
 
-{showCommandSheet && (
-  <p className="mt-1 text-[10px] text-muted-foreground">
-    Long-press 🔄 to toggle suggestions
-  </p>
-)}
+        {showCommandSheet && (
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Long-press 🔄 to toggle suggestions
+          </p>
+        )}
 
 
 
@@ -1274,8 +1283,8 @@ const handleLongPressEnd = () => {
       </div>
 
       {showCommandSheet && (
-  <div className="fixed inset-0 z-[120] bg-black/30">
-    <div className="
+        <div className="fixed inset-0 z-[120] bg-black/30">
+          <div className="
       absolute bottom-0 left-0 right-0
       max-h-[70vh]
       rounded-t-2xl
@@ -1284,45 +1293,45 @@ const handleLongPressEnd = () => {
       shadow-xl
       overflow-y-auto
     ">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">What can Genio do?</h3>
-        <button
-          onClick={() => setShowCommandSheet(false)}
-          className="text-xs text-muted-foreground hover:text-foreground"
-        >
-          Close
-        </button>
-      </div>
-
-      {Object.entries(COMMAND_GROUPS).map(([group, cmds]) => (
-        <div key={group} className="mb-4">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
-            {group}
-          </p>
-
-          <div className="space-y-1">
-            {cmds.map(cmd => (
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">What can Genio do?</h3>
               <button
-                key={cmd.value}
-                className="
+                onClick={() => setShowCommandSheet(false)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+
+            {Object.entries(COMMAND_GROUPS).map(([group, cmds]) => (
+              <div key={group} className="mb-4">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  {group}
+                </p>
+
+                <div className="space-y-1">
+                  {cmds.map(cmd => (
+                    <button
+                      key={cmd.value}
+                      className="
                   w-full rounded-lg px-3 py-2
                   text-left text-sm
                   hover:bg-muted
                 "
-                onClick={() => {
-                  handleChipClick(cmd);
-                  setShowCommandSheet(false);
-                }}
-              >
-                {cmd.label}
-              </button>
+                      onClick={() => {
+                        handleChipClick(cmd);
+                        setShowCommandSheet(false);
+                      }}
+                    >
+                      {cmd.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
-      ))}
-    </div>
-  </div>
-)}
+      )}
 
       {/* FOOTER */}
       <div className="border-t border-black/10 px-4 py-2 text-center text-[11px] text-black">
