@@ -67,7 +67,7 @@ export const GENIO_COMMANDS = [
   {
     label: "Employees by employee number prefix",
     value: "/who-bio",
-    template: "Who are employees starting with BIO[number]",
+    template: "Who are employees starting with BIO [number]",
     quickChip: true,
     examples: [
       "Who are employees starting with BIO715",
@@ -369,7 +369,7 @@ const isMobile = typeof window !== "undefined" &&
 
 const COMMAND_GROUPS = {
   Employees: GENIO_COMMANDS.filter(c =>
-    ["whois", "whoare", "whonote", "profile", "ishead"].includes(c.value.replace("/", ""))
+    ["whois", "whoare","who", "who-bio", "profile", "ishead"].includes(c.value.replace("/", ""))
   ),
   Offices: GENIO_COMMANDS.filter(c =>
     c.value.includes("office")
