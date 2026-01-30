@@ -54,27 +54,6 @@ if (/\bnote\b/.test(text)) {
   }
 }
 
-/* ===============================
-   EMPLOYEE NO PREFIX (GENERIC)
-   =============================== */
-
-const prefixMatch =
-  text.match(/starting with\s*(\d{2,})/) ||
-  text.match(/\bbio\s*(\d{2,})/) ||
-  text.match(/\b(\d{3,})\b/);
-
-if (prefixMatch?.[1]) {
-  return {
-    intent: {
-      action: "describe_employee",
-      filters: {
-        employeeNoPrefix: prefixMatch[1], // ✅ numeric only
-      },
-    },
-    confidence: 8,
-  };
-}
-
 
 /* ===============================
    NATURAL LANGUAGE MAP (PRIMARY)
@@ -163,6 +142,29 @@ if (matchedAction) {
       confidence: 5,
     };
   }
+
+
+  /* ===============================
+   EMPLOYEE NO PREFIX (GENERIC)
+   =============================== */
+
+const prefixMatch =
+  text.match(/starting with\s*(\d{2,})/) ||
+  text.match(/\bbio\s*(\d{2,})/) ||
+  text.match(/\b(\d{3,})\b/);
+
+if (prefixMatch?.[1]) {
+  return {
+    intent: {
+      action: "describe_employee",
+      filters: {
+        employeeNoPrefix: prefixMatch[1], // ✅ numeric only
+      },
+    },
+    confidence: 8,
+  };
+}
+
 
   /* ===============================
    OFFICE HEAD INTENTS

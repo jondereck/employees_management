@@ -3,11 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { streamReply } from "../utils";
 import { resolveOfficeWithAliases } from "../resolve-office";
 
-
-export async function handleInsight(
-  message: string,
-  context: any
-) {
+export async function handleInsight(message: string, context: any) {
   const offices = await prisma.offices.findMany({
     select: { id: true, name: true },
   });
@@ -26,6 +22,10 @@ export async function handleInsight(
     );
   }
 
+  /* ============================================================
+     BASIC COUNTS
+     ============================================================ */
+
   const officeCount = await prisma.employee.count({
     where: {
       isArchived: false,
@@ -39,17 +39,41 @@ export async function handleInsight(
     _count: { _all: true },
   });
 
+  const totalEmployees = allCounts.reduce(
+    (sum, o) => sum + o._count._all,
+    0
+  );
+
   const avg =
-    allCounts.reduce((s, o) => s + o._count._all, 0) /
-    allCounts.length;
+    allCounts.length > 0
+      ? totalEmployees / allCounts.length
+      : 0;
+
+  /* ============================================================
+     INSIGHT REASONS
+     ============================================================ */
 
   const reasons: string[] = [];
 
-  if (officeCount < avg * 0.8) {
-    reasons.push(
-      `Lower headcount compared to the company average (${Math.round(avg)} employees)`
-    );
+  if (avg > 0) {
+    if (officeCount < avg * 0.8) {
+      reasons.push(
+        `Staffing level is below the company average (${Math.round(avg)} employees)`
+      );
+    } else if (officeCount > avg * 1.2) {
+      reasons.push(
+        `Staffing level is above the company average (${Math.round(avg)} employees)`
+      );
+    } else {
+      reasons.push(
+        `Staffing level is close to the company average`
+      );
+    }
   }
+
+  /* ============================================================
+     HIRING TREND
+     ============================================================ */
 
   const startOfYear = new Date(new Date().getFullYear(), 0, 1);
 
@@ -63,16 +87,34 @@ export async function handleInsight(
 
   if (hiresThisYear === 0) {
     reasons.push("No new hires recorded this year");
+  } else {
+    reasons.push(`${hiresThisYear} new hire(s) recorded this year`);
   }
 
-  if (reasons.length === 0) {
+  /* ============================================================
+     WORKFORCE SHARE
+     ============================================================ */
+
+  if (totalEmployees > 0) {
+    const share = ((officeCount / totalEmployees) * 100).toFixed(1);
     reasons.push(
-      "No significant staffing anomalies detected compared to other offices"
+      `Represents ${share}% of the total company workforce`
     );
   }
 
+  /* ============================================================
+     FINAL MESSAGE TONE
+     ============================================================ */
+
+  const headline =
+    officeCount < avg * 0.8
+      ? "appears understaffed"
+      : officeCount > avg * 1.2
+      ? "appears overstaffed"
+      : "has balanced staffing";
+
   return streamReply(
-    `Here’s why **${office.name}** appears understaffed:\n\n${reasons
+    `📊 **Staffing insight for ${office.name}**\n\n${office.name} ${headline} based on current data:\n\n${reasons
       .map((r) => `• ${r}`)
       .join("\n")}`,
     {
