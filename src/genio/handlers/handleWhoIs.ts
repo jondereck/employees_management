@@ -26,6 +26,8 @@ export async function handleWhoIs(
     );
   }
 
+
+  
  /* ===============================
      NOTE-BASED LOOKUP (ABSOLUTE FIRST)
      =============================== */
@@ -85,6 +87,64 @@ export async function handleWhoIs(
       { canExport: true }
     );
   }
+
+
+
+  
+  /* ===============================
+   EMPLOYEE NO PREFIX LOOKUP (BIO*)
+   =============================== */
+
+if (intent?.filters?.employeeNoPrefix) {
+  const prefix = intent.filters.employeeNoPrefix;
+
+  const employees = await prisma.employee.findMany({
+    where: {
+      isArchived: false,
+      employeeNo: {
+        startsWith: prefix,
+        mode: "insensitive",
+      },
+    },
+    include: {
+      offices: true,
+      employeeType: true,
+    },
+  });
+
+  if (employees.length === 0) {
+    return streamReply(
+      `No employees found with employee numbers starting with **${prefix}**.`,
+      context,
+      null
+    );
+  }
+
+  const list = formatEmployees(employees, {
+    style: "bullet",
+    showOffice: true,
+  });
+
+  context = {
+    ...context,
+    lastListQuery: {
+      type: "employee_no_prefix",
+      where: {
+        employeeNo: {
+          startsWith: prefix,
+          mode: "insensitive",
+        },
+      },
+    },
+  };
+
+  return streamReply(
+    `Here are the employees with employee numbers starting with **${prefix}**:\n\n${list}`,
+    context,
+    null,
+    { canExport: true }
+  );
+}
 
   /* ===============================
      EMPLOYEE NUMBER LOOKUP

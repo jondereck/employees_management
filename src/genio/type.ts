@@ -33,6 +33,7 @@ export type GenioIntent = {
     gender?: "Male" | "Female";
     note?: string;
     notes?: string[];
+    employeeNoPrefix?: string;
     office?: string;
     employeeType?: string;
     age?: { min?: number; max?: number };

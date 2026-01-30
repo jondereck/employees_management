@@ -64,6 +64,19 @@ export const GENIO_COMMANDS = [
     ],
   },
 
+  {
+  label: "Employees by employee number prefix",
+  value: "/who-bio",
+  template: "Who are employees starting with BIO[number]",
+  quickChip: true,
+  examples: [
+    "Who are employees starting with BIO715",
+    "Who are employees start with bio 715",
+    "BIO715",
+  ],
+},
+
+
    /* ================= MULTIPLE / ADVANCED LOOKUP ================= */
 
   {
