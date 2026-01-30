@@ -118,7 +118,7 @@ export const GENIO_COMMANDS = [
   {
     label: "Who is the head of an office",
     value: "/headoffice",
-    template: "Who is the head of [office]?",
+    template: "Head of [office]?",
     quickChip: true,
     examples: [
       "Who is the head of HRMO?",
