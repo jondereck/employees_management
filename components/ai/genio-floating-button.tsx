@@ -8,24 +8,31 @@ import { IdleThinkingBubbles } from "./idle-thinking-bubble";
 export function GenioFloatingButton({
   isThinking,
   onClick,
+  onSelectThought, // ✅ NEW
 }: {
   isThinking: boolean;
   onClick: () => void;
+  onSelectThought?: (template: string) => void;
 }) {
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-2">
-      {/* Container for thinking bubbles to ensure they stay centered above */}
+      {/* Thinking bubbles */}
       <div className="relative h-2 w-full flex justify-center">
-        {isThinking && <IdleThinkingBubbles />}
+        {isThinking && onSelectThought && (
+          <IdleThinkingBubbles onSelect={onSelectThought} />
+        )}
       </div>
 
       <div className="relative group">
-        {/* The Outer Glow/Ring */}
-        <div className={clsx(
-          "absolute -inset-0.5 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-75 blur-md transition duration-1000 group-hover:opacity-100 group-hover:duration-200",
-          isThinking ? "animate-pulse" : "animate-none"
-        )} />
+        {/* Glow ring */}
+        <div
+          className={clsx(
+            "absolute -inset-0.5 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-75 blur-md transition duration-1000 group-hover:opacity-100 group-hover:duration-200",
+            isThinking ? "animate-pulse" : "animate-none"
+          )}
+        />
 
+        {/* Avatar */}
         <Button
           variant="ghost"
           onClick={onClick}
@@ -38,7 +45,6 @@ export function GenioFloatingButton({
             src="/genio/genio-avatar.png"
             alt="Genio AI"
             fill
-        
             priority
           />
         </Button>

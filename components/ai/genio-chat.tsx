@@ -369,7 +369,7 @@ const isMobile = typeof window !== "undefined" &&
 
 const COMMAND_GROUPS = {
   Employees: GENIO_COMMANDS.filter(c =>
-    ["whois", "whoare","who", "who-bio", "profile", "ishead"].includes(c.value.replace("/", ""))
+    ["whois", "whoare", "who", "who-bio", "profile", "ishead"].includes(c.value.replace("/", ""))
   ),
   Offices: GENIO_COMMANDS.filter(c =>
     c.value.includes("office")
@@ -393,9 +393,10 @@ export const GenioChat = ({
   onClose,
 
   departmentId,
-  hidden
+  hidden,
+  prefill = null
 }: {
-
+  prefill?: string | null
   onClose: () => void;
   departmentId: string;
   hidden: boolean;
@@ -419,6 +420,8 @@ export const GenioChat = ({
   const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
   const [visibleChips, setVisibleChips] = useState<typeof GENIO_COMMANDS>([]);
   const [showCommandSheet, setShowCommandSheet] = useState(false);
+
+
 
 
 
@@ -514,6 +517,19 @@ export const GenioChat = ({
   useEffect(() => {
     resizeTextarea();
   }, [input]);
+
+
+  useEffect(() => {
+  if (!prefill) return;
+
+  setInput(prefill);
+  requestAnimationFrame(() => {
+    inputRef.current?.focus();
+    resizeTextarea();
+  });
+}, [prefill]);
+
+
 
 
 

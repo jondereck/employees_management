@@ -1,12 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { GenioChat } from "./genio-chat";
-import PreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/preview";
-import Image from "next/image";
 import { GenioFloatingButton } from "./genio-floating-button";
+
 export const AskGenio = ({
   departmentId,
 }: {
@@ -14,14 +11,15 @@ export const AskGenio = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [prefill, setPrefill] = useState<string | null>(null);
 
   const showFloatingButton = !open || minimized;
 
+  
+
   return (
     <>
-      {/* Floating Button */}
-
-
+      {/* Floating Button + Thinking Bubbles */}
       {showFloatingButton && (
         <GenioFloatingButton
           isThinking={!open || minimized}
@@ -29,19 +27,23 @@ export const AskGenio = ({
             setOpen(true);
             setMinimized(false);
           }}
+          onSelectThought={(template) => {
+            setPrefill(template);
+            setOpen(true);
+            setMinimized(false);
+          }}
         />
       )}
-
 
       {/* Chat Panel */}
       <div className="fixed bottom-6 right-6 z-50">
         <GenioChat
           departmentId={departmentId}
-          onClose={() => setOpen(false)}
           hidden={!open || minimized}
+          onClose={() => setOpen(false)}
+          prefill={prefill}
         />
       </div>
-
     </>
   );
 };
