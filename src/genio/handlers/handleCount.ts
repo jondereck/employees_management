@@ -100,25 +100,23 @@ export async function handleCount(
   /* ===============================
      ✅ EMPLOYEE TYPE (SMART)
      =============================== */
-  const rawEmployeeTypeText =
-    intent.filters.employeeType ??
-    extractEmployeeTypeKeyword(message);
+const employeeTypes = await prisma.employeeType.findMany();
 
-  if (rawEmployeeTypeText) {
-    const employeeTypes = await prisma.employeeType.findMany({
-      select: { id: true, name: true, value: true },
-    });
+const rawType =
+  intent.filters.employeeType ??
+  extractEmployeeTypeKeyword(message, employeeTypes) ??
+  message; // 👈 fallback
 
-    const matchedType = resolveEmployeeType(
-      rawEmployeeTypeText,
-      employeeTypes
-    );
 
-    // ✅ apply ONLY if valid
-    if (matchedType) {
-      where.employeeTypeId = matchedType.id;
-    }
-  }
+const matchedType = rawType
+  ? resolveEmployeeType(rawType, employeeTypes)
+  : null;
+
+if (matchedType) {
+  where.employeeTypeId = matchedType.id;
+}
+
+
 
   /* ===============================
      ✅ COUNT

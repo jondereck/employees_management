@@ -26,14 +26,26 @@ export async function handleListHeads(context: any) {
   const list = heads
     .map(
       (e) =>
-        `• **${e.offices.name}** — ${e.firstName} ${e.lastName}`
+        `• **${e.offices?.name ?? "No office"}** — ${e.firstName} ${e.lastName}`
     )
     .join("\n");
+
+  // 🔑 THIS IS THE MISSING PIECE
+  context = {
+    ...context,
+    lastListQuery: {
+      type: "list_heads",
+      where: {
+        isHead: true,
+        isArchived: false,
+      },
+    },
+  };
 
   return streamReply(
     `Here are the current office heads:\n\n${list}`,
     context,
-    null
+    null,
+    { canExport: true }
   );
 }
-  

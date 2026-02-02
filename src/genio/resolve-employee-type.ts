@@ -1,81 +1,85 @@
 // src/genio/resolve-employee-type.ts
 
-function normalize(text: string) {
+export function normalize(text: string) {
   return text
     .toLowerCase()
     .replace(/employees?|employee|staff|workers?|officials?/g, "")
-    .replace(/\s+/g, " ")
+    .replace(/[^a-z0-9]/g, "") // removes spaces, hyphens, symbols
     .trim();
 }
 
-export function extractEmployeeTypeKeyword(message: string) {
-  let text = message.toLowerCase();
 
-  // remove question phrases
-  text = text.replace(/how many|count|number of|\?/gi, "");
-
-  // remove employee words
-  text = text.replace(/employees?|employee|staff|workers?/gi, "");
-
-  // 🚫 remove gender words
-  text = text.replace(
-    /\b(male|men|man|female|women|woman|girls?|boys?)\b/gi,
-    ""
-  );
-
-  // 🚫 remove office phrases
-  text = text.replace(/\b(in|sa)\s+[a-z\s]+/gi, "");
-
-  // normalize spaces
-  text = text.replace(/\s+/g, " ").trim();
-
-  return text;
-}
+const FALLBACK_ALIASES: Record<string, string[]> = {
+  permanent: ["permanent", "regular"],
+  casual: ["casual"],
+  contractofservice: ["contract", "cos", "contract of service"],
+  elected: ["elected", "elected employee", "elected official"],
+  coterminous: ["coterm", "coterminous"],
+  joborder: ["jo", "job order", "job-order"],
+};
 
 
-export function resolveEmployeeType(
-  keyword: string,
-  employeeTypes: { id: string; name: string; value: string }[]
+
+export function extractEmployeeTypeKeyword(
+  message: string,
+  employeeTypes: { name: string }[]
 ) {
-  const normalized = normalize(keyword);
-
-  if (!normalized) return null;
-
-  // 1️⃣ Exact value match
-  const exactValue = employeeTypes.find(
-    (t) => normalize(t.value) === normalized
-  );
-  if (exactValue) return exactValue;
-
-  // 2️⃣ Exact name match
-  const exactName = employeeTypes.find(
-    (t) => normalize(t.name) === normalized
-  );
-  if (exactName) return exactName;
-
-  // 3️⃣ Alias matching
-  const aliasMap: Record<string, string[]> = {
-    permanent: ["permanent", "regular"],
-    casual: ["casual"],
-    contract: ["contract", "cos", "contract of service"],
-    elected: ["elected", "elected employee", "elected official"],
-    coterminous: ["coterm", "coterminous"],
-    "job order": ["jo", "job order", "job-order"],
-  };
+  const normalizedMessage = normalize(message);
 
   for (const type of employeeTypes) {
-    const typeName = normalize(type.name);
-    const typeValue = normalize(type.value);
+    const normalizedType = normalize(type.name);
 
-    for (const aliases of Object.values(aliasMap)) {
-      if (
-        aliases.includes(normalized) &&
-        (aliases.includes(typeName) || aliases.includes(typeValue))
-      ) {
-        return type;
-      }
+    if (normalizedMessage.includes(normalizedType)) {
+      return normalizedType; // 🔧 return normalized token
     }
   }
 
   return null;
 }
+
+
+
+export function resolveEmployeeType(
+  raw: string,
+  employeeTypes: { id: string; name: string }[]
+) {
+  if (!raw) return null;
+
+  const normalizedRaw = normalize(raw);
+
+  /* ===============================
+     1️⃣ PRIMARY: DB-driven match
+     =============================== */
+  for (const type of employeeTypes) {
+    const normalizedName = normalize(type.name);
+
+    if (normalizedRaw === normalizedName) {
+      return type;
+    }
+    if (
+      normalizedRaw === normalizedName ||
+      normalizedRaw.startsWith(normalizedName)
+    ) {
+      return type;
+    }
+
+  }
+
+  /* ===============================
+     2️⃣ FALLBACK: alias match
+     =============================== */
+  for (const [canonical, aliases] of Object.entries(FALLBACK_ALIASES)) {
+    const normalizedAliases = aliases.map(normalize);
+
+if (normalizedAliases.some(a => normalizedRaw.includes(a))) {
+  const match = employeeTypes.find(
+    t => normalize(t.name) === canonical
+  );
+  if (match) return match;
+}
+
+  }
+
+  return null;
+}
+

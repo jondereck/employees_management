@@ -54,17 +54,6 @@ export const GENIO_COMMANDS = [
   },
 
   {
-    label: "Show employee profile",
-    value: "/profile",
-    template: "Show profile",
-    quickChip: true,
-    examples: [
-      "Show profile",
-      "Ipakita ang profile",
-    ],
-  },
-
-  {
     label: "Employees by employee number prefix",
     value: "/who-bio",
     template: "Who are employees starting with BIO [number]",
@@ -221,7 +210,7 @@ export const GENIO_COMMANDS = [
   {
     label: "Count by employee type",
     value: "/count-type",
-    template: "How many [employee type] employees are there?",
+    template: "How many [employee_type] employees are there?",
     quickChip: true,
     examples: [
       "How many regular employees?",
