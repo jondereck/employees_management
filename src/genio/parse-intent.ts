@@ -460,23 +460,36 @@ if (aboveAge || belowAge) {
 /* ===============================
    TENURE ANALYSIS
    =============================== */
+
 if (
-  /\b(years of service|tenure|served|years in service|employed for)\b/.test(text)
+  /\b(tenure|years?\s+of\s+service|years?\s+in\s+service|employed\s+for|worked\s+for)\b/.test(text)
 ) {
-  const above = text.match(/(more than|over|above)\s*(\d+)/);
-  const below = text.match(/(less than|under|below)\s*(\d+)/);
+  const above =
+    text.match(/(more than|over|above)\s*(\d+)/) ||
+    text.match(/at least\s*(\d+)/);
+
+  const below =
+    text.match(/(less than|under|below)\s*(\d+)/) ||
+    text.match(/at most\s*(\d+)/);
+
+  const range =
+    text.match(/(\d+)\s*(to|-)\s*(\d+)/);
 
   return {
     intent: {
       action: "tenure_analysis",
       filters: {
         tenure: {
-          ...(above && { min: Number(above[2]) }),
-          ...(below && { max: Number(below[2]) }),
+          ...(above && { min: Number(above[2] ?? above[1]) }),
+          ...(below && { max: Number(below[2] ?? below[1]) }),
+          ...(range && {
+            min: Number(range[1]),
+            max: Number(range[3]),
+          }),
         },
       },
     },
-    confidence: 4,
+    confidence: 5,
   };
 }
 

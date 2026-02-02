@@ -258,7 +258,7 @@ export const GENIO_COMMANDS = [
   /* ================= AGE ANALYTICS ================= */
   {
     label: "Age analysis",
-    value: "/age",
+    value: "/age-below-above",
     template: "Employees [above/below/between] [age]?",
     quickChip: true,
     examples: [
@@ -269,7 +269,7 @@ export const GENIO_COMMANDS = [
 
     {
     label: "Age analysis",
-    value: "/age",
+    value: "/age-between",
     template: "Employees [between] [min] and [max]?",
     quickChip: true,
     examples: [
@@ -306,13 +306,16 @@ export const GENIO_COMMANDS = [
   {
     label: "Tenure analysis",
     value: "/tenure",
-    template: "How many employees have more than [years] years of service?",
+    template: "Employees worked for at least [years] years",
     quickChip: true,
     examples: [
       "Employees with more than 10 years",
       "Ilan ang may 20 years sa serbisyo?",
     ],
   },
+
+   
+
 
   /* ================= COMPARISONS ================= */
 
@@ -338,29 +341,7 @@ export const GENIO_COMMANDS = [
     ],
   },
 
-  /* ================= EXPORT ================= */
 
-  {
-    label: "Export last result",
-    value: "/export",
-    template: "Export this to Excel",
-    examples: [
-      "Export this",
-      "I-export ang data",
-    ],
-  },
-
-  /* ================= AI / GENERAL ================= */
-
-  {
-    label: "Ask Genio (AI)",
-    value: "/ask",
-    template: "Ask a general HR question",
-    examples: [
-      "Why is workforce balance important?",
-      "Ano ang ibig sabihin ng understaffed?",
-    ],
-  },
 ];
 
 const isMobile = typeof window !== "undefined" &&
