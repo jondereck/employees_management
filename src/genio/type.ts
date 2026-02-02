@@ -22,6 +22,7 @@ export type GenioAction =
     | "age_analysis"
   | "tenure_analysis"
   | "current_employees_by_year"
+|  "age_distribution"
   | "unknown";
 export type GenioIntent = {
   action: GenioAction;
@@ -36,7 +37,8 @@ export type GenioIntent = {
     employeeNoPrefix?: string;
     office?: string;
     employeeType?: string;
-    age?: { min?: number; max?: number };
+    age?: { min?: number; max?: number; exact?: number; };
+    exactAge?: number;
      tenure?: { min?: number; max?: number }; 
     hired?: "this_year" | "recent";
     year?: number;

@@ -287,6 +287,95 @@ if (/list all office heads/i.test(text)) {
     };
   }
 
+
+  /* ===============================
+   AGE DISTRIBUTION
+   =============================== */
+if (/\b(age distribution|age breakdown|age percentile|age demographics)\b/.test(text)) {
+  return {
+    intent: {
+      action: "age_distribution",
+      filters: {},
+    },
+    confidence: 5,
+  };
+}
+
+
+  /* ===============================
+   AGE EXACT (NEW)
+   =============================== */
+const exactAgeMatch =
+  text.match(/\b(age|aged|years old)\s*(\d{1,3})\b/) ||
+  text.match(/\b(\d{1,3})\s*(years old)\b/);
+
+if (exactAgeMatch) {
+  const age = Number(exactAgeMatch[2] ?? exactAgeMatch[1]);
+
+  if (!isNaN(age)) {
+    return {
+      intent: {
+        action: "age_analysis",
+        filters: {
+          age: {
+            exact: age,
+          },
+        },
+      },
+      confidence: 5,
+    };
+  }
+}
+
+
+  /* ===============================
+   AGE RANGE (NEW)
+   =============================== */
+const rangeMatch =
+  text.match(/\b(\d{1,3})\s*(to|-|–)\s*(\d{1,3})\b/) ||
+  text.match(/\bbetween\s+(\d{1,3})\s+and\s+(\d{1,3})\b/);
+
+if (rangeMatch) {
+  const min = Number(rangeMatch[1]);
+  const max = Number(rangeMatch[3] ?? rangeMatch[2]);
+
+  if (!isNaN(min) && !isNaN(max)) {
+    return {
+      intent: {
+        action: "age_analysis",
+        filters: {
+          age: {
+            min,
+            max,
+          },
+        },
+      },
+      confidence: 5,
+    };
+  }
+}
+
+    /* ===============================
+   AGE FILTER (FINAL – CORRECT)
+   =============================== */
+const aboveAge = text.match(/(above|older than|over|more than)\s*(\d+)/);
+const belowAge = text.match(/(below|younger than|under|less than)\s*(\d+)/);
+
+if (aboveAge || belowAge) {
+  return {
+    intent: {
+      action: "age_analysis",
+      filters: {
+        age: {
+          ...(aboveAge && { min: Number(aboveAge[2]) }),
+          ...(belowAge && { max: Number(belowAge[2]) }),
+        },
+      },
+    },
+    confidence: 5,
+  };
+} 
+
   /* ===============================
      COUNT
      =============================== */
@@ -446,26 +535,7 @@ if (
     };
   }
 
-  /* ===============================
-   AGE FILTER (FINAL – CORRECT)
-   =============================== */
-const aboveAge = text.match(/(above|older than|over|more than)\s*(\d+)/);
-const belowAge = text.match(/(below|younger than|under|less than)\s*(\d+)/);
 
-if (aboveAge || belowAge) {
-  return {
-    intent: {
-      action: "age_analysis",
-      filters: {
-        age: {
-          ...(aboveAge && { min: Number(aboveAge[2]) }),
-          ...(belowAge && { max: Number(belowAge[2]) }),
-        },
-      },
-    },
-    confidence: 5,
-  };
-}
 
   /* ===============================
      FINAL RETURN

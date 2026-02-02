@@ -232,30 +232,6 @@ export const GENIO_COMMANDS = [
   },
 
 
-  /* ================= LISTING ================= */
-
-  {
-    label: "List employees from last count",
-    value: "/list",
-    template: "List them",
-    quickChip: true,
-    examples: [
-      "List them",
-      "Ilista sila",
-    ],
-  },
-
-  {
-    label: "List employees from last result",
-    value: "/list-last",
-    template: "Show employees from last count",
-    quickChip: true,
-    examples: [
-      "Show employees from last count",
-      "Sino-sino yung nasa bilang?",
-    ],
-  },
-
   /* ================= ANALYTICS ================= */
 
   {
@@ -279,11 +255,11 @@ export const GENIO_COMMANDS = [
       "Bigyan mo ako ng insight sa Accounting",
     ],
   },
-
+  /* ================= AGE ANALYTICS ================= */
   {
     label: "Age analysis",
     value: "/age",
-    template: "How many employees are [above/below] [age]?",
+    template: "Employees [above/below/between] [age]?",
     quickChip: true,
     examples: [
       "How many employees above 40?",
@@ -291,6 +267,42 @@ export const GENIO_COMMANDS = [
     ],
   },
 
+    {
+    label: "Age analysis",
+    value: "/age",
+    template: "Employees [between] [min] and [max]?",
+    quickChip: true,
+    examples: [
+      "How many employees between 20-25?",
+      "Ilan ang may 20-25 taon?",
+    ],
+  },
+
+   {
+    label: "Age analysis",
+    value: "/age-exact",
+    template: "Employees aged [age]?",
+    quickChip: true,
+    examples: [
+      "How many employees exact 20?",
+      "Ilan ang may 20 taon?",
+    ],
+  },
+
+
+     {
+    label: "Age distribution",
+    value: "/age-distribution",
+    template: "Show age distribution",
+    quickChip: true,
+    examples: [
+      "How many employees exact 20?",
+      "Ilan ang may 20 taon?",
+    ],
+  },
+
+
+ /* ================= TENURE ANALYTICS ================= */
   {
     label: "Tenure analysis",
     value: "/tenure",

@@ -22,6 +22,7 @@ import {
   handleAgeAnalysis,
   handleTenureAnalysis,
   handleCurrentEmployeesByYear,
+  handleAgeDistribution,
 
 } from "@/src/genio/handlers";
 import { streamReply } from "@/src/genio/utils";
@@ -110,6 +111,10 @@ console.log("INTENT:", intent);
 
     case "tenure_analysis":
       return handleTenureAnalysis(intent, context);
+
+      case "age_distribution":
+  return handleAgeDistribution(context);
+
 
       case "current_employees_by_year":
   return handleCurrentEmployeesByYear(

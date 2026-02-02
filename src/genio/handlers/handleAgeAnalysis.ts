@@ -18,26 +18,11 @@ export async function handleAgeAnalysis(
 ) {
   const where: any = { isArchived: false };
 
-  /* ===============================
-     GENDER (optional)
-     =============================== */
-  if (intent.filters.gender) {
-    where.gender =
-      intent.filters.gender === "Male"
-        ? Gender.Male
-        : Gender.Female;
-  }
+  const exactAge =
+    typeof intent.filters.age?.exact === "number"
+      ? intent.filters.age.exact
+      : null;
 
-  /* ===============================
-     OFFICE CONTEXT (carry-over)
-     =============================== */
-  if (context?.focus?.type === "office") {
-    where.officeId = context.focus.id;
-  }
-
-  /* ===============================
-     AGE FILTERS
-     =============================== */
   const minAge =
     typeof intent.filters.age?.min === "number"
       ? intent.filters.age.min
@@ -48,66 +33,77 @@ export async function handleAgeAnalysis(
       ? intent.filters.age.max
       : null;
 
-  if (minAge === null && maxAge === null) {
+  if (exactAge === null && minAge === null && maxAge === null) {
     return streamReply(
-      "Please specify an age or range (e.g. **above 40**, **below 30**, **25 to 35**).",
+      "Please specify an age or range (e.g. **above 40**, **below 30**, **25 to 35**, **aged 30**).",
       context,
       null
     );
   }
 
-  /**
-   * Age → birthday logic
-   *
-   * minAge = youngest allowed
-   * maxAge = oldest allowed
-   */
-  if (minAge !== null) {
-    // age >= minAge → birthday <= today - minAge
-    where.birthday = {
-      ...(where.birthday || {}),
-      lte: birthdateFromAge(minAge),
-    };
+  if (intent.filters.gender) {
+    where.gender =
+      intent.filters.gender === "Male"
+        ? Gender.Male
+        : Gender.Female;
   }
 
-  if (maxAge !== null) {
-    // age <= maxAge → birthday >= today - (maxAge + 1)
-    where.birthday = {
-      ...(where.birthday || {}),
-      gte: birthdateFromAge(maxAge + 1),
-    };
+  if (context?.focus?.type === "office") {
+    where.officeId = context.focus.id;
   }
 
-  /* ===============================
-     COUNT
-     =============================== */
+  const today = new Date();
+  const birthdayFilter: any = {};
+
+  if (exactAge !== null) {
+    const maxBirthDate = new Date(today);
+    maxBirthDate.setFullYear(today.getFullYear() - exactAge);
+
+    const minBirthDate = new Date(today);
+    minBirthDate.setFullYear(today.getFullYear() - exactAge - 1);
+
+    birthdayFilter.lte = maxBirthDate;
+    birthdayFilter.gt = minBirthDate;
+  } else {
+    if (minAge !== null) {
+      const maxBirthDate = new Date(today);
+      maxBirthDate.setFullYear(today.getFullYear() - minAge);
+      birthdayFilter.lte = maxBirthDate;
+    }
+
+    if (maxAge !== null) {
+      const minBirthDate = new Date(today);
+      minBirthDate.setFullYear(today.getFullYear() - maxAge);
+      birthdayFilter.gte = minBirthDate;
+    }
+  }
+
+  if (Object.keys(birthdayFilter).length > 0) {
+    where.birthday = birthdayFilter;
+  }
+
   const count = await prisma.employee.count({ where });
 
-  /* ===============================
-     SAVE CONTEXT
-     =============================== */
-  context = {
-    ...context,
-    lastCountQuery: {
-      type: "age",
-      minAge,
-      maxAge,
-      where,
-    },
-  };
-
-  /* ===============================
-     RESPONSE LABEL
-     =============================== */
   let label = "";
 
-  if (minAge !== null && maxAge !== null) {
+  if (exactAge !== null) {
+    label = `${exactAge} years old`;
+  } else if (minAge !== null && maxAge !== null) {
     label = `between ${minAge} and ${maxAge}`;
   } else if (minAge !== null) {
     label = `${minAge} and above`;
   } else {
     label = `${maxAge} and below`;
   }
+
+  context = {
+    ...context,
+    lastCountQuery: {
+      type: "age",
+      where,
+      label,
+    },
+  };
 
   return streamReply(
     `There are **${count} employees** aged **${label}**.`,
@@ -116,3 +112,5 @@ export async function handleAgeAnalysis(
     { canExport: true }
   );
 }
+
+

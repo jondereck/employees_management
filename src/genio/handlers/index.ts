@@ -21,6 +21,7 @@ export { handleCompareEmployeeTypes } from "@/src/genio/handlers/handleCompareEm
 export { handleAgeAnalysis } from "@/src/genio/handlers/handleAgeAnalysis";
 export { handleTenureAnalysis } from "@/src/genio/handlers/handleTenureAnalysis";
 export { handleCurrentEmployeesByYear } from "@/src/genio/handlers/handleCurrentEmployeesByYear";
+export { handleAgeDistribution } from "@/src/genio/handlers/handleAgeDistribution";
 
 
 
