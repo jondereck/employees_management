@@ -73,26 +73,40 @@ const Info = ({
 
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const updatedId = sessionStorage.getItem("employee-updated");
+    if (updatedId && updatedId === data?.id) {
+      sessionStorage.removeItem("employee-updated");
+      router.refresh();
+    }
+  }, [data?.id, router]);
 
   const hasText = (v?: string | null) => !!v && v.trim().length > 0;
 
   const savedSalary = Number(data?.salary ?? 0); // ← manual/DB value, if any
 
   const grade = Number(data?.salaryGrade ?? 0);
-  const step = computeStep({
+  const stepFromData = Number(data?.salaryStep ?? 0);
+  const computedStep = computeStep({
     dateHired: data?.dateHired,
     latestAppointment: data?.latestAppointment,
   }) || 1;
+  const step = Number.isFinite(stepFromData) && stepFromData > 0 ? stepFromData : computedStep;
 
   const salaryRecord = salarySchedule.find((s) => s.grade === grade);
   const computedSalary = salaryRecord ? (salaryRecord.steps[step - 1] ?? 0) : 0;
 
-  // tiny tolerance to avoid rounding issues
+  const salaryModeFromData = data?.salaryMode?.toUpperCase();
+  const hasAutoInputs = Number.isFinite(grade) && grade > 0 && Number.isFinite(step) && step > 0;
+  // tiny tolerance to avoid rounding issues when salaryMode isn't available
   const EPS = 0.5;
-  // If saved ≈ computed => AUTO; otherwise MANUAL
-  const isManual = !(Math.abs(savedSalary - computedSalary) <= EPS);
+  const isManual = salaryModeFromData
+    ? salaryModeFromData === "MANUAL"
+    : !hasAutoInputs || !(Math.abs(savedSalary - computedSalary) <= EPS);
 
-  const displaySalary = isManual ? savedSalary : computedSalary;
+  const resolvedSalary = isManual ? savedSalary : computedSalary;
+  const displaySalary = resolvedSalary > 0 ? resolvedSalary : savedSalary;
   const formattedSalary = formatSalary(String(displaySalary));
   const salaryMode = isManual ? "MANUAL" : "AUTO";
 

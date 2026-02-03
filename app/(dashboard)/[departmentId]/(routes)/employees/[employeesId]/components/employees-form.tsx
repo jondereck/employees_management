@@ -103,6 +103,7 @@ const formSchema = z.object({
     .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric")
     .refine((v) => Number(v) >= 1 && Number(v) <= 33, "Salary Grade must be between 1 and 33")  
     .default("1"),
+  salaryStep: z.number().optional().default(1),
   salary: z.number().min(0),
   birthday: z.date().optional(),
   salaryMode: z.enum(["AUTO", "MANUAL"]).default("AUTO"),
@@ -175,6 +176,7 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   houseNo: "",
   street: "",
   salaryGrade: "1",
+  salaryStep: 1,
   salary: 0,
   salaryMode: "AUTO",
   birthday: undefined,
@@ -227,8 +229,9 @@ function mapToDefaults(src: any): EmployeesFormValues {
     contactNumber: src.contactNumber ?? "",
     position: src.position ?? "",
     education: src.education ?? "",
-   salary: Number(src.salary ?? 0),
+    salary: Number(src.salary ?? 0),
     salaryGrade: src.salaryGrade?.toString() ?? "",
+    salaryStep: Number(src.salaryStep ?? 1),
 
     // ✅ THIS LINE MAKES THE SWITCH CORRECT ON EDIT
     salaryMode: src.salaryMode ?? "AUTO",
@@ -315,77 +318,31 @@ export const EmployeesForm = ({
 
 
   const router = useRouter();
+  const params = useParams() as { departmentId: string; employeesId?: string };
+  const { departmentId, employeesId } = params;
+  const key = employeesKey(params.departmentId);
+  const { data: employee } = useEmployee(departmentId, employeesId);
 
+  const employeeId =
+    employeesId
+    ?? employee?.id
+    ?? initialData?.id
+    ?? ""; //
 
-
+  const initialDefaults = useMemo(
+    () => (employee ? mapToDefaults(employee) : initialData ? mapToDefaults(initialData) : EMPTY_DEFAULTS),
+    // only compute from SSR (initialData); SWR reset will run in useEffect below
+    [initialData, employee] // safe; recomputes when SWR arrives
+  );
 
   const form = useForm<EmployeesFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData
-      ? {
-        ...initialData,
-        firstName: initialData.firstName.toUpperCase(),
-        middleName: initialData.middleName.toUpperCase(),
-        lastName: initialData.lastName.toUpperCase(),
-        province: initialData.province.toUpperCase(),
-        city: initialData.city.toUpperCase(),
-        barangay: initialData.barangay.toUpperCase(),
-        street: initialData.street.toUpperCase(),
-
-        salary: Number(initialData.salary ?? 0),
-        salaryGrade: String(initialData.salaryGrade ?? "1"), // ✅ cast to string
-
-        dateHired: initialData.dateHired ? new Date(initialData.dateHired) : undefined,
-        latestAppointment: initialData.latestAppointment ? new Date(initialData.latestAppointment) : undefined,
-      }
-      : {
-        prefix: '',
-        employeeNo: '',
-        lastName: '',
-        firstName: '',
-        middleName: '',
-        suffix: '',
-        images: [
-          {
-            url: 'https://res.cloudinary.com/ddzjzrqrj/image/upload/v1700612053/profile-picture-vector-illustration_mxkhbc.jpg',
-          },
-        ],
-        gender: '',
-        contactNumber: '',
-        position: '',
-        birthday: undefined,
-        age: '',
-        gsisNo: '',
-        tinNo: '',
-        pagIbigNo: '',
-        philHealthNo: '',
-        salary: 0,
-        salaryGrade: "0", // ✅ make it string here too
-        dateHired: undefined,
-        latestAppointment: undefined,
-        terminateDate: '',
-        isFeatured: false,
-        isArchived: false,
-        isHead: false,
-        employeeTypeId: '',
-        officeId: '',
-        eligibilityId: '',
-        houseNo: '',
-        education: '',
-        region: '',
-        province: '',
-        city: '',
-        barangay: '',
-        street: '',
-        memberPolicyNo: '',
-        nickname: '',
-        emergencyContactName: '',
-        emergencyContactNumber: '',
-        employeeLink: '',
-        designationId: null,
-        note: "",
-      },
+    defaultValues: initialDefaults,
   });
+
+  useEffect(() => {
+    form.reset(initialDefaults);
+  }, [form, initialDefaults]);
 
 
   const [calculatedAge, setCalculatedAge] = useState(0);
@@ -407,41 +364,6 @@ export const EmployeesForm = ({
     }
   };
 
-
-  const params = useParams() as { departmentId: string; employeesId?: string };
-  const key = employeesKey(params.departmentId);
-
-  const { departmentId, employeesId } = useParams() as {
-    departmentId: string;
-    employeesId?: string;
-  };
-
-
-
-  const { data: employee } = useEmployee(departmentId, employeesId);
-
-  const employeeId =
-    employeesId
-    ?? employee?.id
-    ?? initialData?.id
-    ?? ""; //
-
-  const initialDefaults = useMemo(
-    () => (employee ? mapToDefaults(employee) : initialData ? mapToDefaults(initialData) : EMPTY_DEFAULTS),
-    // only compute from SSR (initialData); SWR reset will run in useEffect below
-    [initialData, employee] // safe; recomputes when SWR arrives
-  );
-
-  useEffect(() => {
-    if (employee) {
-      form.reset(mapToDefaults(employee));
-    } else if (initialData) {
-      form.reset(mapToDefaults(initialData));
-    } else {
-      form.reset(EMPTY_DEFAULTS);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employee, initialData]);
 
   // split "2050000-0007, E-4" | "8540010, E-4" | "2050000-0007" | "8540010"
   function splitEmployeeNo(raw?: string | null) {
@@ -559,6 +481,9 @@ export const EmployeesForm = ({
 
       // 🔄 Then revalidate to ensure perfect server state
       globalMutate(key);
+      if (initialData && employeeId && typeof window !== "undefined") {
+        sessionStorage.setItem("employee-updated", employeeId);
+      }
       router.back();
       toast.success("Success!", { id: toastId, description: initialData ? "Employee updated." : "Employee created." });
     } catch (error: any) {
@@ -1783,4 +1708,3 @@ useEffect(() => {
     </>
   );
 }
-

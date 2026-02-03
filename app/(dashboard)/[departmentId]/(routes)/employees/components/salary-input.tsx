@@ -31,13 +31,23 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
   const [fetchError, setFetchError] = useState<string | null>(null); // track 
   // fetch errors
   const [hasFetched, setHasFetched] = useState(false);
-const salaryMode = form.watch("salaryMode");
-const manual = salaryMode === "MANUAL";
+  const salaryMode = form.watch("salaryMode");
+  const manual = salaryMode === "MANUAL";
 
 
-const isHydrated = form.formState.isDirty || form.formState.isSubmitted;
+  const isHydrated = form.formState.isDirty || form.formState.isSubmitted;
 
+  useEffect(() => {
+    form.register("salaryMode");
+    form.register("salaryStep");
+  }, [form]);
 
+  useEffect(() => {
+    const current = form.getValues("salaryStep");
+    if (current !== currentStep) {
+      form.setValue("salaryStep", currentStep);
+    }
+  }, [currentStep, form]);
 
   // fetch salary table by SG
  useEffect(() => {
@@ -77,14 +87,14 @@ const isHydrated = form.formState.isDirty || form.formState.isSubmitted;
   // whether automatic value is available
   const autoAvailable = !!autoSalary && !Number.isNaN(autoSalary);
 
-useEffect(() => {
-  if (salaryMode === "AUTO") {
-    form.setValue("salary", autoSalary, {
-      shouldValidate: true,
-      shouldDirty: true,
-    });
-  }
-}, [autoSalary, salaryMode]);
+  useEffect(() => {
+    if (salaryMode === "AUTO") {
+      form.setValue("salary", autoSalary, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    }
+  }, [autoSalary, form, salaryMode]);
 
 
   // formatting helpers

@@ -98,6 +98,7 @@ const EmployeesPage = async ({
     salaryGrade: item.salaryGrade?.toString() ?? "",
     salaryStep: item.salaryStep?.toString() ?? "", // <-- add this
     salary: typeof item.salary === "number" ? item.salary.toString() : item.salary,
+    salaryMode: item.salaryMode ?? "AUTO",
     dateHired: item.dateHired ? format(new Date(item.dateHired), "M d, yyyy") : '',
     latestAppointment: item.latestAppointment,
     terminateDate: item.terminateDate,
