@@ -79,20 +79,23 @@ const Info = ({
   const savedSalary = Number(data?.salary ?? 0); // ← manual/DB value, if any
 
   const grade = Number(data?.salaryGrade ?? 0);
-  const step = computeStep({
+  const stepFromData = Number(data?.salaryStep ?? 0);
+  const computedStep = computeStep({
     dateHired: data?.dateHired,
     latestAppointment: data?.latestAppointment,
   }) || 1;
+  const step = Number.isFinite(stepFromData) && stepFromData > 0 ? stepFromData : computedStep;
 
   const salaryRecord = salarySchedule.find((s) => s.grade === grade);
   const computedSalary = salaryRecord ? (salaryRecord.steps[step - 1] ?? 0) : 0;
 
   const salaryModeFromData = data?.salaryMode?.toUpperCase();
+  const hasAutoInputs = Number.isFinite(grade) && grade > 0 && Number.isFinite(step) && step > 0;
   // tiny tolerance to avoid rounding issues when salaryMode isn't available
   const EPS = 0.5;
   const isManual = salaryModeFromData
     ? salaryModeFromData === "MANUAL"
-    : !(Math.abs(savedSalary - computedSalary) <= EPS);
+    : !hasAutoInputs || !(Math.abs(savedSalary - computedSalary) <= EPS);
 
   const resolvedSalary = isManual ? savedSalary : computedSalary;
   const displaySalary = resolvedSalary > 0 ? resolvedSalary : savedSalary;
