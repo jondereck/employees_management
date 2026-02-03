@@ -27,10 +27,17 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
 
   const [fetching, setFetching] = useState(false);
   const [salarySteps, setSalarySteps] = useState<Record<number, number>>({});
-  const [manual, setManual] = useState(false);         // <-- NEW: user toggle
+
   const [fetchError, setFetchError] = useState<string | null>(null); // track 
   // fetch errors
   const [hasFetched, setHasFetched] = useState(false);
+const salaryMode = form.watch("salaryMode");
+const manual = salaryMode === "MANUAL";
+
+
+const isHydrated = form.formState.isDirty || form.formState.isSubmitted;
+
+
 
   // fetch salary table by SG
  useEffect(() => {
@@ -70,20 +77,15 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
   // whether automatic value is available
   const autoAvailable = !!autoSalary && !Number.isNaN(autoSalary);
 
-  // If auto mode and auto value becomes available/changes, sync form.salary
-  useEffect(() => {
-    if (!manual) {
-      form.setValue("salary", autoSalary, { shouldValidate: true, shouldDirty: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSalary, manual]);
-
-  // If fetch failed or there’s no auto value, force manual mode (but don’t turn it off if user already enabled it)
 useEffect(() => {
-  if (!manual && hasFetched && (fetchError || !autoAvailable)) {
-    setManual(true);
+  if (salaryMode === "AUTO") {
+    form.setValue("salary", autoSalary, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
   }
-}, [manual, hasFetched, autoAvailable, fetchError]);
+}, [autoSalary, salaryMode]);
+
 
   // formatting helpers
   const formatPeso = (n: number | string) => {
@@ -117,6 +119,12 @@ useEffect(() => {
   return (
     <div className="grid lg:grid-cols-3 grid-cols-1 gap-4">
       {/* Salary Grade */}
+      <span className="text-xs text-muted-foreground">
+  {manual
+    ? "Manual salary (will not auto-update)"
+    : "Auto-computed from Salary Grade & Step"}
+</span>
+
       <FormField
         control={form.control}
         name="salaryGrade"
@@ -159,17 +167,19 @@ useEffect(() => {
                   <span className={cn("text-xs", isManual ? "text-amber-600" : "text-muted-foreground")}>
                     {isManual ? "MANUAL" : "AUTO"}
                   </span>
-                  <Switch
-                    checked={isManual}
-                    onCheckedChange={(v) => {
-                      setManual(v);
-                      if (!v) {
-                        // switching back to AUTO: push the computed value immediately
-                        form.setValue("salary", autoSalary, { shouldValidate: true, shouldDirty: true });
-                      }
-                    }}
-                    disabled={loading}
-                  />
+<Switch
+  checked={manual}
+  onCheckedChange={(v) => {
+    form.setValue("salaryMode", v ? "MANUAL" : "AUTO", { shouldDirty: true });
+
+    if (!v) {
+      // switching back to AUTO
+      form.setValue("salary", autoSalary, { shouldValidate: true });
+    }
+  }}
+/>
+
+
                 </div>
               </div>
 

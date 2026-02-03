@@ -32,6 +32,8 @@ export async function POST(
     const { userId } = auth();
     const body = await req.json();
 
+
+
     const {
       prefix,
       employeeNo,
@@ -75,6 +77,20 @@ export async function POST(
       note,
       designationId,
     } = body;
+
+    const safeGrade = Number(body.salaryGrade ?? 1);
+    const safeStep = Number(body.salaryStep ?? 1);
+    const mode = body.salaryMode ?? "AUTO";
+
+    let finalSalary = Number(body.salary ?? 0);
+
+    if (mode === "AUTO") {
+      const record = await prismadb.salary.findUnique({
+        where: { grade_step: { grade: safeGrade, step: safeStep } },
+        select: { amount: true },
+      });
+      finalSalary = record?.amount ?? finalSalary;
+    }
 
     // --- your existing validations (kept as-is, tiny touch-ups) ---
     const urlRegex = /^https:\/\/drive\.google\.com\/.*$/;
@@ -136,15 +152,20 @@ export async function POST(
       }
     }
 
-    // compute auto salary from grade/step
-    let autoSalary = 0;
-    if (salaryGrade != null && salaryStep != null) {
-      const salaryRecord = await prismadb.salary.findUnique({
-        where: { grade_step: { grade: Number(salaryGrade), step: Number(salaryStep) } },
-        select: { amount: true },
-      });
-      autoSalary = salaryRecord?.amount ?? 0;
-    }
+    // // compute auto salary from grade/step
+    // let autoSalary = 0;
+
+    // const salaryRecord = await prismadb.salary.findUnique({
+    //   where: {
+    //     grade_step: {
+    //       grade: safeSalaryGrade,
+    //       step: safeSalaryStep,
+    //     },
+    //   },
+    //   select: { amount: true },
+    // });
+
+    // autoSalary = salaryRecord?.amount ?? 0;
 
 
     const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
@@ -211,7 +232,6 @@ export async function POST(
               tinNo,
               pagIbigNo,
               philHealthNo,
-              salary: autoSalary,
               dateHired: dateHired ? new Date(dateHired) : new Date(),
               latestAppointment,
               isFeatured,
@@ -220,8 +240,10 @@ export async function POST(
               employeeTypeId,
               officeId,
               eligibilityId,
-              salaryGrade: salaryGrade != null ? Number(salaryGrade) : 0,
-              salaryStep: salaryStep != null ? Number(salaryStep) : 0,
+              salary: finalSalary,
+              salaryGrade: safeGrade,
+              salaryStep: safeStep,
+              salaryMode: mode,
               memberPolicyNo,
               age,
               nickname,
@@ -345,9 +367,9 @@ export async function GET(
       where,
       include: {
         images: {
-    select: { id: true, url: true, createdAt: true, updatedAt: true },
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-  },
+          select: { id: true, url: true, createdAt: true, updatedAt: true },
+          orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        },
         offices: true,
         employeeType: true,
         eligibility: true,

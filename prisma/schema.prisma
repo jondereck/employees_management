@@ -11,15 +11,15 @@ datasource db {
 }
 
 model Department {
-  id            String          @id @default(uuid())
-  name          String
-  userId        String
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  billboards    Billboard[]     @relation("DepartmentToBillboard")
-  ChangeRequest ChangeRequest[]
-  employee      Employee[]      @relation("DepartmentToEmployee")
-  offices       Offices[]       @relation("DepartmentToOffices")
+  id               String            @id @default(uuid())
+  name             String
+  userId           String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  billboards       Billboard[]       @relation("DepartmentToBillboard")
+  ChangeRequest    ChangeRequest[]
+  employee         Employee[]        @relation("DepartmentToEmployee")
+  offices          Offices[]         @relation("DepartmentToOffices")
   orgChartVersions OrgChartVersion[]
 }
 
@@ -135,19 +135,17 @@ model Employee {
   nickname               String                  @default("")
   employeeNo             String                  @default("")
   employeeLink           String                  @default("")
-  salaryStep             Int?                    @default(0)
-  salaryGrade            Int?                    @default(0)
+  salaryStep             Int?
+  salaryGrade            Int?
   designationId          String?
   note                   String?
   publicId               String                  @unique @default(dbgenerated("gen_random_uuid()"))
   publicEnabled          Boolean                 @default(false)
   publicVersion          Int                     @default(1)
+  salaryMode             SalaryMode              @default(AUTO)
   awards                 Award[]
-  changeRequests         ChangeRequest[]         @relation("EmployeeToChangeRequests")
-  workSchedules          WorkSchedule[]
-  scheduleExceptions     ScheduleException[]
-  weeklyExclusions       WeeklyExclusion[]
   biometricsIdentityMaps BiometricsIdentityMap[] @relation("EmployeeToBiometricsIdentityMaps")
+  changeRequests         ChangeRequest[]         @relation("EmployeeToChangeRequests")
   department             Department              @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onUpdate: NoAction, map: "employee_departmentid_fkey")
   designation            Offices?                @relation("OfficesToDesignation", fields: [designationId], references: [id], onUpdate: NoAction, map: "employee_designationid_fkey")
   eligibility            Eligibility             @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
@@ -155,6 +153,9 @@ model Employee {
   offices                Offices                 @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
   employmentEvents       EmploymentEvent[]
   images                 Image[]
+  scheduleExceptions     ScheduleException[]
+  weeklyExclusions       WeeklyExclusion[]
+  workSchedules          WorkSchedule[]
 
   @@index([departmentId])
   @@index([officeId])
@@ -220,8 +221,7 @@ model BiometricsIdentityMap {
   employeeId String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-
-  employee Employee @relation("EmployeeToBiometricsIdentityMaps", fields: [employeeId], references: [id], onDelete: Cascade)
+  employee   Employee @relation("EmployeeToBiometricsIdentityMaps", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
 }
@@ -250,6 +250,71 @@ model ChangeRequest {
   @@index([departmentId, status, createdAt], map: "changerequest_dept_status_created_idx")
   @@index([employeeId], map: "changerequest_employeeid_idx")
   @@index([entityType, entityId], map: "changerequest_entitytype_entityid_idx")
+}
+
+model WorkSchedule {
+  id                   String       @id @default(cuid())
+  employeeId           String
+  type                 ScheduleType
+  startTime            String?
+  endTime              String?
+  graceMinutes         Int?
+  coreStart            String?
+  coreEnd              String?
+  bandwidthStart       String?
+  bandwidthEnd         String?
+  requiredDailyMinutes Int?
+  shiftStart           String?
+  shiftEnd             String?
+  breakMinutes         Int          @default(60)
+  timezone             String       @default("Asia/Manila")
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  weeklyPattern        Json?
+  employee             Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "workschedule_employeeid_fkey")
+
+  @@index([employeeId, effectiveFrom, effectiveTo])
+}
+
+model ScheduleException {
+  id                   String       @id @default(cuid())
+  employeeId           String
+  date                 DateTime
+  type                 ScheduleType
+  startTime            String?
+  endTime              String?
+  graceMinutes         Int?
+  coreStart            String?
+  coreEnd              String?
+  bandwidthStart       String?
+  bandwidthEnd         String?
+  requiredDailyMinutes Int?
+  shiftStart           String?
+  shiftEnd             String?
+  breakMinutes         Int?
+  employee             Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "scheduleexception_employeeid_fkey")
+
+  @@index([employeeId, date])
+}
+
+model WeeklyExclusion {
+  id            String    @id @default(cuid())
+  employeeId    String
+  weekday       Int
+  mode          String
+  ignoreUntil   DateTime?
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "weeklyexclusion_employeeid_fkey")
+
+  @@index([employeeId, weekday, effectiveFrom, effectiveTo])
+}
+
+enum SalaryMode {
+  AUTO
+  MANUAL
 }
 
 enum EligibilityTypes {
@@ -295,64 +360,4 @@ enum ScheduleType {
   FIXED
   FLEX
   SHIFT
-}
-
-model WorkSchedule {
-  id                   String       @id @default(cuid())
-  employeeId           String
-  type                 ScheduleType
-  startTime            String?
-  endTime              String?
-  graceMinutes         Int?
-  coreStart            String?
-  coreEnd              String?
-  bandwidthStart       String?
-  bandwidthEnd         String?
-  requiredDailyMinutes Int?
-  weeklyPattern        Json?
-  shiftStart           String?
-  shiftEnd             String?
-  breakMinutes         Int          @default(60)
-  timezone             String       @default("Asia/Manila")
-  effectiveFrom        DateTime
-  effectiveTo          DateTime?
-  employee             Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "workschedule_employeeid_fkey")
-
-  @@index([employeeId, effectiveFrom, effectiveTo])
-}
-
-model ScheduleException {
-  id                   String       @id @default(cuid())
-  employeeId           String
-  date                 DateTime
-  type                 ScheduleType
-  startTime            String?
-  endTime              String?
-  graceMinutes         Int?
-  coreStart            String?
-  coreEnd              String?
-  bandwidthStart       String?
-  bandwidthEnd         String?
-  requiredDailyMinutes Int?
-  shiftStart           String?
-  shiftEnd             String?
-  breakMinutes         Int?
-  employee             Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "scheduleexception_employeeid_fkey")
-
-  @@index([employeeId, date])
-}
-
-model WeeklyExclusion {
-  id            String   @id @default(cuid())
-  employeeId    String
-  weekday       Int
-  mode          String
-  ignoreUntil   DateTime?
-  effectiveFrom DateTime
-  effectiveTo   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "weeklyexclusion_employeeid_fkey")
-
-  @@index([employeeId, weekday, effectiveFrom, effectiveTo])
 }

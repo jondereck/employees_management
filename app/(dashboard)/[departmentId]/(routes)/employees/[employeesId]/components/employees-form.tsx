@@ -101,9 +101,11 @@ const formSchema = z.object({
     .union([z.string(), z.number()])
     .transform((v) => String(v).trim())
     .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric")
-    .refine((v) => Number(v) >= 1 && Number(v) <= 33, "Salary Grade must be between 1 and 33"),
+    .refine((v) => Number(v) >= 1 && Number(v) <= 33, "Salary Grade must be between 1 and 33")  
+    .default("1"),
   salary: z.number().min(0),
   birthday: z.date().optional(),
+  salaryMode: z.enum(["AUTO", "MANUAL"]).default("AUTO"),
   // age: z.string(),
   gsisNo: z.string(),
   pagIbigNo: z.string(),
@@ -172,8 +174,9 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   barangay: "",
   houseNo: "",
   street: "",
-  salaryGrade: "0",
+  salaryGrade: "1",
   salary: 0,
+  salaryMode: "AUTO",
   birthday: undefined,
   gsisNo: "",
   pagIbigNo: "",
@@ -224,8 +227,11 @@ function mapToDefaults(src: any): EmployeesFormValues {
     contactNumber: src.contactNumber ?? "",
     position: src.position ?? "",
     education: src.education ?? "",
-    salary: Number(src.salary ?? 0),
-    salaryGrade: String(src.salaryGrade ?? "1"),
+   salary: Number(src.salary ?? 0),
+    salaryGrade: src.salaryGrade?.toString() ?? "",
+
+    // ✅ THIS LINE MAKES THE SWITCH CORRECT ON EDIT
+    salaryMode: src.salaryMode ?? "AUTO",
     birthday: src.birthday ? new Date(src.birthday) : undefined,
     dateHired: src.dateHired ? new Date(src.dateHired) : undefined,
     latestAppointment: src.latestAppointment ? new Date(src.latestAppointment) : undefined,
@@ -623,6 +629,14 @@ export const EmployeesForm = ({
   };
 
 
+useEffect(() => {
+  const sub = form.watch((values, { name }) => {
+    if (name === "salaryGrade" && !values.salaryGrade) {
+      form.setValue("salaryGrade", "1", { shouldDirty: true });
+    }
+  });
+  return () => sub.unsubscribe();
+}, [form]);
 
   return (
     <>

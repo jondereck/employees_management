@@ -53,6 +53,7 @@ export async function PATCH(
       eligibilityId,
       salaryGrade,
       salaryStep,
+      salaryMode,
       memberPolicyNo,
       age,
       nickname,
@@ -105,60 +106,102 @@ export async function PATCH(
         return new NextResponse(JSON.stringify({ error: "Invalid designationId (Office not found in this department)" }), { status: 400 });
       }
     }
+const existing = await prismadb.employee.findUnique({
+  where: { id: params.employeesId },
+  select: {
+    salary: true,
+    salaryMode: true,
+    salaryGrade: true,
+    salaryStep: true,
+  },
+});
+
+if (!existing) {
+  return new NextResponse("Employee not found", { status: 404 });
+}
+
+const finalSalaryMode = salaryMode ?? existing.salaryMode;
+
+let finalSalary = existing.salary;
+
+if (finalSalaryMode === "MANUAL") {
+  finalSalary = Number(salary ?? existing.salary);
+}
+
+if (finalSalaryMode === "AUTO") {
+  const grade = Number(salaryGrade ?? existing.salaryGrade);
+  const step  = Number(salaryStep  ?? existing.salaryStep);
+
+  if (Number.isFinite(grade) && Number.isFinite(step)) {
+    const record = await prismadb.salary.findUnique({
+      where: { grade_step: { grade, step } },
+      select: { amount: true },
+    });
+
+    if (record?.amount != null) {
+      finalSalary = record.amount;
+    }
+  }
+}
+
 
     // Update employee with merged images
-    const employee = await prismadb.employee.update({
-      where: { id: params.employeesId },
-      data: {
-        prefix,
-        employeeNo,
-        lastName,
-        firstName,
-        middleName,
-        suffix,
-        gender,
-        contactNumber,
-        position,
-        birthday,
-        education,
-        houseNo,
-        street,
-        barangay,
-        city,
-        province,
-        gsisNo,
-        tinNo,
-        pagIbigNo,
-        philHealthNo,
-        salary,
-        dateHired,
-        latestAppointment,
-        terminateDate,
-        isFeatured,
-        isArchived,
-        isHead,
-        employeeTypeId,
-        officeId,
-        eligibilityId,
-        salaryGrade: salaryGrade ? Number(salaryGrade) : null,
-        memberPolicyNo,
-        age,
-        nickname,
-        emergencyContactName,
-        emergencyContactNumber,
-        employeeLink,
-        images: {
-          deleteMany: {},
-          createMany: { data: images.map((img: { url: string }) => img) },
-        },
-         note: note ?? null,
-        designationId: designationId ?? null,
-      },
-      include: {
-        designation: { select: { id: true, name: true } },
-        images: true,
-      },
-    });
+const employee = await prismadb.employee.update({
+  where: { id: params.employeesId },
+  data: {
+    prefix,
+    employeeNo,
+    lastName,
+    firstName,
+    middleName,
+    suffix,
+    gender,
+    contactNumber,
+    position,
+    birthday,
+    education,
+    houseNo,
+    street,
+    barangay,
+    city,
+    province,
+    gsisNo,
+    tinNo,
+    pagIbigNo,
+    philHealthNo,
+
+    // ✅ FIXED SALARY HANDLING
+    salary: finalSalary,
+    salaryMode: finalSalaryMode,
+    salaryGrade: salaryGrade != null ? Number(salaryGrade) : existing.salaryGrade,
+    salaryStep: salaryStep != null ? Number(salaryStep) : existing.salaryStep,
+
+    dateHired,
+    latestAppointment,
+    terminateDate,
+    isFeatured,
+    isArchived,
+    isHead,
+    employeeTypeId,
+    officeId,
+    eligibilityId,
+    memberPolicyNo,
+    age,
+    nickname,
+    emergencyContactName,
+    emergencyContactNumber,
+    employeeLink,
+
+    images: {
+      deleteMany: {},
+      createMany: { data: images.map((img: { url: string }) => img) },
+    },
+
+    note: note ?? null,
+    designationId: designationId ?? null,
+  },
+});
+
 
     return NextResponse.json(employee);
   } catch (error) {
