@@ -481,6 +481,9 @@ export const EmployeesForm = ({
 
       // 🔄 Then revalidate to ensure perfect server state
       globalMutate(key);
+      if (initialData && employeeId && typeof window !== "undefined") {
+        sessionStorage.setItem("employee-updated", employeeId);
+      }
       router.back();
       toast.success("Success!", { id: toastId, description: initialData ? "Employee updated." : "Employee created." });
     } catch (error: any) {

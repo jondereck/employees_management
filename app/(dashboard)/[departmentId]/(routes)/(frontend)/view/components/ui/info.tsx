@@ -73,6 +73,14 @@ const Info = ({
 
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const updatedId = sessionStorage.getItem("employee-updated");
+    if (updatedId && updatedId === data?.id) {
+      sessionStorage.removeItem("employee-updated");
+      router.refresh();
+    }
+  }, [data?.id, router]);
 
   const hasText = (v?: string | null) => !!v && v.trim().length > 0;
 
