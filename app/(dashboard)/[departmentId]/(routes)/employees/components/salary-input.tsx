@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import axios from "axios";
@@ -31,11 +31,11 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
   const [fetchError, setFetchError] = useState<string | null>(null); // track 
   // fetch errors
   const [hasFetched, setHasFetched] = useState(false);
-const salaryMode = form.watch("salaryMode");
-const manual = salaryMode === "MANUAL";
-
-
-const isHydrated = form.formState.isDirty || form.formState.isSubmitted;
+  const salaryMode = form.watch("salaryMode");
+  const manual = salaryMode === "MANUAL";
+  const salaryValue = form.watch("salary");
+  const isDirty = form.formState.isDirty;
+  const initializedModeRef = useRef(false);
 
 
 
@@ -77,14 +77,39 @@ const isHydrated = form.formState.isDirty || form.formState.isSubmitted;
   // whether automatic value is available
   const autoAvailable = !!autoSalary && !Number.isNaN(autoSalary);
 
-useEffect(() => {
-  if (salaryMode === "AUTO") {
-    form.setValue("salary", autoSalary, {
-      shouldValidate: true,
-      shouldDirty: true,
-    });
-  }
-}, [autoSalary, salaryMode]);
+  useEffect(() => {
+    if (!hasFetched || !autoAvailable || isDirty || initializedModeRef.current) return;
+
+    const currentMode = form.getValues("salaryMode");
+    const numericSalary = Number(salaryValue ?? 0);
+    const shouldBeManual = Number.isFinite(numericSalary) && numericSalary !== autoSalary;
+
+    if (currentMode !== "AUTO" && currentMode !== "MANUAL") {
+      form.setValue("salaryMode", shouldBeManual ? "MANUAL" : "AUTO", {
+        shouldDirty: false,
+        shouldValidate: true,
+      });
+      if (!shouldBeManual) {
+        form.setValue("salary", autoSalary, { shouldValidate: true, shouldDirty: false });
+      }
+    } else if (currentMode === "AUTO" && shouldBeManual) {
+      form.setValue("salaryMode", "MANUAL", {
+        shouldDirty: false,
+        shouldValidate: true,
+      });
+    }
+
+    initializedModeRef.current = true;
+  }, [autoAvailable, autoSalary, form, hasFetched, isDirty, salaryValue]);
+
+  useEffect(() => {
+    if (salaryMode === "AUTO") {
+      form.setValue("salary", autoSalary, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    }
+  }, [autoSalary, form, salaryMode]);
 
 
   // formatting helpers
@@ -101,8 +126,6 @@ useEffect(() => {
   };
 
   // Manual input value handlers (avoid reformat while typing)
-  const salaryValue = form.watch("salary");
-
   const onManualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
     // permit digits + dot; block letters
