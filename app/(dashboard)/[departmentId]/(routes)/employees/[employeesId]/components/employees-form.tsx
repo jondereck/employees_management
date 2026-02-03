@@ -103,6 +103,7 @@ const formSchema = z.object({
     .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric")
     .refine((v) => Number(v) >= 1 && Number(v) <= 33, "Salary Grade must be between 1 and 33")  
     .default("1"),
+  salaryStep: z.number().optional().default(1),
   salary: z.number().min(0),
   birthday: z.date().optional(),
   salaryMode: z.enum(["AUTO", "MANUAL"]).default("AUTO"),
@@ -175,6 +176,7 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   houseNo: "",
   street: "",
   salaryGrade: "1",
+  salaryStep: 1,
   salary: 0,
   salaryMode: "AUTO",
   birthday: undefined,
@@ -227,8 +229,9 @@ function mapToDefaults(src: any): EmployeesFormValues {
     contactNumber: src.contactNumber ?? "",
     position: src.position ?? "",
     education: src.education ?? "",
-   salary: Number(src.salary ?? 0),
+    salary: Number(src.salary ?? 0),
     salaryGrade: src.salaryGrade?.toString() ?? "",
+    salaryStep: Number(src.salaryStep ?? 1),
 
     // ✅ THIS LINE MAKES THE SWITCH CORRECT ON EDIT
     salaryMode: src.salaryMode ?? "AUTO",
