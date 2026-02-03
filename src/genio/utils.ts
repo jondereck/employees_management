@@ -78,9 +78,9 @@ export function streamReply(
 
   const stream = new ReadableStream({
     async start(controller) {
-      for (const chunk of reply.match(/[^.!?]+[.!?]+/g) ?? [reply]) {
-        controller.enqueue(encoder.encode(chunk));
-        await new Promise((r) => setTimeout(r, 50));
+      for (const chunk of reply.split(/\n+/).filter(Boolean)) {
+        controller.enqueue(encoder.encode(chunk + "\n"));
+        await new Promise((r) => setTimeout(r, 30));
       }
       controller.close();
     },

@@ -25,7 +25,7 @@ function sanitizeFilename(name: string) {
 
 
 function buildExportFilename(context: any) {
-  const last = context?.lastCountQuery || context?.lastListQuery;
+    const last = context?.lastListQuery || context?.lastCountQuery;
 
   if (!last) return "employees-export.xlsx";
 
@@ -147,7 +147,9 @@ function buildExportFilename(context: any) {
 
 
 export async function handleExport(context: any) {
-  const last = context?.lastCountQuery || context?.lastListQuery;
+
+  const last = context?.lastListQuery || context?.lastCountQuery;
+
 
   if (!last) {
     return NextResponse.json(

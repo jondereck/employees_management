@@ -257,9 +257,9 @@ export const GENIO_COMMANDS = [
   },
   /* ================= AGE ANALYTICS ================= */
   {
-    label: "Age analysis",
+    label: "Age Below/Above",
     value: "/age-below-above",
-    template: "Employees [above/below/between] [age]?",
+    template: "Employees [above/below] [age]?",
     quickChip: true,
     examples: [
       "How many employees above 40?",
@@ -268,7 +268,7 @@ export const GENIO_COMMANDS = [
   },
 
     {
-    label: "Age analysis",
+    label: "Age Between",
     value: "/age-between",
     template: "Employees [between] [min] and [max]?",
     quickChip: true,
@@ -279,7 +279,7 @@ export const GENIO_COMMANDS = [
   },
 
    {
-    label: "Age analysis",
+    label: "Age exact",
     value: "/age-exact",
     template: "Employees aged [age]?",
     quickChip: true,
@@ -360,7 +360,12 @@ const COMMAND_GROUPS = {
     c.value.includes("count")
   ),
   Analytics: GENIO_COMMANDS.filter(c =>
-    ["distribution", "age", "tenure", "insight"].some(k =>
+    ["tenure", "insight"].some(k =>
+      c.value.includes(k)
+    )
+  ),
+   Age: GENIO_COMMANDS.filter(c =>
+    ["age", "insight"].some(k =>
       c.value.includes(k)
     )
   ),

@@ -28,6 +28,115 @@ export async function handleWhoIs(
 
 
   
+  /* ===============================
+   EMPLOYEE NUMBER LOOKUP
+   =============================== */
+
+const employeeNumbers = raw.match(/\b\d{6,10}\b/g);
+console.log("RAW:", raw);
+console.log("EMPLOYEE NUMBERS:", employeeNumbers);
+
+if (employeeNumbers && employeeNumbers.length > 0) {
+  const isMultiNumberQuery = employeeNumbers.length > 1;
+
+  const employees = await prisma.employee.findMany({
+    where: {
+      isArchived: false,
+      OR: employeeNumbers.map((num) => ({
+        employeeNo: {
+          equals: num, // ✅ IMPORTANT FIX
+        },
+      })),
+    },
+    include: {
+      offices: true,
+      employeeType: true,
+    },
+  });
+console.log("EMPLOYEES FOUND:", employees.map(e => e.employeeNo));
+console.log("EMPLOYEES COUNT:", employees.length);
+
+  if (employees.length === 0) {
+    return streamReply(
+      "I couldn’t find any employees with the provided employee number(s).",
+      context,
+      null
+    );
+  }
+
+  // ✅ Multi-number query but only ONE match
+if (isMultiNumberQuery && employees.length === 1) {
+  const emp = employees[0];
+
+  context = {
+    ...context,
+    lastListQuery: {
+      type: "employee_lookup",
+      where: {
+        id: { in: [emp.id] },
+      },
+    },
+  };
+
+  return streamReply(
+    `I found **one** employee matching the provided numbers:\n\n` +
+      `${emp.employeeNo} – ${emp.firstName} ${emp.lastName} (${emp.offices?.name})`,
+    context,
+    null,
+    { canExport: true }
+  );
+}
+
+  // 🔹 Multiple employees → list + export
+  if (employees.length > 1) {
+    const list = employees
+      .map(
+        (e, i) =>
+          `${i + 1}. ${e.employeeNo} – ${e.firstName} ${e.lastName} (${e.offices?.name})`
+      )
+      .join("\n");
+
+    context = {
+      ...context,
+      lastListQuery: {
+        type: "employee_lookup",
+        where: {
+          id: {
+            in: employees.map((e) => e.id),
+          },
+        },
+      },
+    };
+
+    return streamReply(
+      `Here are the employees you asked for:\n\n${list}`,
+      context,
+      null,
+      { canExport: true }
+    );
+  }
+
+  // 🔹 Single employee → profile
+  const emp = employees[0];
+
+  const noteText = emp.note
+    ? `\n\n📝 **Note:** ${emp.note}`
+    : "";
+
+  context = {
+    ...context,
+    lastEmployeeId: emp.id,
+    lastOfficeId: emp.officeId,
+    lastOfficeName: emp.offices?.name,
+  };
+
+  return streamReply(
+    `${emp.firstName} ${emp.lastName} (**${emp.employeeNo}**) is a **${emp.position}** in **${emp.offices?.name}**.${noteText}`,
+    context,
+    emp.id
+  );
+}
+
  /* ===============================
      NOTE-BASED LOOKUP (ABSOLUTE FIRST)
      =============================== */
@@ -145,87 +254,6 @@ if (intent?.filters?.employeeNoPrefix) {
     { canExport: true }
   );
 }
-
-  /* ===============================
-     EMPLOYEE NUMBER LOOKUP
-     =============================== */
-
-  const employeeNumbers = raw.match(/\b\d{6,10}\b/g);
-
-  if (employeeNumbers && employeeNumbers.length > 0) {
-    const employees = await prisma.employee.findMany({
-      where: {
-        isArchived: false,
-        OR: employeeNumbers.map((num) => ({
-          employeeNo: {
-            contains: num,
-            mode: "insensitive",
-          },
-        })),
-      },
-      include: {
-        offices: true,
-        employeeType: true,
-      },
-    });
-
-    if (employees.length === 0) {
-      return streamReply(
-        "I couldn’t find any employees with the provided employee number(s).",
-        context,
-        null
-      );
-    }
-
-    // 🔹 Multiple employees → list + export
-    if (employees.length > 1) {
-      const list = employees
-        .map(
-          (e, i) =>
-            `${i + 1}. ${e.employeeNo} – ${e.firstName} ${e.lastName} (${e.offices?.name})`
-        )
-        .join("\n");
-
-      context = {
-        ...context,
-        lastListQuery: {
-          type: "employee_lookup",
-          where: {
-            id: {
-              in: employees.map((e) => e.id),
-            },
-          },
-        },
-      };
-
-      return streamReply(
-        `Here are the employees you asked for:\n\n${list}`,
-        context,
-        null,
-        { canExport: true }
-      );
-    }
-
-    // 🔹 Single employee → profile (NO export)
-    const emp = employees[0];
-
-    const noteText = emp.note
-      ? `\n\n📝 **Note:** ${emp.note}`
-      : "";
-
-    context = {
-      ...context,
-      lastEmployeeId: emp.id,
-      lastOfficeId: emp.officeId,
-      lastOfficeName: emp.offices?.name,
-    };
-
-    return streamReply(
-      `${emp.firstName} ${emp.lastName} (**${emp.employeeNo}**) is a **${emp.position}** in **${emp.offices?.name}**.${noteText}`,
-      context,
-      emp.id
-    );
-  }
 
   /* ===============================
      NAME-BASED LOOKUP
