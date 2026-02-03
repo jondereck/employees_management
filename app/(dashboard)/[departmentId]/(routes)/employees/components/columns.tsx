@@ -78,6 +78,7 @@ export type EmployeesColumn = {
   philHealthNo: string;
   pagIbigNo: string;
   salary: string;
+  salaryMode: string;
   dateHired: string;
   latestAppointment: string;
   terminateDate: string;

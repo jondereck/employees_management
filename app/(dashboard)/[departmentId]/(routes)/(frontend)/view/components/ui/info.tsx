@@ -87,12 +87,15 @@ const Info = ({
   const salaryRecord = salarySchedule.find((s) => s.grade === grade);
   const computedSalary = salaryRecord ? (salaryRecord.steps[step - 1] ?? 0) : 0;
 
-  // tiny tolerance to avoid rounding issues
+  const salaryModeFromData = data?.salaryMode?.toUpperCase();
+  // tiny tolerance to avoid rounding issues when salaryMode isn't available
   const EPS = 0.5;
-  // If saved ≈ computed => AUTO; otherwise MANUAL
-  const isManual = !(Math.abs(savedSalary - computedSalary) <= EPS);
+  const isManual = salaryModeFromData
+    ? salaryModeFromData === "MANUAL"
+    : !(Math.abs(savedSalary - computedSalary) <= EPS);
 
-  const displaySalary = isManual ? savedSalary : computedSalary;
+  const resolvedSalary = isManual ? savedSalary : computedSalary;
+  const displaySalary = resolvedSalary > 0 ? resolvedSalary : savedSalary;
   const formattedSalary = formatSalary(String(displaySalary));
   const salaryMode = isManual ? "MANUAL" : "AUTO";
 

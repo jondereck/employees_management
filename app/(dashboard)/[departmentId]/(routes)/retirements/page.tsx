@@ -54,6 +54,7 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
   salaryGrade: employee.salaryGrade?.toString() ?? "",
   salaryStep: employee.salaryStep?.toString() ?? "",
   salary: employee.salary != null ? String(employee.salary) : "",
+  salaryMode: employee.salaryMode ?? "AUTO",
   dateHired: formatNullableDate(employee.dateHired),
   latestAppointment: employee.latestAppointment ?? "",
   terminateDate: employee.terminateDate ?? "",
