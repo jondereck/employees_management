@@ -129,11 +129,6 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
   return (
     <div className="grid lg:grid-cols-3 grid-cols-1 gap-4">
       {/* Salary Grade */}
-      <span className="text-xs text-muted-foreground">
-  {manual
-    ? "Manual salary (will not auto-update)"
-    : "Auto-computed from Salary Grade & Step"}
-</span>
 
       <FormField
         control={form.control}

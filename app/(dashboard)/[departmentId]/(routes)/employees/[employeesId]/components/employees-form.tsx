@@ -587,7 +587,7 @@ useEffect(() => {
           </Button>
         )}
       </div >
-      <Separator />
+       <Separator className="my-4" />
       < Form {...form} >
         <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 w-full">
 
@@ -687,7 +687,7 @@ useEffect(() => {
                   );
                 }}
               />
-              <Separator className="m-2" />
+              <Separator className="my-4" />
               {/* Compact row: Employee No. + Suggest (left) | Office (right) */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField
@@ -790,7 +790,7 @@ useEffect(() => {
                 />
               </div>
 
-              <Separator className="m-2" />
+              <Separator className="my-4" />
               <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-4 gap-8">
                 <FormField
                   control={form.control}
@@ -815,26 +815,19 @@ useEffect(() => {
                   control={form.control}
                   name="nickname"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nickname</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="Nickname"
-                          {...field}
-                          onChange={(e) => {
-                            // Convert the input value to uppercase
-                            const uppercaseValue = e.target.value.toUpperCase();
-                            // Set the field value to the uppercase value
-                            field.onChange(uppercaseValue);
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Ex: JD
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
+                    <AutoField
+                      kind="text"
+                      label="Nickname"
+                      field={field}
+                      required
+                      placeholder="Nickname"
+                      showCounter
+                      formatMode="upper"           // Anne marie -> Anne Marie
+                      normalizeWhitespace          // collapse extra spaces
+                      nameSafe                     // block digits/symbols (keeps - and ')
+                      autoFormatOnBlur
+                      liveFormat        
+                    />
                   )}
                 />
 
@@ -854,6 +847,7 @@ useEffect(() => {
                       normalizeWhitespace          // collapse extra spaces
                       nameSafe                     // block digits/symbols (keeps - and ')
                       autoFormatOnBlur
+                      liveFormat        
                     />
 
                   )}
@@ -1042,7 +1036,7 @@ useEffect(() => {
                 />
 
               </div>
-              <Separator />
+              <Separator className="my-4" />
               <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
                 {/* <FormField
               control={form.control}
@@ -1216,7 +1210,7 @@ useEffect(() => {
                 />
               </div>
 
-              <Separator />
+              <Separator className="my-4" />
 
               <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
                 <SalaryInput form={form} loading={loading} maxStep={8} />
@@ -1302,10 +1296,11 @@ useEffect(() => {
                     <AutoField
                       kind="date"
                       label="Date hired"
+                      placeholder="MM-DD-YYYY"
                       field={field}                 // ✅ pass RHF field
                       fromYear={fromYear}           // e.g. currentYear - 75
                       toYear={currentYear}
-                      description="Date hired is used to calculate years of service."
+                     
                       disabled={loading}
                       required
                     />
@@ -1314,7 +1309,7 @@ useEffect(() => {
 
 
               </div>
-              <Separator />
+             <Separator className="my-4" />
               <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
                 <FormField
                   control={form.control}
@@ -1631,7 +1626,7 @@ useEffect(() => {
                   )}
                 />
               </div>
-              <Separator />
+              <Separator className="my-4" />
               <Button disabled={loading} className=" mt-2" type="submit">
                 {action}
               </Button>
@@ -1699,7 +1694,7 @@ useEffect(() => {
           </Tabs>
 
 
-          <Separator />
+           <Separator className="my-4" />
 
 
         </form>

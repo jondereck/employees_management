@@ -17,6 +17,25 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { ChevronsUpDown, Check } from "lucide-react";
 
 
+import { parse, isValid, format as fmt } from "date-fns";
+
+const DATE_FORMATS = [
+  "MM-dd-yyyy",
+  "M-d-yyyy",
+  "MM/dd/yyyy",
+  "M/d/yyyy",
+  "yyyy-MM-dd",
+];
+
+function parseStrictDate(input: string): Date | null {
+  const v = input.trim();
+  for (const f of DATE_FORMATS) {
+    const d = parse(v, f, new Date());
+    if (isValid(d)) return d;
+  }
+  return null;
+}
+
 
 /** ---------- Formatting helpers ---------- */
 type FormatMode = "none" | "upper" | "lower" | "title" | "sentence" | "numeric" | "alphanumeric";
@@ -191,6 +210,7 @@ type TextProps = BaseProps & {
   normalizeWhitespace?: boolean;   // collapse multiple spaces, trim ends
   nameSafe?: boolean;              // allow letters, spaces, hyphen, apostrophe only
   autoFormatOnBlur?: boolean;
+  liveFormat?: boolean;
 };
 
 type AutoFieldProps =
@@ -226,6 +246,7 @@ function TextField({
   normalizeWhitespace = true,
   nameSafe = true,
   autoFormatOnBlur = true,
+  liveFormat
 }: TextProps) {
   const sanitize = (raw: string) => {
     let v = raw ?? "";
@@ -233,6 +254,13 @@ function TextField({
       // keep letters (with diacritics), spaces, hyphen, apostrophe
       v = v.replace(/[^\p{L}\p{M}\s'\-]/gu, "");
     }
+
+    if (liveFormat) {
+      v = softApplyFormat(v, formatMode);
+    }
+
+    field.onChange(v);
+
     if (normalizeWhitespace) {
       v = v.replace(/\s+/g, " ").trim();
     }
@@ -335,39 +363,131 @@ function PhoneField({ label, field, disabled, description, required, className, 
 }
 
 // DATE (shadcn Calendar + Popover)
-function DateField({ label, field, disabled, description, required, className, fromYear, toYear, disableFuture, placeholder = "Pick a date" }: DateProps) {
-  const currentYear = new Date().getFullYear();
-  const fromY = fromYear ?? currentYear - 100;
-  const toY = toYear ?? currentYear;
+function DateField({
+  label,
+  field,
+  disabled,
+  description,
+  required,
+  className,
+  fromYear,
+  toYear,
+  disableFuture,
+  placeholder = "",
+}: DateProps) {
+  const selected: Date | undefined =
+    field.value ? new Date(field.value) : undefined;
 
-  const selected: Date | undefined = field.value ? new Date(field.value) : undefined;
+  const [input, setInput] = useState(
+    selected ? fmt(selected, "MM-dd-yyyy") : ""
+  );
+
+
+
+  const [month, setMonth] = useState<Date | undefined>(
+    selected ?? new Date()
+  );
+  // keep input synced if value changes externally
+  useEffect(() => {
+    if (selected) {
+      setInput(fmt(selected, "MM-dd-yyyy"));
+    }
+  }, [field.value]);
+
+  const commitInput = () => {
+    if (!input) {
+      field.onChange(undefined);
+      return;
+    }
+
+    const parsed = parseStrictDate(input);
+    if (!parsed) {
+      // revert on invalid
+      setInput(selected ? fmt(selected, "MM-dd-yyyy") : "");
+      return;
+    }
+
+    setMonth(parsed);
+
+    if (disableFuture && parsed > new Date()) {
+      setInput(selected ? fmt(selected, "MM-dd-yyyy") : "");
+      return;
+    }
+
+    field.onChange(parsed);
+    setInput(fmt(parsed, "MM-dd-yyyy")); // normalize
+  };
+
+
+  useEffect(() => {
+    if (selected) {
+      setMonth(selected);
+      setInput(fmt(selected, "MM-dd-yyyy"));
+    }
+  }, [field.value]);
+
   return (
-    <FormItem className={cn("flex flex-col", className)}>
-      <FormLabel>{label} {required && <span className="text-red-500">*</span>}</FormLabel>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" className={cn("w-auto justify-start text-left font-normal", !selected && "text-muted-foreground")} disabled={disabled}>
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {selected ? format(selected, "PPP") : <span>{placeholder}</span>}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-auto p-0">
-          <Calendar
-            mode="single"
-            captionLayout="dropdown-buttons"
-            selected={selected}
-            onSelect={(d) => field.onChange(d ?? undefined)}
-            fromYear={fromY}
-            toYear={toY}
-            disabled={(date) => !!disableFuture && date > new Date()}
-          />
-        </PopoverContent>
-      </Popover>
-      <p className="text-xs text-muted-foreground">{description}</p>
+    <FormItem className={className}>
+      <FormLabel>
+        {label} {required && <span className="text-red-500">*</span>}
+      </FormLabel>
+
+      <FormControl>
+        <Popover>
+          <div className="relative">
+            {/* INPUT */}
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder={placeholder}
+              value={input}
+              disabled={disabled}
+              onChange={(e) => setInput(e.target.value)}
+              onBlur={commitInput}
+              className="pr-10"
+            />
+
+            {/* CALENDAR ICON */}
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+                disabled={disabled}
+              >
+                <CalendarIcon className="h-4 w-4" />
+              </button>
+            </PopoverTrigger>
+          </div>
+
+          {/* CALENDAR */}
+          <PopoverContent align="start" className="w-auto p-0">
+            <Calendar
+              mode="single"
+              selected={selected}
+              month={month}
+              onMonthChange={setMonth}
+              captionLayout="dropdown-buttons"
+              onSelect={(d) => {
+                if (!d) return;
+                field.onChange(d);
+                setInput(fmt(d, "MM-dd-yyyy"));
+                setMonth(d)
+              }}
+              fromYear={fromYear}
+              toYear={toYear}
+              disabled={(d) =>
+                !!disableFuture && d > new Date()
+              }
+            />
+          </PopoverContent>
+        </Popover>
+      </FormControl>
       <FormMessage />
     </FormItem>
   );
 }
+
 
 
 // DATALIST (with endpoint/static, dedupe, priority, optional format switch & chips)
@@ -614,10 +734,10 @@ function SelectField({
     const arr = Array.isArray(data)
       ? data
       : Array.isArray(data?.items)
-      ? data.items
-      : Array.isArray(data?.popular)
-      ? data.popular
-      : [];
+        ? data.items
+        : Array.isArray(data?.popular)
+          ? data.popular
+          : [];
 
     const seen = new Set<string>();
     const out: SelectOption[] = [];
@@ -777,8 +897,8 @@ function SelectField({
   const hasValue = Boolean(field.value);
   const currentValue = field.value == null ? "" : String(field.value).trim();
   // 👇 ADD THESE
-const [open, setOpen] = useState(false);
-const selected = byValue.get(currentValue.toLowerCase());
+  const [open, setOpen] = useState(false);
+  const selected = byValue.get(currentValue.toLowerCase());
 
 
   // ----- RENDER --------
@@ -790,98 +910,98 @@ const selected = byValue.get(currentValue.toLowerCase());
 
       <FormControl>
         <div className="relative">
-     {searchable ? (
-  <> 
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className={cn("w-full justify-between", allowClear && hasValue ? "pr-9" : undefined)}
-          disabled={disabled || loading}
-        >
-          {selected ? selected.label : (loading ? "Loading..." : placeholder)}
-          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-60" />
-        </Button>
-      </PopoverTrigger>
+          {searchable ? (
+            <>
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className={cn("w-full justify-between", allowClear && hasValue ? "pr-9" : undefined)}
+                    disabled={disabled || loading}
+                  >
+                    {selected ? selected.label : (loading ? "Loading..." : placeholder)}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-60" />
+                  </Button>
+                </PopoverTrigger>
 
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-        <Command shouldFilter>
-          <CommandInput placeholder={searchPlaceholder ?? "Search..."} />
-          <CommandEmpty>No results.</CommandEmpty>
-          <CommandList>
-            <CommandGroup>
-              {ordered.map(opt => (
-                <CommandItem
-                  key={opt.value}
-                  value={`${opt.label} ${opt.value}`}
-                  onSelect={() => {
-                    const nv = String(opt.value).trim();
-                    field.onChange(nv);
-                    pushRecent(opt);
-                    setOpen(false);
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                  <Command shouldFilter>
+                    <CommandInput placeholder={searchPlaceholder ?? "Search..."} />
+                    <CommandEmpty>No results.</CommandEmpty>
+                    <CommandList>
+                      <CommandGroup>
+                        {ordered.map(opt => (
+                          <CommandItem
+                            key={opt.value}
+                            value={`${opt.label} ${opt.value}`}
+                            onSelect={() => {
+                              const nv = String(opt.value).trim();
+                              field.onChange(nv);
+                              pushRecent(opt);
+                              setOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                currentValue.toLowerCase() === opt.value.toLowerCase()
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            {opt.label}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+
+              {allowClear && hasValue && !disabled && !loading && (
+                <button
+                  type="button"
+                  aria-label={clearLabel}
+                  title={clearLabel}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    field.onChange("");
                   }}
                 >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      currentValue.toLowerCase() === opt.value.toLowerCase()
-                        ? "opacity-100"
-                        : "opacity-0"
-                    )}
-                  />
-                  {opt.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-
-    {allowClear && hasValue && !disabled && !loading && (
-      <button
-        type="button"
-        aria-label={clearLabel}
-        title={clearLabel}
-        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          field.onChange("");
-        }}
-      >
-        <X className="h-4 w-4" />
-      </button>
-    )}
-  </>
-) : (
-  // FALLBACK: shadcn Select (keep as-is)
-  <Select
-    disabled={disabled || loading}
-    value={currentValue}
-    onValueChange={(v) => {
-      const nv = String(v).trim();
-      field.onChange(nv);
-      const hit = byValue.get(nv.toLowerCase());
-      if (hit) pushRecent(hit);
-    }}
-  >
-    <SelectTrigger className={cn("w-full", allowClear && hasValue ? "pr-9" : undefined)}>
-      <SelectValue placeholder={loading ? "Loading..." : placeholder} />
-    </SelectTrigger>
-    <SelectContent className="max-h-52 overflow-y-auto">
-      {ordered.map(opt => (
-        <SelectItem key={opt.value} value={opt.value}>
-          {opt.label}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-)}
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </>
+          ) : (
+            // FALLBACK: shadcn Select (keep as-is)
+            <Select
+              disabled={disabled || loading}
+              value={currentValue}
+              onValueChange={(v) => {
+                const nv = String(v).trim();
+                field.onChange(nv);
+                const hit = byValue.get(nv.toLowerCase());
+                if (hit) pushRecent(hit);
+              }}
+            >
+              <SelectTrigger className={cn("w-full", allowClear && hasValue ? "pr-9" : undefined)}>
+                <SelectValue placeholder={loading ? "Loading..." : placeholder} />
+              </SelectTrigger>
+              <SelectContent className="max-h-52 overflow-y-auto">
+                {ordered.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
         </div>
       </FormControl>
