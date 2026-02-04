@@ -22,7 +22,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
     alt: "Made by JDN",
     width: 96,
     height: 18,
-    href: "https://hrps.vercel.app/f622687f-79c6-44e8-87c6-301a257582b2/view/employee/8458d76a-3c43-4c5a-bdaf-40af989500d6" // ← opened when tapped/clicked
+    href: "https://jdnifas.netlify.app/" // ← opened when tapped/clicked
   }}
   dense={true}                  // compact mobile (default true)
   showYearOnMobile={true}      // hide © on very small screens

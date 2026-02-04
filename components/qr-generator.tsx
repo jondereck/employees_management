@@ -140,18 +140,14 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   };
 
 
-  const handlePrint = () => {
-    const canvas = qrRef.current;
-    if (!canvas) return;
-    const imgData = canvas.toDataURL("image/png");
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.write(
-        `<img src="${imgData}" onload="window.print(); window.close();" />`
-      );
-      w.document.close();
-    }
-  };
+  if (!qrData.publicId || !qrData.publicVersion) {
+  return (
+    <div className="text-xs text-muted-foreground">
+      QR not available
+    </div>
+  );
+}
+
 
 
 
