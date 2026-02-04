@@ -1,9 +1,16 @@
 "use client";
 
-
-import { useEffect, useState, type ComponentProps } from "react";
-import Modal from "../ui/modal";
+import { type ComponentProps } from "react";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogPortal,
+} from "../ui/dialog";
 
 interface AlertModalProps {
   isOpen: boolean;
@@ -28,29 +35,34 @@ export const AlertModal = ({
   cancelText = "Cancel",
   variant = "destructive",
 }: AlertModalProps) => {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  if (!isMounted) {
-    return null;
-  }
-
-
   return (
-    <Modal title={title} description={description} isOpen={isOpen} onClose={onClose}>
-      <div className="pt-6 space-x-2 flex items-center justify-end w-full">
-        <Button variant="outline" onClick={onClose} disabled={loading}>
-          {cancelText}
-        </Button>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogPortal>
+       <DialogContent className="fixed z-[9999] w-full max-w-sm p-6">
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
 
+          <DialogFooter className="mt-6 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={loading}
+            >
+              {cancelText}
+            </Button>
 
-        <Button disabled={loading} variant={variant} onClick={onConfirm}>
-          {confirmText}
-        </Button>
-      </div>
-    </Modal>
+            <Button
+              variant={variant}
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {confirmText}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogPortal>
+    </Dialog>
   );
-}
+};

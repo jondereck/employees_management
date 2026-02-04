@@ -85,43 +85,58 @@ const isAdmin = await resolveIsAdmin(params.departmentId);
  * QR VALIDATION (PUBLIC ONLY)
  * ============================ */
 
-const { pid, v } = searchParams;
+const rawPid = searchParams?.pid;
+const rawV = searchParams?.v;
 
-// ADMIN BYPASSES QR CHECK
+const pid = typeof rawPid === "string" && rawPid !== "undefined"
+  ? rawPid
+  : null;
+
+const version = Number(rawV);
+
+const isValidVersion = Number.isInteger(version) && version > 0;
+const expiredScreen = (
+  <div className="mx-auto max-w-md p-6 text-center">
+    <h1 className="text-lg font-semibold">QR Code Expired</h1>
+    <p className="text-sm text-muted-foreground">
+      This employee ID has been revoked or replaced.
+    </p>
+  </div>
+);
+
+
+// PUBLIC VIEW – grace mode
 if (!isAdmin) {
-  if (!pid || !v) {
-    return (
-      <div className="mx-auto max-w-md p-6 text-center">
-        <h1 className="text-lg font-semibold">Invalid QR Code</h1>
-        <p className="text-sm text-muted-foreground">
-          This QR code is missing verification data.
-        </p>
-      </div>
-    );
-  }
+  if (pid && isValidVersion) {
+    // 🔐 strict mode (new QR)
+    const valid = await prismadb.employee.findFirst({
+      where: {
+        id: params.employeeId,
+        publicId: pid,
+        publicEnabled: true,
+        publicVersion: version,
+      },
+      select: { id: true },
+    });
 
-  const valid = await prismadb.employee.findFirst({
-    where: {
-      id: params.employeeId,
-      publicId: pid,
-      publicEnabled: true,
-      publicVersion: Number(v),
-    },
-    select: { id: true },
-  });
+    if (!valid) {
+      return expiredScreen;
+    }
+  } else {
+    // 🟡 GRACE MODE (old printed QR)
+    const legacy = await prismadb.employee.findFirst({
+      where: {
+        id: params.employeeId,
+        publicEnabled: true,
+      },
+      select: { id: true },
+    });
 
-  if (!valid) {
-    return (
-      <div className="mx-auto max-w-md p-6 text-center">
-        <h1 className="text-lg font-semibold">QR Code Expired</h1>
-        <p className="text-sm text-muted-foreground">
-          This employee ID has been revoked or replaced.
-        </p>
-      </div>
-    );
+    if (!legacy) {
+      return expiredScreen;
+    }
   }
 }
-
 
 
 

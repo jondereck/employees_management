@@ -16,6 +16,12 @@ import {
 import ImageLogo from "@/public/icon-192x192.png"; // local asset (same-origin)
 import { toast } from "sonner";
 
+import axios from "axios";
+import { useRouter } from "next/navigation";
+import { Copy, Download, Printer, RotateCcw } from "lucide-react";
+import { AlertModal } from "./modals/alert-modal";
+
+
 interface QrCodeGeneratorProps {
   departmentId: string;
   employeeId: string;
@@ -23,7 +29,7 @@ interface QrCodeGeneratorProps {
   employeeNo?: string | null;
   /** Optional: QR size in px (canvas). Default 200 (modal), 100 (trigger) */
   size?: number;
-   publicId: string;
+  publicId: string;
   publicVersion: number;
   publicEnabled: boolean;
 }
@@ -41,14 +47,17 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   const baseUrl =
     process.env.NEXT_PUBLIC_URL ??
     (typeof window !== "undefined" ? window.location.origin : "");
-const qrValue =
-  `${baseUrl}/view/employee/${employeeId}` +
-  `?pid=${publicId}&v=${publicVersion}`;
+  const qrValue =
+    `${baseUrl}/view/employee/${employeeId}` +
+    `?pid=${publicId}&v=${publicVersion}`;
 
-
+  const router = useRouter();
 
 
   const [isOpen, setIsOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   const qrRef = useRef<HTMLCanvasElement | null>(null);
 
   // Filename rule: JDN + employeeNo(before comma) | fallback to employeeId
@@ -59,6 +68,35 @@ const qrValue =
     return `JDN${base}`;
   }, [employeeNo, employeeId]);
 
+
+
+  const handleRegenerate = () => {
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmRegenerate = async () => {
+    try {
+      setLoading(true);
+
+      await fetch(
+        `/api/${departmentId}/employees/${employeeId}/regenerate-qr`,
+        { method: "POST" }
+      );
+
+      toast.success("QR code regenerated");
+
+      setConfirmOpen(false);
+      setIsOpen(false); // close QR dialog
+
+      // reload fresh publicId / version
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to regenerate QR");
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   const handleDownload = () => {
@@ -138,43 +176,86 @@ const qrValue =
         </DialogTrigger>
 
         {/* Modal */}
-<DialogPortal>
-  <DialogContent className="fixed z-[9999] w-full max-w-sm p-6">
-    <DialogHeader>
-      <DialogTitle className="text-center">
-        Employee QR Code
-      </DialogTitle>
-      <DialogDescription className="text-center text-muted-foreground">
-        Scan the QR code or download/print it.
-      </DialogDescription>
-    </DialogHeader>
+        <DialogPortal>
+          <DialogContent className="fixed z-[9999] w-full max-w-sm p-6">
+            <DialogHeader>
+              <DialogTitle className="text-center">
+                Employee QR Code
+              </DialogTitle>
+              <DialogDescription className="text-center text-muted-foreground">
+                Scan the QR code or download/print it.
+              </DialogDescription>
+            </DialogHeader>
 
-    <div className="flex justify-center items-center py-6">
-      <QRCodeCanvas
-        value={qrValue}
-        size={size}
-        ref={qrRef}
-        imageSettings={{
-          src: ImageLogo.src,
-          height: logoSize,
-          width: logoSize,
-          excavate: true,
-        }}
-      />
-    </div>
+            <div className="flex justify-center items-center py-6">
+              <QRCodeCanvas
+                value={qrValue}
+                size={size}
+                ref={qrRef}
+                imageSettings={{
+                  src: ImageLogo.src,
+                  height: logoSize,
+                  width: logoSize,
+                  excavate: true,
+                }}
+              />
+            </div>
 
-    <DialogFooter className="flex justify-between items-center mt-4">
-      <Button variant="outline" onClick={handleDownload}>
-        ⬇️ Download
-      </Button>
-      <Button variant="outline" onClick={handlePrint}>
-        🖨️ Print
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</DialogPortal>
+            <DialogFooter className="mt-6 space-y-3">
+              {/* Secondary actions */}
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownload}
+                  className="w-full flex items-center justify-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyLink}
+                  className="w-full flex items-center justify-center gap-2"
+                >
+                  <Copy className="h-4 w-4" />
+
+                </Button>
+
+
+                {/* Destructive action */}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleRegenerate}
+                  className="w-full flex items-center justify-center gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+
+                </Button>
+              </div>
+            </DialogFooter>
+
+
+          </DialogContent>
+        </DialogPortal>
 
       </Dialog>
+
+      <AlertModal
+        isOpen={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={handleConfirmRegenerate}
+        loading={loading}
+        title="Regenerate QR Code?"
+        description="This will invalidate ALL previously issued QR codes for this employee. Any printed or shared QR codes will stop working."
+        confirmText="Yes, regenerate"
+        cancelText="Cancel"
+        variant="destructive"
+      />
+
     </div>
   );
 };

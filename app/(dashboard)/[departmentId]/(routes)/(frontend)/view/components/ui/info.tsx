@@ -83,12 +83,12 @@ const Info = ({
   }, [data?.id, router]);
 
   useEffect(() => {
-  console.log("QR DATA", {
-    publicId: data.publicId,
-    publicVersion: data.publicVersion,
-    publicEnabled: data.publicEnabled,
-  });
-}, [data]);
+    console.log("QR DATA", {
+      publicId: data.publicId,
+      publicVersion: data.publicVersion,
+      publicEnabled: data.publicEnabled,
+    });
+  }, [data]);
 
 
   const hasText = (v?: string | null) => !!v && v.trim().length > 0;
@@ -122,12 +122,12 @@ const Info = ({
 
   const lastUpdated = formatUpdatedAt(data?.updatedAt, { tz: "Asia/Manila" });
 
- const monthlySalary = displaySalary;
+  const monthlySalary = displaySalary;
 
-const annualSalary =
-  monthlySalary > 0
-    ? calculateAnnualSalary(String(monthlySalary))
-    : "—";
+  const annualSalary =
+    monthlySalary > 0
+      ? calculateAnnualSalary(String(monthlySalary))
+      : "—";
 
 
   const formattedAddress = addressFormat(data);
@@ -219,30 +219,30 @@ const annualSalary =
             )}
           </h1>
 
-         <div className="flex flex-col">
-  {/* Position row */}
-  <div className="flex flex-wrap items-center">
-    <p className="text-xl font-bold text-gray-900 tracking-tight">
-      {data.position}
-    </p>
+          <div className="flex flex-col">
+            {/* Position row */}
+            <div className="flex flex-wrap items-center">
+              <p className="text-xl font-bold text-gray-900 tracking-tight">
+                {data.position}
+              </p>
 
-    {Number(data.salaryGrade) > 0 && !isJobOrder(data.employeeType) && (
-      <Badge
-        variant="secondary"
-        className="text-xs font-medium px-2 py-0.5 opacity-80"
-      >
-        S.G. {data.salaryGrade}
-      </Badge>
-    )}
-  </div>
+              {Number(data.salaryGrade) > 0 && !isJobOrder(data.employeeType) && (
+                <Badge
+                  variant="secondary"
+                  className="text-xs font-medium px-2 py-0.5 opacity-80"
+                >
+                  S.G. {data.salaryGrade}
+                </Badge>
+              )}
+            </div>
 
-  {/* Note */}
-  {hasText(data?.note) && (
-    <p className="text-xs font-light text-gray-500 whitespace-pre-wrap">
-      {data.note}
-    </p>
-  )}
-</div>
+            {/* Note */}
+            {hasText(data?.note) && (
+              <p className="text-xs font-light text-gray-500 whitespace-pre-wrap">
+                {data.note}
+              </p>
+            )}
+          </div>
 
           <div className="text-gray-700 space-y-2 mt-4">
             <div className="flex items-center gap-2">
@@ -285,9 +285,9 @@ const annualSalary =
           </div>
 
           <div className="transition-transform transform hover:scale-110 cursor-pointer">
-            <QrCodeGenerator departmentId={data.department} employeeId={data.id} employeeNo={data.employeeNo}   publicId={data.publicId}
-  publicVersion={data.publicVersion}
-  publicEnabled={!!data.publicEnabled}/>
+            <QrCodeGenerator departmentId={data.department} employeeId={data.id} employeeNo={data.employeeNo} publicId={data.publicId}
+              publicVersion={data.publicVersion}
+              publicEnabled={!!data.publicEnabled} />
           </div>
 
         </div>
