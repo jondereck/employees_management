@@ -103,6 +103,11 @@ export type EmployeesColumn = {
   employeeLink: string;
  designation: { id: string; name: string } | null;
 note: string;
+
+  // 🔐 QR FIELDS (ADD THESE)
+  publicId: string;
+  publicVersion: number;
+  publicEnabled: boolean;
 createdAt: string | Date | null;
   updatedAt: string | Date | null;
 }

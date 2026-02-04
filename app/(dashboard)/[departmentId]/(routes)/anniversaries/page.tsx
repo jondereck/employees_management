@@ -37,6 +37,12 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
   id: employee.id,
   employeeNo: employee.employeeNo ?? "",
   department: employee.departmentId ?? "",
+
+  // 🔐 QR / PUBLIC FIELDS (ADD THESE)
+  publicId: employee.publicId ?? "",
+  publicVersion: Number(employee.publicVersion ?? 0),
+  publicEnabled: Boolean(employee.publicEnabled),
+
   prefix: employee.prefix ?? "",
   lastName: employee.lastName ?? "",
   firstName: employee.firstName ?? "",
@@ -62,6 +68,7 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
   isFeatured: Boolean(employee.isFeatured),
   isHead: Boolean(employee.isHead),
   isArchived: Boolean(employee.isArchived),
+
   eligibility: employee.eligibility
     ? {
         id: employee.eligibility.id,
@@ -69,6 +76,7 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
         value: employee.eligibility.value,
       }
     : { id: "", name: "", value: "" },
+
   employeeType: employee.employeeType
     ? {
         id: employee.employeeType.id,
@@ -76,12 +84,14 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
         value: employee.employeeType.value,
       }
     : { id: "", name: "", value: "" },
+
   offices: employee.offices
     ? {
         id: employee.offices.id,
         name: employee.offices.name,
       }
     : { id: "", name: "" },
+
   images: Array.isArray(employee.images)
     ? employee.images.map((image: any) => ({
         id: image.id,
@@ -89,6 +99,7 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
         value: "",
       }))
     : [],
+
   region: employee.region ?? "",
   province: employee.province ?? "",
   city: employee.city ?? "",
@@ -100,12 +111,14 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
   emergencyContactNumber: employee.emergencyContactNumber ?? "",
   employeeLink: employee.employeeLink ?? "",
   note: employee.note ?? "",
+
   designation: employee.designation
     ? {
         id: employee.designation.id,
         name: employee.designation.name,
       }
     : null,
+
   createdAt: employee.createdAt ? employee.createdAt.toISOString() : null,
   updatedAt: employee.updatedAt ? employee.updatedAt.toISOString() : null,
 });

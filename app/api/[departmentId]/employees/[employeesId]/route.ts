@@ -272,19 +272,54 @@ export async function GET(
     }
 
 
-    const employee = await prismadb.employee.findUnique({
-      where: {
-        id: params.employeesId,
+ const employee = await prismadb.employee.findUnique({
+  where: {
+    id: params.employeesId,
+  },
+  select: {
+    // 🔑 base identity
+    id: true,
+    employeeNo: true,
 
-      },
-      include: {
-        images: true,
-        offices: true,
-        employeeType: true,
-        eligibility: true,
-        designation: { select: { id: true, name: true } },
-      },
-    });
+    // 🔐 QR FIELDS (THIS IS THE FIX)
+    publicId: true,
+    publicVersion: true,
+    publicEnabled: true,
+
+    // existing relations
+    images: true,
+    offices: true,
+    employeeType: true,
+    eligibility: true,
+    designation: { select: { id: true, name: true } },
+
+    // keep other scalar fields you already rely on
+    firstName: true,
+    lastName: true,
+    middleName: true,
+    suffix: true,
+    prefix: true,
+    position: true,
+    salary: true,
+    salaryGrade: true,
+    salaryStep: true,
+    salaryMode: true,
+    dateHired: true,
+    latestAppointment: true,
+    terminateDate: true,
+    birthday: true,
+    isArchived: true,
+    isHead: true,
+    employeeTypeId: true,
+    officeId: true,
+    eligibilityId: true,
+    designationId: true,
+    note: true,
+    updatedAt: true,
+    createdAt: true,
+  },
+});
+
 
     return NextResponse.json(employee);
 

@@ -10,7 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter
+  DialogFooter,
+  DialogPortal
 } from "@/components/ui/dialog";
 import ImageLogo from "@/public/icon-192x192.png"; // local asset (same-origin)
 import { toast } from "sonner";
@@ -22,6 +23,9 @@ interface QrCodeGeneratorProps {
   employeeNo?: string | null;
   /** Optional: QR size in px (canvas). Default 200 (modal), 100 (trigger) */
   size?: number;
+   publicId: string;
+  publicVersion: number;
+  publicEnabled: boolean;
 }
 
 export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
@@ -29,12 +33,19 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   employeeId,
   employeeNo,
   size = 200,
+  publicId,
+  publicVersion,
+  publicEnabled
 }) => {
 
   const baseUrl =
     process.env.NEXT_PUBLIC_URL ??
     (typeof window !== "undefined" ? window.location.origin : "");
-  const qrValue = `${baseUrl}/view/employee/${employeeId}`;
+const qrValue =
+  `${baseUrl}/view/employee/${employeeId}` +
+  `?pid=${publicId}&v=${publicVersion}`;
+
+
 
 
   const [isOpen, setIsOpen] = useState(false);
@@ -48,7 +59,7 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
     return `JDN${base}`;
   }, [employeeNo, employeeId]);
 
-  const handleOpen = () => setIsOpen(true);
+
 
   const handleDownload = () => {
     const canvas = qrRef.current;
@@ -108,10 +119,8 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
         <DialogTrigger asChild>
           <div
             className="my-4 flex flex-col items-start space-y-2 cursor-pointer"
-            onClick={handleOpen}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && handleOpen()}
             title="Click to enlarge"
           >
             <QRCodeCanvas
@@ -129,60 +138,42 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
         </DialogTrigger>
 
         {/* Modal */}
-        <DialogContent className="w-full max-w-sm p-6">
-          <DialogHeader>
-            <DialogTitle className="text-center">Employee QR Code</DialogTitle>
-            <DialogDescription className="text-center text-muted-foreground">
-              Scan the QR code or download/print it.
-            </DialogDescription>
-          </DialogHeader>
+<DialogPortal>
+  <DialogContent className="fixed z-[9999] w-full max-w-sm p-6">
+    <DialogHeader>
+      <DialogTitle className="text-center">
+        Employee QR Code
+      </DialogTitle>
+      <DialogDescription className="text-center text-muted-foreground">
+        Scan the QR code or download/print it.
+      </DialogDescription>
+    </DialogHeader>
 
-          <div className="flex justify-center items-center py-6">
-            <QRCodeCanvas
-              value={qrValue}
-              size={size}
-              ref={qrRef}
-              // center logo (same-origin image; won’t taint canvas)
-              imageSettings={{
-                src: ImageLogo.src,
-                height: logoSize,
-                width: logoSize,
-                excavate: true,
-              }}
-            // You can tweak errorCorrectionLevel if needed
-            // level="H"
-            // includeMargin
-            />
-          </div>
-          {/* Link + Copy (no overlap, truncates nicely) */}
-          <div className="mb-3">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <input
-                  readOnly
-                  value={qrValue}
-                  className="w-full rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground truncate"
-                  onFocus={(e) => e.currentTarget.select()}
-                  aria-label="Public profile link"
-                />
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="shrink-0"
-                onClick={handleCopyLink}
-              >
-                Copy link
-              </Button>
-            </div>
-          </div>
+    <div className="flex justify-center items-center py-6">
+      <QRCodeCanvas
+        value={qrValue}
+        size={size}
+        ref={qrRef}
+        imageSettings={{
+          src: ImageLogo.src,
+          height: logoSize,
+          width: logoSize,
+          excavate: true,
+        }}
+      />
+    </div>
 
+    <DialogFooter className="flex justify-between items-center mt-4">
+      <Button variant="outline" onClick={handleDownload}>
+        ⬇️ Download
+      </Button>
+      <Button variant="outline" onClick={handlePrint}>
+        🖨️ Print
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</DialogPortal>
 
-          <DialogFooter className="flex justify-between items-center mt-4">
-            <Button variant="outline" onClick={handleDownload}>⬇️ Download</Button>
-            <Button variant="outline" onClick={handlePrint}>🖨️ Print</Button>
-          </DialogFooter>
-        </DialogContent>
       </Dialog>
     </div>
   );

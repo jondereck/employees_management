@@ -138,7 +138,10 @@ const EmployeesPage = async ({
     employeeLink: item.employeeLink,
     note: item.note ?? "",
     designation: item.designation ? { id: item.designation.id, name: item.designation.name } : null,
-    publicEnabled: item.publicEnabled,
+   publicEnabled: Boolean(item.publicEnabled),
+publicId: item.publicId ?? "",
+publicVersion: Number(item.publicVersion ?? 0),
+
      createdAt: item.createdAt?.toISOString() ?? null,
   updatedAt: item.updatedAt?.toISOString() ?? null,
 

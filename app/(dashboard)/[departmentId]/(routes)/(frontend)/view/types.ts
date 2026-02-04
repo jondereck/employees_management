@@ -30,6 +30,10 @@ export interface EmployeeType {
 
 export interface Employees {
   id: string;
+    // 🔐 QR FIELDS (ADD THESE)
+  publicId: string;
+  publicVersion: number;
+  publicEnabled: boolean;
   department: string;
   employeeNo: string;
   offices: Offices;
@@ -73,7 +77,7 @@ export interface Employees {
   employeeLink: string,
   note: string;
   designation: { id: string; name: string } | null;
-  publicEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
+  
 }

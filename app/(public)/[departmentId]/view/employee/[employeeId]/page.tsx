@@ -32,6 +32,7 @@ import PublicHeadshot from "@/app/(public)/components/download-photo";
 import { normalizeEducationLines } from "@/utils/normalize-education";
 import { ActiveBadge } from "@/app/(public)/components/icons/active-badges";
 import AutoTrackPublicView from "@/components/public/auto-track-public-view";
+import RegenerateQrButton from "@/app/(public)/components/regenerate-qr-button";
 
 
 export const dynamic = "force-dynamic";
@@ -65,12 +66,62 @@ interface EmployeeInvdividualPageProps {
   params: {
     departmentId: string;
     employeeId: string;
-    officeId: string;
+  };
+  searchParams: {
+    pid?: string;
+    v?: string;
   };
 }
 
-export default async function EmployeeInvdividualPage({ params }: EmployeeInvdividualPageProps) {
-  const isAdmin = await resolveIsAdmin(params.departmentId);
+
+
+export default async function EmployeeInvdividualPage({
+  params,
+  searchParams,
+}: EmployeeInvdividualPageProps) {
+const isAdmin = await resolveIsAdmin(params.departmentId);
+
+/* ============================
+ * QR VALIDATION (PUBLIC ONLY)
+ * ============================ */
+
+const { pid, v } = searchParams;
+
+// ADMIN BYPASSES QR CHECK
+if (!isAdmin) {
+  if (!pid || !v) {
+    return (
+      <div className="mx-auto max-w-md p-6 text-center">
+        <h1 className="text-lg font-semibold">Invalid QR Code</h1>
+        <p className="text-sm text-muted-foreground">
+          This QR code is missing verification data.
+        </p>
+      </div>
+    );
+  }
+
+  const valid = await prismadb.employee.findFirst({
+    where: {
+      id: params.employeeId,
+      publicId: pid,
+      publicEnabled: true,
+      publicVersion: Number(v),
+    },
+    select: { id: true },
+  });
+
+  if (!valid) {
+    return (
+      <div className="mx-auto max-w-md p-6 text-center">
+        <h1 className="text-lg font-semibold">QR Code Expired</h1>
+        <p className="text-sm text-muted-foreground">
+          This employee ID has been revoked or replaced.
+        </p>
+      </div>
+    );
+  }
+}
+
 
 
 
@@ -112,12 +163,17 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
               {/* Right: Profile Info */}
               <div className="mt-8 lg:mt-0 flex-1">
-                <AdminHeaderCard
-                  departmentId={params.departmentId}
-                  employeeId={employee.id}
-                  publicEnabled={!!employee.publicEnabled}
-
-                />
+         <AdminHeaderCard
+  departmentId={params.departmentId}
+  employeeId={employee.id}
+  publicEnabled={!!employee.publicEnabled}
+  actions={
+    <RegenerateQrButton
+      departmentId={params.departmentId}
+      employeesId={employee.id}
+    />
+  }
+/>
 
                 {/* Details card */}
                 <div className="mt-6 bg-white rounded-xl shadow-sm border p-6">
@@ -322,13 +378,13 @@ export default async function EmployeeInvdividualPage({ params }: EmployeeInvdiv
 
   const latest = publicData.images?.[0] as PublicImage | undefined;
 
-  const v =
+  const ve =
     (latest?.updatedAt && Date.parse(String(latest.updatedAt))) ||
     (latest?.createdAt && Date.parse(String(latest.createdAt))) ||
     Date.now();
 
   const headshot = latest
-    ? `${latest.url}${latest.url.includes("?") ? "&" : "?"}v=${v}`
+    ? `${latest.url}${latest.url.includes("?") ? "&" : "?"}v=${ve}`
     : placeholder;
 
 

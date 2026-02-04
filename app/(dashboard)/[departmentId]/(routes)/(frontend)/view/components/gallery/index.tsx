@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Loader2, Download, Copy, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogPortal
 } from "@/components/ui/dialog";
 
 type GalleryImage = {
@@ -271,57 +271,80 @@ const Gallery = ({ images, employeeId, employeeNo, gender }: GalleryProps) => {
       </Tab.Group>
 
       {/* Full preview dialog */}
-      <Dialog open={previewOpen && activeImage && !isPlaceholder(activeImage)} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-3xl p-0">
-          <DialogHeader className="px-4 pt-4">
-            <DialogTitle className="text-base">Preview</DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              Click download to save as <strong>{activeImage ? buildFilename(activeImage) : ""}</strong>
-            </DialogDescription>
-          </DialogHeader>
+<Dialog
+  open={!!previewOpen && !!activeImage && !isPlaceholder(activeImage)}
+  onOpenChange={setPreviewOpen}
+>
+  <DialogPortal>
+    <DialogContent className="fixed z-[9999] max-w-3xl p-0">
+      <DialogHeader className="px-4 pt-4">
+        <DialogTitle className="text-base">Preview</DialogTitle>
+        <DialogDescription className="text-muted-foreground">
+          Click download to save as{" "}
+          <strong>{activeImage ? buildFilename(activeImage) : ""}</strong>
+        </DialogDescription>
+      </DialogHeader>
 
-          {/* Mirror the toggle inside the dialog too */}
+      <div className="relative w-full">
+        <div
+          className="relative mx-auto w-full aspect-[4/3] bg-black"
+          style={photoBackground}
+        >
+          {activeImage && !isPlaceholder(activeImage) && (
+            <Image
+              src={activeImage.url}
+              alt="Full preview"
+              fill
+              className="object-contain"
+              sizes="100vw"
+              priority
+            />
+          )}
+        </div>
+      </div>
 
-          <div className="relative w-full">
-            <div
-              className="relative mx-auto w-full aspect-[4/3] bg-black"
-              style={photoBackground}
+      <DialogFooter className="px-4 pb-4 gap-2">
+        {activeImage && !isPlaceholder(activeImage) && (
+          <>
+            <Button
+              variant="outline"
+              onClick={() => handleCopy(activeImage)}
+              disabled={
+                loadingAction?.id === activeImage.id &&
+                loadingAction.type === "copy"
+              }
             >
-              {activeImage && !isPlaceholder(activeImage) && (
-                <Image src={activeImage.url} alt="Full preview" fill className="object-contain" sizes="100vw" priority />
+              {loadingAction?.id === activeImage.id &&
+              loadingAction.type === "copy" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Copy className="mr-2 h-4 w-4" />
               )}
-            </div>
-          </div>
+              Copy
+            </Button>
 
-          <DialogFooter className="px-4 pb-4 gap-2">
-            {activeImage && !isPlaceholder(activeImage) && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => handleCopy(activeImage)}
-                  disabled={loadingAction?.id === activeImage.id && loadingAction.type === "copy"}
-                  title="Copy image"
-                >
-                  {loadingAction?.id === activeImage.id && loadingAction.type === "copy"
-                    ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    : <Copy className="mr-2 h-4 w-4" />}
-                  Copy
-                </Button>
-                <Button
-                  onClick={() => handleDownload(activeImage)}
-                  disabled={loadingAction?.id === activeImage.id && loadingAction.type === "download"}
-                  title="Download image"
-                >
-                  {loadingAction?.id === activeImage.id && loadingAction.type === "download"
-                    ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    : <Download className="mr-2 h-4 w-4" />}
-                  Download
-                </Button>
-              </>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <Button
+              onClick={() => handleDownload(activeImage)}
+              disabled={
+                loadingAction?.id === activeImage.id &&
+                loadingAction.type === "download"
+              }
+            >
+              {loadingAction?.id === activeImage.id &&
+              loadingAction.type === "download" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Download
+            </Button>
+          </>
+        )}
+      </DialogFooter>
+    </DialogContent>
+  </DialogPortal>
+</Dialog>
+
     </>
   );
 };

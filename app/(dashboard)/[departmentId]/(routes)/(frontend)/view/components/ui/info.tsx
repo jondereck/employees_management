@@ -82,6 +82,15 @@ const Info = ({
     }
   }, [data?.id, router]);
 
+  useEffect(() => {
+  console.log("QR DATA", {
+    publicId: data.publicId,
+    publicVersion: data.publicVersion,
+    publicEnabled: data.publicEnabled,
+  });
+}, [data]);
+
+
   const hasText = (v?: string | null) => !!v && v.trim().length > 0;
 
   const savedSalary = Number(data?.salary ?? 0); // ← manual/DB value, if any
@@ -113,9 +122,14 @@ const Info = ({
 
   const lastUpdated = formatUpdatedAt(data?.updatedAt, { tz: "Asia/Manila" });
 
-  const monthlySalary = salaryRecord ? salaryRecord.steps[step - 1] ?? 0 : 0;
+ const monthlySalary = displaySalary;
 
-  const annualSalary = calculateAnnualSalary(String(monthlySalary));
+const annualSalary =
+  monthlySalary > 0
+    ? calculateAnnualSalary(String(monthlySalary))
+    : "—";
+
+
   const formattedAddress = addressFormat(data);
 
   const yearService = calculateYearService(data.dateHired, data.terminateDate);
@@ -271,7 +285,9 @@ const Info = ({
           </div>
 
           <div className="transition-transform transform hover:scale-110 cursor-pointer">
-            <QrCodeGenerator departmentId={data.department} employeeId={data.id} employeeNo={data.employeeNo} />
+            <QrCodeGenerator departmentId={data.department} employeeId={data.id} employeeNo={data.employeeNo}   publicId={data.publicId}
+  publicVersion={data.publicVersion}
+  publicEnabled={!!data.publicEnabled}/>
           </div>
 
         </div>
@@ -309,7 +325,7 @@ const Info = ({
           label="Emergency Contact Person"
           value={data.emergencyContactName || "—"}
         />
-        <DetailItem label="Emergency Contact Number" value={data.emergencyContactNumber || "—"} />
+        <DetailItem label="Emergency Contact Number" value={formatContactNumber(data.emergencyContactNumber)} />
       </CardSection>
 
       <CardSection title="Employment Information">
