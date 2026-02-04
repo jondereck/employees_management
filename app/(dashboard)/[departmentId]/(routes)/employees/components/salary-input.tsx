@@ -87,6 +87,20 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
   // whether automatic value is available
   const autoAvailable = !!autoSalary && !Number.isNaN(autoSalary);
 
+
+  const safeStep = Math.max(1, currentStep || 1);
+
+useEffect(() => {
+  const current = form.getValues("salaryStep");
+  if (current !== safeStep) {
+    form.setValue("salaryStep", safeStep, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+}, [safeStep, form]);
+
+
   useEffect(() => {
     if (salaryMode === "AUTO") {
       form.setValue("salary", autoSalary, {

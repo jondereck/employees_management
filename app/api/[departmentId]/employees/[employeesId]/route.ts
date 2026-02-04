@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
 
 
- 
+
 export async function PATCH(
   req: Request,
   { params }: { params: { departmentId: string; employeesId: string } }
@@ -18,7 +18,17 @@ export async function PATCH(
       return new NextResponse("Employee id is required", { status: 400 });
     }
 
+
+    
     const body = await req.json();
+    console.group("🛑 API RECEIVED");
+console.log({
+  salaryMode: body.salaryMode,
+  salary: body.salary,
+  salaryGrade: body.salaryGrade,
+  salaryStep: body.salaryStep,
+});
+console.groupEnd();
     const {
       prefix,
       employeeNo,
@@ -60,10 +70,17 @@ export async function PATCH(
       emergencyContactName,
       emergencyContactNumber,
       employeeLink,
-       note,
+      note,
       designationId,
     } = body;
 
+    const normalizeStep = (v: any) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 1 ? n : 1;
+};
+
+    const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
+    const normalizedEmployeeNo = normalizeBio(employeeNo);
     // Validation
     if (!firstName) return new NextResponse("First Name is required", { status: 400 });
     if (!lastName) return new NextResponse("Last Name is required", { status: 400 });
@@ -97,7 +114,7 @@ export async function PATCH(
       if (exists) return new NextResponse(JSON.stringify({ error: "Contact number already exists" }), { status: 400 });
     }
 
-      if (designationId) {
+    if (designationId) {
       const validDesignation = await prismadb.offices.findFirst({
         where: { id: designationId, departmentId: params.departmentId },
         select: { id: true },
@@ -106,101 +123,131 @@ export async function PATCH(
         return new NextResponse(JSON.stringify({ error: "Invalid designationId (Office not found in this department)" }), { status: 400 });
       }
     }
-const existing = await prismadb.employee.findUnique({
-  where: { id: params.employeesId },
-  select: {
-    salary: true,
-    salaryMode: true,
-    salaryGrade: true,
-    salaryStep: true,
-  },
-});
 
-if (!existing) {
-  return new NextResponse("Employee not found", { status: 404 });
-}
+    if (normalizedEmployeeNo) {
+      const duplicateEmpNo = await prismadb.employee.findFirst({
+        where: {
+          departmentId: params.departmentId,
+          employeeNo: normalizedEmployeeNo,
+           id: { not: params.employeesId }, 
+        },
+        select: { id: true },
+      });
 
-const finalSalaryMode = salaryMode ?? existing.salaryMode;
+      if (duplicateEmpNo) {
+        return new NextResponse(
+          JSON.stringify({ error: "Employee number already exists." }),
+          { status: 400 }
+        );
+      }
+    }
 
-let finalSalary = existing.salary;
-
-if (finalSalaryMode === "MANUAL") {
-  finalSalary = Number(salary ?? existing.salary);
-}
-
-if (finalSalaryMode === "AUTO") {
-  const grade = Number(salaryGrade ?? existing.salaryGrade);
-  const step  = Number(salaryStep  ?? existing.salaryStep);
-
-  if (Number.isFinite(grade) && Number.isFinite(step)) {
-    const record = await prismadb.salary.findUnique({
-      where: { grade_step: { grade, step } },
-      select: { amount: true },
+    const existing = await prismadb.employee.findUnique({
+      where: { id: params.employeesId },
+      select: {
+        salary: true,
+        salaryMode: true,
+        salaryGrade: true,
+        salaryStep: true,
+      },
     });
 
-    if (record?.amount != null) {
-      finalSalary = record.amount;
+    if (!existing) {
+      return new NextResponse("Employee not found", { status: 404 });
     }
+
+    const finalSalaryMode = salaryMode ?? existing.salaryMode;
+
+
+
+    let finalSalary = existing.salary;
+
+    if (finalSalaryMode === "MANUAL") {
+      finalSalary = Number(salary ?? existing.salary);
+    }
+
+ if (finalSalaryMode === "AUTO") {
+  const grade = Number(salaryGrade ?? existing.salaryGrade);
+  const step = normalizeStep(salaryStep ?? existing.salaryStep);
+
+  const record = await prismadb.salary.findUnique({
+    where: {
+      grade_step: { grade, step },
+    },
+    select: { amount: true },
+  });
+
+  if (!record) {
+    return new NextResponse(
+      `Salary table missing for SG ${grade}, Step ${step}`,
+      { status: 400 }
+    );
   }
+
+  finalSalary = record.amount;
 }
+
 
 
     // Update employee with merged images
-const employee = await prismadb.employee.update({
-  where: { id: params.employeesId },
-  data: {
-    prefix,
-    employeeNo,
-    lastName,
-    firstName,
-    middleName,
-    suffix,
-    gender,
-    contactNumber,
-    position,
-    birthday,
-    education,
-    houseNo,
-    street,
-    barangay,
-    city,
-    province,
-    gsisNo,
-    tinNo,
-    pagIbigNo,
-    philHealthNo,
+    const employee = await prismadb.employee.update({
+      where: { id: params.employeesId },
+      data: {
+        prefix,
+        employeeNo,
+        lastName,
+        firstName,
+        middleName,
+        suffix,
+        gender,
+        contactNumber,
+        position,
+        birthday,
+        education,
+        houseNo,
+        street,
+        barangay,
+        city,
+        province,
+        gsisNo,
+        tinNo,
+        pagIbigNo,
+        philHealthNo,
 
-    // ✅ FIXED SALARY HANDLING
-    salary: finalSalary,
-    salaryMode: finalSalaryMode,
-    salaryGrade: salaryGrade != null ? Number(salaryGrade) : existing.salaryGrade,
-    salaryStep: salaryStep != null ? Number(salaryStep) : existing.salaryStep,
+        // ✅ FIXED SALARY HANDLING
+        salary: finalSalary,
+        salaryMode: finalSalaryMode,
+        salaryGrade: salaryGrade != null ? Number(salaryGrade) : existing.salaryGrade,
+       salaryStep: finalSalaryMode === "AUTO"
+  ? normalizeStep(salaryStep ?? existing.salaryStep)
+  : salaryStep ?? existing.salaryStep,
 
-    dateHired,
-    latestAppointment,
-    terminateDate,
-    isFeatured,
-    isArchived,
-    isHead,
-    employeeTypeId,
-    officeId,
-    eligibilityId,
-    memberPolicyNo,
-    age,
-    nickname,
-    emergencyContactName,
-    emergencyContactNumber,
-    employeeLink,
 
-    images: {
-      deleteMany: {},
-      createMany: { data: images.map((img: { url: string }) => img) },
-    },
+        dateHired,
+        latestAppointment,
+        terminateDate,
+        isFeatured,
+        isArchived,
+        isHead,
+        employeeTypeId,
+        officeId,
+        eligibilityId,
+        memberPolicyNo,
+        age,
+        nickname,
+        emergencyContactName,
+        emergencyContactNumber,
+        employeeLink,
 
-    note: note ?? null,
-    designationId: designationId ?? null,
-  },
-});
+        images: {
+          deleteMany: {},
+          createMany: { data: images.map((img: { url: string }) => img) },
+        },
+
+        note: note ?? null,
+        designationId: designationId ?? null,
+      },
+    });
 
 
     return NextResponse.json(employee);

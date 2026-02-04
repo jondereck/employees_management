@@ -81,6 +81,8 @@ export async function POST(
     const safeGrade = Number(body.salaryGrade ?? 1);
     const safeStep = Number(body.salaryStep ?? 1);
     const mode = body.salaryMode ?? "AUTO";
+const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
+const normalizedEmployeeNo = normalizeBio(employeeNo);
 
     let finalSalary = Number(body.salary ?? 0);
 
@@ -114,6 +116,8 @@ export async function POST(
       return new NextResponse("Department Id is required", { status: 400 });
     }
 
+
+    
     const departmentByUserId = await prismadb.department.findFirst({
       where: { id: params.departmentId, userId },
       select: { id: true },
@@ -167,8 +171,23 @@ export async function POST(
 
     // autoSalary = salaryRecord?.amount ?? 0;
 
+if (normalizedEmployeeNo) {
+  const duplicateEmpNo = await prismadb.employee.findFirst({
+    where: {
+      departmentId: params.departmentId,
+      employeeNo: normalizedEmployeeNo,
+    },
+    select: { id: true },
+  });
 
-    const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
+  if (duplicateEmpNo) {
+    return new NextResponse(
+      JSON.stringify({ error: "Employee number already exists." }),
+      { status: 400 }
+    );
+  }
+}
+
     // --- CREATE employee + default HIRED event atomically (with collision-safe BIO) ---
     const created = await prismadb.$transaction(async (tx) => {
       // 1) If employeeNo was not provided, try to auto-suggest from the office.bioIndexCode

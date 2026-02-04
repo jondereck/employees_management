@@ -7,24 +7,49 @@ export function computeStep({
   dateHired?: Date | string;
   latestAppointment?: Date | string;
   maxStep?: number;
-}) {
-  const normalize = (d?: Date | string) => {
-    if (!d) return undefined;
-    if (d instanceof Date) return d;
-    const parsed = new Date(d);
-    return isNaN(parsed.getTime()) ? undefined : parsed;
+}): number {
+  const normalize = (d?: Date | string): Date | null => {
+    if (!d) return null;
+    const parsed = d instanceof Date ? d : new Date(d);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
   const base = normalize(latestAppointment) ?? normalize(dateHired);
   if (!base) return 1;
 
-  // Full years difference (month/day aware)
   const now = new Date();
-  let years = now.getFullYear() - base.getFullYear();
+
+  // Guard against future dates
+  if (base > now) return 1;
+
+  let years =
+    now.getFullYear() - base.getFullYear();
+
   const m = now.getMonth() - base.getMonth();
   const d = now.getDate() - base.getDate();
-  if (m < 0 || (m === 0 && d < 0)) years -= 1;
+
+  if (m < 0 || (m === 0 && d < 0)) {
+    years -= 1;
+  }
+
+  // Defensive clamp
+  if (!Number.isFinite(years) || years < 0) {
+    years = 0;
+  }
+
+  const safeMaxStep =
+    Number.isFinite(maxStep) && maxStep >= 1 ? maxStep : 1;
 
   const stepIncrease = Math.floor(years / 3);
-  return Math.max(1, Math.min(stepIncrease + 1, maxStep));
+  const step = stepIncrease + 1;
+  
+if (process.env.NODE_ENV !== "production") {
+  const result = Math.min(Math.max(1, step), safeMaxStep);
+  if (result < 1) {
+    throw new Error("computeStep invariant violated: step < 1");
+  }
+}
+
+  // 🔒 Final invariant enforcement
+  return Math.min(Math.max(1, step), safeMaxStep);
 }
