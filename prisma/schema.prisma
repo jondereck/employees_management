@@ -143,6 +143,7 @@ model Employee {
   publicEnabled          Boolean                 @default(false)
   publicVersion          Int                     @default(1)
   salaryMode             SalaryMode              @default(AUTO)
+  legacyQrAllowed        Boolean                 @default(true)
   awards                 Award[]
   biometricsIdentityMaps BiometricsIdentityMap[] @relation("EmployeeToBiometricsIdentityMaps")
   changeRequests         ChangeRequest[]         @relation("EmployeeToChangeRequests")

@@ -41,6 +41,7 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
   publicId: employee.publicId ?? "",
   publicVersion: Number(employee.publicVersion ?? 0),
   publicEnabled: Boolean(employee.publicEnabled),
+  legacyQrAllowed: employee.legacyQrAllowed,
 
   prefix: employee.prefix ?? "",
   lastName: employee.lastName ?? "",

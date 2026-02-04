@@ -88,13 +88,14 @@ const isAdmin = await resolveIsAdmin(params.departmentId);
 const rawPid = searchParams?.pid;
 const rawV = searchParams?.v;
 
-const pid = typeof rawPid === "string" && rawPid !== "undefined"
-  ? rawPid
-  : null;
+const pid =
+  typeof rawPid === "string" && rawPid !== "undefined"
+    ? rawPid
+    : null;
 
 const version = Number(rawV);
-
 const isValidVersion = Number.isInteger(version) && version > 0;
+
 const expiredScreen = (
   <div className="mx-auto max-w-md p-6 text-center">
     <h1 className="text-lg font-semibold">QR Code Expired</h1>
@@ -103,12 +104,10 @@ const expiredScreen = (
     </p>
   </div>
 );
-
-
-// PUBLIC VIEW – grace mode
+// ADMIN BYPASSES QR CHECK
 if (!isAdmin) {
   if (pid && isValidVersion) {
-    // 🔐 strict mode (new QR)
+    // 🔐 NEW SECURE QR (post-upgrade)
     const valid = await prismadb.employee.findFirst({
       where: {
         id: params.employeeId,
@@ -123,11 +122,12 @@ if (!isAdmin) {
       return expiredScreen;
     }
   } else {
-    // 🟡 GRACE MODE (old printed QR)
+    // 🟡 LEGACY PRINTED QR (pre-upgrade)
     const legacy = await prismadb.employee.findFirst({
       where: {
         id: params.employeeId,
         publicEnabled: true,
+        legacyQrAllowed: true, // 👈 NEW COLUMN
       },
       select: { id: true },
     });

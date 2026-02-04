@@ -108,6 +108,7 @@ note: string;
   publicId: string;
   publicVersion: number;
   publicEnabled: boolean;
+  legacyQrAllowed?: boolean;
 createdAt: string | Date | null;
   updatedAt: string | Date | null;
 }

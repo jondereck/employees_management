@@ -272,33 +272,44 @@ export async function GET(
     }
 
 
- const employee = await prismadb.employee.findUnique({
-  where: {
-    id: params.employeesId,
-  },
+const employee = await prismadb.employee.findUnique({
+  where: { id: params.employeesId },
+
   select: {
-    // 🔑 base identity
+    // 🔑 identity
     id: true,
     employeeNo: true,
 
-    // 🔐 QR FIELDS (THIS IS THE FIX)
+    // 🔐 QR security
     publicId: true,
     publicVersion: true,
     publicEnabled: true,
+    legacyQrAllowed: true,
 
-    // existing relations
-    images: true,
-    offices: true,
-    employeeType: true,
-    eligibility: true,
-    designation: { select: { id: true, name: true } },
-
-    // keep other scalar fields you already rely on
-    firstName: true,
-    lastName: true,
-    middleName: true,
-    suffix: true,
+    // 👤 personal
     prefix: true,
+    firstName: true,
+    middleName: true,
+    lastName: true,
+    suffix: true,
+    nickname: true,
+    gender: true,
+    birthday: true,
+    age: true,
+
+    // 📞 contact
+    contactNumber: true,
+    emergencyContactName: true,
+    emergencyContactNumber: true,
+
+    // 🏠 address
+    region: true,
+    province: true,
+    city: true,
+    barangay: true,
+    houseNo: true,
+
+    // 💼 employment
     position: true,
     salary: true,
     salaryGrade: true,
@@ -307,21 +318,42 @@ export async function GET(
     dateHired: true,
     latestAppointment: true,
     terminateDate: true,
-    birthday: true,
     isArchived: true,
     isHead: true,
-    employeeTypeId: true,
-    officeId: true,
-    eligibilityId: true,
-    designationId: true,
     note: true,
-    updatedAt: true,
+
+    // 🔗 misc
+    employeeLink: true,
+
+    // 🖼 relations
+    images: {
+      select: {
+        id: true,
+        url: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    },
+    offices: true,
+    employeeType: true,
+    eligibility: true,
+    designation: { select: { id: true, name: true } },
+
+    // ⏱ metadata
     createdAt: true,
+    updatedAt: true,
   },
 });
 
+console.log("EMPLOYEE GET:", {
+  publicId: employee?.publicId,
+  publicVersion: employee?.publicVersion,
+  legacyQrAllowed: employee?.legacyQrAllowed,
+});
 
     return NextResponse.json(employee);
+
+    
 
   } catch (error) {
     console.log("[EMPLOYEES_GET]", error);

@@ -29,7 +29,18 @@ const getEmployee = async (id: string): Promise<Employees> => {
     return img;
   });
 
-  return { ...(data as any), images } as Employees;
+ return {
+  ...(data as any),
+
+  // 🔐 EXPLICITLY FORWARD QR FIELDS
+  publicId: (data as any).publicId,
+  publicVersion: (data as any).publicVersion,
+  publicEnabled: (data as any).publicEnabled,
+  legacyQrAllowed: (data as any).legacyQrAllowed,
+
+  images,
+} as Employees;
+
 };
 
 export default getEmployee;

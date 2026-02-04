@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,19 +44,42 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   publicEnabled
 }) => {
 
+  console.log("QrCodeGenerator props:", {
+    publicId,
+    publicVersion,
+    publicEnabled,
+  });
+
+  const [qrData, setQrData] = useState({
+    publicId,
+    publicVersion,
+  });
+
+
   const baseUrl =
     process.env.NEXT_PUBLIC_URL ??
     (typeof window !== "undefined" ? window.location.origin : "");
   const qrValue =
     `${baseUrl}/view/employee/${employeeId}` +
-    `?pid=${publicId}&v=${publicVersion}`;
+    `?pid=${qrData.publicId}&v=${qrData.publicVersion}`;
+
 
   const router = useRouter();
+
 
 
   const [isOpen, setIsOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+
+
+  useEffect(() => {
+    if (publicId && publicVersion) {
+      setQrData({ publicId, publicVersion });
+    }
+  }, [publicId, publicVersion]);
+
 
   const qrRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -78,18 +101,23 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
     try {
       setLoading(true);
 
-      await fetch(
+      const res = await fetch(
         `/api/${departmentId}/employees/${employeeId}/regenerate-qr`,
         { method: "POST" }
       );
 
+      if (!res.ok) throw new Error("Failed");
+
+      const updated = await res.json();
+
+      // ✅ UPDATE LOCAL STATE
+      setQrData({
+        publicId: updated.publicId,
+        publicVersion: updated.publicVersion,
+      });
+
       toast.success("QR code regenerated");
-
       setConfirmOpen(false);
-      setIsOpen(false); // close QR dialog
-
-      // reload fresh publicId / version
-      router.refresh();
     } catch (e) {
       console.error(e);
       toast.error("Failed to regenerate QR");
@@ -97,6 +125,7 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
       setLoading(false);
     }
   };
+
 
 
   const handleDownload = () => {

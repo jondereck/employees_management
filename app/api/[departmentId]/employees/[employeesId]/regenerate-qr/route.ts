@@ -29,7 +29,8 @@ export async function POST(
     where: { id: params.employeesId }, // ✅ FIX HERE
     data: {
        publicId: randomUUID(),          // ✅ NEW SECRET TOKEN
-  publicVersion: { increment: 1 }, // ✅ INVALIDATES OLD QRs
+  publicVersion: { increment: 1 }, 
+   legacyQrAllowed: false, // ✅ INVALIDATES OLD QRs
   publicEnabled: true,
     },
     select: {

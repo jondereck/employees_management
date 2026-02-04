@@ -13,7 +13,7 @@ export interface Offices {
 export interface Image {
   id: string;
   url: string;
-  value:string;
+  value: string;
 }
 
 export interface Eligibility {
@@ -30,10 +30,11 @@ export interface EmployeeType {
 
 export interface Employees {
   id: string;
-    // 🔐 QR FIELDS (ADD THESE)
+  // 🔐 QR FIELDS (ADD THESE)
   publicId: string;
   publicVersion: number;
   publicEnabled: boolean;
+  legacyQrAllowed: boolean;
   department: string;
   employeeNo: string;
   offices: Offices;
@@ -46,14 +47,14 @@ export interface Employees {
   contactNumber: string;
   position: string;
   birthday: string
-  education:string;
+  education: string;
   gsisNo: string;
   tinNo: string;
   philHealthNo: string;
   pagIbigNo: string;
   salary: string;
   salaryMode: string;
-   salaryStep: string;
+  salaryStep: string;
   dateHired: string;
   latestAppointment: string;
   terminateDate: string;
@@ -79,5 +80,5 @@ export interface Employees {
   designation: { id: string; name: string } | null;
   createdAt: Date;
   updatedAt: Date;
-  
+
 }
