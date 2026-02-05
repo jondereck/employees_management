@@ -63,7 +63,7 @@ type Field = "fullName" | "position" | "office";
 
 
 interface InfoProps {
-  data: Employees;
+  data: Employees | EmployeesColumn;
 }
 
 

@@ -274,47 +274,15 @@ export async function GET(
 
 const employee = await prismadb.employee.findUnique({
   where: { id: params.employeesId },
-
- select: {
-  id: true,
-  employeeNo: true,
-
-  // QR
-  publicId: true,
-  publicVersion: true,
-  publicEnabled: true,
-  legacyQrAllowed: true,
-
-  // relations
-  images: true,
-  offices: true,
-  employeeType: true,
-  eligibility: true,
-  designation: { select: { id: true, name: true } },
-
-  // scalars
-  firstName: true,
-  lastName: true,
-  middleName: true,
-  suffix: true,
-  prefix: true,
-  position: true,
-  salary: true,
-  salaryGrade: true,
-  salaryStep: true,
-  salaryMode: true,
-  dateHired: true,
-  latestAppointment: true,
-  terminateDate: true,
-  birthday: true,
-  isArchived: true,
-  isHead: true,
-  note: true,
-  updatedAt: true,
-  createdAt: true,
-}
-
+  include: {
+    images: true,
+    offices: true,
+    employeeType: true,
+    eligibility: true,
+    designation: true,
+  },
 });
+
 
 console.log("EMPLOYEE GET:", {
   publicId: employee?.publicId,
