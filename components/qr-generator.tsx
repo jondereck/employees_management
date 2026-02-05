@@ -176,98 +176,92 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   // Logo size ~20% ng QR (pareho sa bulk exporter)
   const logoSize = Math.round(size * 0.2);
 
+  
   return (
-    <div className="">
-      {/* Small preview (click to enlarge) */}
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <div>
+      <Dialog
+        key={qrMeta?.publicVersion} // 🔥 FORCE REMOUNT
+        open={isOpen}
+        onOpenChange={setIsOpen}
+      >
         <DialogTrigger asChild>
-          <div
-            className="my-4 flex flex-col items-start space-y-2 cursor-pointer"
-            role="button"
-            tabIndex={0}
-            title="Click to enlarge"
-          >
-            <QRCodeCanvas
-              value={qrValue}
-              size={100}
-              // embed center icon for preview as well
-              imageSettings={{
-                src: ImageLogo.src,
-                height: Math.round(100 * 0.2),
-                width: Math.round(100 * 0.2),
-                excavate: true, // clears modules under the image for better contrast
-              }}
-            />
+          <div className="cursor-pointer">
+            {qrValue ? (
+              <QRCodeCanvas
+                value={qrValue}
+                size={100}
+                imageSettings={{
+                  src: ImageLogo.src,
+                  height: 20,
+                  width: 20,
+                  excavate: true,
+                }}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 py-6">
+    <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+    <p className="text-xs text-muted-foreground">Generating QR…</p>
+  </div>
+            )}
           </div>
         </DialogTrigger>
 
-        {/* Modal */}
         <DialogPortal>
-          <DialogContent className="fixed z-[9999] w-full max-w-sm p-6">
+          <DialogContent className="fixed z-[9999] max-w-sm p-6">
             <DialogHeader>
               <DialogTitle className="text-center">
                 Employee QR Code
               </DialogTitle>
-              <DialogDescription className="text-center text-muted-foreground">
-                Scan the QR code or download/print it.
+              <DialogDescription className="text-center">
+                Scan or share this QR code
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex justify-center items-center py-6">
-              <QRCodeCanvas
-                value={qrValue}
-                size={size}
-                ref={qrRef}
-                imageSettings={{
-                  src: ImageLogo.src,
-                  height: logoSize,
-                  width: logoSize,
-                  excavate: true,
-                }}
-              />
-            </div>
-
-            <DialogFooter className="mt-6 space-y-3">
-              {/* Secondary actions */}
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownload}
-                  className="w-full flex items-center justify-center gap-2"
-                >
-                  <Download className="h-4 w-4" />
-
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyLink}
-                  className="w-full flex items-center justify-center gap-2"
-                >
-                  <Copy className="h-4 w-4" />
-
-                </Button>
-
-
-                {/* Destructive action */}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleRegenerate}
-                  className="w-full flex items-center justify-center gap-2"
-                >
-                  <RotateCcw className="h-4 w-4" />
-
-                </Button>
+            {qrValue && (
+              <div className="flex justify-center py-6">
+                <QRCodeCanvas
+                  ref={qrRef}
+                  value={qrValue}
+                  size={size}
+                  imageSettings={{
+                    src: ImageLogo.src,
+                    height: logoSize,
+                    width: logoSize,
+                    excavate: true,
+                  }}
+                />
               </div>
+            )}
+
+            <DialogFooter className="grid grid-cols-3 gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!qrValue}
+                onClick={handleDownload}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!qrValue}
+                onClick={handleCopyLink}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleRegenerate}
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
             </DialogFooter>
-
-
           </DialogContent>
         </DialogPortal>
-
       </Dialog>
 
       <AlertModal
@@ -276,12 +270,11 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
         onConfirm={handleConfirmRegenerate}
         loading={loading}
         title="Regenerate QR Code?"
-        description="This will invalidate ALL previously issued QR codes for this employee. Any printed or shared QR codes will stop working."
+        description="This will invalidate ALL previously issued QR codes."
         confirmText="Yes, regenerate"
         cancelText="Cancel"
         variant="destructive"
       />
-
     </div>
   );
 };
