@@ -63,7 +63,7 @@ type DownloadExcelParams = {
   qrExt?: string;
   salaryTable?: SalaryRow[];         // <- NEW: pass in or fetch inside
   salaryModeField?: string;
-   sortBy?: string;
+  sortBy?: string;
   sortDir?: 'asc' | 'desc';
   officesSelection?: string[];
   officeMetadata?: Record<string, { name: string; bioIndexCode?: string | null }>;
@@ -210,7 +210,7 @@ export async function generateExcelFile({
     cache: 'no-store',
   });
 
-  
+
 
   async function fetchStepsForGrade(sg: number): Promise<{ [step: number]: number }> {
     const res = await fetch(`/api/departments/salary?sg=${sg}`, { cache: 'no-store' });
@@ -256,7 +256,7 @@ export async function generateExcelFile({
   }
 
   const hasText = (v: unknown) =>
-  v != null && String(v).trim().length > 0;
+    v != null && String(v).trim().length > 0;
 
   const updatedData = data.employees.map((row: any) => {
     const copy: any = { ...row };
@@ -309,10 +309,8 @@ export async function generateExcelFile({
     }
 
     // --- Middle initial ---
-    if (copy.middleName) {
-      const trimmed = copy.middleName.trim();
-      copy.middleName = trimmed.length > 0 ? `${trimmed[0].toUpperCase()}.` : '';
-    }
+    copy.middleInitial = toMiddleInitial(copy.middleName);
+
 
     // --- Position rules ---
     if (copy.position) {
@@ -444,15 +442,13 @@ export async function generateExcelFile({
         } else {
           val = codePart || bioPart || row.id || '';
         }
-      } else if (col.key === 'middleName') {
-        const source =
-          row.middleName ??
-          row.middle_name ??
-          row.middleInitial ??
-          row.middle_initial ??
-          '';
-        val = toMiddleInitial(source);
-      } else if (col.key === 'signature') {
+      } else if (col.key === 'middleInitial') {
+        val = row.middleInitial ?? toMiddleInitial(row.middleName);
+      }
+      else if (col.key === 'middleName') {
+        val = row.middleName ?? '';
+      }
+      else if (col.key === 'signature') {
         val = '';
       } else {
         const def = COLUMN_DEFS[col.key];
@@ -496,7 +492,7 @@ export async function generateExcelFile({
 
   const styleDataRows = (
     worksheet: XLSX.WorkSheet,
-    filteredData: Record<string, any>[] ,
+    filteredData: Record<string, any>[],
     dataStartRowIdx: number
   ) => {
     filteredData.forEach((row, rowIndex) => {
@@ -936,9 +932,9 @@ export function groupKeyOf(row: any, mode: GroupMode): string {
   if (mode === 'bioIndex') {
     const raw = normalizeBioIndex(
       row?.__bioIndexCode
-        ?? row?.bioIndexCode
-        ?? row?.offices?.bioIndexCode
-        ?? row?.office?.bioIndexCode
+      ?? row?.bioIndexCode
+      ?? row?.offices?.bioIndexCode
+      ?? row?.office?.bioIndexCode
     );
     return raw || BIO_INDEX_GROUP_KEY;
   }

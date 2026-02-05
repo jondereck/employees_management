@@ -284,11 +284,6 @@ const employee = await prismadb.employee.findUnique({
 });
 
 
-console.log("EMPLOYEE GET:", {
-  publicId: employee?.publicId,
-  publicVersion: employee?.publicVersion,
-  legacyQrAllowed: employee?.legacyQrAllowed,
-});
 
     return NextResponse.json(employee);
 

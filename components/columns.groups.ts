@@ -7,6 +7,7 @@ export const COLUMN_GROUPS = [
       "lastName",
       "firstName",
       "middleName",
+      "middleInitial",
       "suffix",
       "nickname",
       "gender",

@@ -10,6 +10,7 @@ export const COLUMN_SEQUENCE = [
   'prefix',
   'lastName',
   'firstName',
+  'middleInitial',
   'middleName',
   'suffix',
   'nickname',
@@ -55,7 +56,8 @@ export const COLUMN_DEFS: Record<string, ColumnDefinition> = {
   prefix: { key: 'prefix', label: 'Prefix' },
   lastName: { key: 'lastName', label: 'Last Name' },
   firstName: { key: 'firstName', label: 'First Name' },
-  middleName: { key: 'middleName', label: 'M.I.' },
+middleInitial: { key: 'middleInitial', label: 'M.I.' },
+middleName: { key: 'middleName', label: 'Middle Name' },
   suffix: { key: 'suffix', label: 'Suffix' },
   nickname: { key: 'nickname', label: 'Nickname' },
   office: {

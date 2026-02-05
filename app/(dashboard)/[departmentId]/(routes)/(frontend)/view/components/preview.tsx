@@ -9,6 +9,7 @@ import getEmployee from "../actions/get-employee";
 import { Employees } from "../types";
 
 const PreviewModal = () => {
+  
   const previewModal = usePreviewModal();
   const previewEmployee = usePreviewModal((state) => state.data);
 
