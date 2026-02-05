@@ -140,14 +140,6 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   };
 
 
-  if (!qrData.publicId || !qrData.publicVersion) {
-  return (
-    <div className="text-xs text-muted-foreground">
-      QR not available
-    </div>
-  );
-}
-
 
 
 
