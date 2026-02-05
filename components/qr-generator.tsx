@@ -50,21 +50,32 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
     publicEnabled,
   });
 
-  const [qrData, setQrData] = useState({
-    publicId,
-    publicVersion,
-  });
+  const [qrMeta, setQrMeta] = useState<{
+    publicId: string;
+    publicVersion: number;
+  } | null>(
+    publicId && publicVersion
+      ? { publicId, publicVersion }
+      : null
+  );
 
 
   const baseUrl =
     process.env.NEXT_PUBLIC_URL ??
     (typeof window !== "undefined" ? window.location.origin : "");
-  const qrValue =
-    `${baseUrl}/view/employee/${employeeId}` +
-    `?pid=${qrData.publicId}&v=${qrData.publicVersion}`;
+  const qrValue = qrMeta
+    ? `${baseUrl}/view/employee/${employeeId}?pid=${qrMeta.publicId}&v=${qrMeta.publicVersion}`
+    : "";
+
+  useEffect(() => {
+    if (publicId && publicVersion) {
+      setQrMeta({ publicId, publicVersion });
+    }
+  }, [publicId, publicVersion]);
 
 
-  const router = useRouter();
+
+
 
 
 
@@ -73,12 +84,6 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   const [loading, setLoading] = useState(false);
 
 
-
-  useEffect(() => {
-    if (publicId && publicVersion) {
-      setQrData({ publicId, publicVersion });
-    }
-  }, [publicId, publicVersion]);
 
 
   const qrRef = useRef<HTMLCanvasElement | null>(null);
@@ -92,7 +97,7 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
   }, [employeeNo, employeeId]);
 
 
-
+  const router = useRouter();
   const handleRegenerate = () => {
     setConfirmOpen(true);
   };
@@ -106,18 +111,20 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
         { method: "POST" }
       );
 
-      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
 
-      const updated = await res.json();
-
-      // ✅ UPDATE LOCAL STATE
-      setQrData({
-        publicId: updated.publicId,
-        publicVersion: updated.publicVersion,
+      // ✅ IMMEDIATE, RELIABLE UPDATE
+      setQrMeta({
+        publicId: data.publicId,
+        publicVersion: data.publicVersion,
       });
 
       toast.success("QR code regenerated");
+
       setConfirmOpen(false);
+      setIsOpen(false);
+
+      router.refresh();
     } catch (e) {
       console.error(e);
       toast.error("Failed to regenerate QR");
@@ -125,6 +132,8 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
       setLoading(false);
     }
   };
+
+
 
 
 

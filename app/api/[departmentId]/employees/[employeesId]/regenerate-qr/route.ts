@@ -16,21 +16,13 @@ export async function POST(
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  const dept = await prismadb.department.findFirst({
-    where: { id: params.departmentId, userId },
-    select: { id: true },
-  });
 
-  if (!dept) {
-    return new NextResponse("Forbidden", { status: 403 });
-  }
 
   const employee = await prismadb.employee.update({
     where: { id: params.employeesId }, // ✅ FIX HERE
     data: {
        publicId: randomUUID(),          // ✅ NEW SECRET TOKEN
-  publicVersion: { increment: 1 }, 
-   legacyQrAllowed: false, // ✅ INVALIDATES OLD QRs
+  publicVersion: { increment: 1 }, // ✅ INVALIDATES OLD QRs
   publicEnabled: true,
     },
     select: {

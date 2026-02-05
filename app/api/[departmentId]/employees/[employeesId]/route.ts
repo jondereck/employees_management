@@ -275,74 +275,45 @@ export async function GET(
 const employee = await prismadb.employee.findUnique({
   where: { id: params.employeesId },
 
-  select: {
-    // 🔑 identity
-    id: true,
-    employeeNo: true,
+ select: {
+  id: true,
+  employeeNo: true,
 
-    // 🔐 QR security
-    publicId: true,
-    publicVersion: true,
-    publicEnabled: true,
-    legacyQrAllowed: true,
+  // QR
+  publicId: true,
+  publicVersion: true,
+  publicEnabled: true,
+  legacyQrAllowed: true,
 
-    // 👤 personal
-    prefix: true,
-    firstName: true,
-    middleName: true,
-    lastName: true,
-    suffix: true,
-    nickname: true,
-    gender: true,
-    birthday: true,
-    age: true,
+  // relations
+  images: true,
+  offices: true,
+  employeeType: true,
+  eligibility: true,
+  designation: { select: { id: true, name: true } },
 
-    // 📞 contact
-    contactNumber: true,
-    emergencyContactName: true,
-    emergencyContactNumber: true,
+  // scalars
+  firstName: true,
+  lastName: true,
+  middleName: true,
+  suffix: true,
+  prefix: true,
+  position: true,
+  salary: true,
+  salaryGrade: true,
+  salaryStep: true,
+  salaryMode: true,
+  dateHired: true,
+  latestAppointment: true,
+  terminateDate: true,
+  birthday: true,
+  isArchived: true,
+  isHead: true,
+  note: true,
+  updatedAt: true,
+  createdAt: true,
+}
 
-    // 🏠 address
-    region: true,
-    province: true,
-    city: true,
-    barangay: true,
-    houseNo: true,
-
-    // 💼 employment
-    position: true,
-    salary: true,
-    salaryGrade: true,
-    salaryStep: true,
-    salaryMode: true,
-    dateHired: true,
-    latestAppointment: true,
-    terminateDate: true,
-    isArchived: true,
-    isHead: true,
-    note: true,
-
-    // 🔗 misc
-    employeeLink: true,
-
-    // 🖼 relations
-    images: {
-      select: {
-        id: true,
-        url: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    },
-    offices: true,
-    employeeType: true,
-    eligibility: true,
-    designation: { select: { id: true, name: true } },
-
-    // ⏱ metadata
-    createdAt: true,
-    updatedAt: true,
-  },
 });
 
 console.log("EMPLOYEE GET:", {

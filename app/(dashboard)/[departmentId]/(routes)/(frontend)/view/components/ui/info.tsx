@@ -63,13 +63,14 @@ type Field = "fullName" | "position" | "office";
 
 
 interface InfoProps {
-  data: Employees | EmployeesColumn;
+  data: Employees;
 }
+
+
 
 const Info = ({
   data,
 }: InfoProps) => {
-
 
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -171,6 +172,9 @@ const Info = ({
       n === "JO"
     );
   };
+
+
+
   return (
     <div
       className="bg-white p-6 rounded-xl shadow-lg border print:border-0 print:shadow-none print:p-0 print:rounded-none transition-shadow duration-300 hover:shadow-2xl max-w-7xl mx-auto"
@@ -285,9 +289,16 @@ const Info = ({
           </div>
 
           <div className="transition-transform transform hover:scale-110 cursor-pointer">
-            <QrCodeGenerator departmentId={data.department} employeeId={data.id} employeeNo={data.employeeNo} publicId={data.publicId}
+
+            <QrCodeGenerator
+              departmentId={data.department}
+              employeeId={data.id}
+              employeeNo={data.employeeNo}
+              publicId={data.publicId}
               publicVersion={data.publicVersion}
-              publicEnabled={!!data.publicEnabled} />
+              publicEnabled={data.publicEnabled}
+            />
+
           </div>
 
         </div>
