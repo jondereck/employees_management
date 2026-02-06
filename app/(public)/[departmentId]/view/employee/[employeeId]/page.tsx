@@ -5,25 +5,17 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import Image from "next/image";
 import prismadb from "@/lib/prismadb";
 
-import Gallery from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/components/gallery";
 import getEmployee from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/actions/get-employee";
 import getEmployees from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/actions/get-employees";
 import Container from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/container";
 import Info from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/info";
 import Footer from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/components/footer";
 import CameraScannerWrapper from "@/components/camera-scanner-wrapper";
-import TogglePublicButton from "@/app/(dashboard)/[departmentId]/(routes)/settings/components/toggle-public-button";
+
 import BrandHeader from "@/components/public/brand-header";
 import PublicFooter from "@/components/public/footer";
 import ReportIssueBox from "@/components/public/report-issue-box";
 import EmployeeList from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/employee-list";
-import AdminHeaderCard from "@/app/(public)/components/admin/admin-header-card";
-import ActionBar from "@/app/(public)/components/admin/action-bar";
-import { use } from "react";
-import Timeline from "@/app/(public)/components/timeline";
-import AwardsGallery from "@/app/(public)/components/awards-gallery";
-import AddTimelineEvent from "@/app/(public)/components/admin/add-timeline-event";
-import AddAward from "@/app/(public)/components/admin/add-award";
 import PublicTimeline from "@/app/(public)/components/public-timeline";
 import PublicAwardsGallery from "@/app/(public)/components/public-awards.gallery";
 import PublicSelfServiceActions from "@/app/(public)/components/public-self-service-actions";
@@ -33,6 +25,11 @@ import { normalizeEducationLines } from "@/utils/normalize-education";
 import { ActiveBadge } from "@/app/(public)/components/icons/active-badges";
 import AutoTrackPublicView from "@/components/public/auto-track-public-view";
 import RegenerateQrButton from "@/app/(public)/components/regenerate-qr-button";
+import EmployeeHeader from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/employee-header";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import WorkSchedulePreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/work-schedule-preview";
+import AwardPreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/award-preview";
+import EmploymentEventPreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/employment-event-preview";
 
 
 export const dynamic = "force-dynamic";
@@ -161,52 +158,89 @@ if (!isAdmin) {
 
 
     return (
+      
       <div className="bg-white">
-        <Container>
-          <div className="px-4 py-10 sm:px-6 lg:px-8">
-            <div className="flex flex-col lg:flex-row lg:items-start lg:gap-x-12">
-              {/* Left: Profile Image / Gallery */}
-              <div className="w-full max-w-xs mx-auto lg:mx-0">
-                <div className="overflow-hidden rounded-xl border shadow-sm bg-white">
+  <Container>
+    {/* 🟢 MAIN CONTAINER: Vertical flow */}
+    <div className="mx-auto w-full max-w-5xl space-y-8 p-2 sm:p-4 lg:p-6">
 
-                  <Gallery
-                    images={employee.images ?? []}
-                    employeeId={employee.id}
-                    employeeNo={employee.employeeNo ?? ""} />
-                </div>
-              </div>
+      {/* 1️⃣ HEADER SECTION (same as Preview) */}
+      <EmployeeHeader employee={employee} />
 
-              {/* Right: Profile Info */}
-              <div className="mt-8 lg:mt-0 flex-1">
-         <AdminHeaderCard
-  departmentId={params.departmentId}
-  employeeId={employee.id}
-  publicEnabled={!!employee.publicEnabled}
-  actions={
-    <RegenerateQrButton
-      departmentId={params.departmentId}
-      employeesId={employee.id}
-    />
-  }
-/>
+      {/* 2️⃣ TABS SECTION */}
+      <Tabs defaultValue="info" className="w-full">
+        {/* Tabs header */}
+        <div className="flex items-center justify-between border-b pb-2 mb-6">
+          <TabsList className="bg-transparent h-auto p-0 gap-6">
+            <TabsTrigger
+              value="info"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2 font-bold"
+            >
+              Info
+            </TabsTrigger>
 
-                {/* Details card */}
-                <div className="mt-6 bg-white rounded-xl shadow-sm border p-6">
-                  <Info data={employee} />
-                </div>
-              </div>
+            <TabsTrigger
+              value="schedule"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2 font-bold"
+            >
+              Schedule
+            </TabsTrigger>
 
-            </div>
+            <TabsTrigger
+              value="awards"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2 font-bold"
+            >
+              Awards
+            </TabsTrigger>
 
-            {/* Optional: Related personnel */}
-            <EmployeeList title="Related Personnel" items={suggestedPeople} />
-          </div>
+            <TabsTrigger
+              value="history"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2 font-bold"
+            >
+              History
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-          <CameraScannerWrapper />
-          <Footer />
-        </Container>
+        {/* 3️⃣ TAB CONTENT AREA */}
+        <div className="mt-4">
+          <TabsContent value="info" className="outline-none">
+            <Info data={employee} />
+          </TabsContent>
 
-      </div>
+          <TabsContent value="schedule" className="outline-none">
+            <WorkSchedulePreview
+              schedules={employee.workSchedules}
+            />
+          </TabsContent>
+
+          <TabsContent value="awards" className="outline-none">
+            <AwardPreview
+              awards={employee.awards}
+            />
+          </TabsContent>
+
+          <TabsContent value="history" className="outline-none">
+            <EmploymentEventPreview
+              events={employee.employmentEvents}
+            />
+          </TabsContent>
+        </div>
+      </Tabs>
+
+      {/* Optional related section */}
+      <EmployeeList
+        title="Related Personnel"
+        items={suggestedPeople}
+      />
+
+    </div>
+
+    <CameraScannerWrapper />
+    <Footer />
+  </Container>
+</div>
+
     );
   }
 

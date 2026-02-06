@@ -20,7 +20,7 @@ const Modal: React.FC<ModalProps> = ({
     <Transition show={open} appear as={Fragment}>
       <Dialog
         as="div"
-        className="fixed inset-0 z-[9999]"
+        className="fixed inset-0"
         onClose={onClose}
       >
         {/* BACKDROP */}

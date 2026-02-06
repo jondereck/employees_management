@@ -196,15 +196,16 @@ export const calculateAge = (birthday: string) => {
 // In utils/addressUtils.ts
 export const addressFormat = (data: {
   region?: string;
+  street?: string;
   barangay?: string;
   city?: string;
   province?: string;
   houseNo?: string;
 }): string => {
-  const { region, barangay, city, province, houseNo } = data;
+  const { region, barangay, street, city, province, houseNo } = data;
 
   // Create an array of non-empty address components
-  const addressComponents = [region, houseNo, barangay, city, province].filter(Boolean);
+  const addressComponents = [region, houseNo,street, barangay, city, province].filter(Boolean);
   // Convert the array elements to camel case (ensure they're strings)
   const formattedAddress = addressComponents.map((component: string | undefined) =>
     (component || '').replace(/\w\S*/g, (word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())

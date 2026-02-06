@@ -14,6 +14,30 @@
   }
 };
 
+
+/**
+ * Returns Full Name with Middle Initial (e.g., JOHN "JAY" D. DOE SR.)
+ */
+export const buildNameWithInitial = (data: any) => {
+  const firstName = data.firstName?.trim().toUpperCase() || "";
+  const lastName = data.lastName?.trim().toUpperCase() || "";
+  
+  // Convert Middle Name to Initial (e.g., "Delacruz" -> "D.")
+  const middleInitial = data.middleName?.trim() 
+    ? `${data.middleName.trim().charAt(0).toUpperCase()}.`
+    : "";
+
+  const prefix = data.prefix?.trim() || "";
+  const suffix = data.suffix?.trim().toUpperCase() || "";
+
+  // Filter out empty parts and join with single spaces
+  return [prefix, firstName, middleInitial, lastName, suffix]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 export const buildFullName = (data: any) => {
   const middle = data.middleName?.length === 1 
     ? `${data.middleName.toUpperCase()}.`

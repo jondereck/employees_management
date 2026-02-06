@@ -2,18 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Globe, Globe2Icon,  } from "lucide-react";
+import { Loader2, Globe, Globe2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Props = {
-  departmentId: string;
   employeeId: string;
   initialEnabled: boolean;
 };
 
-export default function TogglePublicButton({
-  departmentId,
+export default function TogglePublicBadge({
   employeeId,
   initialEnabled,
 }: Props) {
@@ -27,55 +25,40 @@ export default function TogglePublicButton({
         const res = await fetch(`/api/employee/${employeeId}/toggle-public`, { method: "POST" });
         if (!res.ok) throw new Error();
         const json = await res.json();
-        const next = Boolean(json?.publicEnabled);
-        setEnabled(next);
-        toast.success(next ? "Public profile enabled" : "Public profile disabled");
+        
+        const nextValue = Boolean(json?.publicEnabled);
+        setEnabled(nextValue);
+        
+        toast.success(nextValue ? "Profile is now Public" : "Profile is now Private");
         router.refresh();
-      } catch {
-        toast.error("Failed to toggle public profile");
+      } catch (error) {
+        toast.error("Failed to update visibility");
       }
     });
   };
 
   return (
-    <div className="flex items-center gap-2">
-      {/* SMALLER button */}
-      <Button
-        onClick={onToggle}
-        disabled={pending}
-        size="sm"                                     // ← makes it smaller
-        variant={enabled ? "destructive" : "default"}
-        className="h-8 px-3 text-xs"                 // ← extra compact
-        aria-pressed={enabled}
-      >
-        {pending ? (
-          <>
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            Saving…
-          </>
-        ) : enabled ? (
-          <>
-            <Globe2Icon className="mr-2 h-3.5 w-3.5" />
-            Disable
-          </>
-        ) : (
-          <>
-            <Globe className="mr-2 h-3.5 w-3.5" />
-            Enable Public
-          </>
-        )}
-      </Button>
-
-      {/* tiny status chip */}
-      <span
-        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-none ${
-          enabled
-            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-            : "border-zinc-200 bg-zinc-50 text-zinc-600"
-        }`}
-      >
-        {enabled ? "Public enabled" : "Public disabled"}
-      </span>
-    </div>
+    <button
+      onClick={onToggle}
+      disabled={pending}
+      className={cn(
+        // Base badge styles matching your screenshot
+        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed",
+        // Conditional styles based on enabled status
+        enabled 
+          ? "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100" 
+          : "bg-red-500 text-white border-red-600 hover:bg-red-600 shadow-sm"
+      )}
+    >
+      {pending ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : enabled ? (
+        <Globe2 className="h-3 w-3" />
+      ) : (
+        <Globe className="h-3 w-3" />
+      )}
+      
+      {pending ? "Updating..." : enabled ? "Public Enabled" : "Disable / Private"}
+    </button>
   );
 }

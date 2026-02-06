@@ -280,6 +280,9 @@ const employee = await prismadb.employee.findUnique({
     employeeType: true,
     eligibility: true,
     designation: true,
+     workSchedules: true,
+  awards: true,
+  employmentEvents: true,
   },
 });
 

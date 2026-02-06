@@ -1,33 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+
 import usePreviewModal from "../hooks/use-preview-modal";
-import Gallery from "./gallery";
 import Info from "./ui/info";
 import Modal from "./ui/modal";
 import getEmployee from "../actions/get-employee";
 import { Employees } from "../types";
 import { EmployeesColumn } from "../../../employees/components/columns";
-
+import WorkSchedulePreview from "./ui/work-schedule-preview";
+import AwardPreview from "./ui/award-preview";
+import EmploymentEventPreview from "./ui/employment-event-preview";
+import EmployeeHeader from "./ui/employee-header";
 
 const PreviewModal = () => {
   const previewModal = usePreviewModal();
 
-  // FAST data from table
   const previewEmployee = usePreviewModal(
     (state) => state.previewData
   ) as EmployeesColumn | undefined;
 
-  // FULL data from API
   const [employee, setEmployee] = useState<Employees | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // 🔥 RESET local state when switching employees
   useEffect(() => {
     setEmployee(null);
   }, [previewEmployee?.id]);
 
-  // Fetch full data AFTER modal opens
   useEffect(() => {
     if (!previewModal.isOpen || !previewEmployee?.id) return;
 
@@ -38,35 +43,85 @@ const PreviewModal = () => {
       .finally(() => setLoading(false));
   }, [previewModal.isOpen, previewEmployee?.id]);
 
-  // 🚀 Optimistic render: full data if ready, else preview data
   const dataToRender = employee ?? previewEmployee;
 
   if (!previewModal.isOpen || !dataToRender) return null;
 
   return (
     <Modal
-      key={previewEmployee?.id} // ✅ prevents stale employee flash
+      key={previewEmployee?.id}
       open={previewModal.isOpen}
       onClose={previewModal.onClose}
     >
-      <div className="grid w-full grid-cols-1 items-start gap-x-6 gap-y-8 sm:grid-cols-2 md:grid-cols-3 lg:gap-x-8">
-        <div className="col-span-1">
-          <Gallery
-            images={dataToRender.images ?? []}
-            employeeId={dataToRender.id}
-            employeeNo={dataToRender.employeeNo ?? ""}
-            gender={dataToRender.gender as "Male" | "Female" | undefined}
-          />
-        </div>
+      {/* 🟢 MAIN CONTAINER: Simplified to vertical flow */}
+      <div className="mx-auto w-full max-w-5xl space-y-8 p-2">
+        
+        {/* 1. HEADER SECTION (Full Width) */}
+        <EmployeeHeader employee={dataToRender as Employees} />
 
-        <div className="sm:col-span-1 md:col-span-2 lg:col-span-2">
-          <Info data={dataToRender as Employees} />
+        {/* 2. CONTENT SECTION (Tabs) */}
+        <div className="w-full">
+          <Tabs defaultValue="info" className="w-full">
+            <div className="flex items-center justify-between border-b pb-2 mb-6">
+               <TabsList className="bg-transparent h-auto p-0 gap-6">
+                <TabsTrigger 
+                  value="info" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2 font-bold"
+                >
+                  Info
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="schedule" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2 font-bold"
+                >
+                  Schedule
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="awards" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2 font-bold"
+                >
+                  Awards
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="history" 
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2 font-bold"
+                >
+                  History
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-          {loading && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Loading full employee details…
-            </p>
-          )}
+            {/* 3. TAB CONTENT AREA */}
+            <div className="mt-4">
+              <TabsContent value="info" className="outline-none">
+                <Info data={dataToRender as Employees} />
+                {loading && (
+                  <div className="flex items-center gap-2 mt-4 text-xs text-amber-600 animate-pulse font-medium">
+                    <span className="h-2 w-2 bg-amber-600 rounded-full"></span>
+                    Syncing live employee data...
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="schedule" className="outline-none">
+                <WorkSchedulePreview
+                  schedules={(dataToRender as Employees).workSchedules}
+                />
+              </TabsContent>
+
+              <TabsContent value="awards" className="outline-none">
+                <AwardPreview
+                  awards={(dataToRender as Employees).awards}
+                />
+              </TabsContent>
+
+              <TabsContent value="history" className="outline-none">
+                <EmploymentEventPreview
+                  events={(dataToRender as Employees).employmentEvents}
+                />
+              </TabsContent>
+            </div>
+          </Tabs>
         </div>
       </div>
     </Modal>

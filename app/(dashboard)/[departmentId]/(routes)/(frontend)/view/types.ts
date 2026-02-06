@@ -28,6 +28,43 @@ export interface EmployeeType {
 }
 
 
+export type WorkSchedulePreview = {
+  id: string;
+  type: "FIXED" | "FLEX" | "SHIFT";
+  startTime?: string | null;
+  endTime?: string | null;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+ weeklyPattern: any;
+};
+
+export type AwardPreview = {
+  id: string;
+  title: string;
+  description?: string | null;
+  givenAt: string | Date; 
+  issuer?: string | null;
+  thumbnail?: string | null;
+  fileUrl?: string | null;
+  tags: string[]; // Changed from string | null to string[]
+};
+
+export type EmploymentEventPreview = {
+  id: string;
+  type:
+    | "HIRED"
+    | "PROMOTED"
+    | "TRANSFERRED"
+    | "REASSIGNED"
+    | "AWARDED"
+    | "CONTRACT_RENEWAL"
+    | "TERMINATED"
+    | "OTHER";
+  details?: string | null;
+  occurredAt: string;
+};
+
+
 export interface Employees {
   id: string;
   // 🔐 QR FIELDS (ADD THESE)
@@ -64,6 +101,9 @@ export interface Employees {
   eligibility: Eligibility;
   employeeType: EmployeeType;
   images: Image[];
+  workSchedules?: WorkSchedulePreview[];
+  awards?: AwardPreview[];
+  employmentEvents?: EmploymentEventPreview[];
   region: string;
   province: string;
   city: string;
