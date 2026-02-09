@@ -2,7 +2,7 @@
 import * as z from "zod";
 import { mutate as globalMutate } from "swr";
 import { Eligibility, Employee, EmployeeType, Gender, Image, Offices } from "@prisma/client";
-import { CalendarIcon, Check, ChevronDown, HelpCircle, LinkIcon, Loader2, Trash } from "lucide-react";
+import { Archive, CalendarIcon, CalendarX, Check, ChevronDown, FileText, HelpCircle, LinkIcon, Loader2, ShieldCheck, Star, Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -1051,35 +1051,7 @@ export const EmployeesForm = ({
 
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-dashed border-border/60">
     
-    {/* 1. Employee File Link - Always Visible in Admin Section */}
-    <FormField
-      control={form.control}
-      name="employeeLink"
-      render={({ field }) => (
-        <FormItem className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <FormLabel className="text-[13px] font-semibold">Employee Digital File</FormLabel>
-            <ActionTooltip label="External Link" description="Link to Google Drive, SharePoint, or Dropbox folder containing PDS/Documents.">
-               <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30" />
-            </ActionTooltip>
-          </div>
-          <FormControl>
-            <div className="relative group">
-               <Input
-                disabled={loading}
-                placeholder="https://drive.google.com/..."
-                className="bg-background/50 h-10 rounded-xl focus:bg-background transition-all pl-9"
-                {...field}
-              />
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 group-focus-within:text-primary transition-colors">
-                <LinkIcon className="h-4 w-4" /> 
-              </div>
-            </div>
-          </FormControl>
-          <FormMessage className="text-[11px]" />
-        </FormItem>
-      )}
-    />
+
 
     {/* 2. Termination Date - ONLY SHOWS IF ARCHIVED IS CHECKED */}
   <FormField
@@ -1239,57 +1211,85 @@ export const EmployeesForm = ({
               </section>
 
               {/* 6. FLAGS & NOTES */}
-        <section className="space-y-6 p-6 bg-secondary/5 rounded-2xl border border-border/50 shadow-sm">
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+   <section className="space-y-6 p-6 bg-secondary/5 rounded-3xl border border-border/50 shadow-sm overflow-hidden">
+  {/* Header for the section */}
+  <div className="flex items-center gap-2 mb-2">
+    <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+    <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground/70">Administrative Control</h3>
+  </div>
+
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
     
-    {/* Featured Employee */}
+    {/* Featured Employee Card */}
     <FormField control={form.control} name="isFeatured" render={({ field }) => (
-      <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 rounded-xl border border-transparent hover:bg-background/50 transition-colors">
+      <FormItem className={cn(
+        "relative flex flex-row items-center space-x-3 space-y-0 p-4 rounded-2xl border transition-all duration-200 cursor-pointer",
+        field.value ? "bg-amber-500/5 border-amber-500/20 shadow-sm" : "bg-background/40 border-transparent hover:border-border"
+      )}>
         <FormControl>
-          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+          <Checkbox 
+            checked={field.value} 
+            onCheckedChange={field.onChange} 
+            className="data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+          />
         </FormControl>
-        <div className="flex items-center gap-1.5 leading-none">
-          <FormLabel className="text-sm font-medium cursor-pointer">Featured</FormLabel>
-          <ActionTooltip 
-            label="Featured Status" 
-            description="Displays this employee on the company landing page or spotlight section."
-            side="top"
-          >
-            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-primary transition-colors cursor-help" />
+        <div className="flex flex-1 items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Star className={cn("h-4 w-4", field.value ? "text-amber-500 fill-amber-500" : "text-muted-foreground/40")} />
+            <FormLabel className="text-sm font-bold cursor-pointer">Featured</FormLabel>
+          </div>
+          <ActionTooltip label="Spotlight" description="Promote this employee on the public portal.">
+            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30 hover:text-amber-500" />
           </ActionTooltip>
         </div>
       </FormItem>
     )} />
 
-    {/* Department Head */}
+    {/* Head of Office Card */}
     <FormField control={form.control} name="isHead" render={({ field }) => (
-      <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 rounded-xl border border-transparent hover:bg-background/50 transition-colors">
+      <FormItem className={cn(
+        "relative flex flex-row items-center space-x-3 space-y-0 p-4 rounded-2xl border transition-all duration-200 cursor-pointer",
+        field.value ? "bg-blue-500/5 border-blue-500/20 shadow-sm" : "bg-background/40 border-transparent hover:border-border"
+      )}>
         <FormControl>
-          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+          <Checkbox 
+            checked={field.value} 
+            onCheckedChange={field.onChange} 
+            className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+          />
         </FormControl>
-        <div className="flex items-center gap-1.5 leading-none">
-          <FormLabel className="text-sm font-medium cursor-pointer">Deptartment Head</FormLabel>
-        <ActionTooltip 
-          label="Executive Role" 
-          description="Enabling this marks the employee as the primary signatory and authority for this office."
-          side="top"
-        >
-            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-primary transition-colors cursor-help" />
+        <div className="flex flex-1 items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className={cn("h-4 w-4", field.value ? "text-blue-500" : "text-muted-foreground/40")} />
+            <FormLabel className="text-sm font-bold cursor-pointer">Head of Office</FormLabel>
+          </div>
+          <ActionTooltip label="Executive Authority" description="Designates this person as the primary office signatory.">
+            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30 hover:text-blue-500" />
           </ActionTooltip>
         </div>
       </FormItem>
     )} />
 
-    {/* Archive Profile */}
+    {/* Archive Card */}
     <FormField control={form.control} name="isArchived" render={({ field }) => (
-      <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 rounded-xl border border-transparent hover:bg-background/50 transition-colors">
+      <FormItem className={cn(
+        "relative flex flex-row items-center space-x-3 space-y-0 p-4 rounded-2xl border transition-all duration-200 cursor-pointer",
+        field.value ? "bg-destructive/5 border-destructive/20 shadow-sm" : "bg-background/40 border-transparent hover:border-border"
+      )}>
         <FormControl>
-          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+          <Checkbox 
+            checked={field.value} 
+            onCheckedChange={field.onChange} 
+            className="data-[state=checked]:bg-destructive data-[state=checked]:border-destructive"
+          />
         </FormControl>
-        <div className="flex items-center gap-1.5 leading-none">
-          <FormLabel className="text-sm font-medium cursor-pointer">Archive</FormLabel>
-          <ActionTooltip 
-            label="Soft Delete" 
+        <div className="flex flex-1 items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Archive className={cn("h-4 w-4", field.value ? "text-destructive" : "text-muted-foreground/40")} />
+            <FormLabel className="text-sm font-bold cursor-pointer">Archive</FormLabel>
+          </div>
+             <ActionTooltip
+            label="Soft Delete"
             description="Hides this profile from active lists without deleting data. Useful for resigned employees."
             side="top"
           >
@@ -1300,25 +1300,68 @@ export const EmployeesForm = ({
     )} />
   </div>
 
-  {/* Administrative Notes */}
+  {/* Sub-grid for Links and Dates */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-dashed">
+    <FormField control={form.control} name="employeeLink" render={({ field }) => (
+      <FormItem>
+        <div className="flex items-center gap-2 mb-2">
+          <FileText className="h-4 w-4 text-primary" />
+          <FormLabel className="text-[13px] font-bold">Employee Digital File</FormLabel>
+        </div>
+        <FormControl>
+          <div className="relative group">
+            <Input 
+              {...field} 
+              className="pl-9 rounded-xl bg-background/50 focus:bg-background transition-all" 
+              placeholder="https://cloud-storage.com/file-id" 
+            />
+            <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
+          </div>
+        </FormControl>
+        <FormMessage />
+      </FormItem>
+    )} />
+
+
+  </div>
+
+  {/* Notes Section */}
   <FormField control={form.control} name="note" render={({ field }) => (
+
     <FormItem className="pt-4 border-t border-dashed border-border/60">
+
       <div className="flex items-center gap-2 mb-2">
+
         <FormLabel className="text-[13px] font-semibold">Administrative Notes</FormLabel>
+
         <ActionTooltip label="Internal Only" description="These notes are never visible to the employee.">
+
            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30" />
+
         </ActionTooltip>
+
       </div>
+
       <FormControl>
-        <textarea 
-          {...field} 
-          value={field.value || ""} 
-          className="w-full min-h-[100px] rounded-xl border border-input bg-background/50 px-4 py-3 text-sm focus:bg-background transition-all focus:ring-1 focus:ring-primary/20 resize-none" 
-          placeholder="Add private internal notes regarding this employee..." 
+
+        <textarea
+
+          {...field}
+
+          value={field.value || ""}
+
+          className="w-full min-h-[100px] rounded-xl border border-input bg-background/50 px-4 py-3 text-sm focus:bg-background transition-all focus:ring-1 focus:ring-primary/20 resize-none"
+
+          placeholder="Add private internal notes regarding this employee..."
+
         />
+
       </FormControl>
+
       <FormMessage />
+
     </FormItem>
+
   )} />
 </section>
 

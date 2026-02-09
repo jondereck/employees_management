@@ -87,6 +87,7 @@ export type EmployeesColumn = {
   publicEnabled: boolean;
   createdAt: string | Date | null;
   updatedAt: string | Date | null;
+  legacyQrAllowed: boolean;
 }
 
 const onCopy = (text: string) => {

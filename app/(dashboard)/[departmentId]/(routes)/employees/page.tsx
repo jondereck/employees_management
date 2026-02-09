@@ -144,6 +144,7 @@ publicVersion: Number(item.publicVersion ?? 0),
 
      createdAt: item.createdAt?.toISOString() ?? null,
   updatedAt: item.updatedAt?.toISOString() ?? null,
+  legacyQrAllowed: Boolean(item.legacyQrAllowed),
 
   }));
 
