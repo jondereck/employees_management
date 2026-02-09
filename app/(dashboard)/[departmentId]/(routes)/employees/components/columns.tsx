@@ -1,66 +1,45 @@
-
+"use client"
 
 import { ColumnDef } from "@tanstack/react-table"
-
-import { Button } from "@/components/ui/button"
-import { ArrowUpDown, Copy } from "lucide-react"
-import { CellAction } from "./cell-actions"
-import { Checkbox } from "@/components/ui/checkbox"
-import { DataTableColumnHeader } from "@/components/ui/column-header"
-import PreviewModal from "../../(frontend)/view/components/preview"
-import { Eye } from "./eye"
-
 import { useState } from "react"
 import toast from "react-hot-toast"
-import { ActionTooltip } from "@/components/ui/action-tooltip"
-import getEmployees from "../../(frontend)/view/actions/get-employees"
+import moment from 'moment'
+import { ArrowUpDown, Copy, MoreHorizontal, User, Briefcase, Calendar } from "lucide-react"
 
-import { Employees } from "../../(frontend)/view/types";
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
+import { ActionTooltip } from "@/components/ui/action-tooltip"
+import { DataTableColumnHeader } from "@/components/ui/column-header"
+
+import { CellAction } from "./cell-actions"
+import { Eye } from "./eye"
 import AgeCell from "./age-cell"
 import YearsOfService from "./years_of_service_cell"
-import moment from 'moment';
-import { format, isValid } from "date-fns"
-import { formatContactNumber, formatDate, formatFullName, formatGsisNumber, formatPagIbigNumber, formatPhilHealthNumber, formatSalary, getBirthday } from "@/utils/utils"
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { salarySchedule } from "@/utils/salarySchedule"
 import { computeStep } from "@/utils/compute-step"
+import { 
+  formatContactNumber, 
+  formatDate, 
+  formatFullName, 
+  formatGsisNumber, 
+  formatPagIbigNumber, 
+  formatPhilHealthNumber, 
+  formatSalary, 
+  getBirthday 
+} from "@/utils/utils"
 
-
-
-
-
-// This type is used to define the shape of our data.
-// You can use a Zod schema here if you want.
-
-export interface Offices {
-  id: string;
-  name: string;
-}
-
-export interface Image {
-  id: string;
-  url: string;
-  value: string;
-}
-
-export interface Eligibility {
-  id: string;
-  name: string;
-  value: string;
-}
-
-export interface EmployeeType {
-  id: string;
-  name: string;
-  value: string;
-}
+// --- Types ---
+export interface Offices { id: string; name: string; }
+export interface Image { id: string; url: string; value: string; }
+export interface Eligibility { id: string; name: string; value: string; }
+export interface EmployeeType { id: string; name: string; value: string; }
 
 export type EmployeesColumn = {
   id: string;
-  department: string
+  department: string;
   employeeNo: string;
   offices: Offices;
   prefix: string;
@@ -87,7 +66,7 @@ export type EmployeesColumn = {
   isArchived: boolean;
   eligibility: Eligibility;
   employeeType: EmployeeType;
-  images: Image[]; // Array of Image
+  images: Image[];
   region: string;
   province: string;
   city: string;
@@ -101,48 +80,21 @@ export type EmployeesColumn = {
   emergencyContactName: string;
   emergencyContactNumber: string;
   employeeLink: string;
- designation: { id: string; name: string } | null;
-note: string;
-
-  // 🔐 QR FIELDS (ADD THESE)
+  designation: { id: string; name: string } | null;
+  note: string;
   publicId: string;
   publicVersion: number;
   publicEnabled: boolean;
-  legacyQrAllowed?: boolean;
-createdAt: string | Date | null;
+  createdAt: string | Date | null;
   updatedAt: string | Date | null;
 }
 
-
 const onCopy = (text: string) => {
   navigator.clipboard.writeText(text);
+  toast.success("Copied to clipboard");
 }
 
-
-// Function to remove ordinal indicators from the date string
-const removeOrdinal = (dateString: string): string => {
-  return dateString.replace(/(\d+)(th|st|nd|rd)/, '$1');
-};
-
-const dateFormats = [
-  'MMMM D, YYYY', // e.g., March 28, 2000
-];
-
-
-const parseDate = (dateString: string) => {
-  const cleanedDateString = removeOrdinal(dateString);
-  for (const format of dateFormats) {
-    const date = moment(cleanedDateString, format, true);
-    if (date.isValid()) {
-      return date;
-    }
-  }
-  return null;
-};
-
-
 export const columns: ColumnDef<EmployeesColumn>[] = [
- 
   {
     id: "select",
     header: ({ table }) => (
@@ -161,332 +113,168 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     ),
     enableSorting: false,
     enableHiding: false,
-
-  },
-  {
-    id: "actions",
-    cell: ({ row }) => <CellAction data={row.original} />
   },
   {
     id: "eye",
+    header: "View",
     cell: ({ row }) => <Eye data={row.original} />
   },
-
   {
     accessorKey: "employeeNo",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column}
-        title="EmpNo." />
-    ),
-    cell: ({ row }) => row.getValue("employeeNo") || "N/A"
+    header: ({ column }) => <DataTableColumnHeader column={column} title="ID No." />,
+    cell: ({ row }) => (
+      <span className="font-mono font-medium text-slate-500 text-xs">
+        {row.getValue("employeeNo") || "N/A"}
+      </span>
+    )
   },
   {
     accessorKey: "firstName",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="FirstName" />
-    ),
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
     cell: ({ row }) => {
-      const firstName = row.original.firstName;
-      const middleName = row.original.middleName || '';
-      const lastName = row.original.lastName || '';
-      const suffix = row.original.suffix || '';
-      const gender = row.original.gender || '';
-      const prefix = row.original.prefix || '';
-      const position = row.original.position || '';
-
-      const fullName = formatFullName(firstName, middleName, lastName, suffix,
-        gender, prefix, position);
-
-      const handleCopyClick = () => {
-        let copiedText = fullName;
-        if (row.original.employeeType && row.original.employeeType.name === 'Job Order') {
-          copiedText += ' (Job Order)';
-        }
-        onCopy(copiedText);
-        toast.success("Copied");
-      };
+      const { firstName, middleName, lastName, suffix, gender, prefix, position, employeeType } = row.original;
+      const fullName = formatFullName(firstName, middleName, lastName, suffix, gender, prefix, position);
+      
       return (
-        <ActionTooltip label="Copy" side="right">
+        <ActionTooltip label="Click to copy full name" side="right">
           <div
-            className={`flex border p-1 rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
-            onClick={handleCopyClick}
+            className="flex flex-col cursor-pointer group max-w-[200px]"
+            onClick={() => onCopy(employeeType?.name === 'Job Order' ? `${fullName} (JO)` : fullName)}
           >
-            <span>{`${firstName} `}</span>
+            <span className="font-bold text-slate-900 truncate group-hover:text-primary transition-colors">
+              {lastName}, {firstName} {suffix}
+            </span>
+            <span className="text-[10px] text-muted-foreground truncate italic">
+              {middleName || "No middle name"}
+            </span>
           </div>
         </ActionTooltip>
       );
     },
   },
   {
-    accessorKey: "middleName",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column}
-        title="MiddleName" />
-    ),
-    cell: ({ row }) => row.getValue("middleName") || "N/A"
-  },
-  {
-    accessorKey: "lastName",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="LastName" />
-    ),
-  },
-
-  {
-    accessorKey: "suffix",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Suffix" />
-    ),
-    cell: ({ row }) => row.getValue("suffix") || "N/A"
-
-  },
-
-  {
-    accessorKey: "nickname",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Nickname" />
-    ),
-    cell: ({ row }) => row.getValue("nickname") || "N/A"
-  },
-
-  {
     accessorKey: "position",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Position" />
-    ),
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Position" />,
+    cell: ({ row }) => (
+      <div className="flex flex-col min-w-[140px]">
+        <span className="text-sm font-medium leading-none mb-1">{row.original.position}</span>
+        {row.original.designation && (
+          <span className="text-[11px] text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded w-fit">
+            {row.original.designation.name}
+          </span>
+        )}
+      </div>
+    )
   },
-
   {
-    accessorKey: "contactNumber",
-    header: "ContactNumber_",
+    accessorKey: "officeName",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Department" />,
+    accessorFn: row => row.offices?.name ?? "",
+    cell: ({ row }) => (
+      <span className="text-xs font-semibold text-slate-600">
+        {row.original.offices?.name ?? "N/A"}
+      </span>
+    ),
+    filterFn: (row, columnId, filterValue) => {
+      if (!filterValue || filterValue === "all") return true;
+      return row.getValue(columnId) === filterValue;
+    },
+  },
+  {
+    accessorKey: "gender",
+    header: "Gender",
     cell: ({ row }) => {
-      const contactNumber = row.getValue('contactNumber') as string;
-      const formattedNumber = formatContactNumber(contactNumber);
-
-      const handleCopyClick = () => {
-        onCopy(formattedNumber);
-        toast.success("Copied");
-      };
-
+      const gender = row.getValue("gender") as string;
       return (
-        <ActionTooltip label="Copy" side="right">
-          <div
-            className={`flex border  rounded-md items-center bg-gray-50 cursor-pointer justify-center `}
-            onClick={handleCopyClick}>
-            <span>{formattedNumber}</span>
-          </div>
-        </ActionTooltip>
+        <Badge variant="secondary" className={cn(
+          "font-normal capitalize shadow-sm",
+          gender.toLowerCase() === "male" 
+            ? "bg-blue-50 text-blue-700 border-blue-100" 
+            : "bg-pink-50 text-pink-700 border-pink-100"
+        )}>
+          {gender}
+        </Badge>
       );
     }
   },
   {
-    id: "birthday",
-    accessorKey: "birthday",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Birthday" />
-    ),
+    accessorKey: "salary",
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Salary" />,
     cell: ({ row }) => {
-      const birthday = row.getValue('birthday') as string; // Ensure the type is correct
-      return getBirthday(birthday); // Format date as needed
-    }
-  },
+      const saved = Number(row.original.salary ?? 0);
+      let amount = saved;
 
-  {
-    id: "age",
-    accessorKey: "birthday",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Age" />),
-    cell: ({ row }) => (
-
-      <span><AgeCell birthday={row.original.birthday} /></span>
-    ),
-  },
-
-  {
-    id: "yearsOfService",
-    accessorKey: "dateHired",
-    header: "Year(s)of Service ",
-    cell: ({ row }) => (
-      <span><YearsOfService year_service={row.original.dateHired} /></span>
-    ),
-  },
-
-
- 
-  {
-    accessorKey: "education",
-    header: "Education",
-    cell: ({ row }) => (
-      row.original.education ? row.original.education : "N/A"
-    ),
-  },
-  // {
-  //   accessorKey: "eligibility",
-  //   header: "Eligibility",
-  //   cell: ({ row }) => (
-  //     row.original.eligibility ? row.original.eligibility.name : "N/A"
-  //   ),
-  // },
-  // {
-  //   accessorKey: "employeeType",
-  //   header: "Appointment",
-  //   cell: ({ row }) => (
-  //     row.original.employeeType ? row.original.employeeType.name : "N/A"
-  //   ),
-  // },
-  {
-  accessorKey: "eligibility",
-  header: "Eligibility",
-  cell: ({ row }) => (row.original.eligibility ? row.original.eligibility.name : "N/A"),
-  filterFn: (row, columnId, filterValue) => {
-    if (!filterValue || filterValue === "all") return true;
-    const eligibilityName = row.original.eligibility?.name ?? "";
-    return eligibilityName === filterValue;
-  },
-},
-
-{
-  accessorKey: "employeeType",
-  header: "Appointment",
-  cell: ({ row }) => (row.original.employeeType ? row.original.employeeType.name : "N/A"),
-  filterFn: (row, columnId, filterValue) => {
-    if (!filterValue || filterValue === "all") return true;
-    const employeeTypeName = row.original.employeeType?.name ?? "";
-    return employeeTypeName === filterValue;
-  },
-},
-
-
-  {
-    accessorKey: "gender",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Gender" />
-    ),
-  },
-{
-  accessorKey: "salary",
-  header: ({ column }) => (
-    <DataTableColumnHeader column={column} title="Salary" />
-  ),
-  cell: ({ row }) => {
-    const saved = Number(row.original.salary ?? 0);     // 👈 manual/DB value
-    if (saved > 0) return formatSalary(String(saved));
-
-    const grade = Number(row.getValue("salaryGrade"));
-    const step = computeStep({
-      dateHired: row.original.dateHired,
-      latestAppointment: row.original.latestAppointment,
-    });
-    const rec = salarySchedule.find((s) => s.grade === grade);
-    const computed = rec ? rec.steps[step - 1] ?? 0 : 0;
-    return formatSalary(String(computed));
-  },
-},
-
-
-
-  
-  {
-    accessorKey: "salaryGrade",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column}
-        title="Grade"
-      />
-    ),
-    cell: ({ row }) => row.getValue("salaryGrade") || "N/A"
-  },
-
-  {
-    accessorKey: "tinNo",
-    header: "TaxpayerIdentificationNo",
-    cell: ({ row }) => (
-      row.original.tinNo ? row.original.tinNo : "N/A"
-    )
-  },
-  {
-    accessorKey: "gsisNo",
-    header: "GSISNumber ",
-    cell: ({ row }) => {
-      const gsisNumber = row.getValue('gsisNo') as string;
-      return formatGsisNumber(gsisNumber);
-    }
-  },
-  {
-    accessorKey: "philHealthNo",
-    header: "PhilhealthNumber",
-    cell: ({ row }) => {
-      const PhilhealthNumber = row.getValue('philHealthNo') as string;
-      return formatPhilHealthNumber(PhilhealthNumber);
-    }
-  },
-  {
-    accessorKey: "pagIbigNo",
-    header: "PagibigNumber__",
-    cell: ({ row }) => {
-      const PagibigNumber = row.getValue('pagIbigNo') as string;
-      return formatPagIbigNumber(PagibigNumber);
-    }
-  },
-
-  {
-    accessorKey: "dateHired",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="DateHired" />
-    ),
-    cell: ({ row }) => {
-      const dateHired = row.getValue('dateHired') as string; // Ensure the type is correct
-      return formatDate(dateHired); // Format date as needed
-    }
-  },
-  {
-    accessorKey: "isFeatured",
-    header: "Featured",
+      if (saved <= 0) {
+        const grade = Number(row.original.salaryGrade);
+        const step = computeStep({
+          dateHired: row.original.dateHired,
+          latestAppointment: row.original.latestAppointment,
+        });
+        const rec = salarySchedule.find((s) => s.grade === grade);
+        amount = rec ? rec.steps[step - 1] ?? 0 : 0;
+      }
+      
+      return (
+        <div className="flex flex-col">
+          <span className="font-bold text-emerald-700">{formatSalary(String(amount))}</span>
+          <span className="text-[10px] text-muted-foreground">Grade {row.original.salaryGrade || "N/A"}</span>
+        </div>
+      );
+    },
   },
   {
     accessorKey: "isArchived",
     header: "Status",
     cell: ({ row }) => {
-      const status = row.original.isArchived ? "Inactive" : "Active";
+      const isArchived = row.original.isArchived;
       return (
-        <span
-          className={cn("rounded px-2 py-1 text-xs font-medium", {
-            "bg-green-100 text-green-800": status === "Active",
-            "bg-red-100 text-red-800": status === "Inactive",
-          })}
-        >
-          {status}
-        </span>
+        <Badge className={cn(
+          "rounded-full px-2.5 py-0.5 border-none",
+          isArchived ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"
+        )}>
+          <span className={cn(
+            "h-1.5 w-1.5 rounded-full mr-1.5",
+            isArchived ? "bg-slate-400" : "bg-emerald-500"
+          )} />
+          {isArchived ? "Inactive" : "Active"}
+        </Badge>
       );
     },
     filterFn: (row, columnId, filterValue) => {
-      // filterValue will be one of "all", "Active", "Inactive"
       if (!filterValue || filterValue === "all") return true;
-      if (filterValue === "Active") return row.getValue(columnId) === false;  // isArchived === false
-      if (filterValue === "Inactive") return row.getValue(columnId) === true; // isArchived === true
-      return true;
-    },
-
-  },
-
-  {
-    id: "officeName", // 👈 new ID (more descriptive)
-    header: "Office",
-    accessorFn: row => row.offices?.name ?? "", // 👈 returns office name for filtering
-    cell: ({ row }) => row.original.offices?.name ?? "N/A",
-    filterFn: (row, columnId, filterValue) => {
-      const value = row.getValue(columnId);
-      return filterValue === "all" || value === filterValue;
+      const status = row.getValue(columnId) ? "Inactive" : "Active";
+      return status === filterValue;
     },
   },
-  
-  
-  
   {
-    accessorKey: "createdAt",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title=" CreatedAt" />
+    accessorKey: "contactNumber",
+    header: "Contact",
+    cell: ({ row }) => {
+      const contact = row.getValue('contactNumber') as string;
+      const formatted = formatContactNumber(contact);
+      return (
+        <button 
+          onClick={() => onCopy(formatted)}
+          className="text-xs hover:underline text-slate-600 font-medium"
+        >
+          {formatted}
+        </button>
+      );
+    }
+  },
+  {
+    id: "yearsOfService",
+    header: "Tenure",
+    cell: ({ row }) => (
+      <div className="flex flex-col text-[11px]">
+        <YearsOfService year_service={row.original.dateHired} />
+        <span className="text-muted-foreground mt-0.5">since {formatDate(row.original.dateHired)}</span>
+      </div>
     ),
   },
-
-
+  {
+    id: "actions",
+    header: "Actions",
+    cell: ({ row }) => <CellAction data={row.original} />
+  },
 ]

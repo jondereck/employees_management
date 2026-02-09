@@ -1,42 +1,42 @@
 "use client";
-import { Loader2, Plus } from "lucide-react";
+
+import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { useParams, useRouter } from "next/navigation";
-import { Eligibility, EmployeeType, EmployeesColumn, Offices, columns } from "./columns";
+import { format } from "date-fns";
+import { 
+  Loader2, 
+  Plus, 
+  Users, 
+  UserCheck, 
+  UserMinus, 
+  LayoutGrid, 
+  FilterX 
+} from "lucide-react";
+import clsx from "clsx";
 
-import useSWR from 'swr';
-import { useEmployees } from "@/hooks/use-employees";
-import { useDebounce } from "@/hooks/use-debounce";
-
-
+// UI Components from your library
 import { Button } from "@/components/ui/button";
 import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
 import { DataTable } from "@/components/ui/data-table";
-import ApiList from "@/components/ui/api-list";
-import ApiHeading from "@/components/ui/api-heading";
-import Footer from "../../(frontend)/view/components/footer";
-import DownloadEmployeeBackup from "@/components/download-button";
-import React, { useState, useMemo, useEffect, useTransition } from 'react';
-import SearchFilter from "@/components/search-filter";
-import BirthdayNotifications from "./notifications";
-import Notifications from "./notifications";
-import { OfficesColumn } from "../../offices/components/columns";
-import EmployeeFilters from "./employee-filters";
-import { format } from "date-fns";
-import { FloatingSelectionBar } from "./floating-selection-bar";
-import CsvAttendanceImport from "./csv-attendance-import";
 import { Badge } from "@/components/ui/badge";
+import ApiList from "@/components/ui/api-list";
 
+// Custom Components
+import SearchFilter from "@/components/search-filter";
+import EmployeeFilters from "./employee-filters";
+import { FloatingSelectionBar } from "./floating-selection-bar";
+import DownloadEmployeeBackup from "@/components/download-button";
+import Footer from "../../(frontend)/view/components/footer";
+
+// Hooks & Types
+import { useEmployees } from "@/hooks/use-employees";
+import { useDebounce } from "@/hooks/use-debounce";
+import { columns, EmployeesColumn } from "./columns";
 
 interface Option { id: string; name: string; }
-
 const STATUS_VALUES = ["all", "Active", "Inactive"] as const;
 type StatusValue = typeof STATUS_VALUES[number];
-
-
-
-
-
 
 interface EmployeesClientProps {
   departmentId: string;
@@ -47,361 +47,237 @@ interface EmployeesClientProps {
   positions: Option[];
 }
 
-export const EmployeesClient = ({ departmentId, data, offices, positions, eligibilities, employeeTypes
+export const EmployeesClient = ({ 
+  departmentId, 
+  data, 
+  offices, 
+  eligibilities, 
+  employeeTypes 
 }: EmployeesClientProps) => {
   const router = useRouter();
   const params = useParams();
-
-  const SEARCH_STORAGE_KEY = "employees_search_v1";
-  const norm = (s?: string) => (s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
-
-  const [searchTerm, setSearchTerm] = useState<string>(() => {
-    try {
-      if (typeof window === "undefined") return "";
-      const raw = localStorage.getItem(SEARCH_STORAGE_KEY);
-      const saved = raw ? JSON.parse(raw) : "";
-      return typeof saved === "string" ? saved : "";
-    } catch {
-      return "";
-    }
-  });
-
-  const [isGenioOpen, setIsGenioOpen] = useState(false);
-
   const [isPending, startTransition] = useTransition();
 
-  const onAdd = () => {
-    startTransition(() => {
-      router.push(`/${params.departmentId}/employees/new`);
-    });
-  };
-  // persist on change
-  useEffect(() => {
+  // --- State ---
+  const SEARCH_STORAGE_KEY = "employees_search_v1";
+  const [searchTerm, setSearchTerm] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
     try {
-      localStorage.setItem(SEARCH_STORAGE_KEY, JSON.stringify(searchTerm));
-    } catch { }
-  }, [searchTerm]);
-
-  //  // ✅ Escape clears search
-  // useEffect(() => {
-  //   const onKey = (e: KeyboardEvent) => {
-  //     if (e.key === "Escape" && searchTerm) {
-  //       setSearchTerm("");
-  //     }
-  //   };
-  //   window.addEventListener("keydown", onKey);
-  //   return () => window.removeEventListener("keydown", onKey);
-  // }, [searchTerm]);
-
-  const debouncedSearchTerm = useDebounce(searchTerm, 400);
+      const saved = localStorage.getItem(SEARCH_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : "";
+    } catch { return ""; }
+  });
 
   const [filters, setFilters] = useState({
     offices: [] as string[],
     eligibilities: [] as string[],
     employeeTypes: [] as string[],
-    positions: [] as string[],       // <-- add this
-    status: "all" as StatusValue,    // <-- strong type
+    positions: [] as string[],
+    status: "all" as StatusValue,
   });
-  const { employees: swrEmployees = [], isLoading, isError } = useEmployees(departmentId);
 
+  const { employees: swrEmployees = [], isLoading } = useEmployees(departmentId);
+  const debouncedSearchTerm = useDebounce(searchTerm, 400);
 
+  // --- Persistence ---
+  useEffect(() => {
+    localStorage.setItem(SEARCH_STORAGE_KEY, JSON.stringify(searchTerm));
+  }, [searchTerm]);
+
+  // --- Data Merging & Sorting ---
   const employees = useMemo(() => {
-    let merged: EmployeesColumn[];
-
-    if (swrEmployees.length > 0) {
-      merged = swrEmployees.map((emp) => ({
-        id: emp.id,
-        department: emp.departmentId,
-        employeeNo: emp.employeeNo ?? "",
-        offices: emp.offices,
-        prefix: emp.prefix ?? "",
-        firstName: emp.firstName ?? "",
-        middleName: emp.middleName ?? "",
-        lastName: emp.lastName ?? "",
-        suffix: emp.suffix ?? "",
-        gender: emp.gender ?? "",
-        contactNumber: emp.contactNumber ?? "",
-        position: emp.position ?? "",
-        birthday: emp.birthday ? format(new Date(emp.birthday), "M d, yyyy") : "",
-        education: emp.education ?? "",
-        gsisNo: emp.gsisNo ?? "",
-        tinNo: emp.tinNo ?? "",
-        philHealthNo: emp.philHealthNo ?? "",
-        pagIbigNo: emp.pagIbigNo ?? "",
-        salary: typeof emp.salary === "number" ? String(emp.salary) : emp.salary ?? "",
-        dateHired: emp.dateHired ? format(new Date(emp.dateHired), "M d, yyyy") : "",
-        latestAppointment: emp.latestAppointment ?? "",
-        terminateDate: emp.terminateDate ?? "",
-        isFeatured: !!emp.isFeatured,
-        isHead: !!emp.isHead,
-        isArchived: !!emp.isArchived,
-        eligibility: emp.eligibility,
-        employeeType: emp.employeeType,
-        images: emp.images ?? [],
-        region: emp.region ?? "",
-        province: emp.province ?? "",
-        city: emp.city ?? "",
-        barangay: emp.barangay ?? "",
-        houseNo: emp.houseNo ?? "",
-        salaryGrade: emp.salaryGrade?.toString() ?? "",
-        salaryStep: emp.salaryStep?.toString() ?? "",
-        memberPolicyNo: emp.memberPolicyNo ?? "",
-        age: emp.age ?? "",
-        nickname: emp.nickname ?? "",
-        emergencyContactName: emp.emergencyContactName ?? "",
-        emergencyContactNumber: emp.emergencyContactNumber ?? "",
-        employeeLink: emp.employeeLink ?? "",
-        createdAt: emp.createdAt,
-        updatedAt: emp.updatedAt,
-        designation: emp.designation ?? null,
-        note: emp.note ?? null,
-
-      })) as EmployeesColumn[];
-    } else {
-      merged = data ?? [];
-    }
-
-    return merged.sort((a, b) => {
-      const dateA = new Date((a as any).updatedAt || (a as any).createdAt).getTime();
-      const dateB = new Date((b as any).updatedAt || (b as any).createdAt).getTime();
+    const source = swrEmployees.length > 0 ? swrEmployees : data;
+    return source.map((emp: any) => ({
+      ...emp,
+      // Normalize dates for display if they exist
+      displayBirthday: emp.birthday ? format(new Date(emp.birthday), "MMM d, yyyy") : "",
+      displayHired: emp.dateHired ? format(new Date(emp.dateHired), "MMM d, yyyy") : "",
+    })).sort((a: any, b: any) => {
+      const dateA = new Date(a.updatedAt || a.createdAt).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt).getTime();
       return dateB - dateA;
     });
   }, [swrEmployees, data]);
 
-
-  // Unique positions from NON-archived employees only (case-insensitive, keep first casing)
-  const activePositionOptions: Option[] = useMemo(() => {
+  // --- Dynamic Position Options ---
+  const activePositionOptions = useMemo(() => {
     const seen = new Set<string>();
-    const list: Option[] = [];
-    for (const e of employees) {
-      if (e.isArchived) continue;                       // <-- exclude archived owners
-      const p = (e.position ?? "").trim();
-      if (!p) continue;
-      const key = p.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        list.push({ id: p, name: p });
-      }
-    }
-    // sort by display name
-    return list.sort((a, b) => a.name.localeCompare(b.name));
+    return employees
+      .filter(e => !e.isArchived)
+      .reduce((acc: Option[], e) => {
+        const p = (e.position || "").trim();
+        if (p && !seen.has(p.toLowerCase())) {
+          seen.add(p.toLowerCase());
+          acc.push({ id: p, name: p });
+        }
+        return acc;
+      }, [])
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [employees]);
 
-
-  useEffect(() => {
-    setFilters((prev) => {
-      if (prev.positions.length === 0) return prev;
-      const allowed = new Set(activePositionOptions.map(o => o.id));
-      const next = prev.positions.filter(p => allowed.has(p));
-      return next.length === prev.positions.length ? prev : { ...prev, positions: next };
-    });
-  }, [activePositionOptions]);
-
-
-
-  const filteredEmployees = useMemo(() => {
-    return employees.filter((employee) => {
-      const officeMatch =
-        filters.offices.length === 0 || filters.offices.includes(employee.offices.id);
-
-      const eligMatch =
-        filters.eligibilities.length === 0 || filters.eligibilities.includes(employee.eligibility.id);
-
-      const typeMatch =
-        filters.employeeTypes.length === 0 || filters.employeeTypes.includes(employee.employeeType.id);
-
-      const posMatch =
-        filters.positions.length === 0 ||
-        (!!employee.position &&
-          filters.positions.some((selected) =>
-            norm(employee.position).includes(norm(selected))
-          ));
-
-      const statusMatch =
-        filters.status === "all" ||
-        (filters.status === "Active" && !employee.isArchived) ||
-        (filters.status === "Inactive" && employee.isArchived);
-
-      return officeMatch && eligMatch && typeMatch && posMatch && statusMatch;
-    });
-  }, [employees, filters]);
-
-
-
-
-
+  // --- Comprehensive Filtering ---
   const filteredData = useMemo(() => {
-    const raw = debouncedSearchTerm || "";
-    const q = raw.trim();
+    const norm = (s?: string) => (s ?? "").toLowerCase().trim();
+    const q = norm(debouncedSearchTerm);
 
-    const lowerQ = norm(q);
+    return employees.filter((emp) => {
+      // 1. Hard Filters (Sidebar)
+      const officeMatch = filters.offices.length === 0 || filters.offices.includes(emp.offices.id);
+      const eligMatch = filters.eligibilities.length === 0 || filters.eligibilities.includes(emp.eligibility.id);
+      const typeMatch = filters.employeeTypes.length === 0 || filters.employeeTypes.includes(emp.employeeType.id);
+      const statusMatch = filters.status === "all" || (filters.status === "Active" ? !emp.isArchived : emp.isArchived);
+      
+      const posFilterMatch = filters.positions.length === 0 || 
+        filters.positions.some(p => norm(emp.position).includes(norm(p)));
 
-    // Command detection
-    const isPosSearch = lowerQ.startsWith("?pos");
-    const isNoteSearch = lowerQ.startsWith("?note");
+      if (!officeMatch || !eligMatch || !typeMatch || !statusMatch || !posFilterMatch) return false;
 
-    const posQuery = isPosSearch
-      ? norm(q.replace(/^(\?pos)\s*/i, ""))
-      : "";
-
-    const noteQuery = isNoteSearch
-      ? norm(q.replace(/^(\?note)\s*/i, ""))
-      : "";
-
-    return filteredEmployees.filter((employee) => {
-      /** =========================
-       * POSITION SEARCH
-       ========================== */
-      if (isPosSearch) {
-        const terms = posQuery
-          .split(",")
-          .map((t) => norm(t))
-          .filter(Boolean);
-
-        const pos = norm(employee.position);
-
-        return terms.length === 0 ? true : terms.some((t) => pos.includes(t));
+      // 2. Search Commands (?pos, ?note) or General Search
+      if (q.startsWith("?pos")) {
+        const query = q.replace("?pos", "").trim();
+        return norm(emp.position).includes(query);
+      }
+      if (q.startsWith("?note")) {
+        const query = q.replace("?note", "").trim();
+        return norm(emp.note).includes(query);
+      }
+      if (q.startsWith("?off")) {
+        const query = q.replace("?off", "").trim();
+        return norm(emp.offices.name).includes(query);
       }
 
-      /** =========================
-       * NOTE SEARCH
-       ========================== */
-      if (isNoteSearch) {
-        const note = norm(employee.note);
-        return noteQuery === "" ? true : note.includes(noteQuery);
-      }
-
-      /** =========================
-       * DEFAULT SEARCH
-       ========================== */
-      const fullName = norm(`${employee.firstName} ${employee.lastName}`);
-      const reversedName = norm(`${employee.lastName} ${employee.firstName}`);
-      const contactNumber = norm(employee.contactNumber);
-      const nickname = norm(employee.nickname);
-      const employeeNo = norm(employee.employeeNo);
-
+      // Default Global Search
       return (
-        fullName.includes(lowerQ) ||
-        reversedName.includes(lowerQ) ||
-        contactNumber.includes(lowerQ) ||
-        nickname.includes(lowerQ) ||
-        employeeNo.includes(lowerQ)
+        norm(`${emp.firstName} ${emp.lastName}`).includes(q) ||
+        norm(emp.employeeNo).includes(q) ||
+        norm(emp.nickname).includes(q) ||
+        norm(emp.contactNumber).includes(q)
       );
     });
-  }, [filteredEmployees, debouncedSearchTerm]);
+  }, [employees, debouncedSearchTerm, filters]);
 
+  // --- Stats Calculation ---
+  const stats = useMemo(() => ({
+    total: filteredData.length,
+    active: filteredData.filter(e => !e.isArchived).length,
+    inactive: filteredData.filter(e => e.isArchived).length
+  }), [filteredData]);
 
-
-  const { total, inactive, active } = useMemo(() => {
-    const total = filteredData?.length ?? 0;
-    const inactive = (filteredData ?? []).reduce((n, e) => n + (e?.isArchived ? 1 : 0), 0);
-    const active = total - inactive;
-    return { total, active, inactive };
-  }, [filteredData]);
   return (
-    <div className="flex flex-col min-h-screen px-4 sm:px-4 lg:px-6 py-6 gap-6 bg-gray-50">
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <Heading
-          title={`Employees (${total})`}
-          description={
-            <div className="flex gap-2 items-center">
-              <Badge variant="secondary" className="flex items-center gap-1">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
-                Active: {active}
-              </Badge>
-              <Badge variant="outline" className="flex items-center gap-1">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500" />
-                Inactive: {inactive}
-              </Badge>
-            </div>
-          }
-        />
-        <div className="flex items-center gap-3">
-          <Button
-         onClick={onAdd}
-  disabled={isPending}
-  className="flex w-[88px] items-center justify-center gap-2 px-4 py-2"
-          >
-            {isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin"  aria-label="Loading" /> 
-            ) : (
-              <>
-                <Plus className="h-4 w-4" />
-                Add
-              </>
-            )}
-          </Button>
-
-          {/* Optional: Notification bell or badge here */}
-        </div>
-      </div>
-
-      <Separator />
-
-      <div className="bg-white p-4 rounded-2xl shadow-sm border">
-        <div className="flex flex-col md:flex-row md:items-center md:gap-4 gap-3 w-full">
-          <div className="flex flex-row items-center gap-2 w-full">
-            {/* Search Input */}
-            <div className="flex-1">
-              <SearchFilter searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
-            </div>
-            {/* Download Button */}
-            <div className="w-auto">
-              <DownloadEmployeeBackup />
-            </div>
+    <div className="flex flex-col min-h-screen bg-[#f9fafb]">
+      {/* Top Header Section */}
+      <header className="bg-white border-b sticky top-0 z-30 shadow-sm px-6 py-4">
+        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <Heading 
+            title={`Employees (${stats.total})`} 
+            description="Manage your workforce, track positions, and view history." 
+          />
+          <div className="flex items-center gap-3">
+            <DownloadEmployeeBackup />
+            <Button 
+              onClick={() => startTransition(() => router.push(`/${params.departmentId}/employees/new`))}
+              disabled={isPending}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all active:scale-95"
+            >
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+              Add Employee
+            </Button>
           </div>
+        </div>
+      </header>
 
-          {/* Filters beside or below */}
-          <div className="w-full md:w-auto">
+      <main className="flex-1 p-6 space-y-6 max-w-[1600px] mx-auto w-full">
+        
+        {/* Quick Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard label="Total Headcount" value={stats.total} icon={Users} color="text-indigo-600" bg="bg-indigo-50" />
+          <StatCard label="Active Status" value={stats.active} icon={UserCheck} color="text-emerald-600" bg="bg-emerald-50" />
+          <StatCard label="Archived/Inactive" value={stats.inactive} icon={UserMinus} color="text-rose-600" bg="bg-rose-50" />
+        </div>
+
+        {/* Filter & Search Toolbar */}
+        <div className="bg-white rounded-2xl border shadow-sm p-2 flex flex-col lg:flex-row items-center gap-3">
+          <div className="w-full lg:flex-1">
+            <SearchFilter 
+              searchTerm={searchTerm} 
+              setSearchTerm={setSearchTerm} 
+              isDebouncing={searchTerm !== debouncedSearchTerm} 
+            />
+          </div>
+          <div className="flex items-center gap-2 w-full lg:w-auto border-t lg:border-t-0 lg:border-l pt-3 lg:pt-0 lg:pl-3">
             <EmployeeFilters
               offices={offices}
               eligibilities={eligibilities}
               employeeTypes={employeeTypes}
-               isGenioOpen={isGenioOpen}
-              onFilterChange={setFilters}
               positions={activePositionOptions}
+              onFilterChange={setFilters}
             />
           </div>
         </div>
 
-
-      </div>
-      {/* Data Table */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border">
-        {filteredData.length === 0 ? (
-          <div className="text-center text-gray-500 py-12">
-            No employees match your filters or search.
-          </div>
-        ) : (
-          <div className="bg-white p-4 rounded-2xl shadow-sm border">
-            <DataTable
-              columns={columns}
-              data={filteredData}
-              offices={offices}
-              eligibilities={eligibilities}
-              employeeTypes={employeeTypes}
-              storageKey="employees_table_v1"   // 🔑 unique key per table
-              syncPageToUrl={true}
-              enableColumnReorder
-              columnOrderStorageKey="hrps.employees.columnOrder"
-              renderExtra={(table) => <FloatingSelectionBar table={table} departmentId={departmentId}
+        {/* Data Table Area */}
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden min-h-[500px]">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-[500px] gap-3 text-slate-400">
+              <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
+              <p className="text-sm font-medium animate-pulse">Syncing employee records...</p>
+            </div>
+          ) : filteredData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-[500px] text-center p-6">
+              <div className="bg-slate-50 p-4 rounded-full mb-4">
+                <FilterX className="h-10 w-10 text-slate-300" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900">No employees found</h3>
+              <p className="text-slate-500 max-w-xs mx-auto">
+                We couldn't find any results matching your current search or filter criteria.
+              </p>
+              <Button 
+                variant="outline" 
+                className="mt-4"
+                onClick={() => { setSearchTerm(""); setFilters({ offices: [], eligibilities: [], employeeTypes: [], positions: [], status: "all" }); }}
+              >
+                Clear all filters
+              </Button>
+            </div>
+          ) : (
+            <div className="p-1">
+              <DataTable
+                columns={columns}
+                data={filteredData}
+                storageKey="employees_table_v1"
+                syncPageToUrl
+                enableColumnReorder
+                renderExtra={(table) => (
+                  <FloatingSelectionBar table={table} departmentId={departmentId} />
+                )}
               />
-              }
-            />
+            </div>
+          )}
+        </div>
 
-          </div>
-
-        )}
-      </div>
-
-      <ApiList entityIdName="employeesId" entityName="employees" />
+        <ApiList entityIdName="employeesId" entityName="employees" />
+      </main>
+      
       <Footer />
     </div>
-
-
-
   );
-}
+};
 
+// --- Helper UI Components ---
 
+const StatCard = ({ label, value, icon: Icon, color, bg }: any) => (
+  <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-5 transition-all hover:shadow-md">
+    <div className={clsx("p-3.5 rounded-xl shrink-0", bg, color)}>
+      <Icon className="h-6 w-6" />
+    </div>
+    <div className="min-w-0">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</p>
+      <div className="flex items-baseline gap-1">
+        <span className="text-3xl font-black text-slate-900">{value}</span>
+        <span className="text-[10px] text-slate-400 font-medium italic">records</span>
+      </div>
+    </div>
+  </div>
+);
+
+export default EmployeesClient;
