@@ -67,14 +67,6 @@ const EmployeeHeader = ({ employee }: Props) => {
               {!employee.isArchived ? "Active" : "Archived"}
             </span>
 
-            {employee.employeeType && (
-              <Badge
-                style={{ backgroundColor: employee.employeeType.value, color: "white" }}
-                className="px-2.5 py-1 text-[10px] font-black uppercase border-none shadow-sm"
-              >
-                {employee.employeeType.name}
-              </Badge>
-            )}
           </div>
 
           {/* Name Display */}
@@ -83,6 +75,7 @@ const EmployeeHeader = ({ employee }: Props) => {
               {fullName}
             </h1>
             <div className="flex items-center gap-2 text-slate-500 font-medium">
+              
               <Briefcase className="h-4 w-4" />
               <span className="text-lg">{employee.position}</span>
               {employee.salaryGrade && (
@@ -90,7 +83,18 @@ const EmployeeHeader = ({ employee }: Props) => {
                   SG-{employee.salaryGrade}
                 </span>
               )}
+
+              
+          
             </div>
+              {employee.employeeType && (
+              <Badge
+                style={{ backgroundColor: employee.employeeType.value, color: "white" }}
+                className="px-2.5 py-1 text-[10px] font-black uppercase border-none shadow-sm"
+              >
+                {employee.employeeType.name}
+              </Badge>
+            )}
           </div>
 
           {/* Metadata Grid */}

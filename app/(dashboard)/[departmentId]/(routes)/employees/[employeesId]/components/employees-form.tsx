@@ -2,7 +2,7 @@
 import * as z from "zod";
 import { mutate as globalMutate } from "swr";
 import { Eligibility, Employee, EmployeeType, Gender, Image, Offices } from "@prisma/client";
-import { CalendarIcon, Check, ChevronDown, Trash } from "lucide-react";
+import { CalendarIcon, Check, ChevronDown, HelpCircle, LinkIcon, Loader2, Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -41,6 +41,7 @@ import AwardsGallery from "@/app/(public)/components/awards-gallery";
 import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
 import type { WeeklyExclusionDTO } from "@/lib/weeklyExclusions";
 import { EmployeeScheduleManager } from "./employee-schedule-manager";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 
 
 
@@ -101,7 +102,7 @@ const formSchema = z.object({
     .union([z.string(), z.number()])
     .transform((v) => String(v).trim())
     .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric")
-    .refine((v) => Number(v) >= 1 && Number(v) <= 33, "Salary Grade must be between 1 and 33")  
+    .refine((v) => Number(v) >= 1 && Number(v) <= 33, "Salary Grade must be between 1 and 33")
     .default("1"),
   salaryStep: z.number().optional().default(1),
   salary: z.number().min(0),
@@ -418,7 +419,7 @@ export const EmployeesForm = ({
         const suggested = suggestions[0].candidate.toUpperCase();
         const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
         form.setValue("employeeNo", joinEmployeeNo(suggested, emp), { shouldDirty: true, shouldTouch: true, shouldValidate: true });
-        toast.success(`Suggested BIO: ${suggested}`, { 
+        toast.success(`Suggested BIO: ${suggested}`, {
           id: toastId,
           duration: 3000,
         });
@@ -426,7 +427,7 @@ export const EmployeesForm = ({
       }
 
       setBioOptions(suggestions);
-      toast.success("Suggestion ready ✔", { id: toastId, duration: 3000  });
+      toast.success("Suggestion ready ✔", { id: toastId, duration: 3000 });
     } catch (e: any) {
       toast.error(e?.message ?? "Unable to suggest bio number.", { id: toastId, duration: 3000 });
     } finally {
@@ -442,18 +443,18 @@ export const EmployeesForm = ({
     });
   };
   const onSubmit = async (values: EmployeesFormValues) => {
-      console.group("🚨 SUBMIT PAYLOAD");
-  console.log("salaryMode:", values.salaryMode);
-  console.log("salary:", values.salary);
-  console.log("salaryGrade:", values.salaryGrade);
-  console.log("salaryStep:", values.salaryStep);
-  console.groupEnd();
+    console.group("🚨 SUBMIT PAYLOAD");
+    console.log("salaryMode:", values.salaryMode);
+    console.log("salary:", values.salary);
+    console.log("salaryGrade:", values.salaryGrade);
+    console.log("salaryStep:", values.salaryStep);
+    console.groupEnd();
     const contact = (values.contactNumber ?? "").trim();
     setLoading(true);
 
-         const toastId = toast.loading("Processing...", {
-    description: "Please wait while we save your data.",
-  });
+    const toastId = toast.loading("Processing...", {
+      description: "Please wait while we save your data.",
+    });
 
     try {
       const payload = {
@@ -494,11 +495,11 @@ export const EmployeesForm = ({
       toast.success("Success!", { id: toastId, description: initialData ? "Employee updated." : "Employee created." });
     } catch (error: any) {
       toast.error("Uh oh! Something went wrong.", {
-      id: toastId,
-      description:
-        error?.response?.data?.error ??
-        "There was a problem with your request.",
-    });
+        id: toastId,
+        description:
+          error?.response?.data?.error ??
+          "There was a problem with your request.",
+      });
     } finally {
       setLoading(false);
     }
@@ -560,14 +561,14 @@ export const EmployeesForm = ({
   };
 
 
-useEffect(() => {
-  const sub = form.watch((values, { name }) => {
-    if (name === "salaryGrade" && !values.salaryGrade) {
-      form.setValue("salaryGrade", "1", { shouldDirty: true });
-    }
-  });
-  return () => sub.unsubscribe();
-}, [form]);
+  useEffect(() => {
+    const sub = form.watch((values, { name }) => {
+      if (name === "salaryGrade" && !values.salaryGrade) {
+        form.setValue("salaryGrade", "1", { shouldDirty: true });
+      }
+    });
+    return () => sub.unsubscribe();
+  }, [form]);
 
   return (
     <>
@@ -593,7 +594,7 @@ useEffect(() => {
           </Button>
         )}
       </div >
-       <Separator className="my-4" />
+      <Separator className="my-4" />
       < Form {...form} >
         <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8 w-full">
 
@@ -658,599 +659,321 @@ useEffect(() => {
               </TabsTrigger>
             </TabsList>
 
-
-            <TabsContent value="details">
-              <h1 className="font-sans text-4xl font-bold">Profile</h1>
-              <FormField
-                control={form.control}
-                name="images"
-                render={({ field }) => {
-                  // watch the gender field from your form
-                  const gender = form.watch("gender") as "Male" | "Female" | undefined;
-
-                  return (
-                    <FormItem>
-                      <FormControl>
-                        <ImageUpload
-                          gender={gender} // ✅ pass gender here
-                          value={field.value.map((image) => image.url)}
-                          disabled={loading}
-                          onChange={(url) =>
-                            field.onChange([...field.value, { url }])
-                          }
-                          onRemove={(url) =>
-                            field.onChange(
-                              field.value.filter((current) => current.url !== url)
-                            )
-                          }
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Upload picture of an employee
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
-              />
-              <Separator className="my-4" />
-              {/* Compact row: Employee No. + Suggest (left) | Office (right) */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="employeeNo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Employee No. (e.g., 8540010, E-4)</FormLabel>
-
-                      {/* Input + Button inline */}
-                      <div className="flex gap-2">
-                        <FormControl className="flex-1">
-                          <Input
-                            disabled={loading}
-                            placeholder="e.g., 8540010, E-4"
-                            {...field}
-                            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-                          />
-                        </FormControl>
-
-                        <Button
-                          type="button"
-                          onClick={suggestBio}
-                          disabled={loading || suggesting || !officeId}
-                          className="shrink-0 whitespace-nowrap"
-                          variant="secondary"
-                          aria-label="Suggest Bio Number"
-                          aria-busy={suggesting}
-                        >
-                          {suggesting ? (
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                              Suggesting…
-                            </span>
-                          ) : "Suggest Bio No."}
-                        </Button>
-
-
-                      </div>
-                      {/* Render multiple suggestions as quick-pick buttons */}
-                      {bioOptions.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {bioOptions.map((opt) => (
-                            <Button
-                              key={`${opt.indexCode}-${opt.candidate}`}
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
-                                form.setValue("employeeNo", joinEmployeeNo(opt.candidate.toUpperCase(), emp), {
-                                  shouldDirty: true,
-                                  shouldTouch: true,
-                                  shouldValidate: true,
-                                });
-                                // Optionally hide choices after selecting:
-                                // setBioOptions([]);
-                              }}
-                              className="rounded-full"
-                            >
-                              Use {opt.candidate}
-                            </Button>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* keep description but hide on small screens to reduce height */}
-                      <FormDescription className="hidden sm:block">
-                        Enter “BIO, EMP” or click Suggest to auto-fill the BIO part.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="officeId"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="select"
-                      label="Office"
-                      field={field}
-                      required
-                      disabled={loading}
-                      placeholder="Select Office"
-                      recentKey="officeId"
-                      recentMax={3}
-                      recentLabel="Recently used"
-                      pinSuggestions
-                      options={[...offices]
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((o) => ({ value: o.id, label: o.name }))}
-                      description="Select the office where the employee is designated."
-                      searchable
-                      searchPlaceholder="Search office..."
-                    />
-
-                  )}
-                />
-              </div>
-
-              <Separator className="my-4" />
-              <div className="sm:grid sm:grid-1 md:grid-2 grid-cols-4 gap-8">
-                <FormField
-                  control={form.control}
-                  name="prefix"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="datalist"
-                      label="Prefix"
-                      field={field}
-                      staticOptions={PREFIX_OPTIONS}
-                      priorityOptions={["HON.", "DR.", "ATTY."]}
-                      pinSuggestions
-                      placeholder="Select or type Prefix..."
-                      formatMode="upper"
-                      formatModes={["none", "upper", "title"]}
-                      disabled={loading}
-                    />
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="nickname"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="text"
-                      label="Nickname"
-                      field={field}
-                      required
-                      placeholder="Nickname"
-                      showCounter
-                      formatMode="upper"           // Anne marie -> Anne Marie
-                      normalizeWhitespace          // collapse extra spaces
-                      nameSafe                     // block digits/symbols (keeps - and ')
-                      autoFormatOnBlur
-                      liveFormat        
-                    />
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="text"
-                      label="First Name"
-                      field={field}
-                      required
-                      placeholder="First Name"
-                      description="Ex: Jon"
-                      showCounter
-                      formatMode="upper"           // Anne marie -> Anne Marie
-                      normalizeWhitespace          // collapse extra spaces
-                      nameSafe                     // block digits/symbols (keeps - and ')
-                      autoFormatOnBlur
-                      liveFormat        
-                    />
-
-                  )}
-                />
-
-
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="text"
-                      label="Last Name"
-                      field={field}
-                      required
-                      placeholder="Last Name"
-                      description="Ex: Nifas"
-                      showCounter
-                      formatMode="upper"
-                      normalizeWhitespace
-                      nameSafe
-                      autoFormatOnBlur
-                    />
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="middleName"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="text"
-                      label="Middle Name"
-                      field={field}
-                      placeholder="Middle Name"
-                      description="Ex: De Guzman"
-                      showCounter
-                      formatMode="upper"           // Anne marie -> Anne Marie
-                      normalizeWhitespace          // collapse extra spaces
-                      nameSafe                     // block digits/symbols (keeps - and ')
-                      autoFormatOnBlur
-                    />
-                  )}
-                />
-
-
-                <FormField
-                  control={form.control}
-                  name="suffix"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="datalist"
-                      label="Suffix"
-                      field={field}
-                      staticOptions={SUFFIX_OPTIONS}
-                      priorityOptions={["JR.", "CPA", "RN"]}
-                      pinSuggestions
-                      placeholder="Select or type Suffix..."
-                      formatMode="upper"
-                      formatModes={["none", "upper", "title"]}
-                      disabled={loading}
-                    />
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="position"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="datalist"
-                      label="Position"
-                      field={field}
-                      endpoint="/api/autofill/positions" // full list (string[])
-                      priorityEndpoint={`/api/autofill/popular?field=position&limit=2`}
-                      pinSuggestions
-                      pinnedLabel="Frequently used"
-                      placeholder="Search or enter Position..."
-                      showFormatSwitch
-                      formatMode="none"
-                      formatModes={["none", "upper", "title", "sentence"]}
-                      disabled={loading}
-                    />
-                  )}
-                />
-
-
-
-                <FormField
-                  control={form.control}
-                  name="contactNumber"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="phone"
-                      label="Contact Number"
-                      field={field}
-                      disabled={loading}
-                    />
-                  )}
-                />
-
-
-                <FormField
-                  control={form.control}
-                  name="birthday"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="date"
-                      label="Date of birth"
-                      field={field}
-                      fromYear={currentYear - 100}
-                      toYear={currentYear}
-                      disableFuture
-                      description="Your date of birth is used to calculate your age."
-                      disabled={loading}
-                      required
-                    />
-                  )}
-                />
-                {/* <FormField
+            <TabsContent value="details" className="space-y-10 pt-6 pb-20">
+              {/* 1. IDENTITY & PRIMARY OFFICE */}
+<section className={cn(
+  "grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden rounded-3xl border bg-background shadow-sm"
+)}>
+  {/* Left: Interactive Photo Profile */}
+  <div className="lg:col-span-4 bg-secondary/10 p-8 flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-border/50">
+    <div className="relative group">
+      <FormField
         control={form.control}
-        name="age"
+        name="images"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Age</FormLabel>
             <FormControl>
-              <Input
-                disabled={loading}
-            
-                {...field}
-              />
+              <div className="relative rounded-2xl overflow-hidden ring-4 ring-background shadow-2xl transition-transform duration-300 ">
+                <ImageUpload
+                
+                  gender={form.watch("gender") as any}
+                  value={field.value.map((image) => image.url)}
+                  disabled={loading}
+                  onChange={(url) => field.onChange([...field.value, { url }])}
+                  onRemove={(url) =>
+                    field.onChange(field.value.filter((current) => current.url !== url))
+                  }
+                />
+              </div>
             </FormControl>
           </FormItem>
         )}
-      /> */}
-                <FormField
-                  control={form.control}
-                  name="gender"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Gender </FormLabel>
-                      <span className="text-red-500 align-top">*</span>
-                      <Select
+      />
+    </div>
+
+  </div>
+
+  {/* Right: Key Identifiers */}
+  <div className="lg:col-span-8 p-8 lg:p-10 bg-background">
+    <div className="grid grid-cols-1 gap-8">
+      
+      {/* Top Row: ID Number and Designation */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Biometric / ID Number */}
+        <FormField
+          control={form.control}
+          name="employeeNo"
+          render={({ field }) => (
+            <FormItem className="space-y-1.5">
+              <FormLabel className="text-[13px] font-semibold text-foreground/80">
+                Biometric / ID Number
+              </FormLabel>
+              <div className="relative flex items-center group">
+                <div className="flex-1">
+                  <AutoField
+                    kind="number"
+                    label="" 
+                    field={{
+                      ...field,
+                      onChange: (v: string) => field.onChange(v.toUpperCase()),
+                    }}
+                    placeholder="e.g. 8540005"
+                    className="pr-20 h-10 bg-secondary/20 border-transparent focus:bg-background transition-all"
+                  />
+                </div>
+                {/* Modern Integrated Suggest Button */}
+                <button
+                  type="button"
+                  onClick={suggestBio}
+                  disabled={loading || suggesting || !officeId}
+                  className="absolute right-1.5 top-1.5 bottom-1.5 px-3 rounded-md bg-background border shadow-sm text-[10px] font-bold uppercase tracking-tight hover:bg-secondary transition-colors disabled:opacity-50"
+                >
+                  {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Suggest"}
+                </button>
+              </div>
+              <FormMessage className="text-[11px]" />
+            </FormItem>
+          )}
+        />
+
+        {/* Plantilla Designation */}
+        <FormField
+          control={form.control}
+          name="designationId"
+          render={({ field }) => (
+            <AutoField
+              kind="select"
+              label="Plantilla Designation"
+              field={field}
+              placeholder="Choose designation…"
+              optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`}
+              className="h-10 bg-secondary/20 border-transparent focus:bg-background"
+              pinSuggestions
+              searchable
+              disabled={loading}
+            />
+          )}
+        />
+      </div>
+
+      {/* Bottom Row: Department (Full Width for focus) */}
+      <FormField
+        control={form.control}
+        name="officeId"
+        render={({ field }) => (
+          <div className="pt-4 border-t border-dashed border-border/60">
+            <AutoField
+              kind="select"
+              label="Department / Assignment"
+              field={field}
+              required
+              options={offices.map((o) => ({
+                value: o.id,
+                label: o.name,
+              }))}
+              searchable
+              className="h-10 bg-secondary/20 border-transparent focus:bg-background"
+            />
+          </div>
+        )}
+      />
+    </div>
+  </div>
+</section>
+
+
+              {/* 2. FULL NAME & PERSONAL DETAILS */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Personal Information</h2>
+                  <Separator className="flex-1" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  <FormField control={form.control} name="prefix" render={({ field }) => <AutoField kind="datalist" label="Prefix" field={field} staticOptions={PREFIX_OPTIONS} />} />
+                  <FormField control={form.control} name="lastName" render={({ field }) => <AutoField
+                    kind="text"
+                    label="Last Name"
+                    field={field}
+                    required
+                    showCounter
+                    formatMode="upper"
+                    normalizeWhitespace
+                    nameSafe
+                    autoFormatOnBlur
+                  />} />
+                  <FormField control={form.control} name="firstName" render={({ field }) => <AutoField
+                    kind="text"
+                    label="First Name"
+                    field={field}
+                    required
+                    showCounter
+                    formatMode="upper"           // Anne marie -> Anne Marie
+                    normalizeWhitespace          // collapse extra spaces
+                    nameSafe                     // block digits/symbols 
+                    autoFormatOnBlur
+                    liveFormat
+                  />} />
+                  <FormField control={form.control} name="middleName" render={({ field }) => <AutoField
+                    kind="text"
+                    label="Middle Name"
+                    field={field}
+                    showCounter
+                    formatMode="upper"
+                    normalizeWhitespace
+                    nameSafe
+                    autoFormatOnBlur
+                    liveFormat
+                  />} />
+
+                  <FormField control={form.control} name="suffix" render={({ field }) => <AutoField
+                    kind="datalist"
+                    label="Suffix"
+                    field={field}
+                    staticOptions={SUFFIX_OPTIONS}
+                    priorityOptions={["JR.", "SR.",]}
+                    pinSuggestions
+                    formatMode="upper"
+                    formatModes={["none", "upper", "title"]}
+                    disabled={loading}
+                  />} />
+                  <FormField control={form.control} name="nickname" render={({ field }) => <AutoField kind="text" label="Nickname" field={field} />} />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <FormField control={form.control} name="gender" render={({ field }) => (
+                    <FormField
+                      control={form.control}
+                      name="gender"
+                      render={({ field }) => (
+                        <AutoField
+                          kind="select"
+                          label="Gender"
+                          field={field}
+                          required
+                          options={genderOptions.map(g => ({
+                            value: g,
+                            label: g,
+                          }))}
+                          placeholder="Select gender"
+                        />
+                      )}
+                    />
+
+                  )} />
+
+                  <FormField
+                    control={form.control}
+                    name="birthday"
+                    render={({ field }) => (
+                      <AutoField
+                        kind="date"
+                        label="Date of birth"
+                        field={field}
+                        fromYear={currentYear - 100}
+                        toYear={currentYear}
+                        disableFuture
+                        description="Your date of birth is used to calculate your age."
                         disabled={loading}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue
-                              defaultValue={field.value}
-                              placeholder="Select gender "
-                            />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {genderOptions.map((item) => (
-                            <SelectItem
-                              key={item}
-                              value={item}
-                            >
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />  <FormField
-                  control={form.control}
-                  name="education"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="datalist"
-                      label="Education"
-                      field={field}
-                      endpoint="/api/autofill/educations"
-                      priorityEndpoint={`/api/autofill/popular?field=education&limit=2`}
-                      pinSuggestions
-                      formatMode="title"
-                      pinnedLabel="Suggestions"
-                      placeholder="Search or enter Position..."
-                    />
-                  )}
-                />
+                        required
+                      />
+                    )}
+                  />
 
-              </div>
-              <Separator className="my-4" />
-              <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
-                {/* <FormField
-              control={form.control}
-              name="region"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Region</FormLabel>
-                  <FormControl>
-                    <Input
-                      disabled={loading}
-                      placeholder="Ilocos"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    This Information is private
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            /> */}
-                <FormField
-                  control={form.control}
-                  name="emergencyContactName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Emergency Contact Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="Emergency Contact Name"
-                          {...field}
-                          onChange={(e) => {
-                            // Convert the input value to uppercase
-                            const uppercaseValue = e.target.value.toUpperCase();
-                            // Set the field value to the uppercase value
-                            field.onChange(uppercaseValue);
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Contact when emergecy
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="emergencyContactNumber"
-                  render={({ field }) => {
-                    const display = formatPHPretty(field.value ?? ""); // pretty only
-                    return (
-                      <FormItem>
-                        <FormLabel>Emergency Contact Number</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            autoComplete="tel"
-                            pattern={"^0\\d{10}$|^0\\d{3}-\\d{3}-\\d{4}$"}
-                            value={display}
-                            onChange={(e) => {
-                              // Strip hyphens/spaces from UI, normalize + clamp, store raw (no hyphens)
-                              const raw = normalizePHMobileLive(e.target.value);
-                              // allow empty (optional field)
-                              field.onChange(raw);
-                            }}
-                            onBlur={(e) => {
-                              // Re-run normalize (handles paste cases cleanly)
-                              const raw = normalizePHMobileLive(e.target.value);
-                              field.onChange(raw);
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
+                  <FormField control={form.control} name="contactNumber" render={({ field }) => <AutoField
+                    kind="phone"
+                    label="Contact Number"
+                    field={field}
+                    disabled={loading}
+                  />} />
 
-                <FormField
-                  control={form.control}
-                  name="houseNo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Unit/Number</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="Home Number"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        This is optional
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="street"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="datalist"
-                      label="Street"
-                      field={field}
-                      endpoint="/api/autofill/streets"
-                      priorityEndpoint={`/api/autofill/popular?field=street&limit=3`}
-                      pinSuggestions
-                      pinnedLabel="Suggestions"
-                      placeholder="Search or enter Street..."
+                  <FormField control={form.control} name="education" render={({ field }) => <AutoField
+                    kind="datalist"
+                    label="Education"
+                    field={field}
+                    endpoint="/api/autofill/educations"
+                    priorityEndpoint={`/api/autofill/popular?field=education&limit=2`}
+                    pinSuggestions
+                    formatMode="title"
 
-                    />
-                  )}
-                />
+                  />} />
+                </div>
 
-                <FormField
-                  control={form.control}
-                  name="barangay"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="datalist"
-                      label="Barangay"
-                      field={field}
-                      endpoint="/api/autofill/barangays"
-                      priorityEndpoint={`/api/autofill/popular?field=barangay&limit=2`}
-                      pinSuggestions
-                      pinnedLabel="Suggestions"
-                      placeholder="Search or enter Barangay..."
-                      formatMode="upper"
-                    />
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="city"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="datalist"
-                      label="City"
-                      field={field}
-                      endpoint="/api/autofill/cities"
-                      placeholder="Search or enter City..."
-                      formatMode="upper"
-                      priorityEndpoint={`/api/autofill/popular?field=city&limit=2`}
-                      pinSuggestions
-                      pinnedLabel="Suggestions"
-                    />
-                  )}
-                />
+              </section>
 
-                <FormField
-                  control={form.control}
-                  name="province"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="datalist"
-                      label="Province"
-                      field={field}
-                      endpoint="/api/autofill/provinces"
-                      placeholder="Search or enter Province..."
-                      formatMode="upper"
-                      priorityEndpoint={`/api/autofill/popular?field=province&limit=2`}
-                      pinSuggestions
-                      pinnedLabel="Suggestions"
-                    />
-                  )}
-                />
-              </div>
+              {/* 3. RESIDENTIAL ADDRESS */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Residential Address</h2>
+                  <Separator className="flex-1" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  <FormField control={form.control} name="houseNo" render={({ field }) => <AutoField kind="text" label="House/Bldg No." field={field} />} />
+                  <FormField control={form.control} name="street" render={({ field }) => <AutoField
+                    kind="datalist"
+                    label="Street/Sitio"
+                    field={field}
+                    endpoint="/api/autofill/streets"
+                    priorityEndpoint={`/api/autofill/popular?field=street&limit=2`}
+                    formatMode="upper"
+                  />} />
+                  <FormField control={form.control} name="barangay" render={({ field }) => <AutoField
+                    kind="datalist"
+                    label="Barangay"
+                    field={field}
+                    endpoint="/api/autofill/barangays"
+                    priorityEndpoint={`/api/autofill/popular?field=barangay&limit=2`}
+                    pinSuggestions
+                    formatMode="upper"
+                  />} />
+                  <FormField control={form.control} name="city" render={({ field }) => <AutoField
+                    kind="datalist"
+                    label="City"
+                    field={field}
+                    endpoint="/api/autofill/cities"
+                    formatMode="upper"
+                    priorityEndpoint={`/api/autofill/popular?field=city&limit=2`}
+                    pinSuggestions
 
-              <Separator className="my-4" />
+                  />} />
+                  <FormField control={form.control} name="province" render={({ field }) => <AutoField
+                    kind="datalist"
+                    label="Province"
+                    field={field}
+                    endpoint="/api/autofill/provinces"
+                    formatMode="upper"
+                    priorityEndpoint={`/api/autofill/popular?field=province&limit=2`}
+                    pinSuggestions
 
-              <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
-                <SalaryInput form={form} loading={loading} maxStep={8} />
-                <FormField
-                  control={form.control}
-                  name="designationId"
-                  render={({ field }) => (
-                    <AutoField
+                  />} />
+                  {/* <FormField control={form.control} name="region" render={({ field }) => <AutoField kind="text" label="Region" field={field} />} /> */}
+                </div>
+              </section>
+
+              {/* 4. PROFESSIONAL & COMPENSATION */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Employment & Salary</h2>
+                  <Separator className="flex-1" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <FormField control={form.control} name="position" render={({ field }) => <AutoField
+                    kind="datalist"
+                    label="Position Title"
+                    required
+                    field={field}
+                    endpoint="/api/autofill/positions" // full list (string[])
+                    priorityEndpoint={`/api/autofill/popular?field=position&limit=2`}
+                    pinSuggestions
+                    pinnedLabel="Frequently used"
+                    placeholder="Search or enter Position..."
+                    showFormatSwitch
+                    formatMode="none"
+                    formatModes={["none", "upper", "title", "sentence"]}
+                    disabled={loading}
+                  />} />
+                  <FormField control={form.control} name="employeeTypeId" render={({ field }) =>        <AutoField
                       kind="select"
-                      label="Plantilla Designation"
-                      field={field}
-                      placeholder="Choose office…"
-                      optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`}
-                      recentKey="designationId"
-                      recentMax={3}
-                      recentLabel="Recently used"
-                      pinSuggestions
-                      disabled={loading}
-                      description="Plantilla office record."
-                      required={false}
-                      searchable
-                      searchPlaceholder="Search office..."
-                    />
-                  )}
-                />
-
-
-                <FormField
-                  control={form.control}
-                  name="employeeTypeId"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="select"
-                      label="Appointment"
+                      label="Appointment Status"
                       field={field}
                       required
                       disabled={loading}
@@ -1262,67 +985,134 @@ useEffect(() => {
 
                       searchable
                       searchPlaceholder="Search appointment..."
-                      description="Select an Appointment for the employee"
-                    />
+                    />} />
+                  <FormField control={form.control} name="eligibilityId" render={({ field }) => <AutoField
+                    kind="select"
+                    label="Civil Service Eligibility"
+                    field={field}
+                    required
+                    disabled={loading}
+                    placeholder="Select Eligibility"
+                    recentKey="eligibilityId"
+                    recentMax={3}
+                    recentLabel="Recently used"
+                    pinSuggestions
+                    pinnedLabel="Suggestions"
+                    options={eligibility
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map(el => ({ value: el.id, label: el.name }))}
+                    searchable
+                    searchPlaceholder="Search eligibility..."
+                  />} />
+                </div>
 
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="eligibilityId"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="select"
-                      label="Eligibility"
-                      field={field}
-                      required
-                      disabled={loading}
-                      placeholder="Select Eligibility"
-                      recentKey="eligibilityId"
-                      recentMax={3}
-                      recentLabel="Recently used"
-                      priorityEndpoint={`/api/autofill/popular?field=eligibility&limit=3`}
-                      pinSuggestions
-                      pinnedLabel="Suggestions"
-                      options={eligibility
-                        .slice()
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map(el => ({ value: el.id, label: el.name }))}
-                      searchable
-                      searchPlaceholder="Search eligibility..."
-                    />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                  <div className="p-6 border rounded-2xl bg-muted/20">
+                    <SalaryInput form={form} loading={loading} />
+                  </div>
 
-                  )}
-                />
+                  {/* SEPARATE DATE FIELDS SECTION */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-6 border rounded-2xl">
+                    <FormField control={form.control} name="dateHired" render={({ field }) => (
+                      <AutoField
+                        kind="date"
+                        label="Date hired"
+                        placeholder="MM-DD-YYYY"
+                        field={field}                 // ✅ pass RHF field
+                        fromYear={fromYear}           // e.g. currentYear - 75
+                        toYear={currentYear}
 
-                <FormField
-                  control={form.control}
-                  name="dateHired"
-                  render={({ field }) => (
-                    <AutoField
+                        disabled={loading}
+                        required
+                      />
+                    )} />
+                    <FormField control={form.control} name="latestAppointment" render={({ field }) => (
+                      <AutoField
+                        kind="date"
+                        label="Latest Appointment Date"
+                        placeholder="MM-DD-YYYY"
+                        field={field}                 // ✅ pass RHF field
+                        fromYear={fromYear}           // e.g. currentYear - 75
+                        toYear={currentYear}
+
+                        disabled={loading}
+      
+                      />
+                    )} />
+
+   
+                  </div>
+                  
+                </div>
+              </section>
+<section className="space-y-6 p-6 bg-secondary/5 rounded-2xl border border-border/50 shadow-sm">
+  {/* ... Checkboxes (isFeatured, isHead, isArchived) stay here ... */}
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-dashed border-border/60">
+    
+    {/* 1. Employee File Link - Always Visible in Admin Section */}
+    <FormField
+      control={form.control}
+      name="employeeLink"
+      render={({ field }) => (
+        <FormItem className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <FormLabel className="text-[13px] font-semibold">Employee Digital File</FormLabel>
+            <ActionTooltip label="External Link" description="Link to Google Drive, SharePoint, or Dropbox folder containing PDS/Documents.">
+               <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30" />
+            </ActionTooltip>
+          </div>
+          <FormControl>
+            <div className="relative group">
+               <Input
+                disabled={loading}
+                placeholder="https://drive.google.com/..."
+                className="bg-background/50 h-10 rounded-xl focus:bg-background transition-all pl-9"
+                {...field}
+              />
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 group-focus-within:text-primary transition-colors">
+                <LinkIcon className="h-4 w-4" /> 
+              </div>
+            </div>
+          </FormControl>
+          <FormMessage className="text-[11px]" />
+        </FormItem>
+      )}
+    />
+
+    {/* 2. Termination Date - ONLY SHOWS IF ARCHIVED IS CHECKED */}
+  <FormField
+        control={form.control}
+        name="terminateDate"
+        render={({ field }) => (
+     <AutoField
                       kind="date"
-                      label="Date hired"
+                      label="Termination / Retirement Date"
                       placeholder="MM-DD-YYYY"
                       field={field}                 // ✅ pass RHF field
                       fromYear={fromYear}           // e.g. currentYear - 75
-                      toYear={currentYear}
-                     
+                  
+
                       disabled={loading}
-                      required
+  
                     />
-                  )}
-                />
+        )}
+      />
+  </div>
 
-
-              </div>
-             <Separator className="my-4" />
-              <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
-                <FormField
-                  control={form.control}
-                  name="gsisNo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>GSIS Number</FormLabel>
+  {/* Administrative Notes (Textarea) remains at the very bottom */}
+</section>
+              {/* 5. STATUTORY & EMERGENCY */}
+              <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Government Identifiers</h2>
+                    <Separator className="flex-1" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={form.control} name="gsisNo" render={({ field }) => <FormItem>
+                      <FormLabel className="text-xs">GSIS Number</FormLabel>
                       <FormControl>
                         <Input
                           disabled={loading}
@@ -1344,98 +1134,9 @@ useEffect(() => {
                         {field.value && field.value.length !== 13 && <span className="text-red-600">GSIS number must be 10 characters long.</span>}
                       </FormDescription>
                       <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="tinNo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>TIN Number</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="000-000-000"
-                          {...field}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            if (inputValue.length <= 11) {
-                              const formattedValue = formatNumber(inputValue);
-                              field.onChange(formattedValue);
-                            }
-                          }}
-
-                        />
-
-                      </FormControl>
-                      <FormDescription>
-                        {field.value && field.value.length !== 11 && <span className="text-red-600">TIN number must be 9 characters long.</span>}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="philHealthNo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Philhealth Number</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="000-000-000-000"
-                          {...field}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            if (inputValue.length <= 15) {
-                              const formattedValue = formatNumber(inputValue);
-                              field.onChange(formattedValue);
-                            }
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {field.value && field.value.length !== 15 && <span className="text-red-600">TIN number must be 12 characters long.</span>}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="memberPolicyNo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Member Policy Number</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="Member Policy Number"
-                          {...field}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            if (inputValue.length <= 13) {
-                              field.onChange(inputValue);
-                            }
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {field.value && field.value.length !== 13 && <span className="text-red-600">Member Policy number must be 13 characters long.</span>}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="pagIbigNo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Pagibig Number</FormLabel>
+                    </FormItem>} />
+                    <FormField control={form.control} name="pagIbigNo" render={({ field }) => <FormItem>
+                      <FormLabel className="text-xs">Pag-IBIG ID</FormLabel>
                       <FormControl>
                         <Input
                           disabled={loading}
@@ -1456,189 +1157,179 @@ useEffect(() => {
                         {field.value && field.value.length !== 15 && <span className="text-red-600">Pagibig Policy number must be 12 characters long.</span>}
                       </FormDescription>
                       <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="latestAppointment"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Latest Appointment</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-auto justify-start text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value ? format(new Date(field.value), "PPP") : <span>Pick a date</span>}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="start" className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            captionLayout="dropdown-buttons"
-                            selected={field.value ? new Date(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date?.toISOString() ?? undefined)}
-                            fromYear={fromYear}
-                            toYear={currentYear}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormDescription>
-                        This field is optional for employees with the most recent appointment.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-
-                <FormField
-                  control={form.control}
-                  name="employeeLink"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Employee&rsquo;s File</FormLabel>
+                    </FormItem>} />
+                    <FormField control={form.control} name="philHealthNo" render={({ field }) => <FormItem>
+                      <FormLabel className="text-xs">PhilHealth No.</FormLabel>
                       <FormControl>
                         <Input
                           disabled={loading}
-                          placeholder="https:// "
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Please provide the URL link to the employee&rsquo;s file. Ensure it is accessible and correctly formatted (if applicable).
-                      </FormDescription>
-                      <FormMessage>
-                        {field.value && !/^https?:\/\/[^\s/$.?#].[^\s]*$/.test(field.value) && (
-                          <span className="text-red-600">Please provide a valid URL.</span>
-                        )}
-                      </FormMessage>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="terminateDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Termination Date </FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="mm/dd/yyyy"
+                          placeholder="000-000-000-000"
                           {...field}
                           onChange={(e) => {
-                            const formattedValue = formatDate(e.target.value);
-                            field.onChange(formattedValue);
+                            const inputValue = e.target.value;
+                            if (inputValue.length <= 15) {
+                              const formattedValue = formatNumber(inputValue);
+                              field.onChange(formattedValue);
+                            }
                           }}
                         />
                       </FormControl>
                       <FormDescription>
-                        This field is optional for employee is terminated/retired.
+                        {field.value && field.value.length !== 15 && <span className="text-red-600">TIN number must be 12 characters long.</span>}
                       </FormDescription>
                       <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    </FormItem>} />
+                    <FormField control={form.control} name="tinNo" render={({ field }) => <FormItem>
+                      <FormLabel className="text-xs">TIN No.</FormLabel>
+                      <FormControl>
+                        <Input
+                          disabled={loading}
+                          placeholder="000-000-000"
+                          {...field}
+                          onChange={(e) => {
+                            const inputValue = e.target.value;
+                            if (inputValue.length <= 11) {
+                              const formattedValue = formatNumber(inputValue);
+                              field.onChange(formattedValue);
+                            }
+                          }}
 
+                        />
 
-                <FormField
-                  control={form.control}
-                  name="note"
-                  render={({ field }) => (
-                    <AutoField
-                      kind="textarea"
-                      label="Notes"
-                      field={field}
-                      placeholder="Enter any remarks, assignments, or special notes…"
-                      rows={5}
-                      maxLength={1000}
-                      showCounter
-                      disabled={loading}
-                    />
-                  )}
-                />
+                      </FormControl>
+                      <FormDescription>
+                        {field.value && field.value.length !== 11 && <span className="text-red-600">TIN number must be 9 characters long.</span>}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>} />
+                    <FormField control={form.control} name="memberPolicyNo" render={({ field }) => <FormItem>
+                      <FormLabel className="text-xs">Member Policy Number</FormLabel>
+                      <FormControl>
+                        <Input
+                          disabled={loading}
+                          placeholder="Member Policy Number"
+                          {...field}
+                          onChange={(e) => {
+                            const inputValue = e.target.value;
+                            if (inputValue.length <= 13) {
+                              field.onChange(inputValue);
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {field.value && field.value.length !== 13 && <span className="text-red-600">Member Policy number must be 13 characters long.</span>}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>} />
+                  </div>
+                </div>
 
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xs font-bold uppercase text-destructive/70">In Case of Emergency</h2>
+                    <Separator className="flex-1" />
+                  </div>
+                  <div className="p-4 border border-destructive/20 rounded-xl bg-destructive/5 space-y-4">
+                    <FormField control={form.control} name="emergencyContactName" render={({ field }) => <AutoField kind="text" label="Contact Person" field={field} />} />
+                    <FormField control={form.control} name="emergencyContactNumber" render={({ field }) => <AutoField kind="text" label="Contact Number" field={field} />} />
+                  </div>
+
+                </div>
+              </section>
+
+              {/* 6. FLAGS & NOTES */}
+        <section className="space-y-6 p-6 bg-secondary/5 rounded-2xl border border-border/50 shadow-sm">
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    
+    {/* Featured Employee */}
+    <FormField control={form.control} name="isFeatured" render={({ field }) => (
+      <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 rounded-xl border border-transparent hover:bg-background/50 transition-colors">
+        <FormControl>
+          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+        </FormControl>
+        <div className="flex items-center gap-1.5 leading-none">
+          <FormLabel className="text-sm font-medium cursor-pointer">Featured</FormLabel>
+          <ActionTooltip 
+            label="Featured Status" 
+            description="Displays this employee on the company landing page or spotlight section."
+            side="top"
+          >
+            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-primary transition-colors cursor-help" />
+          </ActionTooltip>
+        </div>
+      </FormItem>
+    )} />
+
+    {/* Department Head */}
+    <FormField control={form.control} name="isHead" render={({ field }) => (
+      <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 rounded-xl border border-transparent hover:bg-background/50 transition-colors">
+        <FormControl>
+          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+        </FormControl>
+        <div className="flex items-center gap-1.5 leading-none">
+          <FormLabel className="text-sm font-medium cursor-pointer">Deptartment Head</FormLabel>
+        <ActionTooltip 
+          label="Executive Role" 
+          description="Enabling this marks the employee as the primary signatory and authority for this office."
+          side="top"
+        >
+            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-primary transition-colors cursor-help" />
+          </ActionTooltip>
+        </div>
+      </FormItem>
+    )} />
+
+    {/* Archive Profile */}
+    <FormField control={form.control} name="isArchived" render={({ field }) => (
+      <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 rounded-xl border border-transparent hover:bg-background/50 transition-colors">
+        <FormControl>
+          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+        </FormControl>
+        <div className="flex items-center gap-1.5 leading-none">
+          <FormLabel className="text-sm font-medium cursor-pointer">Archive</FormLabel>
+          <ActionTooltip 
+            label="Soft Delete" 
+            description="Hides this profile from active lists without deleting data. Useful for resigned employees."
+            side="top"
+          >
+            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-primary transition-colors cursor-help" />
+          </ActionTooltip>
+        </div>
+      </FormItem>
+    )} />
+  </div>
+
+  {/* Administrative Notes */}
+  <FormField control={form.control} name="note" render={({ field }) => (
+    <FormItem className="pt-4 border-t border-dashed border-border/60">
+      <div className="flex items-center gap-2 mb-2">
+        <FormLabel className="text-[13px] font-semibold">Administrative Notes</FormLabel>
+        <ActionTooltip label="Internal Only" description="These notes are never visible to the employee.">
+           <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30" />
+        </ActionTooltip>
+      </div>
+      <FormControl>
+        <textarea 
+          {...field} 
+          value={field.value || ""} 
+          className="w-full min-h-[100px] rounded-xl border border-input bg-background/50 px-4 py-3 text-sm focus:bg-background transition-all focus:ring-1 focus:ring-primary/20 resize-none" 
+          placeholder="Add private internal notes regarding this employee..." 
+        />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
+  )} />
+</section>
+
+              <div className="flex items-center justify-end gap-x-4">
+                <Button disabled={loading} variant="ghost" type="button" onClick={() => router.back()}>Discard Changes</Button>
+                <Button disabled={loading} size="lg" type="submit" className="px-8 font-bold">{action}</Button>
               </div>
-
-              <div className="grid lg:grid-cols-2  grid-cols-1 gap-8  space-y-0 ">
-                <FormField
-                  control={form.control}
-                  name='isHead'
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          //@ts-ignore
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Is this employee in Executive Level Position?</FormLabel>
-                        <FormDescription>
-                          Marking this option will ensure that this employee always appears at the top.
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name='isFeatured'
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          //@ts-ignore
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Is featured employee?</FormLabel>
-                        <FormDescription>
-                          This employee will apear on home page
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name='isArchived'
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          //@ts-ignore
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Archived employee?</FormLabel>
-                        <FormDescription>
-                          This employee will not appear anywhere
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <Separator className="my-4" />
-              <Button disabled={loading} className=" mt-2" type="submit">
-                {action}
-              </Button>
-
             </TabsContent>
 
+
+       
             <TabsContent value="schedule">
               {employeeId ? (
                 <EmployeeScheduleManager
@@ -1700,7 +1391,7 @@ useEffect(() => {
           </Tabs>
 
 
-           <Separator className="my-4" />
+          <Separator className="my-4" />
 
 
         </form>

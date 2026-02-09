@@ -46,7 +46,7 @@ const SearchFilter: FC<SearchFilterProps> = ({ searchTerm, setSearchTerm, isDebo
   }, []);
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-2">
+    <div className="w-full max-w-auto mx-auto space-y-2">
       <div 
         className={clsx(
           "relative flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-200 shadow-sm",

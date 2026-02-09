@@ -166,7 +166,7 @@ export const EmployeesClient = ({
   return (
     <div className="flex flex-col min-h-screen bg-[#f9fafb]">
       {/* Top Header Section */}
-      <header className="bg-white border-b sticky top-0 z-30 shadow-sm px-6 py-4">
+      <header className="bg-white border-b   shadow-sm px-6 py-4">
         <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <Heading 
             title={`Employees (${stats.total})`} 
@@ -229,7 +229,7 @@ export const EmployeesClient = ({
               </div>
               <h3 className="text-lg font-semibold text-slate-900">No employees found</h3>
               <p className="text-slate-500 max-w-xs mx-auto">
-                We couldn't find any results matching your current search or filter criteria.
+                We couldnt find any results matching your current search or filter criteria.
               </p>
               <Button 
                 variant="outline" 
