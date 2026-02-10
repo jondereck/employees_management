@@ -180,7 +180,7 @@ export default function PublicSelfServiceActions({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 items-start"> {/* <- not items-stretch */}
-          <SimplePdfLinkTile
+          {/* <SimplePdfLinkTile
             title="Employee Handbook"
             description="A complete guide to workplace policies, employee benefits, and standards."
             pdfUrl="/_pdf/employee-handbook.pdf"
@@ -191,7 +191,7 @@ export default function PublicSelfServiceActions({
             wmOpacity={0.12}
             wmRotationDeg={0}
 
-          />
+          /> */}
           <SimplePdfLinkTile
             title="Citizen's Charter"
             description="A transparent guide to frontline services, processes, and commitments under the ARTA framework."

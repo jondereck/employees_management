@@ -661,125 +661,125 @@ export const EmployeesForm = ({
 
             <TabsContent value="details" className="space-y-10 pt-6 pb-20">
               {/* 1. IDENTITY & PRIMARY OFFICE */}
-<section className={cn(
-  "grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden rounded-3xl border bg-background shadow-sm"
-)}>
-  {/* Left: Interactive Photo Profile */}
-  <div className="lg:col-span-4 bg-secondary/10 p-8 flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-border/50">
-    <div className="relative group">
-      <FormField
-        control={form.control}
-        name="images"
-        render={({ field }) => (
-          <FormItem>
-            <FormControl>
-              <div className="relative rounded-2xl overflow-hidden ring-4 ring-background shadow-2xl transition-transform duration-300 ">
-                <ImageUpload
-                
-                  gender={form.watch("gender") as any}
-                  value={field.value.map((image) => image.url)}
-                  disabled={loading}
-                  onChange={(url) => field.onChange([...field.value, { url }])}
-                  onRemove={(url) =>
-                    field.onChange(field.value.filter((current) => current.url !== url))
-                  }
-                />
-              </div>
-            </FormControl>
-          </FormItem>
-        )}
-      />
-    </div>
+              <section className={cn(
+                "grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden rounded-3xl border bg-background shadow-sm"
+              )}>
+                {/* Left: Interactive Photo Profile */}
+                <div className="lg:col-span-4 bg-secondary/10 p-8 flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-border/50">
+                  <div className="relative group">
+                    <FormField
+                      control={form.control}
+                      name="images"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <div className="relative rounded-2xl overflow-hidden ring-4 ring-background shadow-2xl transition-transform duration-300 ">
+                              <ImageUpload
 
-  </div>
+                                gender={form.watch("gender") as any}
+                                value={field.value.map((image) => image.url)}
+                                disabled={loading}
+                                onChange={(url) => field.onChange([...field.value, { url }])}
+                                onRemove={(url) =>
+                                  field.onChange(field.value.filter((current) => current.url !== url))
+                                }
+                              />
+                            </div>
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-  {/* Right: Key Identifiers */}
-  <div className="lg:col-span-8 p-8 lg:p-10 bg-background">
-    <div className="grid grid-cols-1 gap-8">
-      
-      {/* Top Row: ID Number and Designation */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Biometric / ID Number */}
-        <FormField
-          control={form.control}
-          name="employeeNo"
-          render={({ field }) => (
-            <FormItem className="space-y-1.5">
-              <FormLabel className="text-[13px] font-semibold text-foreground/80">
-                Biometric / ID Number
-              </FormLabel>
-              <div className="relative flex items-center group">
-                <div className="flex-1">
-                  <AutoField
-                    kind="number"
-                    label="" 
-                    field={{
-                      ...field,
-                      onChange: (v: string) => field.onChange(v.toUpperCase()),
-                    }}
-                    placeholder="e.g. 8540005"
-                    className="pr-20 h-10 bg-secondary/20 border-transparent focus:bg-background transition-all"
-                  />
                 </div>
-                {/* Modern Integrated Suggest Button */}
-                <button
-                  type="button"
-                  onClick={suggestBio}
-                  disabled={loading || suggesting || !officeId}
-                  className="absolute right-1.5 top-1.5 bottom-1.5 px-3 rounded-md bg-background border shadow-sm text-[10px] font-bold uppercase tracking-tight hover:bg-secondary transition-colors disabled:opacity-50"
-                >
-                  {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Suggest"}
-                </button>
-              </div>
-              <FormMessage className="text-[11px]" />
-            </FormItem>
-          )}
-        />
 
-        {/* Plantilla Designation */}
-        <FormField
-          control={form.control}
-          name="designationId"
-          render={({ field }) => (
-            <AutoField
-              kind="select"
-              label="Plantilla Designation"
-              field={field}
-              placeholder="Choose designation…"
-              optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`}
-              className="h-10 bg-secondary/20 border-transparent focus:bg-background"
-              pinSuggestions
-              searchable
-              disabled={loading}
-            />
-          )}
-        />
-      </div>
+                {/* Right: Key Identifiers */}
+                <div className="lg:col-span-8 p-8 lg:p-10 bg-background">
+                  <div className="grid grid-cols-1 gap-8">
 
-      {/* Bottom Row: Department (Full Width for focus) */}
-      <FormField
-        control={form.control}
-        name="officeId"
-        render={({ field }) => (
-          <div className="pt-4 border-t border-dashed border-border/60">
-            <AutoField
-              kind="select"
-              label="Department / Assignment"
-              field={field}
-              required
-              options={offices.map((o) => ({
-                value: o.id,
-                label: o.name,
-              }))}
-              searchable
-              className="h-10 bg-secondary/20 border-transparent focus:bg-background"
-            />
-          </div>
-        )}
-      />
-    </div>
-  </div>
-</section>
+                    {/* Top Row: ID Number and Designation */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Biometric / ID Number */}
+                      <FormField
+                        control={form.control}
+                        name="employeeNo"
+                        render={({ field }) => (
+                          <FormItem className="space-y-1.5">
+                            <FormLabel className="text-[13px] font-semibold text-foreground/80">
+                              Biometric / ID Number
+                            </FormLabel>
+                            <div className="relative flex items-center group">
+                              <div className="flex-1">
+                                <AutoField
+                                  kind="number"
+                                  label=""
+                                  field={{
+                                    ...field,
+                                    onChange: (v: string) => field.onChange(v.toUpperCase()),
+                                  }}
+                                  placeholder="e.g. 8540005"
+                                  className="pr-20 h-10 bg-secondary/20 border-transparent focus:bg-background transition-all"
+                                />
+                              </div>
+                              {/* Modern Integrated Suggest Button */}
+                              <button
+                                type="button"
+                                onClick={suggestBio}
+                                disabled={loading || suggesting || !officeId}
+                                className="absolute right-1.5 top-1.5 bottom-1.5 px-3 rounded-md bg-background border shadow-sm text-[10px] font-bold uppercase tracking-tight hover:bg-secondary transition-colors disabled:opacity-50"
+                              >
+                                {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Suggest"}
+                              </button>
+                            </div>
+                            <FormMessage className="text-[11px]" />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Plantilla Designation */}
+                      <FormField
+                        control={form.control}
+                        name="designationId"
+                        render={({ field }) => (
+                          <AutoField
+                            kind="select"
+                            label="Plantilla Designation"
+                            field={field}
+                            placeholder="Choose designation…"
+                            optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`}
+                            className="h-10 bg-secondary/20 border-transparent focus:bg-background"
+                            pinSuggestions
+                            searchable
+                            disabled={loading}
+                          />
+                        )}
+                      />
+                    </div>
+
+                    {/* Bottom Row: Department (Full Width for focus) */}
+                    <FormField
+                      control={form.control}
+                      name="officeId"
+                      render={({ field }) => (
+                        <div className="pt-4 border-t border-dashed border-border/60">
+                          <AutoField
+                            kind="select"
+                            label="Department / Assignment"
+                            field={field}
+                            required
+                            options={offices.map((o) => ({
+                              value: o.id,
+                              label: o.name,
+                            }))}
+                            searchable
+                            className="h-10 bg-secondary/20 border-transparent focus:bg-background"
+                          />
+                        </div>
+                      )}
+                    />
+                  </div>
+                </div>
+              </section>
 
 
               {/* 2. FULL NAME & PERSONAL DETAILS */}
@@ -971,21 +971,21 @@ export const EmployeesForm = ({
                     formatModes={["none", "upper", "title", "sentence"]}
                     disabled={loading}
                   />} />
-                  <FormField control={form.control} name="employeeTypeId" render={({ field }) =>        <AutoField
-                      kind="select"
-                      label="Appointment Status"
-                      field={field}
-                      required
-                      disabled={loading}
-                      placeholder="Select Appointment"
-                      options={employeeType
-                        .slice()
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map(et => ({ value: et.id, label: et.name }))}
+                  <FormField control={form.control} name="employeeTypeId" render={({ field }) => <AutoField
+                    kind="select"
+                    label="Appointment Status"
+                    field={field}
+                    required
+                    disabled={loading}
+                    placeholder="Select Appointment"
+                    options={employeeType
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map(et => ({ value: et.id, label: et.name }))}
 
-                      searchable
-                      searchPlaceholder="Search appointment..."
-                    />} />
+                    searchable
+                    searchPlaceholder="Search appointment..."
+                  />} />
                   <FormField control={form.control} name="eligibilityId" render={({ field }) => <AutoField
                     kind="select"
                     label="Civil Service Eligibility"
@@ -1037,44 +1037,51 @@ export const EmployeesForm = ({
                         toYear={currentYear}
 
                         disabled={loading}
-      
+
                       />
                     )} />
 
-   
+
                   </div>
-                  
+
                 </div>
               </section>
-<section className="space-y-6 p-6 bg-secondary/5 rounded-2xl border border-border/50 shadow-sm">
-  {/* ... Checkboxes (isFeatured, isHead, isArchived) stay here ... */}
+              <section className="space-y-6 p-6 bg-secondary/5 rounded-2xl border border-border/50 shadow-sm">
+                {/* ... Checkboxes (isFeatured, isHead, isArchived) stay here ... */}
 
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-dashed border-border/60">
-    
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-dashed border-border/60">
 
 
-    {/* 2. Termination Date - ONLY SHOWS IF ARCHIVED IS CHECKED */}
-  <FormField
-        control={form.control}
-        name="terminateDate"
-        render={({ field }) => (
-     <AutoField
-                      kind="date"
-                      label="Termination / Retirement Date"
-                      placeholder="MM-DD-YYYY"
-                      field={field}                 // ✅ pass RHF field
-                      fromYear={fromYear}           // e.g. currentYear - 75
-                  
 
-                      disabled={loading}
-  
-                    />
-        )}
-      />
-  </div>
+                  {/* 2. Termination Date - ONLY SHOWS IF ARCHIVED IS CHECKED */}
+                <FormField
+                  control={form.control}
+                  name="terminateDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Termination Date </FormLabel>
+                      <FormControl>
+                        <Input
+                          disabled={loading}
+                          placeholder="MM-DD-YYYY"
+                          {...field}
+                          onChange={(e) => {
+                            const formattedValue = formatDate(e.target.value);
+                            field.onChange(formattedValue);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        This field is optional for employee is terminated/retired.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                </div>
 
-  {/* Administrative Notes (Textarea) remains at the very bottom */}
-</section>
+                {/* Administrative Notes (Textarea) remains at the very bottom */}
+              </section>
               {/* 5. STATUTORY & EMERGENCY */}
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="space-y-4">
@@ -1204,166 +1211,166 @@ export const EmployeesForm = ({
                   </div>
                   <div className="p-4 border border-destructive/20 rounded-xl bg-destructive/5 space-y-4">
                     <FormField control={form.control} name="emergencyContactName" render={({ field }) => <AutoField kind="text" label="Contact Person" field={field} />} />
-                    <FormField control={form.control} name="emergencyContactNumber" render={({ field }) => <AutoField kind="text" label="Contact Number" field={field} />} />
+                    <FormField control={form.control} name="emergencyContactNumber" render={({ field }) => <AutoField kind="phone" label="Contact Number" field={field} />} />
                   </div>
 
                 </div>
               </section>
 
               {/* 6. FLAGS & NOTES */}
-   <section className="space-y-6 p-6 bg-secondary/5 rounded-3xl border border-border/50 shadow-sm overflow-hidden">
-  {/* Header for the section */}
-  <div className="flex items-center gap-2 mb-2">
-    <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-    <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground/70">Administrative Control</h3>
-  </div>
+              <section className="space-y-6 p-6 bg-secondary/5 rounded-3xl border border-border/50 shadow-sm overflow-hidden">
+                {/* Header for the section */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground/70">Administrative Control</h3>
+                </div>
 
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-    
-    {/* Featured Employee Card */}
-    <FormField control={form.control} name="isFeatured" render={({ field }) => (
-      <FormItem className={cn(
-        "relative flex flex-row items-center space-x-3 space-y-0 p-4 rounded-2xl border transition-all duration-200 cursor-pointer",
-        field.value ? "bg-amber-500/5 border-amber-500/20 shadow-sm" : "bg-background/40 border-transparent hover:border-border"
-      )}>
-        <FormControl>
-          <Checkbox 
-            checked={field.value} 
-            onCheckedChange={field.onChange} 
-            className="data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
-          />
-        </FormControl>
-        <div className="flex flex-1 items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Star className={cn("h-4 w-4", field.value ? "text-amber-500 fill-amber-500" : "text-muted-foreground/40")} />
-            <FormLabel className="text-sm font-bold cursor-pointer">Featured</FormLabel>
-          </div>
-          <ActionTooltip label="Spotlight" description="Promote this employee on the public portal.">
-            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30 hover:text-amber-500" />
-          </ActionTooltip>
-        </div>
-      </FormItem>
-    )} />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-    {/* Head of Office Card */}
-    <FormField control={form.control} name="isHead" render={({ field }) => (
-      <FormItem className={cn(
-        "relative flex flex-row items-center space-x-3 space-y-0 p-4 rounded-2xl border transition-all duration-200 cursor-pointer",
-        field.value ? "bg-blue-500/5 border-blue-500/20 shadow-sm" : "bg-background/40 border-transparent hover:border-border"
-      )}>
-        <FormControl>
-          <Checkbox 
-            checked={field.value} 
-            onCheckedChange={field.onChange} 
-            className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
-          />
-        </FormControl>
-        <div className="flex flex-1 items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className={cn("h-4 w-4", field.value ? "text-blue-500" : "text-muted-foreground/40")} />
-            <FormLabel className="text-sm font-bold cursor-pointer">Head of Office</FormLabel>
-          </div>
-          <ActionTooltip label="Executive Authority" description="Designates this person as the primary office signatory.">
-            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30 hover:text-blue-500" />
-          </ActionTooltip>
-        </div>
-      </FormItem>
-    )} />
+                  {/* Featured Employee Card */}
+                  <FormField control={form.control} name="isFeatured" render={({ field }) => (
+                    <FormItem className={cn(
+                      "relative flex flex-row items-center space-x-3 space-y-0 p-4 rounded-2xl border transition-all duration-200 cursor-pointer",
+                      field.value ? "bg-amber-500/5 border-amber-500/20 shadow-sm" : "bg-background/40 border-transparent hover:border-border"
+                    )}>
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          className="data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                        />
+                      </FormControl>
+                      <div className="flex flex-1 items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Star className={cn("h-4 w-4", field.value ? "text-amber-500 fill-amber-500" : "text-muted-foreground/40")} />
+                          <FormLabel className="text-sm font-bold cursor-pointer">Featured</FormLabel>
+                        </div>
+                        <ActionTooltip label="Spotlight" description="Promote this employee on the public portal.">
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30 hover:text-amber-500" />
+                        </ActionTooltip>
+                      </div>
+                    </FormItem>
+                  )} />
 
-    {/* Archive Card */}
-    <FormField control={form.control} name="isArchived" render={({ field }) => (
-      <FormItem className={cn(
-        "relative flex flex-row items-center space-x-3 space-y-0 p-4 rounded-2xl border transition-all duration-200 cursor-pointer",
-        field.value ? "bg-destructive/5 border-destructive/20 shadow-sm" : "bg-background/40 border-transparent hover:border-border"
-      )}>
-        <FormControl>
-          <Checkbox 
-            checked={field.value} 
-            onCheckedChange={field.onChange} 
-            className="data-[state=checked]:bg-destructive data-[state=checked]:border-destructive"
-          />
-        </FormControl>
-        <div className="flex flex-1 items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Archive className={cn("h-4 w-4", field.value ? "text-destructive" : "text-muted-foreground/40")} />
-            <FormLabel className="text-sm font-bold cursor-pointer">Archive</FormLabel>
-          </div>
-             <ActionTooltip
-            label="Soft Delete"
-            description="Hides this profile from active lists without deleting data. Useful for resigned employees."
-            side="top"
-          >
-            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-primary transition-colors cursor-help" />
-          </ActionTooltip>
-        </div>
-      </FormItem>
-    )} />
-  </div>
+                  {/* Head of Office Card */}
+                  <FormField control={form.control} name="isHead" render={({ field }) => (
+                    <FormItem className={cn(
+                      "relative flex flex-row items-center space-x-3 space-y-0 p-4 rounded-2xl border transition-all duration-200 cursor-pointer",
+                      field.value ? "bg-blue-500/5 border-blue-500/20 shadow-sm" : "bg-background/40 border-transparent hover:border-border"
+                    )}>
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                        />
+                      </FormControl>
+                      <div className="flex flex-1 items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className={cn("h-4 w-4", field.value ? "text-blue-500" : "text-muted-foreground/40")} />
+                          <FormLabel className="text-sm font-bold cursor-pointer">Head of Office</FormLabel>
+                        </div>
+                        <ActionTooltip label="Executive Authority" description="Designates this person as the primary office signatory.">
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30 hover:text-blue-500" />
+                        </ActionTooltip>
+                      </div>
+                    </FormItem>
+                  )} />
 
-  {/* Sub-grid for Links and Dates */}
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-dashed">
-    <FormField control={form.control} name="employeeLink" render={({ field }) => (
-      <FormItem>
-        <div className="flex items-center gap-2 mb-2">
-          <FileText className="h-4 w-4 text-primary" />
-          <FormLabel className="text-[13px] font-bold">Employee Digital File</FormLabel>
-        </div>
-        <FormControl>
-          <div className="relative group">
-            <Input 
-              {...field} 
-              className="pl-9 rounded-xl bg-background/50 focus:bg-background transition-all" 
-              placeholder="https://cloud-storage.com/file-id" 
-            />
-            <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
-          </div>
-        </FormControl>
-        <FormMessage />
-      </FormItem>
-    )} />
+                  {/* Archive Card */}
+                  <FormField control={form.control} name="isArchived" render={({ field }) => (
+                    <FormItem className={cn(
+                      "relative flex flex-row items-center space-x-3 space-y-0 p-4 rounded-2xl border transition-all duration-200 cursor-pointer",
+                      field.value ? "bg-destructive/5 border-destructive/20 shadow-sm" : "bg-background/40 border-transparent hover:border-border"
+                    )}>
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          className="data-[state=checked]:bg-destructive data-[state=checked]:border-destructive"
+                        />
+                      </FormControl>
+                      <div className="flex flex-1 items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Archive className={cn("h-4 w-4", field.value ? "text-destructive" : "text-muted-foreground/40")} />
+                          <FormLabel className="text-sm font-bold cursor-pointer">Archive</FormLabel>
+                        </div>
+                        <ActionTooltip
+                          label="Soft Delete"
+                          description="Hides this profile from active lists without deleting data. Useful for resigned employees."
+                          side="top"
+                        >
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-primary transition-colors cursor-help" />
+                        </ActionTooltip>
+                      </div>
+                    </FormItem>
+                  )} />
+                </div>
+
+                {/* Sub-grid for Links and Dates */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-dashed">
+                  <FormField control={form.control} name="employeeLink" render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center gap-2 mb-2">
+                        <FileText className="h-4 w-4 text-primary" />
+                        <FormLabel className="text-[13px] font-bold">Employee Digital File</FormLabel>
+                      </div>
+                      <FormControl>
+                        <div className="relative group">
+                          <Input
+                            {...field}
+                            className="pl-9 rounded-xl bg-background/50 focus:bg-background transition-all"
+                            placeholder="https://cloud-storage.com/file-id"
+                          />
+                          <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
 
 
-  </div>
+                </div>
 
-  {/* Notes Section */}
-  <FormField control={form.control} name="note" render={({ field }) => (
+                {/* Notes Section */}
+                <FormField control={form.control} name="note" render={({ field }) => (
 
-    <FormItem className="pt-4 border-t border-dashed border-border/60">
+                  <FormItem className="pt-4 border-t border-dashed border-border/60">
 
-      <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-2">
 
-        <FormLabel className="text-[13px] font-semibold">Administrative Notes</FormLabel>
+                      <FormLabel className="text-[13px] font-semibold">Administrative Notes</FormLabel>
 
-        <ActionTooltip label="Internal Only" description="These notes are never visible to the employee.">
+                      <ActionTooltip label="Internal Only" description="These notes are never visible to the employee.">
 
-           <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30" />
+                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30" />
 
-        </ActionTooltip>
+                      </ActionTooltip>
 
-      </div>
+                    </div>
 
-      <FormControl>
+                    <FormControl>
 
-        <textarea
+                      <textarea
 
-          {...field}
+                        {...field}
 
-          value={field.value || ""}
+                        value={field.value || ""}
 
-          className="w-full min-h-[100px] rounded-xl border border-input bg-background/50 px-4 py-3 text-sm focus:bg-background transition-all focus:ring-1 focus:ring-primary/20 resize-none"
+                        className="w-full min-h-[100px] rounded-xl border border-input bg-background/50 px-4 py-3 text-sm focus:bg-background transition-all focus:ring-1 focus:ring-primary/20 resize-none"
 
-          placeholder="Add private internal notes regarding this employee..."
+                        placeholder="Add private internal notes regarding this employee..."
 
-        />
+                      />
 
-      </FormControl>
+                    </FormControl>
 
-      <FormMessage />
+                    <FormMessage />
 
-    </FormItem>
+                  </FormItem>
 
-  )} />
-</section>
+                )} />
+              </section>
 
               <div className="flex items-center justify-end gap-x-4">
                 <Button disabled={loading} variant="ghost" type="button" onClick={() => router.back()}>Discard Changes</Button>
@@ -1372,7 +1379,7 @@ export const EmployeesForm = ({
             </TabsContent>
 
 
-       
+
             <TabsContent value="schedule">
               {employeeId ? (
                 <EmployeeScheduleManager

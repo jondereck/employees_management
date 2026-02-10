@@ -415,7 +415,6 @@ if (!isAdmin) {
       timeZone: "Asia/Manila",
       year: "numeric",
       month: "short",
-      day: "2-digit",
     }).format(new Date(d));
   }
 
