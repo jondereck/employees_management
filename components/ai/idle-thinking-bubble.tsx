@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GENIO_COMMANDS } from "./genio-chat";
 import clsx from "clsx";
+import { useIsScrolling } from "@/hooks/use-is-scrolling";
 
 const THOUGHTS = GENIO_COMMANDS
   .filter((c) => c.quickChip)
@@ -16,20 +17,34 @@ export function IdleThinkingBubbles({
   const [thought, setThought] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
+  const isScrolling = useIsScrolling();
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      const random = THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)];
+    if (isScrolling) {
+      setIsVisible(false);
+      setThought(null);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
+    }
+
+    intervalRef.current = setInterval(() => {
+      const random =
+        THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)];
+
       setThought(random);
       setIsVisible(true);
 
-      setTimeout(() => setIsVisible(false), 10000);
-      setTimeout(() => setThought(null), 11000);
-    }, 12000);
+      setTimeout(() => setIsVisible(false), 6000);
+      setTimeout(() => setThought(null), 7000);
+    }, 10000);
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isScrolling]);
 
-  if (!thought) return null;
+  if (!thought || isScrolling) return null;
 
   return (
     <div className="absolute -top-20 right-4 flex flex-col items-end gap-1.5">

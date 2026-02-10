@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import clsx from "clsx";
 import { IdleThinkingBubbles } from "./idle-thinking-bubble";
+import { useIsScrolling } from "@/hooks/use-is-scrolling";
 
 export function GenioFloatingButton({
   isThinking,
@@ -14,11 +15,14 @@ export function GenioFloatingButton({
   onClick: () => void;
   onSelectThought?: (template: string) => void;
 }) {
+  const isScrolling = useIsScrolling();
+
+  const canThink = isThinking && !isScrolling;
+
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-2">
-      {/* Thinking bubbles */}
       <div className="relative h-2 w-full flex justify-center">
-        {isThinking && onSelectThought && (
+        {canThink && onSelectThought && (
           <IdleThinkingBubbles onSelect={onSelectThought} />
         )}
       </div>
