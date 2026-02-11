@@ -6,6 +6,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CalendarDays, CalendarClock, Ban } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -47,6 +50,9 @@ import {
   validateWeeklyPatternDay,
 } from "@/utils/weeklyPattern";
 import type { WeekdayKey, WeeklyPattern, WeeklyPatternDay } from "@/utils/weeklyPattern";
+import { CalendarIcon, CalendarX, CheckCircle2, Clock, EditIcon, HelpCircle, Info, Loader2, Pencil, Settings2, ShieldCheck, Trash2, TrashIcon, XIcon } from "lucide-react";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
+import { TimeButtonField } from "./time-button-field";
 
 const ScheduleType = {
   FIXED: "FIXED",
@@ -124,7 +130,7 @@ const scheduleFormSchema = z
     effectiveTo: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-  if (data.type === ScheduleType.FIXED) {
+    if (data.type === ScheduleType.FIXED) {
       if (!data.startTime || !data.endTime) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -133,7 +139,7 @@ const scheduleFormSchema = z
         });
       }
     }
-  if (data.type === ScheduleType.FLEX) {
+    if (data.type === ScheduleType.FLEX) {
       const required = [
         "coreStart",
         "coreEnd",
@@ -157,7 +163,7 @@ const scheduleFormSchema = z
         });
       }
     }
-  if (data.type === ScheduleType.SHIFT) {
+    if (data.type === ScheduleType.SHIFT) {
       if (!data.shiftStart || !data.shiftEnd) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -187,7 +193,7 @@ const exceptionFormSchema = z
     breakMinutes: z.coerce.number().int().min(0).max(720).default(60),
   })
   .superRefine((data, ctx) => {
-  if (data.type === ScheduleType.FIXED) {
+    if (data.type === ScheduleType.FIXED) {
       if (!data.startTime || !data.endTime) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -196,7 +202,7 @@ const exceptionFormSchema = z
         });
       }
     }
-  if (data.type === ScheduleType.FLEX) {
+    if (data.type === ScheduleType.FLEX) {
       const required = [
         "coreStart",
         "coreEnd",
@@ -220,7 +226,7 @@ const exceptionFormSchema = z
         });
       }
     }
-  if (data.type === ScheduleType.SHIFT) {
+    if (data.type === ScheduleType.SHIFT) {
       if (!data.shiftStart || !data.shiftEnd) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -908,6 +914,8 @@ export function EmployeeScheduleManager({
     [editingSchedule, resetScheduleForm]
   );
 
+  
+
   const handleDeleteException = useCallback(
     async (exception: ScheduleExceptionDTO) => {
       if (!confirm("Remove this exception?")) return;
@@ -982,111 +990,160 @@ export function EmployeeScheduleManager({
     [weeklyExclusionList]
   );
 
+
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold">Recurring work schedules</h3>
-          <p className="text-sm text-muted-foreground">
-            Define the base schedule per effective period. Overlaps are resolved by latest effective date.
-          </p>
+    <div className="mt-10 space-y-8">
+
+      <Tabs defaultValue="recurring" className="w-full">
+    <TabsList className="grid w-full grid-cols-3 h-14 bg-slate-100/50 p-1 rounded-xl">
+      <TabsTrigger value="recurring" className="gap-2 rounded-lg data-[state=active]:shadow-sm">
+        <CalendarClock className="h-4 w-4" />
+        <span className="font-bold">Recurring Schedules</span>
+        <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] bg-slate-200">
+          {scheduleList.length}
+        </Badge>
+      </TabsTrigger>
+      
+      <TabsTrigger value="exclusions" className="gap-2 rounded-lg data-[state=active]:shadow-sm">
+        <Ban className="h-4 w-4" />
+        <span className="font-bold">Weekly Exclusions</span>
+        <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] bg-slate-200">
+          {weeklyExclusionList.length}
+        </Badge>
+      </TabsTrigger>
+      
+      <TabsTrigger value="exceptions" className="gap-2 rounded-lg data-[state=active]:shadow-sm">
+        <CalendarDays className="h-4 w-4" />
+        <span className="font-bold">One-day Exceptions</span>
+        <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] bg-slate-200">
+          {exceptionList.length}
+        </Badge>
+      </TabsTrigger>
+    </TabsList>
+    
+{/* RECURRING WORK SCHEDULES*/}
+
+<TabsContent value="recurring" className="mt-6 animate-in fade-in-50 duration-300">
+        <section className="space-y-6">
+
+{/* Header Section */}
+<div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b pb-4">
+  <div className="space-y-1">
+    <div className="flex items-center gap-2">
+      <h3 className="text-lg font-bold tracking-tight text-slate-800">
+        Recurring Work Schedules
+      </h3>
+      <ActionTooltip 
+        label="How do schedules work?" 
+        description="Define base schedules per period. Overlaps are automatically resolved by the latest effective date." 
+        side="right"
+      >
+        <HelpCircle className="h-4 w-4 text-slate-400 cursor-help" />
+      </ActionTooltip>
+    </div>
+    <p className="text-sm text-muted-foreground max-w-2xl">
+      Define base work hours and timing rules. Overlaps are resolved by the latest effective date.
+    </p>
+  </div>
+</div>
+  {/* Form Editor Card */}
+  <div className={`rounded-xl border shadow-sm transition-all ${editingSchedule ? 'ring-2 ring-blue-500/20 border-blue-200 bg-blue-50/10' : 'bg-white'}`}>
+    <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
+      <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        {editingSchedule ? "Modifying Schedule" : "Add New Schedule"}
+      </span>
+      {editingSchedule && (
+        <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">Editing Mode</Badge>
+      )}
+    </div>
+
+    <Form {...scheduleForm}>
+      <form onSubmit={handleScheduleFormSubmit} className="p-6 space-y-8">
+        {/* Basic Config Group */}
+        <div className="grid gap-6 md:grid-cols-2">
+          <FormField
+            control={scheduleForm.control}
+            name="type"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="font-bold">Schedule Type</FormLabel>
+                <Select value={field.value} onValueChange={(value) => field.onChange(value as ScheduleTypeEnum)}>
+                  <FormControl>
+                    <SelectTrigger className="bg-white">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {scheduleTypes.map((type) => (
+                      <SelectItem key={type} value={type}>{formatTypeLabel(type)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={scheduleForm.control}
+            name="breakMinutes"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="font-bold">Paid Break (min)</FormLabel>
+                <FormControl>
+                  <Input type="number" className="bg-white" value={field.value ?? 60} onChange={(e) => field.onChange(e.target.valueAsNumber)} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
-        <Form {...scheduleForm}>
-          <form onSubmit={handleScheduleFormSubmit} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={scheduleForm.control}
-                name="type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Schedule type</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={(value) => field.onChange(value as ScheduleTypeEnum)}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {scheduleTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {formatTypeLabel(type)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={scheduleForm.control}
-                name="breakMinutes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Paid break (minutes)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={720}
-                        value={field.value ?? 60}
-                        onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+
+        {/* Dynamic Fields Container - SEE PART 2 BELOW */}
+        {/* ... */}
+
+     {(scheduleType === ScheduleType.FIXED || scheduleType === ScheduleType.SHIFT || scheduleType === ScheduleType.FLEX) && (
+          <div className="p-6 rounded-xl bg-slate-50/50 border border-slate-200 space-y-6">
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-4">
+              <div className="h-4 w-1 bg-indigo-500 rounded-full" />
+              <h4 className="text-xs font-bold uppercase text-slate-600 tracking-wider">
+                Timing Configuration
+              </h4>
             </div>
 
-            {scheduleType === ScheduleType.FIXED && (
-              <div className="grid gap-4 md:grid-cols-3">
+            {/* FIXED & SHIFT Start/End */}
+            {(scheduleType === ScheduleType.FIXED || scheduleType === ScheduleType.SHIFT) && (
+              <div className="grid gap-6 md:grid-cols-3">
                 <FormField
                   control={scheduleForm.control}
-                  name="startTime"
+                  name={scheduleType === ScheduleType.FIXED ? "startTime" : "shiftStart"}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Start time</FormLabel>
-                      <FormControl>
-                        <Input placeholder="08:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
+                      <FormLabel className="text-[10px] font-bold uppercase text-slate-500">
+                        {scheduleType === ScheduleType.FIXED ? "Standard Start" : "Shift Start"}
+                      </FormLabel>
+                      <Input
+                        type="time"
+                        className="bg-white shadow-sm font-mono tabular-nums focus-visible:ring-indigo-500"
+                        {...field}
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
                   control={scheduleForm.control}
-                  name="endTime"
+                  name={scheduleType === ScheduleType.FIXED ? "endTime" : "shiftEnd"}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>End time</FormLabel>
-                      <FormControl>
-                        <Input placeholder="17:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="graceMinutes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Grace minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={180}
-                          value={field.value ?? 0}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
+                      <FormLabel className="text-[10px] font-bold uppercase text-slate-500">
+                        {scheduleType === ScheduleType.FIXED ? "Standard End" : "Shift End"}
+                      </FormLabel>
+                      <Input
+                        type="time"
+                        className="bg-white shadow-sm font-mono tabular-nums focus-visible:ring-indigo-500"
+                        {...field}
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1094,68 +1151,18 @@ export function EmployeeScheduleManager({
               </div>
             )}
 
+            {/* FLEX Rules */}
             {scheduleType === ScheduleType.FLEX && (
-              <>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <FormField
-                    control={scheduleForm.control}
-                    name="coreStart"
-                    render={({ field }) => (
-                      <FormItem>
-                        <InfoLabel label="Core Hours Start (optional)" tooltip={CORE_START_HELP} />
-                        <FormControl>
-                          <Input placeholder="10:00" {...field} />
-                        </FormControl>
-                        <FormDescription>{CORE_START_HELP}</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={scheduleForm.control}
-                    name="coreEnd"
-                    render={({ field }) => (
-                      <FormItem>
-                        <InfoLabel label="Core Hours End (optional)" tooltip={CORE_END_HELP} />
-                        <FormControl>
-                          <Input placeholder="15:00" {...field} />
-                        </FormControl>
-                        <FormDescription>{CORE_END_HELP}</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={scheduleForm.control}
-                    name="requiredDailyMinutes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <InfoLabel label="Required Work Minutes" tooltip={REQUIRED_MINUTES_HELP} />
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={1440}
-                            value={field.value ?? 480}
-                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                          />
-                        </FormControl>
-                        <FormDescription>{REQUIRED_MINUTES_HELP}</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              <div className="space-y-6">
+                <div className="grid gap-6 p-5 rounded-xl border border-indigo-100 bg-indigo-50/30 shadow-sm md:grid-cols-3">
+                  {/* Required Mins, Bandwidth Start/End with type="time" */}
                   <FormField
                     control={scheduleForm.control}
                     name="bandwidthStart"
                     render={({ field }) => (
                       <FormItem>
-                        <InfoLabel label="Work Window Start (Bandwidth)" tooltip={BANDWIDTH_START_HELP} />
-                        <FormControl>
-                          <Input placeholder="06:00" {...field} />
-                        </FormControl>
-                        <FormDescription>{BANDWIDTH_START_HELP}</FormDescription>
-                        <FormMessage />
+                        <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Earliest Start</FormLabel>
+                        <Input type="time" className="bg-white border-indigo-200 font-mono" {...field} />
                       </FormItem>
                     )}
                   />
@@ -1164,855 +1171,896 @@ export function EmployeeScheduleManager({
                     name="bandwidthEnd"
                     render={({ field }) => (
                       <FormItem>
-                        <InfoLabel label="Work Window End (Bandwidth)" tooltip={BANDWIDTH_END_HELP} />
-                        <FormControl>
-                          <Input placeholder="20:00" {...field} />
-                        </FormControl>
-                        <FormDescription>{BANDWIDTH_END_HELP}</FormDescription>
-                        <FormMessage />
+                        <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Latest End</FormLabel>
+                        <Input type="time" className="bg-white border-indigo-200 font-mono" {...field} />
                       </FormItem>
                     )}
                   />
                 </div>
 
-                <div className="space-y-4 rounded-lg border border-muted p-4">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <h4 className="text-sm font-semibold">Weekly pattern (optional)</h4>
-                      <p className="text-xs text-muted-foreground">{WEEKLY_PATTERN_HINT}</p>
+        {/* 2. Weekly Pattern Interface */}
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div className="flex items-center justify-between p-4 border-b bg-slate-50/80">
+            <div className="space-y-0.5">
+              <h4 className="text-sm font-bold text-slate-800 tracking-tight">Weekly Breakdown</h4>
+              <p className="text-[11px] text-slate-500 font-medium">Define specific core windows or targets per day</p>
+            </div>
+            <Button
+              type="button"
+              variant={weeklyPatternOpen ? "ghost" : "outline"}
+              size="sm"
+              onClick={handleToggleWeeklyPattern}
+              className={`h-8 text-xs font-bold transition-all ${weeklyPatternOpen ? 'text-rose-500 hover:text-rose-600 hover:bg-rose-50' : 'text-indigo-600 border-indigo-200'}`}
+            >
+              {weeklyPatternOpen ? "Close Editor" : "Configure Days"}
+            </Button>
+          </div>
+
+          <div className="p-4">
+            {/* Day Picker Summaries */}
+            <div className="flex items-center gap-2 mb-4">
+              {WEEKDAY_KEYS.map((key) => {
+                const isActive = weeklyPattern[key].windows.length > 0 || (weeklyPattern[key].requiredMinutes > 0);
+                return (
+                  <div
+                    key={key}
+                    className={`flex flex-col h-12 w-12 items-center justify-center rounded-lg border text-[11px] font-bold transition-all
+                      ${isActive 
+                        ? 'bg-indigo-600 border-indigo-700 text-white shadow-md shadow-indigo-100' 
+                        : 'bg-slate-50 border-slate-200 text-slate-400'}`}
+                  >
+                    <span>{WEEKDAY_LABELS[key].substring(0, 3)}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Expanded Day-by-Day Editor */}
+            {weeklyPatternOpen && (
+              <div className="space-y-2 mt-4 animate-in slide-in-from-top-2 duration-300">
+                {WEEKDAY_KEYS.map((key) => (
+                  <div key={key} className="group flex flex-col md:flex-row md:items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/40 p-3 hover:bg-white hover:border-indigo-200 hover:shadow-md transition-all">
+                    <div className="w-16 shrink-0">
+                      <span className="text-xs font-black text-slate-600 uppercase tracking-tighter">
+                        {WEEKDAY_LABELS[key]}
+                      </span>
                     </div>
+                    
+                    <div className="flex flex-1 flex-wrap gap-3 items-center">
+                      {weeklyPattern[key].windows.map((window) => (
+                        <div key={window.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 border border-slate-200 shadow-sm ring-offset-background focus-within:ring-2 focus-within:ring-indigo-500">
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-black uppercase text-indigo-500 leading-none mb-1">In</span>
+                            <input
+                              type="time"
+                              className="bg-transparent text-xs font-bold focus:outline-none"
+                              value={window.start || ""}
+                              onChange={(e) => handleWeeklyWindowChange(key, window.id, "start", e.target.value)}
+                            />
+                          </div>
+                          <div className="h-6 w-[1px] bg-slate-200 mx-1" />
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-black uppercase text-rose-500 leading-none mb-1">Out</span>
+                            <input
+                              type="time"
+                              className="bg-transparent text-xs font-bold focus:outline-none"
+                              value={window.end || ""}
+                              onChange={(e) => handleWeeklyWindowChange(key, window.id, "end", e.target.value)}
+                            />
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={() => handleRemoveWeeklyWindow(key, window.id)} 
+                            className="ml-2 p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-rose-500 transition-colors"
+                          >
+                            <XIcon className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {weeklyPattern[key].windows.length < 2 && (
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-9 border border-dashed border-slate-300 px-3 text-[10px] font-bold text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50" 
+                          onClick={() => handleAddWeeklyWindow(key)}
+                        >
+                          + Core Window
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 border-t md:border-t-0 md:border-l border-slate-200 pt-3 md:pt-0 md:pl-4">
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase mb-1">Target Min</span>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            className="w-20 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                            value={weeklyPattern[key].requiredMinutes ?? ""}
+                            onChange={(e) => handleWeeklyRequiredChange(key, e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
+              {/* Date Range Section */}
+    
+{/* Date Range Section */}
+        <div className="grid gap-6 md:grid-cols-2 pt-4 border-t">
+          <FormField
+            control={scheduleForm.control}
+            name="effectiveFrom"
+            render={({ field }) => (
+              <FormItem>
+                <ActionTooltip 
+                  label="Activation Date" 
+                  description="When this schedule starts applying."
+                  side="top"
+                  align="start"
+                >
+                  <FormLabel className="flex items-center gap-2 font-bold cursor-help">
+                    <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
+                    Effective From
+                  </FormLabel>
+                </ActionTooltip>
+                <FormControl>
+                  <Input 
+                    type="date" 
+                    className="bg-white hover:border-indigo-200 transition-colors focus:ring-indigo-500" 
+                    {...field} 
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={scheduleForm.control}
+            name="effectiveTo"
+            render={({ field }) => (
+              <FormItem>
+                <ActionTooltip 
+                  label="Expiry Date" 
+                  description="Leave blank for permanent schedules."
+                  side="top"
+                  align="start"
+                >
+                  <FormLabel className="flex items-center gap-2 font-bold cursor-help">
+                    <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
+                    Effective Until (Optional)
+                  </FormLabel>
+                </ActionTooltip>
+                <FormControl>
+                  <Input 
+                    type="date" 
+                    className="bg-white hover:border-indigo-200 transition-colors focus:ring-indigo-500" 
+                    {...field} 
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-3 pt-6 border-t border-slate-100 mt-4">
+          <Button
+            type="button"
+            onClick={handleScheduleButtonClick}
+            disabled={savingSchedule}
+            className={`
+              relative px-8 shadow-sm transition-all duration-200
+              ${savingSchedule ? "opacity-90 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-lg active:scale-95 text-white"}
+            `}
+          >
+            {savingSchedule && (
+              <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            )}
+            <span className="font-medium">
+              {savingSchedule ? "Saving..." : editingSchedule ? "Update Schedule" : "Add Schedule"}
+            </span>
+          </Button>
+
+          {editingSchedule && !savingSchedule && (
+            <Button 
+              type="button" 
+              variant="ghost" 
+              onClick={resetScheduleForm}
+              className="text-slate-500 hover:text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              Cancel Edit
+            </Button>
+          )}
+        </div>
+      </form>
+    </Form>
+  </div>
+
+        {/* Summary Table - Made more scan-able */}
+    {/* Summary Table */}
+  <div className="rounded-xl border bg-white overflow-hidden shadow-sm mt-8">
+    <div className="px-4 py-3 bg-slate-50 border-b">
+      <h4 className="text-sm font-bold text-slate-700">Existing Schedules</h4>
+    </div>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-slate-50/50 text-slate-500 border-b">
+            <th className="px-6 py-3 text-left font-semibold uppercase tracking-tighter text-[10px]">Type</th>
+            <th className="px-6 py-3 text-left font-semibold uppercase tracking-tighter text-[10px]">Details</th>
+            <th className="px-6 py-3 text-left font-semibold uppercase tracking-tighter text-[10px]">Validity Period</th>
+            <th className="px-6 py-3 text-center font-semibold uppercase tracking-tighter text-[10px]">Manage</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {scheduleRows.length === 0 ? (
+            <tr><td colSpan={4} className="py-12 text-center text-slate-400 italic">No schedules defined yet.</td></tr>
+          ) : (
+            scheduleRows.map((schedule) => (
+              <tr key={schedule.id} className="hover:bg-slate-50/80 transition-colors group">
+                <td className="px-6 py-4">
+                  <Badge variant="outline" className="font-bold shadow-sm bg-white border-slate-200">
+                    {formatTypeLabel(schedule.type)}
+                  </Badge>
+                </td>
+                <td className="px-6 py-4 font-medium text-slate-600 italic">
+                  {describeSchedule(schedule)}
+                </td>
+                <td className="px-6 py-4 text-slate-500">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-black text-indigo-400 uppercase w-7">From</span>
+                      <span className="font-mono text-xs font-bold">{toDateInput(schedule.effectiveFrom)}</span>
+                    </div>
+                    {schedule.effectiveTo && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-black text-rose-400 uppercase w-7">To</span>
+                        <span className="font-mono text-xs font-bold">{toDateInput(schedule.effectiveTo)}</span>
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleToggleWeeklyPattern}
+                        type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                      onClick={() => handleEditSchedule(schedule)}
                     >
-                      {weeklyPatternOpen ? "Hide pattern" : "Edit pattern"}
+                      <EditIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                        type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-rose-500 hover:bg-rose-50"
+                      onClick={() => handleDeleteSchedule(schedule)}
+                    >
+                      <TrashIcon className="h-4 w-4" />
                     </Button>
                   </div>
-                  {!weeklyPatternOpen && (
-                    <div className="flex flex-wrap gap-2">
-                      {WEEKDAY_KEYS.map((key) => (
-                        <Badge key={key} variant="outline" className="font-normal">
-                          {WEEKDAY_LABELS[key]}: {describeWeeklyPatternDay(weeklyPattern[key])}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {weeklyPatternOpen && (
-                    <div className="space-y-4">
-                      {WEEKDAY_KEYS.map((key) => {
-                        const dayState = weeklyPattern[key];
-                        const error = weeklyPatternErrors[key];
-                        return (
-                          <div key={key} className="rounded-md border p-3">
-                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">{WEEKDAY_LABELS[key]}</span>
-                                  <Badge variant="secondary" className="font-normal">
-                                    {describeWeeklyPatternDay(dayState)}
-                                  </Badge>
-                                </div>
-                                {error ? (
-                                  <p className="mt-1 text-xs text-destructive">{error}</p>
-                                ) : null}
-                              </div>
-                              <Button type="button" variant="ghost" size="sm" onClick={() => handleClearWeeklyDay(key)}>
-                                Clear day
-                              </Button>
-                            </div>
-                            <div className="mt-3 space-y-3">
-                              {dayState.windows.map((window) => (
-                                <div key={window.id} className="grid gap-2 md:grid-cols-[1fr,1fr,auto] md:items-end">
-                                  <div>
-                                    <FormLabel>Start</FormLabel>
-                                    <Input
-                                      placeholder="08:00"
-                                      value={window.start}
-                                      onChange={(event) =>
-                                        handleWeeklyWindowChange(key, window.id, "start", event.target.value)
-                                      }
-                                    />
-                                  </div>
-                                  <div>
-                                    <FormLabel>End</FormLabel>
-                                    <Input
-                                      placeholder="12:00"
-                                      value={window.end}
-                                      onChange={(event) =>
-                                        handleWeeklyWindowChange(key, window.id, "end", event.target.value)
-                                      }
-                                    />
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRemoveWeeklyWindow(key, window.id)}
-                                  >
-                                    Remove
-                                  </Button>
-                                </div>
-                              ))}
-                              {dayState.windows.length < 3 && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleAddWeeklyWindow(key)}
-                                >
-                                  Add window
-                                </Button>
-                              )}
-                            </div>
-                            <div className="mt-3 grid gap-2 md:grid-cols-[max-content,1fr] md:items-center">
-                              <FormLabel>Required minutes</FormLabel>
-                              <div>
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={1440}
-                                  placeholder="480"
-                                  value={dayState.requiredMinutes ?? ""}
-                                  onChange={(event) => handleWeeklyRequiredChange(key, event.target.value)}
-                                />
-                                <p className="mt-1 text-xs text-muted-foreground">480 = 8h, 720 = 12h</p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {scheduleType === ScheduleType.SHIFT && (
-              <div className="grid gap-4 md:grid-cols-3">
-                <FormField
-                  control={scheduleForm.control}
-                  name="shiftStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Shift start</FormLabel>
-                      <FormControl>
-                        <Input placeholder="22:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="shiftEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Shift end</FormLabel>
-                      <FormControl>
-                        <Input placeholder="06:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={scheduleForm.control}
-                  name="graceMinutes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Grace minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={180}
-                          value={field.value ?? 0}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={scheduleForm.control}
-                name="effectiveFrom"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Effective from</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={scheduleForm.control}
-                name="effectiveTo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Effective to</FormLabel>
-                    <FormControl>
-                      <Input type="date" value={field.value ?? ""} onChange={field.onChange} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" onClick={handleScheduleButtonClick} disabled={savingSchedule}>
-                {savingSchedule ? "Saving..." : editingSchedule ? "Update schedule" : "Add schedule"}
-              </Button>
-              {editingSchedule && (
-                <Button type="button" variant="outline" onClick={resetScheduleForm} disabled={savingSchedule}>
-                  Cancel edit
-                </Button>
-              )}
-            </div>
-          </form>
-        </Form>
-
-        <div className="overflow-hidden rounded-lg border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="p-2 text-left">Type</th>
-                <th className="p-2 text-left">Details</th>
-                <th className="p-2 text-left">Effective</th>
-                <th className="p-2 text-center">Actions</th>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {scheduleRows.length === 0 ? (
-                <tr>
-                  <td className="p-3 text-center text-muted-foreground" colSpan={4}>
-                    No schedules yet.
-                  </td>
-                </tr>
-              ) : (
-                scheduleRows.map((schedule) => (
-                  <tr key={schedule.id} className="odd:bg-muted/20">
-                    <td className="p-2">
-                      <Badge variant="secondary">{formatTypeLabel(schedule.type)}</Badge>
-                    </td>
-                    <td className="p-2">{describeSchedule(schedule)}</td>
-                    <td className="p-2">
-                      {toDateInput(schedule.effectiveFrom)}
-                      {" "}
-                      {schedule.effectiveTo ? `to ${toDateInput(schedule.effectiveTo)}` : "onward"}
-                    </td>
-                    <td className="p-2 text-center">
-                      <div className="flex justify-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditSchedule(schedule)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteSchedule(schedule)}
-                          disabled={deletingScheduleId === schedule.id}
-                        >
-                          {deletingScheduleId === schedule.id ? "Removing…" : "Remove"}
-                        </Button>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+    </TabsContent>
+
+
+{/* WEEKLY INCLUSIONS*/}
+<TabsContent value="exclusions" className="mt-6 animate-in fade-in-50 duration-300">
+         <section className="space-y-6">
+  {/* Header Section */}
+  <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <h3 className="text-lg font-bold tracking-tight text-slate-800">Weekly Exclusions</h3>
+        <ActionTooltip label="What are exclusions?" description={WEEKLY_EXCLUSION_HELP_TEXT} side="right">
+          <HelpCircle className="h-4 w-4 text-slate-400 cursor-help" />
+        </ActionTooltip>
+      </div>
+      <p className="text-sm text-muted-foreground max-w-2xl">
+        Set specific days where late rules or attendance tracking are relaxed.
+      </p>
+    </div>
+  </div>
+
+  <Form {...weeklyExclusionForm}>
+    <form onSubmit={handleWeeklyExclusionFormSubmit} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-8">
+      
+      {/* Weekday Selection - Better Visual Feedback */}
+      <FormField
+        control={weeklyExclusionForm.control}
+        name="weekdays"
+        render={({ field }) => {
+          const value = Array.isArray(field.value) ? field.value : [];
+          return (
+            <FormItem className="space-y-4">
+              <div className="flex items-center justify-between">
+                <FormLabel className="text-[10px] font-black uppercase tracking-widest text-indigo-500">
+                  Select Days to Apply
+                </FormLabel>
+                {value.length > 0 && (
+                  <span className="text-[10px] font-bold text-slate-400 italic">
+                    {value.length} days selected
+                  </span>
+                )}
+              </div>
+              <FormControl>
+                <div className="flex flex-wrap gap-2">
+                  {WEEKDAY_NUMBERS.map((weekday) => {
+                    const isChecked = value.includes(weekday);
+                    return (
+                      <button
+                        key={weekday}
+                        type="button"
+                        onClick={() => {
+                          const next = new Set(value);
+                          if (isChecked) next.delete(weekday);
+                          else {
+                            if (isEditingWeeklyExclusion) next.clear();
+                            next.add(weekday);
+                          }
+                          field.onChange(Array.from(next).sort((a, b) => a - b));
+                        }}
+                        className={`min-w-[54px] px-3 py-2 rounded-xl text-xs font-bold border transition-all duration-200 flex flex-col items-center gap-1 ${
+                          isChecked 
+                            ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100 scale-105" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-white"
+                        }`}
+                      >
+                        <span className={isChecked ? "text-indigo-200" : "text-slate-400"}>
+                          {weekdayNumberToLabel(weekday).substring(0, 1)}
+                        </span>
+                        {weekdayNumberToLabel(weekday)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          );
+        }}
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-100">
+        {/* Mode Selection with Card Style */}
+        <FormField
+          control={weeklyExclusionForm.control}
+          name="mode"
+          render={({ field }) => (
+            <FormItem className="space-y-4">
+              <FormLabel className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Exclusion Rule</FormLabel>
+              <FormControl>
+                <div className="grid gap-3">
+                  {WEEKLY_EXCLUSION_MODES.map((mode) => {
+                    const isSelected = field.value === mode;
+                    return (
+                      <label
+                        key={mode}
+                        className={`relative flex items-center gap-4 rounded-xl border-2 p-4 cursor-pointer transition-all ${
+                          isSelected 
+                            ? "bg-indigo-50/50 border-indigo-600 shadow-sm" 
+                            : "bg-white border-slate-100 hover:border-slate-200"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          className="sr-only" // Hide native radio
+                          checked={isSelected}
+                          onChange={() => field.onChange(mode)}
+                        />
+                        <div className={`p-2 rounded-lg ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                           {mode === "IGNORE_LATE_UNTIL" ? <Clock className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className={`text-sm font-bold ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
+                            {WEEKLY_EXCLUSION_MODE_LABELS[mode]}
+                          </p>
+                          <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                            {WEEKLY_EXCLUSION_MODE_DESCRIPTIONS[mode]}
+                          </p>
+                        </div>
+                        {isSelected && <CheckCircle2 className="h-5 w-5 text-indigo-600 shrink-0" />}
+                      </label>
+                    );
+                  })}
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Dynamic Inputs Section */}
+        <div className="space-y-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+          <div className="flex items-center gap-2 mb-2">
+             <CalendarIcon className="h-4 w-4 text-slate-400" />
+             <span className="text-xs font-bold text-slate-600">Validity Period</span>
+          </div>
+          
+          {weeklyExclusionMode === "IGNORE_LATE_UNTIL" && (
+            <FormField
+              control={weeklyExclusionForm.control}
+              name="ignoreUntil"
+              render={({ field }) => (
+                <FormItem className="animate-in fade-in slide-in-from-right-4">
+                  <FormLabel className="text-xs font-bold text-slate-500">Ignore Late Arrivals Until</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Input type="time" className="bg-white border-slate-200 focus:ring-indigo-500" {...field} />
+                      <div className="absolute right-3 top-2.5">
+                         <ActionTooltip label="Hint" description="Employees clocking in before this time won't be marked late.">
+                            <Info className="h-4 w-4 text-slate-300" />
+                         </ActionTooltip>
                       </div>
-                    </td>
-                  </tr>
-                ))
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold">Weekly exclusions</h3>
-          <p className="text-sm text-muted-foreground">{WEEKLY_EXCLUSION_HELP_TEXT}</p>
-        </div>
-        <Form {...weeklyExclusionForm}>
-          <form onSubmit={handleWeeklyExclusionFormSubmit} className="space-y-4">
-            <FormField
-              control={weeklyExclusionForm.control}
-              name="weekdays"
-              render={({ field }) => {
-                const value: number[] = Array.isArray(field.value) ? field.value : [];
-                return (
-                  <FormItem>
-                    <FormLabel>Weekdays</FormLabel>
-                    <FormControl>
-                      <div className="grid gap-2 sm:grid-cols-4">
-                        {WEEKDAY_NUMBERS.map((weekday) => {
-                          const checked = value.includes(weekday);
-                          return (
-                            <label
-                              key={weekday}
-                              className="flex items-center gap-2 rounded-md border border-input bg-background p-2 text-sm"
-                            >
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(checkedState) => {
-                                  const isChecked = Boolean(checkedState);
-                                  const next = new Set(value);
-                                  if (isChecked) {
-                                    if (isEditingWeeklyExclusion) {
-                                      next.clear();
-                                    }
-                                    next.add(weekday);
-                                  } else {
-                                    next.delete(weekday);
-                                  }
-                                  field.onChange(Array.from(next).sort((a, b) => a - b));
-                                }}
-                              />
-                              <div>
-                                <p className="font-medium">{weekdayNumberToLabel(weekday)}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {WEEKDAY_LONG_LABELS[weekday] ?? ""}
-                                </p>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </FormControl>
-                    <FormDescription>
-                      Select one or more weekdays. Editing applies to the chosen weekday.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                );
-              }}
             />
+          )}
 
+          <div className="grid grid-cols-2 gap-4">
             <FormField
               control={weeklyExclusionForm.control}
-              name="mode"
+              name="effectiveFrom"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Mode</FormLabel>
-                  <FormControl>
-                    <div className="space-y-2">
-                      {WEEKLY_EXCLUSION_MODES.map((mode) => (
-                        <label
-                          key={mode}
-                          className="flex items-start gap-3 rounded-md border border-input bg-background p-3"
-                        >
-                          <input
-                            type="radio"
-                            className="mt-1 h-4 w-4"
-                            checked={field.value === mode}
-                            onChange={() => field.onChange(mode)}
-                          />
-                          <div>
-                            <p className="font-medium">{WEEKLY_EXCLUSION_MODE_LABELS[mode]}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {WEEKLY_EXCLUSION_MODE_DESCRIPTIONS[mode]}
-                            </p>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </FormControl>
+                  <FormLabel className="text-xs font-bold text-slate-500">Effective From</FormLabel>
+                  <FormControl><Input type="date" className="bg-white border-slate-200" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            {weeklyExclusionMode === "IGNORE_LATE_UNTIL" && (
-              <FormField
-                control={weeklyExclusionForm.control}
-                name="ignoreUntil"
-                render={({ field }) => (
-                  <FormItem className="w-full sm:w-48">
-                    <FormLabel>Ignore lateness until</FormLabel>
-                    <FormControl>
-                      <Input placeholder="08:30" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      Punches before this time are on time. Undertime still uses the base schedule end.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                control={weeklyExclusionForm.control}
-                name="effectiveFrom"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Effective from</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={weeklyExclusionForm.control}
-                name="effectiveTo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Effective to</FormLabel>
-                    <FormControl>
-                      <Input type="date" value={field.value ?? ""} onChange={field.onChange} />
-                    </FormControl>
-                    <FormDescription>Leave blank for open-ended.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                onClick={handleWeeklyExclusionButtonClick}
-                disabled={savingWeeklyExclusion}
-              >
-                {savingWeeklyExclusion
-                  ? "Saving..."
-                  : editingWeeklyExclusion
-                  ? "Update exclusion"
-                  : "Add exclusion"}
-              </Button>
-              {editingWeeklyExclusion && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resetWeeklyExclusionForm}
-                  disabled={savingWeeklyExclusion}
-                >
-                  Cancel edit
-                </Button>
-              )}
-            </div>
-          </form>
-        </Form>
-
-        <div className="overflow-hidden rounded-lg border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="p-2 text-left">Weekday</th>
-                <th className="p-2 text-left">Mode</th>
-                <th className="p-2 text-left">Effective</th>
-                <th className="p-2 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {weeklyExclusionRows.length === 0 ? (
-                <tr>
-                  <td className="p-3 text-center text-muted-foreground" colSpan={4}>
-                    No weekly exclusions yet.
-                  </td>
-                </tr>
-              ) : (
-                weeklyExclusionRows.map((exclusion) => (
-                  <tr key={exclusion.id} className="odd:bg-muted/20">
-                    <td className="p-2">
-                      <div className="space-y-1">
-                        <Badge variant="secondary">
-                          {weekdayNumberToLabel(exclusion.weekday)}
-                        </Badge>
-                        <p className="text-xs text-muted-foreground">
-                          {WEEKDAY_LONG_LABELS[exclusion.weekday] ?? ""}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="p-2">
-                      <div className="space-y-1">
-                        <Badge variant="outline">
-                          {WEEKLY_EXCLUSION_MODE_LABELS[exclusion.mode]}
-                        </Badge>
-                        {exclusion.mode === "IGNORE_LATE_UNTIL" && exclusion.ignoreUntil ? (
-                          <p className="text-xs text-muted-foreground">
-                            Ignore lateness until {exclusion.ignoreUntil}
-                          </p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            Excused from Late/UT and Days
-                          </p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-2">
-                      {toDateInput(exclusion.effectiveFrom)}{" "}
-                      {exclusion.effectiveTo
-                        ? `to ${toDateInput(exclusion.effectiveTo)}`
-                        : "onward"}
-                    </td>
-                    <td className="p-2 text-center">
-                      <div className="flex justify-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditWeeklyExclusion(exclusion)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteWeeklyExclusion(exclusion)}
-                          disabled={deletingWeeklyExclusionId === exclusion.id}
-                        >
-                          {deletingWeeklyExclusionId === exclusion.id ? "Removing…" : "Remove"}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold">One-day exceptions</h3>
-          <p className="text-sm text-muted-foreground">
-            Override the base schedule for specific dates (e.g., special shifts, field work).
-          </p>
-        </div>
-        <Form {...exceptionForm}>
-          <form onSubmit={onSubmitException} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={exceptionForm.control}
-                name="type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Exception type</FormLabel>
-                    <Select
-                      value={field.value}
-                      onValueChange={(value) => field.onChange(value as ScheduleTypeEnum)}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {scheduleTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {formatTypeLabel(type)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={exceptionForm.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Date</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {exceptionType === ScheduleType.FIXED && (
-              <div className="grid gap-4 md:grid-cols-3">
-                <FormField
-                  control={exceptionForm.control}
-                  name="startTime"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Start time</FormLabel>
-                      <FormControl>
-                        <Input placeholder="08:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="endTime"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>End time</FormLabel>
-                      <FormControl>
-                        <Input placeholder="17:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="graceMinutes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Grace minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={180}
-                          value={field.value ?? 0}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {exceptionType === ScheduleType.FLEX && (
-              <div className="grid gap-4 md:grid-cols-3">
-                <FormField
-                  control={exceptionForm.control}
-                  name="coreStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Core Hours Start (optional)" tooltip={CORE_START_HELP} />
-                      <FormControl>
-                        <Input placeholder="10:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{CORE_START_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="coreEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Core Hours End (optional)" tooltip={CORE_END_HELP} />
-                      <FormControl>
-                        <Input placeholder="15:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{CORE_END_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="requiredDailyMinutes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Required Work Minutes" tooltip={REQUIRED_MINUTES_HELP} />
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={1440}
-                          value={field.value ?? 480}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
-                      <FormDescription>{REQUIRED_MINUTES_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="bandwidthStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Work Window Start (Bandwidth)" tooltip={BANDWIDTH_START_HELP} />
-                      <FormControl>
-                        <Input placeholder="06:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{BANDWIDTH_START_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="bandwidthEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <InfoLabel label="Work Window End (Bandwidth)" tooltip={BANDWIDTH_END_HELP} />
-                      <FormControl>
-                        <Input placeholder="20:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{BANDWIDTH_END_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {exceptionType === ScheduleType.SHIFT && (
-              <div className="grid gap-4 md:grid-cols-3">
-                <FormField
-                  control={exceptionForm.control}
-                  name="shiftStart"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Shift start</FormLabel>
-                      <FormControl>
-                        <Input placeholder="22:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="shiftEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Shift end</FormLabel>
-                      <FormControl>
-                        <Input placeholder="06:00" {...field} />
-                      </FormControl>
-                      <FormDescription>{SHIFT_TIMING_HELP}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={exceptionForm.control}
-                  name="graceMinutes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Grace minutes</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={180}
-                          value={field.value ?? 0}
-                          onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
             <FormField
-              control={exceptionForm.control}
-              name="breakMinutes"
+              control={weeklyExclusionForm.control}
+              name="effectiveTo"
               render={({ field }) => (
-                <FormItem className="w-full md:w-48">
-                  <FormLabel>Break minutes</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={720}
-                      value={field.value ?? 60}
-                      onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                    />
-                  </FormControl>
+                <FormItem>
+                  <FormLabel className="text-xs font-bold text-slate-500">Until (Optional)</FormLabel>
+                  <FormControl><Input type="date" className="bg-white border-slate-200" value={field.value ?? ""} onChange={field.onChange} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" disabled={savingException}>
-                {savingException ? "Saving..." : editingException ? "Update exception" : "Add exception"}
-              </Button>
-              {editingException && (
-                <Button type="button" variant="outline" onClick={resetExceptionForm} disabled={savingException}>
-                  Cancel edit
-                </Button>
-              )}
-            </div>
-          </form>
-        </Form>
-
-        <div className="overflow-hidden rounded-lg border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="p-2 text-left">Date</th>
-                <th className="p-2 text-left">Type</th>
-                <th className="p-2 text-left">Details</th>
-                <th className="p-2 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {exceptionRows.length === 0 ? (
-                <tr>
-                  <td className="p-3 text-center text-muted-foreground" colSpan={4}>
-                    No exceptions yet.
-                  </td>
-                </tr>
-              ) : (
-                exceptionRows.map((exception) => (
-                  <tr key={exception.id} className="odd:bg-muted/20">
-                    <td className="p-2">{toDateInput(exception.date)}</td>
-                    <td className="p-2">
-                      <Badge variant="outline">{formatTypeLabel(exception.type)}</Badge>
-                    </td>
-                    <td className="p-2">{describeException(exception)}</td>
-                    <td className="p-2 text-center">
-                      <div className="flex justify-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditException(exception)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteException(exception)}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          </div>
         </div>
-      </section>
+      </div>
+
+      {/* Form Actions */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        {editingWeeklyExclusion && (
+          <Button type="button" variant="ghost" onClick={resetWeeklyExclusionForm} className="text-slate-500 font-bold">
+            Discard Changes
+          </Button>
+        )}
+        <Button
+          type="button"
+          onClick={handleWeeklyExclusionButtonClick}
+          disabled={savingWeeklyExclusion}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 rounded-xl shadow-lg shadow-indigo-100 transition-all active:scale-95"
+        >
+          {savingWeeklyExclusion ? (
+            <span className="flex items-center gap-2">
+               <Loader2 className="h-4 w-4 animate-spin" /> Saving
+            </span>
+          ) : editingWeeklyExclusion ? "Update Exclusion" : "Create Exclusion"}
+        </Button>
+      </div>
+    </form>
+  </Form>
+
+  {/* Results Table - Compact and Clean */}
+  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+    <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+       <span className="text-xs font-black uppercase tracking-widest text-slate-500">Applied Exceptions</span>
+       <Badge variant="outline" className="text-[10px] bg-white">{weeklyExclusionRows.length} Total</Badge>
+    </div>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <tbody className="divide-y divide-slate-100">
+          {weeklyExclusionRows.length === 0 ? (
+            <tr>
+              <td className="py-12 text-center">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center">
+                    <CalendarX className="h-5 w-5 text-slate-300" />
+                  </div>
+                  <p className="text-slate-400 font-medium">No exclusions active for this schedule.</p>
+                </div>
+              </td>
+            </tr>
+          ) : (
+            weeklyExclusionRows.map((exclusion) => (
+              <tr key={exclusion.id} className="hover:bg-indigo-50/20 transition-colors group">
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+                      {weekdayNumberToLabel(exclusion.weekday).substring(0, 3)}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-800">{WEEKDAY_LONG_LABELS[exclusion.weekday]}</p>
+                      <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-tighter">
+                         {exclusion.mode === "IGNORE_LATE_UNTIL" ? `Ignore until ${exclusion.ignoreUntil}` : "Full Exemption"}
+                      </p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                   <div className="flex flex-col">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Timeline</span>
+                      <span className="text-xs font-medium text-slate-600">
+                         {toDateInput(exclusion.effectiveFrom)} 
+                         <span className="mx-2 text-slate-300">→</span> 
+                         {exclusion.effectiveTo ? toDateInput(exclusion.effectiveTo) : "Permanent"}
+                      </span>
+                   </div>
+                </td>
+                <td className="px-6 py-4 text-right">
+                  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button type="button" variant="outline" size="sm" className="h-8 rounded-lg border-slate-200" onClick={() => handleEditWeeklyExclusion(exclusion)}>
+                       <Pencil className="h-3 w-3 mr-1" /> Edit
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      type="button"
+                      size="sm" 
+                      className="h-8 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-600" 
+                      onClick={() => handleDeleteWeeklyExclusion(exclusion)}
+                      disabled={deletingWeeklyExclusionId === exclusion.id}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" /> Remove
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+    </TabsContent>
+
+{/* ONE DAY EXCEPTIONS*/}
+
+<TabsContent value="exceptions" className="mt-6 animate-in fade-in-50 duration-300">
+             <section className="space-y-6">
+  {/* Header Section */}
+  <div className="space-y-1">
+    <div className="flex items-center gap-2">
+      <h3 className="text-lg font-bold tracking-tight text-slate-800">One-day exceptions</h3>
+      <ActionTooltip label="What are exceptions?" description="Override the base schedule for specific dates (e.g., special shifts, field work).">
+        <HelpCircle className="h-4 w-4 text-slate-400 cursor-help" />
+      </ActionTooltip>
+    </div>
+    <p className="text-sm text-muted-foreground">
+      Specific date overrides for events, field work, or irregular shift changes.
+    </p>
+  </div>
+
+  <Form {...exceptionForm}>
+    <form onSubmit={onSubmitException} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+      
+      {/* Primary Selection Row */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <FormField
+          control={exceptionForm.control}
+          name="type"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Exception type</FormLabel>
+              <Select
+                value={field.value}
+                onValueChange={(value) => field.onChange(value as ScheduleTypeEnum)}
+              >
+                <FormControl>
+                  <SelectTrigger className="bg-slate-50/50 border-slate-200 rounded-xl focus:ring-indigo-500">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {scheduleTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {formatTypeLabel(type)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={exceptionForm.control}
+          name="date"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Target Date</FormLabel>
+              <FormControl>
+                <Input type="date" className="bg-slate-50/50 border-slate-200 rounded-xl focus:ring-indigo-500" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
+      {/* Dynamic Configuration Area */}
+      {(exceptionType === ScheduleType.FIXED || exceptionType === ScheduleType.FLEX || exceptionType === ScheduleType.SHIFT) && (
+        <div className="p-5 rounded-2xl bg-indigo-50/30 border border-indigo-100/50 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center gap-2 mb-4 text-indigo-600">
+            <Settings2 className="h-4 w-4" />
+            <span className="text-xs font-bold uppercase tracking-wider">Configure Parameters</span>
+          </div>
+
+          {exceptionType === ScheduleType.FIXED && (
+            <div className="grid gap-4 md:grid-cols-3">
+              <FormField
+                control={exceptionForm.control}
+                name="startTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold text-slate-500">Start Time</FormLabel>
+                    <FormControl><Input type="time" className="bg-white" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={exceptionForm.control}
+                name="endTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold text-slate-500">End Time</FormLabel>
+                    <FormControl><Input type="time" className="bg-white" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={exceptionForm.control}
+                name="graceMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold text-slate-500">Grace (Mins)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={0} className="bg-white" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
+
+          {exceptionType === ScheduleType.FLEX && (
+            <div className="grid gap-4 md:grid-cols-3">
+              <FormField
+                control={exceptionForm.control}
+                name="coreStart"
+                render={({ field }) => (
+                  <FormItem>
+                    <InfoLabel label="Core Start" tooltip={CORE_START_HELP} />
+                    <FormControl><Input type="time" className="bg-white" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={exceptionForm.control}
+                name="coreEnd"
+                render={({ field }) => (
+                  <FormItem>
+                    <InfoLabel label="Core End" tooltip={CORE_END_HELP} />
+                    <FormControl><Input type="time" className="bg-white" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={exceptionForm.control}
+                name="requiredDailyMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <InfoLabel label="Work Mins" tooltip={REQUIRED_MINUTES_HELP} />
+                    <FormControl>
+                      <Input type="number" className="bg-white" value={field.value ?? 480} onChange={e => field.onChange(e.target.valueAsNumber)} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
+
+          {exceptionType === ScheduleType.SHIFT && (
+            <div className="grid gap-4 md:grid-cols-3">
+              <FormField
+                control={exceptionForm.control}
+                name="shiftStart"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold text-slate-500">Shift Start</FormLabel>
+                    <FormControl><Input type="time" className="bg-white" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={exceptionForm.control}
+                name="shiftEnd"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold text-slate-500">Shift End</FormLabel>
+                    <FormControl><Input type="time" className="bg-white" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={exceptionForm.control}
+                name="graceMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold text-slate-500">Grace (Mins)</FormLabel>
+                    <FormControl>
+                      <Input type="number" className="bg-white" value={field.value ?? 0} onChange={e => field.onChange(e.target.valueAsNumber)} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Break Minutes & Actions */}
+      <div className="flex flex-col md:flex-row items-end justify-between gap-4 pt-4 border-t border-slate-100">
+        <FormField
+          control={exceptionForm.control}
+          name="breakMinutes"
+          render={({ field }) => (
+            <FormItem className="w-full md:w-48">
+              <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Break Mins</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  className="bg-slate-50/50 border-slate-200 rounded-xl"
+                  value={field.value ?? 60}
+                  onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="flex items-center gap-2">
+          {editingException && (
+            <Button type="button" variant="ghost" onClick={resetExceptionForm} className="font-bold text-slate-500">
+              Discard
+            </Button>
+          )}
+          <Button 
+            type="submit" 
+            onClick={onSubmitException}
+            disabled={savingException}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 rounded-xl shadow-lg shadow-indigo-100"
+          >
+            {savingException ? "Saving..." : editingException ? "Update Exception" : "Add Exception"}
+          </Button>
+        </div>
+      </div>
+    </form>
+  </Form>
+ {/* List of Exceptions Table */}
+  <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm mt-8">
+    <div className="px-6 py-4 border-b bg-slate-50/50 flex justify-between items-center">
+      <h4 className="text-xs font-black uppercase tracking-widest text-slate-700">Active Overrides</h4>
+      <Badge variant="outline" className="bg-white text-[10px] font-bold">
+        {exceptions.length} Total
+      </Badge>
+    </div>
+    
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm text-left">
+        <thead>
+          <tr className="border-b bg-slate-50/30 text-slate-500">
+            <th className="px-6 py-3 font-bold uppercase text-[10px]">Target Date</th>
+            <th className="px-6 py-3 font-bold uppercase text-[10px]">Type</th>
+            <th className="px-6 py-3 font-bold uppercase text-[10px]">Parameters</th>
+            <th className="px-6 py-3 text-right font-bold uppercase text-[10px]">Manage</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+         {exceptionRows.length === 0 ? (
+
+            <tr>
+              <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">
+                No exceptions scheduled. Use the form above to add one.
+              </td>
+            </tr>
+          ) : (
+          exceptionRows.map((exc) => (
+
+              <tr key={exc.id} className="hover:bg-slate-50/50 transition-colors group">
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <CalendarIcon className="h-3.5 w-3.5 text-indigo-500" />
+                    <span className="font-mono font-bold text-slate-700">
+                      {new Date(exc.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <Badge className="bg-indigo-50 text-indigo-700 border-none shadow-none font-bold">
+                    {formatTypeLabel(exc.type)}
+                  </Badge>
+                </td>
+                <td className="px-6 py-4">
+                  <span className="text-xs text-slate-600 font-medium italic">
+                    {describeException(exc)}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-right">
+                  <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button 
+                     type="button"
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-slate-400 hover:text-indigo-600"
+                      onClick={() => handleEditException(exc)}
+                    >
+                      <EditIcon className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-slate-400 hover:text-rose-500"
+                      onClick={() => handleDeleteException(exc)}
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+    </TabsContent>
+
+</Tabs>
     </div>
   );
 }
