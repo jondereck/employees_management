@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import AddAward, { AwardRecord } from "./admin/add-award";
 import { Dialog as ShadDialog, DialogContent as ShadContent } from "@/components/ui/dialog";
 import { AlertModal } from "@/components/modals/alert-modal"; // ✅ reusable confirm
+import { Building2, Calendar, ExternalLink, Pencil, Trash2, Trophy, ZoomIn } from "lucide-react";
 
 type AwardsGalleryProps = { employeeId: string; version?: number };
 type Award = {
@@ -114,74 +115,80 @@ export default function AwardsGallery({ employeeId, version = 0 }: AwardsGallery
   }
 
   return (
-    <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {awards.map(a => {
-        const cover =
-  (isImageLike(a.thumbnail) && a.thumbnail) ||
-  (isImageLike(a.fileUrl) && a.fileUrl) ||
-  "/placeholder.svg";
-
-{isImageLike(cover) ? (
-  <Image src={cover} alt={a.title} fill className="object-cover" />
-) : (
-  <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-    No preview • {a.fileUrl && (
-      <a className="underline ml-1" href={a.fileUrl} target="_blank" rel="noreferrer">Open</a>
-    )}
-  </div>
-)}
+          const cover = (isImageLike(a.thumbnail) && a.thumbnail) || 
+                        (isImageLike(a.fileUrl) && a.fileUrl) || 
+                        "/placeholder.svg";
 
           return (
-            <div key={a.id} className="rounded-lg border overflow-hidden">
-              <button
-                type="button"
-                className="w-full text-left"
+            <div key={a.id} className="group relative rounded-2xl border border-slate-200 bg-white overflow-hidden hover:shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-200 transition-all duration-300 flex flex-col">
+              {/* Image Header */}
+              <div 
+                className="relative aspect-[16/10] w-full bg-slate-100 overflow-hidden cursor-pointer"
                 onClick={() => { setActive(a); setOpen(true); }}
               >
-                <div className="relative aspect-[4/3] w-full bg-muted">
-                  <Image src={cover} alt={a.title} fill className="object-cover" />
-                </div>
-                <div className="p-3 space-y-1">
-                  <div className="font-medium line-clamp-1">{a.title}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {(a.issuer ? `${a.issuer} • ` : "") + new Date(a.date).toLocaleDateString()}
+                {isImageLike(cover) ? (
+                  <Image 
+                    src={cover} 
+                    alt={a.title} 
+                    fill 
+                    className="object-cover transition-transform duration-500 group-hover:scale-105" 
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-slate-50 text-slate-400">
+                    <Trophy className="h-8 w-8 opacity-20" />
                   </div>
-                  {a.tags?.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {a.tags.map(t => <Badge key={t} variant="secondary">{t}</Badge>)}
-                    </div>
-                  )}
-                  {(a.description || a.issuer) && (
-  <div className="px-3 pb-3">
- 
-    {a.description && (
-      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-        {a.description}
-      </p>
-    )}
-  </div>
-)}
-
-
+                )}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                   <ZoomIn className="text-white opacity-0 group-hover:opacity-100 h-8 w-8 transition-opacity" />
                 </div>
-              </button>
-              <div className="p-3 pt-0 flex gap-2">
+              </div>
+
+              {/* Content */}
+              <div className="p-4 flex-grow space-y-3">
+                <div className="space-y-1">
+                  <h4 className="font-bold text-slate-800 line-clamp-1 group-hover:text-indigo-600 transition-colors">
+                    {a.title}
+                  </h4>
+                  <div className="flex items-center text-[11px] font-medium text-slate-400 gap-1.5">
+                    <Building2 className="h-3 w-3" />
+                    <span className="truncate">{a.issuer || "No Issuer"}</span>
+                  </div>
+                </div>
+
+                {a.tags?.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {a.tags.slice(0, 3).map(t => (
+                      <Badge key={t} variant="secondary" className="bg-slate-100 text-[10px] text-slate-600 border-none font-bold uppercase tracking-tighter">
+                        {t}
+                      </Badge>
+                    ))}
+                    {a.tags.length > 3 && <span className="text-[10px] text-slate-400">+{a.tags.length - 3}</span>}
+                  </div>
+                )}
+              </div>
+
+              {/* Actions Footer */}
+              <div className="px-4 pb-4 flex gap-2 pt-0">
                 <Button
+                  variant="outline"
                   type="button"
                   size="sm"
-                  variant="outline"
+                  className="flex-1 rounded-xl h-8 border-slate-200 text-slate-600 hover:bg-slate-50 gap-2 font-bold text-xs"
                   onClick={() => { setActive(a); setEditOpen(true); }}
                 >
-                  Edit
+                  <Pencil className="h-3 w-3" /> Edit
                 </Button>
                 <Button
-                  type="button"
+                  variant="outline"
+                   type="button"
                   size="sm"
-                  variant="destructive"
+                  className="h-8 w-8 rounded-xl border-slate-200 text-rose-500 hover:bg-rose-50 hover:border-rose-100 p-0"
                   onClick={() => { setDeletingId(a.id); setConfirmOpen(true); }}
                 >
-                  Delete
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
@@ -191,40 +198,45 @@ export default function AwardsGallery({ employeeId, version = 0 }: AwardsGallery
 
       {/* VIEW DIALOG */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl">
-        {active && (
-  <div className="space-y-2">
-    <div className="flex items-center justify-between gap-3">
-      <h3 className="font-semibold">{active.title}</h3>
-      <time className="text-xs text-muted-foreground">
-        {new Date(active.date).toLocaleDateString('en-PH', { year:'numeric', month:'short', day:'2-digit' })}
-      </time>
-    </div>
+        <DialogContent className="max-w-3xl rounded-3xl overflow-hidden p-0 border-none">
+          {active && (
+            <div className="flex flex-col">
+               {/* Cover Image in Modal */}
+               <div className="relative w-full aspect-video bg-slate-900">
+                  <Image src={(isImageLike(active.thumbnail) && active.thumbnail) || (isImageLike(active.fileUrl) && active.fileUrl) || "/placeholder.svg"} fill className="object-contain" alt={active.title} />
+               </div>
+               <div className="p-8 space-y-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs uppercase tracking-widest">
+                       <Trophy className="h-3 w-3" /> {active.issuer}
+                    </div>
+                    <h2 className="text-2xl font-black text-slate-900">{active.title}</h2>
+                    <div className="flex items-center text-sm text-slate-400 gap-2">
+                       <Calendar className="h-4 w-4" />
+                       {new Date(active.date).toLocaleDateString('en-PH', { year:'numeric', month:'long', day:'2-digit' })}
+                    </div>
+                  </div>
 
-    {active.issuer && (
-      <p className="text-xs text-muted-foreground">Issuer: {active.issuer}</p>
-    )}
+                  {active.description && (
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <p className="text-slate-600 leading-relaxed italic">"{active.description}"</p>
+                    </div>
+                  )}
 
-    {active.description && (
-      <p className="text-sm leading-relaxed">{active.description}</p>
-    )}
-
-    {active.fileUrl && (
-      <a
-        href={active.fileUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-block text-xs underline hover:opacity-80"
-      >
-        Open certificate
-      </a>
-    )}
-  </div>
-)}
+                  {active.fileUrl && (
+                    <Button asChild className="w-full bg-slate-900 hover:bg-black text-white rounded-xl gap-2 font-bold">
+                       <a href={active.fileUrl} target="_blank" rel="noreferrer">
+                         <ExternalLink className="h-4 w-4" /> View Full Certificate
+                       </a>
+                    </Button>
+                  )}
+               </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
-      {/* EDIT DIALOG */}
+          {/* EDIT DIALOG */}
      <ShadDialog
   open={editOpen}
   onOpenChange={(o) => {

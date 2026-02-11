@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
+import { AlignLeft, Calendar, History, LinkIcon, RefreshCcw, Save, Tag, Trash2, Type } from "lucide-react";
 
 export type TimelineRecord = {
   id: string;
@@ -126,51 +127,112 @@ export default function AddTimelineEvent({
   }
 
   return (
-    <div className="rounded-lg border p-4 space-y-3">
+<div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
       {!hideHeader && (
-        <div className="font-medium">{isEdit ? "Edit Timeline Event" : "Add Timeline Event"}</div>
+        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+          <div className="p-2 bg-indigo-50 rounded-lg">
+            <History className="h-4 w-4 text-indigo-600" />
+          </div>
+          <h3 className="text-lg font-bold tracking-tight text-slate-800">
+            {isEdit ? "Edit Timeline Event" : "Add Timeline Event"}
+          </h3>
+        </div>
       )}
 
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-muted-foreground">Type</label>
+      <div className="grid sm:grid-cols-2 gap-6">
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-1.5">
+            <Tag className="h-3 w-3" /> Event Type
+          </label>
           <Select value={form.type} onValueChange={(v) => setForm(s => ({ ...s, type: v as TimelineRecord["type"] }))}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger className="bg-slate-50/50 border-slate-200 rounded-xl focus:ring-indigo-500">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               {TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Date</label>
-          <Input type="date" value={form.date} onChange={e => setForm(s => ({ ...s, date: e.target.value }))} />
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-1.5">
+            <Calendar className="h-3 w-3" /> Event Date
+          </label>
+          <Input 
+            type="date" 
+            className="bg-slate-50/50 border-slate-200 rounded-xl focus:ring-indigo-500"
+            value={form.date} 
+            onChange={e => setForm(s => ({ ...s, date: e.target.value }))} 
+          />
         </div>
       </div>
 
-      <div>
-        <label className="text-xs text-muted-foreground">Title</label>
-        <Input value={form.title} onChange={e => setForm(s => ({ ...s, title: e.target.value }))} placeholder="e.g., Disaster Preparedness Seminar" />
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+          <Type className="h-3 w-3" /> Event Title
+        </label>
+        <Input 
+          className="bg-slate-50/50 border-slate-200 rounded-xl focus:ring-indigo-500 font-medium"
+          value={form.title} 
+          onChange={e => setForm(s => ({ ...s, title: e.target.value }))} 
+          placeholder="e.g., Promotion to Senior Developer" 
+        />
       </div>
 
-      <div>
-        <label className="text-xs text-muted-foreground">Description</label>
-        <Textarea rows={3} value={form.description ?? ""} onChange={e => setForm(s => ({ ...s, description: e.target.value }))} />
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+          <AlignLeft className="h-3 w-3" /> Description
+        </label>
+        <Textarea 
+          rows={3} 
+          className="bg-slate-50/50 border-slate-200 rounded-xl focus:ring-indigo-500 resize-none"
+          value={form.description ?? ""} 
+          onChange={e => setForm(s => ({ ...s, description: e.target.value }))} 
+        />
       </div>
 
-      <div>
-        <label className="text-xs text-muted-foreground">Attachment URL (image/pdf)</label>
-        <Input value={form.attachment ?? ""} onChange={e => setForm(s => ({ ...s, attachment: e.target.value }))} placeholder="https://…" />
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+          <LinkIcon className="h-3 w-3" /> Evidence / Attachment URL
+        </label>
+        <Input 
+          className="bg-slate-50/50 border-slate-200 rounded-xl focus:ring-indigo-500 text-xs"
+          value={form.attachment ?? ""} 
+          onChange={e => setForm(s => ({ ...s, attachment: e.target.value }))} 
+          placeholder="https://storage.cloud.com/certificate.pdf" 
+        />
       </div>
 
-      <div className="flex items-center justify-end gap-2">
-        {isEdit && (
-          <Button type="button" variant="destructive" onClick={handleDelete} disabled={loading}>
-            Delete
-          </Button>
-        )}
-        <Button type="button" onClick={handleSubmit} disabled={loading || !payload.title}>
-          {isEdit ? "Update" : "Save"}
-        </Button>
+      <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+        <div>
+          {isEdit && (
+            <Button 
+              type="button" 
+              variant="ghost" 
+              className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 font-bold gap-2 rounded-xl"
+              onClick={handleDelete} 
+              disabled={loading}
+            >
+              <Trash2 className="h-4 w-4" /> Delete Event
+            </Button>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-3">
+      <Button 
+  type="button" 
+  onClick={handleSubmit} 
+  disabled={loading || !payload.title}
+  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 rounded-xl shadow-lg shadow-indigo-100 gap-2"
+>
+  {loading 
+    ? <RefreshCcw className="h-4 w-4 animate-spin" /> 
+    : <Save className="h-4 w-4" />
+  }
+  {isEdit ? "Update Event" : "Save Event"}
+</Button>
+
+        </div>
       </div>
     </div>
   );

@@ -1396,9 +1396,7 @@ export const EmployeesForm = ({
             </TabsContent>
 
             <TabsContent value="timeline">
-              <div className="text-sm text-muted-foreground p-2 ">
-                Fill out the Timeline.
-              </div>
+
               {employeeId ? (
                 <>
                   <AddTimelineEvent

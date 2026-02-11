@@ -992,7 +992,7 @@ export function EmployeeScheduleManager({
 
 
   return (
-    <div className="mt-10 space-y-8">
+    <div className=" space-y-8">
 
       <Tabs defaultValue="recurring" className="w-full">
     <TabsList className="grid w-full grid-cols-3 h-14 bg-slate-100/50 p-1 rounded-xl">
