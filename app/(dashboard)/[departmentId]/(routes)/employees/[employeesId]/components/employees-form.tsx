@@ -443,12 +443,7 @@ export const EmployeesForm = ({
     });
   };
   const onSubmit = async (values: EmployeesFormValues) => {
-    console.group("🚨 SUBMIT PAYLOAD");
-    console.log("salaryMode:", values.salaryMode);
-    console.log("salary:", values.salary);
-    console.log("salaryGrade:", values.salaryGrade);
-    console.log("salaryStep:", values.salaryStep);
-    console.groupEnd();
+   
     const contact = (values.contactNumber ?? "").trim();
     setLoading(true);
 

@@ -219,7 +219,7 @@ export default function AwardsGallery({ employeeId, version = 0 }: AwardsGallery
 
                   {active.description && (
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <p className="text-slate-600 leading-relaxed italic">"{active.description}"</p>
+                      <p className="text-slate-600 leading-relaxed italic">{active.description}</p>
                     </div>
                   )}
 

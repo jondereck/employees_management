@@ -21,7 +21,7 @@ export async function PATCH(
 
     
     const body = await req.json();
-    console.group("🛑 API RECEIVED");
+
 console.log({
   salaryMode: body.salaryMode,
   salary: body.salary,

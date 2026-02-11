@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { toastProgress } from "@/lib/linear-progress";
-import { Download, Calendar, Settings2, Share2, EyeOff, ImageIcon, FileImage } from "lucide-react";
+import { Download, Calendar, Settings2, Share2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import BirthdayGreetingCard from "./birthday-greetting-card";
@@ -25,8 +25,6 @@ import {
   BirthdayTheme,
   getAutoTheme,
 } from "@/themes/birthdays";
-
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 
 
@@ -902,170 +900,181 @@ export default function BirthdayMonthClient({
           "border-b px-3 py-2 sm:px-4"
         )}
       >
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between bg-card p-4 rounded-xl border shadow-sm">
-  {/* Left Section: Context & Core Filters */}
-  <div className="flex flex-wrap items-center gap-3">
-    <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-lg border">
-      <Calendar className="h-4 w-4 text-indigo-500" />
-      <Select value={String(month)} onValueChange={onChangeMonth}>
-        <SelectTrigger className="w-[140px] border-none bg-transparent focus:ring-0 h-7 shadow-none p-0">
-          <SelectValue placeholder="Select month" />
-        </SelectTrigger>
-        <SelectContent>
-          {Array.from({ length: 12 }, (_, i) => (
-            <SelectItem key={i} value={String(i)}>{monthName(i)}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Calendar className="h-5 w-5 text-muted-foreground" />
+            <Select value={String(month)} onValueChange={onChangeMonth}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Select month" />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <SelectItem key={i} value={String(i)}>{monthName(i)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowExcluded(true)}
+              data-hide-in-export
+              disabled={excludedPeople.length === 0}
+              title="View and restore excluded celebrants"
+            >
+              Show excluded ({excludedPeople.length})
+            </Button>
 
-    <div className="h-6 w-[1px] bg-border hidden sm:block" />
 
-    <div className="flex items-center gap-2">
-      <Badge variant="secondary" className="px-2 py-1 rounded-md font-medium">
-        {celebrants.length} {celebrants.length === 1 ? "Celebrant" : "Celebrants"}
-      </Badge>
-      
-      {excludedPeople.length > 0 && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowExcluded(true)}
-          className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-          data-hide-in-export
-        >
-          <EyeOff className="h-3.5 w-3.5 mr-1.5" />
-          Excluded ({excludedPeople.length})
-        </Button>
-      )}
-    </div>
-  </div>
+            <div className="text-xs sm:text-sm text-muted-foreground ml-1">
+              {celebrants.length} celebrant{celebrants.length === 1 ? "" : "s"}
+            </div>
+          </div>
 
-  {/* Right Section: Actions & Settings */}
-  <div className="flex flex-wrap items-center gap-2" data-hide-in-export>
-    {/* Filter Group */}
-    <div className="flex items-center bg-muted/50 rounded-lg p-1 border">
-      <Button 
-        variant={headsFilter === 'all' ? 'secondary' : 'ghost'} 
-        size="sm" 
-        className="h-7 px-3 text-xs"
-        onClick={() => onHeadsFilterChange('all')}
-      >
-        All
-      </Button>
-      <Button 
-        variant={headsFilter === 'heads-only' ? 'secondary' : 'ghost'} 
-        size="sm" 
-        className="h-7 px-3 text-xs"
-        onClick={() => onHeadsFilterChange('heads-only')}
-      >
-        Heads Only
-      </Button>
-    </div>
+          <div className="flex items-center gap-2" data-hide-in-export>
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-medium text-muted-foreground">Heads:</span>
+              <Select
+                value={headsFilter}
+                onValueChange={(value) => onHeadsFilterChange(value as HeadsFilter)}
+              >
+                <SelectTrigger className="h-8 w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="heads-only">Heads only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-    {/* Configuration Popover */}
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="shadow-sm">
-          <Settings2 className="mr-2 h-4 w-4 text-muted-foreground" />
-          Customize
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0 shadow-xl border-muted">
-        <div className="p-4 border-b bg-muted/30">
-          <h4 className="font-semibold text-sm">Board Settings</h4>
-          <p className="text-xs text-muted-foreground">Adjust the look and feel of the birthday board.</p>
-        </div>
-        
-        <div className="p-4 space-y-6 max-h-[60vh] overflow-y-auto">
-          {/* Theme Grid */}
-          <div>
-            <label className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground mb-3 block">Visual Theme</label>
-            <div className="grid grid-cols-1 gap-2">
-              {themeOptions.map((option) => {
-                const isActive = themeMode === option.id;
-                return (
-                  <button
-                    key={option.id}
-                    onClick={() => setThemeModePersist(option.id as BirthdayThemeMode)}
-                    className={cn(
-                      "group relative flex items-center gap-3 p-2 rounded-lg border transition-all text-left",
-                      isActive ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-500/10" : "hover:border-muted-foreground/30"
-                    )}
-                  >
-                    <div 
-                      className="h-8 w-8 rounded-md border shadow-sm flex-shrink-0" 
-                      style={{ background: option.preview || 'var(--muted)', backgroundSize: 'cover' }}
-                    />
-                    <div className="flex-1 overflow-hidden">
-                      <div className="text-sm font-medium leading-none mb-1">{option.label}</div>
-                      <div className="text-xs text-muted-foreground truncate">{option.description}</div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Options
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 max-h-[75vh] overflow-y-auto">
+                <div className="space-y-5">
+                  <div>
+                    <div className="mb-2 text-sm font-semibold text-muted-foreground">Theme</div>
+                    <div className="space-y-1.5">
+                      {themeOptions.map((option) => {
+                        const isActive = themeMode === option.id;
+                        const previewStyle: CSSProperties = option.preview
+                          ? { backgroundImage: option.preview }
+                          : { backgroundColor: "var(--bday-card-border, rgba(0,0,0,0.1))" };
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => setThemeModePersist(option.id as BirthdayThemeMode)}
+                            className={cn(
+                              "w-full rounded-md border px-2.5 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+                              isActive
+                                ? "border-[var(--bday-accent,_#2563eb)] bg-white/10"
+                                : "border-border border-opacity-40 hover:bg-muted/40"
+                            )}
+                            style={isActive ? { borderColor: resolvedTheme?.cssVars["--bday-accent"] ?? "#2563eb" } : undefined}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="h-6 w-6 flex-none rounded-full border border-white/40 shadow-sm"
+                                style={{ ...previewStyle, backgroundSize: "cover" }}
+                                aria-hidden
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold leading-tight">{option.label}</div>
+                                {option.description && (
+                                  <div className="text-xs text-muted-foreground leading-snug truncate">
+                                    {option.description}
+                                  </div>
+                                )}
+                              </div>
+                              {isActive && (
+                                <span
+                                  className="text-xs font-semibold"
+                                  style={{ color: resolvedTheme?.cssVars["--bday-accent"] ?? "var(--primary)" }}
+                                >
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
-                    {isActive && <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                  </div>
 
-          {/* Toggles */}
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Export-safe (Print)</label>
-              <Switch checked={exportSafe} onCheckedChange={setExportSafe} />
-            </div>
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Display Dates</label>
-              <Switch checked={showDates} onCheckedChange={handleToggleShowDates} />
-            </div>
-          </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium">Export-safe mode</div>
+                      <div className="text-xs text-muted-foreground">High-contrast / print-friendly styling</div>
+                    </div>
+                    <Switch checked={exportSafe} onCheckedChange={(value) => setExportSafe(value)} />
+                  </div>
 
-          {/* Density Slider */}
-          <div className="pt-2">
-            <div className="flex justify-between mb-2">
-              <label className="text-sm font-medium">Grid Density</label>
-              <span className="text-xs text-indigo-600 font-bold uppercase">
-                {density === 1 ? "Large" : density === 5 ? "Compact" : "Standard"}
-              </span>
-            </div>
-            <Slider
-              value={[density]}
-              onValueChange={(v) => setDensity(v[0] ?? 3)}
-              min={1}
-              max={5}
-              step={1}
-              className="py-2"
-            />
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Show dates on cards</span>
+                    <Switch checked={showDates} onCheckedChange={handleToggleShowDates} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Show header</span>
+                    <Switch checked={showHeader} onCheckedChange={setShowHeader} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Show watermark</span>
+                    <Switch checked={showWatermark} onCheckedChange={setShowWatermark} />
+                  </div>
+                  <div>
+                    <div className="mb-2 text-sm">Grid density</div>
+                    <Slider
+                      value={[density]}
+                      onValueChange={(v) => setDensity(v[0] ?? 3)}
+                      min={1}
+                      max={5}
+                      step={1}
+                    />
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {density === 1 ? "Large cards" : density === 5 ? "Compact cards" : "Balanced"}
+                    </div>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <Button
+              onClick={handleShareToFacebook}
+              variant="outline"
+              size="sm"
+              data-hide-in-export
+              title="Share this board to the Facebook business page"
+              disabled={!shareableBoardUrl || sharing || exporting}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              {sharing ? "Sharing…" : "Share"}
+            </Button>
+
+            <Button
+              onClick={() => doExport("fast-jpeg")}
+              variant="outline"
+              size="sm"
+              disabled={exporting}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {exporting ? "Exporting…" : "Fast JPEG"}
+            </Button>
+
+            <Button
+              onClick={() => doExport("high-png")}
+              size="sm"
+              disabled={exporting}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {exporting ? "Exporting…" : "High PNG"}
+            </Button>
           </div>
         </div>
-      </PopoverContent>
-    </Popover>
-
-    <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block" />
-
-    {/* Export Actions */}
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="default" size="sm" className="bg-indigo-600 hover:bg-indigo-700 shadow-md">
-          <Download className="h-4 w-4 mr-2" />
-          Export
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={() => doExport("fast-jpeg")} disabled={exporting}>
-          <ImageIcon className="mr-2 h-4 w-4" /> Fast JPEG
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => doExport("high-png")} disabled={exporting}>
-          <FileImage className="mr-2 h-4 w-4" /> High-Res PNG
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleShareToFacebook} disabled={!shareableBoardUrl || sharing}>
-          <Share2 className="mr-2 h-4 w-4" /> Share to Facebook
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  </div>
-</div>
       </div>
 
       {/* Board */}
