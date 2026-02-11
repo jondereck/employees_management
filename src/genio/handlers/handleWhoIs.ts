@@ -32,21 +32,39 @@ export async function handleWhoIs(
    EMPLOYEE NUMBER LOOKUP
    =============================== */
 
-const employeeNumbers = raw.match(/\b\d{6,10}\b/g);
-console.log("RAW:", raw);
-console.log("EMPLOYEE NUMBERS:", employeeNumbers);
+const employeeNumbers = [
+  ...new Set(
+    raw
+      .match(/\b[A-Za-z0-9-]{2,20}\b/g)
+      ?.map((s) =>
+        s
+          .replace(/[.,]/g, "")
+          .replace(/–/g, "-") // normalize dash
+          .trim()
+      )
+      ?.filter((s) => /\d/.test(s)) ?? []
+  ),
+];
 
-if (employeeNumbers && employeeNumbers.length > 0) {
+
+console.log("RAW INPUT:", raw);
+console.log("MATCHED TOKENS:", raw.match(/\b[A-Za-z0-9-]{2,20}\b/g));
+console.log("FINAL EMPLOYEE NUMBERS:", employeeNumbers);
+
+
+if (employeeNumbers.length > 0) {
   const isMultiNumberQuery = employeeNumbers.length > 1;
 
   const employees = await prisma.employee.findMany({
     where: {
       isArchived: false,
-      OR: employeeNumbers.map((num) => ({
-        employeeNo: {
-          equals: num, // ✅ IMPORTANT FIX
-        },
-      })),
+  OR: employeeNumbers.map((num) => ({
+  employeeNo: {
+    contains: num.trim(),
+    mode: "insensitive",
+  },
+})),
+
     },
     include: {
       offices: true,

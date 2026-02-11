@@ -107,7 +107,7 @@ export default function AwardsGallery({ employeeId, version = 0 }: AwardsGallery
       setDeleting(false);
     }
   }
-
+ 
   // ---------- LIST UI ----------
   if (awards === null) return <AwardsSkeleton />;
   if (awards.length === 0) {

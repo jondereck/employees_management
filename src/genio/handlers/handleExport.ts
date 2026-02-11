@@ -25,7 +25,7 @@ function sanitizeFilename(name: string) {
 
 
 function buildExportFilename(context: any) {
-    const last = context?.lastListQuery || context?.lastCountQuery;
+  const last = context?.lastListQuery || context?.lastCountQuery;
 
   if (!last) return "employees-export.xlsx";
 
@@ -158,31 +158,31 @@ export async function handleExport(context: any) {
     );
   }
 
-  
 
-let employees = await prisma.employee.findMany({
-  where: last.where,
-  include: {
-    offices: { select: { name: true } },
-    employeeType: { select: { name: true } },
-  },
-});
 
-// 🔥 APPLY POST FILTER (CURRENT EMPLOYEES BY YEAR)
-if (last.postFilter?.excludeTerminatedOnOrBefore) {
-  const year = last.postFilter.excludeTerminatedOnOrBefore;
-  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
-
-  employees = employees.filter((e) => {
-    if (!e.terminateDate) return true;
-
-    const [m, d, y] = e.terminateDate.split("/").map(Number);
-    if (!m || !d || !y) return true;
-
-    const termination = new Date(y, m - 1, d);
-    return termination > yearEnd;
+  let employees = await prisma.employee.findMany({
+    where: last.where,
+    include: {
+      offices: { select: { name: true } },
+      employeeType: { select: { name: true } },
+    },
   });
-}
+
+  // 🔥 APPLY POST FILTER (CURRENT EMPLOYEES BY YEAR)
+  if (last.postFilter?.excludeTerminatedOnOrBefore) {
+    const year = last.postFilter.excludeTerminatedOnOrBefore;
+    const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+
+    employees = employees.filter((e) => {
+      if (!e.terminateDate) return true;
+
+      const [m, d, y] = e.terminateDate.split("/").map(Number);
+      if (!m || !d || !y) return true;
+
+      const termination = new Date(y, m - 1, d);
+      return termination > yearEnd;
+    });
+  }
 
 
 
@@ -194,47 +194,49 @@ if (last.postFilter?.excludeTerminatedOnOrBefore) {
     );
   }
 
-const rows = employees.map((e) => ({
-  "Employee No": e.employeeNo,
-  "Last Name": e.lastName,
-  "First Name": e.firstName,
-  "M.I.": e.middleName ? e.middleName.charAt(0) : "",
-  Suffix: e.suffix ?? "",
-  Position: e.position,
-  Office: e.offices?.name ?? "",
-  "Employee Type": e.employeeType?.name ?? "",
-  Gender: e.gender,
-  Status: e.isArchived ? "Archived" : "Active",
-}));
+  const rows = employees.map((e) => ({
+    "Employee No": e.employeeNo,
+    "Last Name": e.lastName,
+    "First Name": e.firstName,
+    "Contact Number": e.contactNumber?.trim() ?? "",
+    "M.I.": e.middleName ? e.middleName.charAt(0) : "",
+    Suffix: e.suffix ?? "",
+    Position: e.position,
+    Office: e.offices?.name ?? "",
+    "Employee Type": e.employeeType?.name ?? "",
+    Gender: e.gender,
+
+    Status: e.isArchived ? "Archived" : "Active",
+  }));
 
 
   // 🧾 Create workbook
   const worksheet = XLSX.utils.json_to_sheet(rows, {
-  skipHeader: false,
-});
+    skipHeader: false,
+  });
 
-const headerCells = Object.keys(rows[0]) as Array<keyof typeof rows[0]>;
-
-
+  const headerCells = Object.keys(rows[0]) as Array<keyof typeof rows[0]>;
 
 
-headerCells.forEach((_, colIndex) => {
-  const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIndex });
-  if (worksheet[cellAddress]) {
-    worksheet[cellAddress].s = {
-      font: { bold: true },
-      alignment: { vertical: "center" },
-    };
-  }
-});
 
 
-worksheet["!cols"] = headerCells.map((header) => ({
-  wch: Math.max(
-    header.length,
-    ...rows.map((row) => String(row[header] ?? "").length)
-  ) + 2,
-}));
+  headerCells.forEach((_, colIndex) => {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIndex });
+    if (worksheet[cellAddress]) {
+      worksheet[cellAddress].s = {
+        font: { bold: true },
+        alignment: { vertical: "center" },
+      };
+    }
+  });
+
+
+  worksheet["!cols"] = headerCells.map((header) => ({
+    wch: Math.max(
+      header.length,
+      ...rows.map((row) => String(row[header] ?? "").length)
+    ) + 2,
+  }));
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Employees");
 
@@ -244,10 +246,10 @@ worksheet["!cols"] = headerCells.map((header) => ({
   });
 
 
-const baseFilename = buildExportFilename(context);
-const filename = addTimestamp(
-  sanitizeFilename(baseFilename)
-);
+  const baseFilename = buildExportFilename(context);
+  const filename = addTimestamp(
+    sanitizeFilename(baseFilename)
+  );
 
 
   return new Response(buffer, {
