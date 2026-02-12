@@ -167,16 +167,19 @@ const employeeTypes = await prismadb.employeeType.findMany({
 
   const entries: CelebrationEntry[] = [];
 
- for (const employee of employees) {
-  if (!employee.dateHired) continue;
+for (const employee of employees) {
 
-  const hireDate = new Date(employee.dateHired);
+  // ✅ Priority: latestAppointment → fallback to dateHired
+  const baseDateRaw = employee.latestAppointment || employee.dateHired;
+  if (!baseDateRaw) continue;
+
+  const hireDate = new Date(baseDateRaw);
   if (Number.isNaN(hireDate.getTime())) continue;
 
   for (const milestone of MILESTONE_YEARS) {
     const milestoneYear = hireDate.getFullYear() + milestone;
 
-    // do not create future milestones
+    // ❌ Skip future milestones
     if (milestoneYear > currentYear) continue;
 
     const milestoneDate = new Date(
@@ -204,12 +207,12 @@ const employeeTypes = await prismadb.employeeType.findMany({
 
     const secondaryLabel = `${
       status === "completed" ? "Celebrated on" : "Scheduled for"
-    } ${milestoneDateFormatter.format(milestoneDate)} • Hired ${milestoneDateFormatter.format(
+    } ${milestoneDateFormatter.format(milestoneDate)} • Started ${milestoneDateFormatter.format(
       hireDate
     )}`;
 
     entries.push({
-      id: `${employee.id}-${milestoneYear}`, // 👈 unique per year
+      id: `${employee.id}-${milestoneYear}`,
       fullName: displayName,
       primaryLabel,
       secondaryLabel,
@@ -222,6 +225,7 @@ const employeeTypes = await prismadb.employeeType.findMany({
     });
   }
 }
+
 
   const sorted = entries.sort(
     (a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime()

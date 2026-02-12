@@ -15,6 +15,7 @@ import { EmployeesColumn } from "@/app/(dashboard)/[departmentId]/(routes)/emplo
 import usePreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/hooks/use-preview-modal";
 import { Button } from "./ui/button";
 import * as XLSX from "xlsx";
+import { Calendar, Download, Search } from "lucide-react";
 
 
 export type CelebrationEntry = CelebrationPerson & {
@@ -173,133 +174,99 @@ export function CelebrationView({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-3">
-          <Select
-            value={year.toString()}
-            onValueChange={(value) => setYear(Number(value))}
+  <div className="flex w-full items-center justify-between gap-4 rounded-2xl border bg-white/80 p-2 shadow-sm backdrop-blur-md">
+  {/* Left Section: Selects and Status Filter */}
+  <div className="flex items-center gap-3">
+    {/* Year Select */}
+    <div className="flex items-center">
+      <Select
+        value={year.toString()}
+        onValueChange={(value) => setYear(Number(value))}
+      >
+        <SelectTrigger className="h-10 w-[110px] border-none bg-transparent font-bold text-slate-700 focus:ring-0">
+          <Calendar className="mr-2 h-4 w-4 text-blue-500" />
+          <SelectValue placeholder="Year" />
+        </SelectTrigger>
+        <SelectContent className="rounded-xl border-slate-200 shadow-xl">
+          {availableYears.map((y) => (
+            <SelectItem key={y} value={y.toString()} className="font-medium">
+              {y}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {/* Vertical Divider */}
+      <div className="mx-2 h-6 w-px bg-slate-200" />
+
+      {/* Employee Type Select (Dynamic 'All Types' dropdown from your image) */}
+      <Select
+        value={employeeType}
+        onValueChange={(value) => setEmployeeType(value)}
+      >
+        <SelectTrigger className="h-10 w-[140px] border-none bg-transparent font-bold text-slate-700 focus:ring-0">
+          <SelectValue placeholder="All Types" />
+        </SelectTrigger>
+        <SelectContent className="rounded-xl border-slate-200 shadow-xl">
+          <SelectItem value="all">All Types</SelectItem>
+        {safeEmployeeTypes
+  .filter((type) => type.value && type.value.trim() !== "")
+  .map((type) => (
+    <SelectItem key={type.id} value={type.value}>
+      {type.name}
+    </SelectItem>
+  ))}
+
+        </SelectContent>
+      </Select>
+    </div>
+
+    {/* Status Filter (Pill/Segmented control) */}
+    <ToggleGroup
+      type="single"
+      value={filter}
+      onValueChange={(value) => value && setFilter(value as FilterValue)}
+      className="inline-flex rounded-xl bg-slate-100 p-1"
+    >
+      {FILTER_OPTIONS
+        .filter((opt) => opt.value !== "upcoming" || isCurrentYear)
+        .map((option) => (
+          <ToggleGroupItem
+            key={option.value}
+            value={option.value}
+            className="rounded-lg px-4 py-1.5 text-[11px] font-black uppercase tracking-wider transition-all data-[state=on]:bg-white data-[state=on]:text-blue-600 data-[state=on]:shadow-sm"
           >
-            <SelectTrigger className="w-[120px]">
-              <SelectValue placeholder="Year" />
-            </SelectTrigger>
+            {option.label}
+          </ToggleGroupItem>
+        ))}
+    </ToggleGroup>
+  </div>
 
-            <SelectContent>
-              {availableYears.map((y) => (
-                <SelectItem key={y} value={y.toString()}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+  {/* Right Section: Search and Actions */}
+  <div className="flex items-center gap-3 pr-2">
+    {/* Search Input */}
+    <div className="relative hidden lg:block">
+      <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+      <input
+        type="text"
+        placeholder="Search..."
+        className="h-10 w-64 rounded-xl border-none bg-slate-50 pl-10 pr-4 text-sm font-medium outline-none transition-all focus:ring-2 focus:ring-blue-100"
+      />
+    </div>
 
-          {/* ================= STATUS FILTER ================= */}
-          <ToggleGroup
-            type="single"
-            value={filter}
-            onValueChange={(value) => value && setFilter(value as FilterValue)}
-            className="inline-flex w-fit rounded-lg border bg-muted/40 p-1"
-          >
-            {FILTER_OPTIONS
-              .filter((option) => {
-                if (option.value === "upcoming" && !isCurrentYear) {
-                  return false;
-                }
-                return true;
-              })
-              .map((option) => {
-                const count =
-                  option.value === "upcoming"
-                    ? counts.upcoming
-                    : option.value === "completed"
-                      ? counts.completed
-                      : counts.upcoming + counts.completed;
-
-                return (
-                  <ToggleGroupItem
-                    key={option.value}
-                    value={option.value}
-                    className="
-          relative px-4 py-1.5 text-xs font-semibold uppercase tracking-wide
-          text-muted-foreground transition-all
-          hover:text-foreground
-          data-[state=on]:bg-background
-          data-[state=on]:text-foreground
-          data-[state=on]:shadow-sm
-        "
-                  >
-                    {option.label}
-                    <span className="ml-1 text-[10px] opacity-70">
-                      {count}
-                    </span>
-                  </ToggleGroupItem>
-                );
-              })}
-
-          </ToggleGroup>
-
-          {/* ================= EMPLOYEE TYPE FILTER ================= */}
-          {showFilters && safeEmployeeTypes.length > 0 && (
-            <div className="relative">
-              <ToggleGroup
-                type="single"
-                value={employeeType}
-                onValueChange={(value) => value && setEmployeeType(value)}
-                className="
-          flex gap-2 overflow-x-auto no-scrollbar
-          rounded-lg border bg-muted/30 p-2
-        "
-              >
-                {/* All Types → treated as reset */}
-                <ToggleGroupItem
-                  value="all"
-                  className="
-            rounded-full px-4 py-1.5 text-xs font-medium uppercase
-            text-muted-foreground transition-all
-            hover:bg-muted
-            data-[state=on]:bg-foreground
-            data-[state=on]:text-background
-          "
-                >
-                  All
-                </ToggleGroupItem>
-
-                {safeEmployeeTypes.map((type) => (
-                  <ToggleGroupItem
-                    key={type.id}
-                    value={type.value}
-                    className="
-              rounded-full px-4 py-1.5 text-xs font-medium uppercase
-              text-muted-foreground transition-all
-              hover:bg-muted
-              active:scale-[0.97]
-              data-[state=on]:bg-primary/15
-              data-[state=on]:text-primary
-              data-[state=on]:border
-              data-[state=on]:border-primary/30
-              data-[state=on]:shadow-sm
-            "
-                  >
-                    {type.name}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
-          )}
-
-
-        </div>
-
-        {enableDownload && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDownload}
-          >
-            Download Excel
-          </Button>
-        )}
-
-      </div>
+    {enableDownload && (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleDownload}
+        className="h-10 gap-2 rounded-xl font-bold text-blue-600 hover:bg-blue-50"
+      >
+        <Download className="h-4 w-4" />
+        <span className="hidden sm:inline">Export Excel</span>
+      </Button>
+    )}
+  </div>
+</div>
 
       <CelebrationGrid
         title={title}
@@ -308,6 +275,8 @@ export function CelebrationView({
         people={filtered}
         emptyMessage={emptyMessage}
         onPersonClick={handlePersonClick}
+        enableDownload={enableDownload}
+        employeeTypes={safeEmployeeTypes}
       />
     </div>
   );
