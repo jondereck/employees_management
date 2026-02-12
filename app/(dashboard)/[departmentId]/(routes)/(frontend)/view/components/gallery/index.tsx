@@ -5,7 +5,7 @@ import { Tab } from "@headlessui/react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Loader2, Download, Copy, Maximize2 } from "lucide-react";
+import { Loader2, Download, Copy, Maximize2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +15,8 @@ import {
   DialogDescription,
   DialogFooter,
   DialogPortal,
+  DialogOverlay,
+  DialogClose,
 } from "@/components/ui/dialog";
 
 type GalleryImage = {
@@ -216,32 +218,70 @@ const Gallery = ({ images, employeeId, employeeNo, gender }: GalleryProps) => {
         )}
       </Tab.Group>
 
-      {/* Full Preview Dialog */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogPortal>
-          <DialogContent className="max-w-2xl overflow-hidden p-0 sm:rounded-3xl">
-            <div className="relative aspect-[4/5] w-full bg-slate-900" style={photoBackground}>
-              {activeImage && (
-                <Image src={activeImage.url} alt="Full View" fill className="object-contain p-4" />
-              )}
-            </div>
-            <div className="flex items-center justify-between border-t bg-white p-4">
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-slate-900">HD Profile Image</p>
-                <p className="text-xs text-slate-500">{buildFilename(activeImage!)}</p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => handleCopy(activeImage!)}>
-                  <Copy className="mr-2 h-4 w-4" /> Copy
-                </Button>
-                <Button size="sm" onClick={() => handleDownload(activeImage!)}>
-                  <Download className="mr-2 h-4 w-4" /> Download
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </DialogPortal>
-      </Dialog>
+  <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+  <DialogPortal>
+    {/* Darker overlay for focus */}
+    <DialogOverlay className="bg-black/80 backdrop-blur-sm" />
+    
+    <DialogContent className="max-w-3xl overflow-hidden border-none bg-transparent p-0 shadow-2xl sm:rounded-2xl">
+      <div className="group relative flex flex-col">
+        
+        {/* Main Image Container */}
+        <div 
+          className="relative aspect-square w-full overflow-hidden bg-slate-950 flex items-center justify-center transition-all"
+          style={photoBackground}
+        >
+          {activeImage && (
+            <Image 
+              src={activeImage.url} 
+              alt="Full View" 
+              fill 
+              className="object-contain transition-transform duration-500 hover:scale-105" 
+              priority
+            />
+          )}
+
+          {/* Floating Top Close/Info - Subtle hint of UI */}
+          <div className="absolute top-4 right-4 z-10">
+             <DialogClose className="rounded-full bg-black/20 p-2 text-white/70 backdrop-blur-md transition-all hover:bg-black/40 hover:text-white">
+                <X className="h-5 w-5" />
+             </DialogClose>
+          </div>
+        </div>
+
+        {/* Floating Bottom Action Bar */}
+        <div className="absolute bottom-6 left-1/2 flex w-[90%] -translate-x-1/2 items-center justify-between rounded-2xl border border-white/10 bg-black/40 p-4 text-white backdrop-blur-xl transition-all group-hover:bottom-8 group-hover:bg-black/60">
+          <div className="flex flex-col gap-0.5 overflow-hidden">
+            <span className="text-sm font-semibold tracking-tight">HD Profile Image</span>
+            <span className="truncate text-[10px] uppercase tracking-widest text-white/50">
+              {buildFilename(activeImage!)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-9 w-9 rounded-full text-white/80 hover:bg-white/10 hover:text-white"
+              onClick={() => handleCopy(activeImage!)}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+            
+            <Button 
+              size="sm" 
+              className="rounded-full bg-white px-5 text-slate-900 transition-transform active:scale-95 hover:bg-slate-100"
+              onClick={() => handleDownload(activeImage!)}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download
+            </Button>
+          </div>
+        </div>
+      </div>
+    </DialogContent>
+  </DialogPortal>
+</Dialog>
     </>
   );
 };

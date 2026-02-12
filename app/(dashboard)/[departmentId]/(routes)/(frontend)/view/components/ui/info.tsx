@@ -45,41 +45,55 @@ const Info = ({ data }: InfoProps) => {
   const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment)
 
 
-  const savedSalary = Number(data?.salary ?? 0); // ← manual/DB value, if any
+  const savedSalary = Number(data?.salary ?? 0);
+  const salaryMode = (data?.salaryMode ?? "AUTO").toUpperCase();
 
+  // AUTO COMPUTATION
   const grade = Number(data?.salaryGrade ?? 0);
-  const stepFromData = Number(data?.salaryStep ?? 0);
+
   const computedStep = computeStep({
     dateHired: data?.dateHired,
     latestAppointment: data?.latestAppointment,
   }) || 1;
-  const step = Number.isFinite(stepFromData) && stepFromData > 0 ? stepFromData : computedStep;
 
   const salaryRecord = salarySchedule.find((s) => s.grade === grade);
-  const computedSalary = salaryRecord ? (salaryRecord.steps[step - 1] ?? 0) : 0;
 
-  const salaryModeFromData = data?.salaryMode?.toUpperCase();
-  const hasAutoInputs = Number.isFinite(grade) && grade > 0 && Number.isFinite(step) && step > 0;
-  // tiny tolerance to avoid rounding issues when salaryMode isn't available
-  const EPS = 0.5;
-  const isManual = salaryModeFromData
-    ? salaryModeFromData === "MANUAL"
-    : !hasAutoInputs || !(Math.abs(savedSalary - computedSalary) <= EPS);
+  // clamp step safely
+  const safeStep = salaryRecord
+    ? Math.min(computedStep, salaryRecord.steps.length)
+    : 0;
 
-  const resolvedSalary = isManual ? savedSalary : computedSalary;
-  const displaySalary = resolvedSalary > 0 ? resolvedSalary : savedSalary;
-  const formattedSalary = formatSalary(String(displaySalary));
-  const salaryMode = isManual ? "MANUAL" : "AUTO";
+  const computedSalary =
+    salaryRecord && safeStep > 0
+      ? salaryRecord.steps[safeStep - 1] ?? 0
+      : 0;
+
+  // FINAL RESOLUTION
+  const resolvedSalary =
+    salaryMode === "MANUAL"
+      ? savedSalary
+      : computedSalary;
+
+  const formattedSalary =
+    resolvedSalary > 0
+      ? formatSalary(String(resolvedSalary))
+      : "";
+
 
 
   const lastUpdated = formatUpdatedAt(data?.updatedAt, { tz: "Asia/Manila" });
 
-  const monthlySalary = displaySalary;
+  const monthlySalary = resolvedSalary;
 
   const annualSalary =
     monthlySalary > 0
       ? calculateAnnualSalary(String(monthlySalary))
       : "—";
+
+  const resolvedStep =
+    salaryMode === "MANUAL"
+      ? Number(data?.salaryStep ?? 1)
+      : computedStep;
 
 
   return (
@@ -122,24 +136,24 @@ const Info = ({ data }: InfoProps) => {
 
             {/* ADDED SG AND STEP HERE */}
             {renderItem("Salary Grade", data.salaryGrade)}
-            {renderItem("Step Increment", data.salaryStep)}
+            {renderItem("Step Increment", resolvedStep)}
+
             <div className="sm:col-span-2">
-  <div className="flex flex-col gap-1">
-    <dt className="text-xs font-medium uppercase tracking-wider text-slate-500 flex items-center gap-2">
-      Monthly Salary
-      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${
-        salaryMode === "AUTO" 
-          ? "bg-blue-50 text-blue-600 border-blue-100" 
-          : "bg-amber-50 text-amber-600 border-amber-100"
-      }`}>
-        {salaryMode}
-      </span>
-    </dt>
-    <dd className="text-sm font-semibold text-slate-900">
-      {formattedSalary || <span className="text-slate-300">—</span>}
-    </dd>
-  </div>
-</div>
+              <div className="flex flex-col gap-1">
+                <dt className="text-xs font-medium uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                  Monthly Salary
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border ${salaryMode === "AUTO"
+                    ? "bg-blue-50 text-blue-600 border-blue-100"
+                    : "bg-amber-50 text-amber-600 border-amber-100"
+                    }`}>
+                    {salaryMode}
+                  </span>
+                </dt>
+                <dd className="text-sm font-semibold text-slate-900">
+                  {formattedSalary || <span className="text-slate-300">—</span>}
+                </dd>
+              </div>
+            </div>
             {renderItem("Annual Increment", annualSalary)}
             {renderItem("Eligibility", data.eligibility?.name)}
             {renderItem("Date Hired", formattedDateHired)}

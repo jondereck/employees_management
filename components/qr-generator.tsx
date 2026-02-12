@@ -11,7 +11,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogPortal
+  DialogPortal,
+  DialogOverlay
 } from "@/components/ui/dialog";
 import ImageLogo from "@/public/icon-192x192.png"; // local asset (same-origin)
 import { toast } from "sonner";
@@ -178,103 +179,127 @@ export const QrCodeGenerator: React.FC<QrCodeGeneratorProps> = ({
 
   
   return (
-    <div>
-      <Dialog
-        key={qrMeta?.publicVersion} // 🔥 FORCE REMOUNT
-        open={isOpen}
-        onOpenChange={setIsOpen}
-      >
-        <DialogTrigger asChild>
-          <div className="cursor-pointer">
-            {qrValue ? (
+   <div>
+  <Dialog
+    key={qrMeta?.publicVersion}
+    open={isOpen}
+    onOpenChange={setIsOpen}
+  >
+    <DialogTrigger asChild>
+      <div className="group relative cursor-pointer overflow-hidden rounded-xl border border-white/20 bg-white/5 p-2 transition-all hover:bg-white/10 active:scale-95">
+        {qrValue ? (
+          <QRCodeCanvas
+            value={qrValue}
+            size={100}
+            className="rounded-lg opacity-80 transition-opacity group-hover:opacity-100"
+            imageSettings={{
+              src: ImageLogo.src,
+              height: 20,
+              width: 20,
+              excavate: true,
+            }}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 py-6 min-w-[100px]">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+          </div>
+        )}
+      </div>
+    </DialogTrigger>
+
+    <DialogPortal>
+      {/* Immersive Blur Overlay */}
+      <DialogOverlay className="bg-black/40 backdrop-blur-md" />
+      
+   <DialogContent className="
+  fixed z-[9999] max-w-md 
+  border border-white/30
+  bg-gradient-to-b from-white/30 to-white/10
+  p-8 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.45)]
+  backdrop-blur-3xl
+  sm:rounded-[2rem]
+  
+">
+
+        <DialogHeader className="space-y-3">
+        <DialogTitle className="text-center text-2xl font-bold tracking-tight text-slate-900 drop-shadow-sm">
+
+            Employee QR Code
+          </DialogTitle>
+         <DialogDescription className="text-center text-slate-700">
+
+            Scan for instant verification or share the profile link.
+          </DialogDescription>
+        </DialogHeader>
+
+        {qrValue && (
+          <div className="relative flex justify-center py-10">
+            {/* Ambient Glow behind QR */}
+            <div className="absolute inset-0 m-auto h-40 w-40 rounded-full bg-white/20 blur-[60px]" />
+            
+            <div className="relative rounded-3xl bg-white p-6 shadow-2xl">
               <QRCodeCanvas
+                ref={qrRef}
                 value={qrValue}
-                size={100}
+                size={240} // Increased size
                 imageSettings={{
                   src: ImageLogo.src,
-                  height: 20,
-                  width: 20,
+                  height: 48, // Bigger logo
+                  width: 48,
                   excavate: true,
                 }}
               />
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-2 py-6">
-    <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
-    <p className="text-xs text-muted-foreground">Generating QR…</p>
-  </div>
-            )}
+            </div>
           </div>
-        </DialogTrigger>
+        )}
 
-        <DialogPortal>
-          <DialogContent className="fixed z-[9999] max-w-sm p-6">
-            <DialogHeader>
-              <DialogTitle className="text-center">
-                Employee QR Code
-              </DialogTitle>
-              <DialogDescription className="text-center">
-                Scan or share this QR code
-              </DialogDescription>
-            </DialogHeader>
+        <DialogFooter className="flex flex-row items-center justify-center gap-3 sm:justify-center">
+          <Button
+            size="lg"
+            variant="ghost"
+         className="h-12 w-12 rounded-full border border-white/40 bg-white/30 text-slate-800 hover:bg-white/50 shadow-sm"
 
-            {qrValue && (
-              <div className="flex justify-center py-6">
-                <QRCodeCanvas
-                  ref={qrRef}
-                  value={qrValue}
-                  size={size}
-                  imageSettings={{
-                    src: ImageLogo.src,
-                    height: logoSize,
-                    width: logoSize,
-                    excavate: true,
-                  }}
-                />
-              </div>
-            )}
+            disabled={!qrValue}
+            onClick={handleDownload}
+          >
+            <Download className="h-5 w-5" />
+          </Button>
 
-            <DialogFooter className="grid grid-cols-3 gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!qrValue}
-                onClick={handleDownload}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
+          <Button
+            size="lg"
+            variant="ghost"
+          className="h-12 w-12 rounded-full border border-white/40 bg-white/30 text-slate-800 hover:bg-white/50 shadow-sm"
 
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!qrValue}
-                onClick={handleCopyLink}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
+            disabled={!qrValue}
+            onClick={handleCopyLink}
+          >
+            <Copy className="h-5 w-5" />
+          </Button>
 
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={handleRegenerate}
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </DialogPortal>
-      </Dialog>
+          <Button
+            size="lg"
+            variant="ghost"
+            className="h-12 w-12 rounded-full border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+            onClick={handleRegenerate}
+          >
+            <RotateCcw className="h-5 w-5" />
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </DialogPortal>
+  </Dialog>
 
-      <AlertModal
-        isOpen={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        onConfirm={handleConfirmRegenerate}
-        loading={loading}
-        title="Regenerate QR Code?"
-        description="This will invalidate ALL previously issued QR codes."
-        confirmText="Yes, regenerate"
-        cancelText="Cancel"
-        variant="destructive"
-      />
-    </div>
+  <AlertModal
+    isOpen={confirmOpen}
+    onClose={() => setConfirmOpen(false)}
+    onConfirm={handleConfirmRegenerate}
+    loading={loading}
+    title="Regenerate QR Code?"
+    description="This will invalidate ALL previously issued QR codes."
+    confirmText="Yes, regenerate"
+    cancelText="Cancel"
+    variant="destructive"
+  />
+</div>
   );
 };

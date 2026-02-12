@@ -218,7 +218,7 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       return (
         <div className="flex flex-col">
           <span className="font-bold text-emerald-700">{formatSalary(String(amount))}</span>
-          <span className="text-[10px] text-muted-foreground">Grade {row.original.salaryGrade || "N/A"}</span>
+          <span className="text-[10px] text-muted-foreground">S.G. {row.original.salaryGrade || "N/A"}</span>
         </div>
       );
     },
