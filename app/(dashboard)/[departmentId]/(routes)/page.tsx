@@ -14,6 +14,8 @@ import CameraScannerWrapper from "@/components/camera-scanner-wrapper";
 import { getMonthlyEmployeeActivity } from "@/actions/get-monthly-employee-activity";
 import { getHeadcountTrend } from "@/actions/get-headcount-trend";
 import HeadcountTrend from "@/components/headcount-trend";
+import { useCountUp } from "@/hooks/use-count-up";
+import { AnimatedNumber } from "@/components/animated-number";
 
 
 interface DashboardProps {
@@ -115,7 +117,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
 
   <CardContent className="relative z-10">
     <div className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">
-      {totalEmployee}
+    <AnimatedNumber value={totalEmployee} />
     </div>
     
     <div className="mt-2 flex items-center gap-1">
@@ -170,7 +172,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
         </CardHeader>
 
         <CardContent>
-          <div className="text-2xl font-bold">{employeeType.total}</div>
+          <div className="text-2xl font-bold"> <AnimatedNumber value={employeeType.total} /></div>
           <div className="mt-1 w-full bg-white/10 h-1 rounded-full overflow-hidden">
              <div 
                 className="h-full bg-current opacity-60" 

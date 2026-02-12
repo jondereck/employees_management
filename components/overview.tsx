@@ -109,7 +109,7 @@ const Overview = ({ data }: OverviewProps) => {
             borderRadius: '16px',
             boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
           }}
-          itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+          itemStyle={{ color: '#000000', fontWeight: 'bold' }}
           cursor={{ stroke: 'rgba(99, 102, 241, 0.2)', strokeWidth: 8 }}
         />
 
