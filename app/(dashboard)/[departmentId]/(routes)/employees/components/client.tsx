@@ -169,7 +169,7 @@ export const EmployeesClient = ({
       <header className="bg-white border-b   shadow-sm px-6 py-4">
         <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <Heading 
-            title={`Employees (${stats.total})`} 
+            title={`Employees`} 
             description="Manage your workforce, track positions, and view history." 
           />
           <div className="flex items-center gap-3">
@@ -255,10 +255,10 @@ export const EmployeesClient = ({
           )}
         </div>
 
-        <ApiList entityIdName="employeesId" entityName="employees" />
+        {/* <ApiList entityIdName="employeesId" entityName="employees" /> */}
       </main>
       
-      <Footer />
+
     </div>
   );
 };
