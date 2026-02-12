@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowUpRight, MoveRight, RefreshCw, Gift, FileEdit, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUpRight, MoveRight, RefreshCw, Gift, FileEdit, ChevronLeft, ChevronRight, Sparkles, CheckCircle2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import clsx from "clsx";
 
@@ -107,121 +107,185 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
   };
 
   return (
-    <div ref={containerRef} className="rounded-xl border border-dashed bg-muted/20 p-4 sm:p-6">
-      {/* Header stacks on mobile */}
-      <div className="mb-3 flex flex-col gap-2 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-base font-semibold">What you can add next</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your hired date is already on your timeline. Add more milestones so HR always has the latest.
-          </p>
-        </div>
-        <div>
-          <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={onCreate}>
-            <FileEdit className="mr-2 h-4 w-4" />
-            Create a custom entry
-          </Button>
-        </div>
-      </div>
+  <div
+  ref={containerRef}
+  className="relative w-full overflow-hidden rounded-3xl border border-emerald-500/20 bg-emerald-500/5 backdrop-blur-md px-4 py-6 sm:p-8 transition-all duration-500 hover:shadow-[0_20px_50px_rgba(16,185,129,0.1)]"
+>
+  {/* Liquid Glow */}
+  <div className="pointer-events-none absolute -top-24 -left-24 h-48 w-48 rounded-full bg-emerald-500/10 blur-[70px] opacity-70" />
 
-      <Tabs value={active} onValueChange={(v) => setActive(v as K)}>
-        {/* Mobile tab strip with snap + chevrons */}
-        <div className="relative">
-          <TabsList
-            ref={listRef as any}
+  {/* Header */}
+  <div className="relative z-10 mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-1">
+      <h3 className="flex items-center gap-2 text-base sm:text-lg font-black tracking-tight text-slate-800 dark:text-white">
+        <Sparkles className="h-5 w-5 text-emerald-500 shrink-0" />
+        Growth Milestones
+      </h3>
+
+      <p className="text-sm font-medium text-slate-500 dark:text-slate-400 max-w-md">
+        Your journey is evolving. Add new achievements to keep your official profile synchronized with your career.
+      </p>
+    </div>
+
+    <Button
+      size="lg"
+      onClick={onCreate}
+      className="group w-full sm:w-auto rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold px-6 shadow-xl transition-all hover:scale-105 active:scale-95"
+    >
+      <FileEdit className="mr-2 h-4 w-4 transition-transform group-hover:rotate-12" />
+      Submit Milestone
+    </Button>
+  </div>
+
+  <Tabs
+    value={active}
+    onValueChange={(v) => setActive(v as K)}
+    className="relative z-10"
+  >
+    {/* Tabs */}
+    <div className="relative mb-6">
+      <TabsList
+        ref={listRef as any}
+        className="flex w-full justify-start overflow-x-auto no-scrollbar gap-2 snap-x snap-mandatory bg-transparent p-0"
+      >
+        {tabs.map(({ key, title }) => (
+          <TabsTrigger
+            key={key}
+            value={key}
             className={clsx(
-              "w-full justify-start overflow-x-auto no-scrollbar",
-              "snap-x snap-mandatory gap-1 sm:gap-2"
+              "snap-start whitespace-nowrap rounded-full px-4 sm:px-5 py-2 text-[10px] sm:text-xs font-bold uppercase tracking-widest transition-all",
+              "data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/30",
+              "data-[state=inactive]:bg-white/60 dark:data-[state=inactive]:bg-white/5 data-[state=inactive]:text-slate-500 data-[state=inactive]:hover:bg-white/80"
             )}
           >
-            {tabs.map(({ key, title }) => (
-              <TabsTrigger
-                key={key}
-                value={key}
-                className={clsx(
-                  "whitespace-nowrap snap-start",
-                  "text-xs sm:text-sm px-3 py-1.5 sm:px-4 sm:py-2"
-                )}
-              >
-                {title}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+            {title}
+          </TabsTrigger>
+        ))}
+      </TabsList>
 
-          {/* chevrons appear on mobile only */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center sm:hidden">
-            <button
-              type="button"
-              onClick={() => scrollTabs("left")}
-              className="pointer-events-auto rounded-full bg-white/80 p-1 shadow"
-              aria-label="Scroll left"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center sm:hidden">
-            <button
-              type="button"
-              onClick={() => scrollTabs("right")}
-              className="pointer-events-auto rounded-full bg-white/80 p-1 shadow"
-              aria-label="Scroll right"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+      {/* Mobile Arrows */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center sm:hidden">
+        <button
+          type="button"
+          onClick={() => scrollTabs("left")}
+          className="pointer-events-auto rounded-full bg-white/90 dark:bg-slate-800/90 p-2 shadow-xl border border-white/20 backdrop-blur-md"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center sm:hidden">
+        <button
+          type="button"
+          onClick={() => scrollTabs("right")}
+          className="pointer-events-auto rounded-full bg-white/90 dark:bg-slate-800/90 p-2 shadow-xl border border-white/20 backdrop-blur-md"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+
+    {tabs.map(({ key, title, icon: Icon, lines }) => (
+      <TabsContent key={key} value={key} className="mt-0 outline-none">
+        <div className="group rounded-[28px] sm:rounded-[32px] border border-white/40 dark:border-white/10 bg-white/60 dark:bg-white/5 backdrop-blur-xl p-5 sm:p-6 transition-all duration-500 hover:bg-white/80 dark:hover:bg-white/[0.08]">
+
+          <div className="flex flex-col sm:flex-row items-start gap-5 sm:gap-6">
+
+            {/* Icon */}
+            <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-transform group-hover:rotate-6">
+              <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
+            </div>
+
+            <div className="flex-1 space-y-4 w-full">
+
+              <div>
+                <div className="text-base sm:text-lg font-black text-slate-800 dark:text-white leading-tight">
+                  {title}
+                </div>
+                <div className="mt-2 h-1 w-10 sm:w-12 bg-emerald-500 rounded-full" />
+              </div>
+
+              {/* Grid */}
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {lines.map((t, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm font-medium text-slate-600 dark:text-slate-400"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                    {t}
+                  </li>
+                ))}
+              </ul>
+
+              {/* Quick Tip */}
+              <div className="rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 p-4 border border-emerald-500/10">
+                <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-tight text-emerald-700 dark:text-emerald-400">
+                  <Info className="h-3.5 w-3.5" />
+                  Quick Tip
+                </p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Use the{" "}
+                  <span className="font-bold italic text-slate-900 dark:text-white">
+                    “Submit Milestone”
+                  </span>{" "}
+                  button above to upload certificates or proof for this category.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {tabs.map(({ key, title, icon: Icon, lines }) => (
-          <TabsContent key={key} value={key} className="mt-3 sm:mt-4">
-            <div className="rounded-md border bg-white p-3 sm:p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-muted sm:h-9 sm:w-9">
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-semibold">{title}</div>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-[13px] text-muted-foreground sm:text-sm">
-                    {lines.map((t, i) => <li key={i}>{t}</li>)}
-                  </ul>
-                  <div className="mt-3 text-[11px] text-muted-foreground sm:text-xs">
-                    Hint: Use “Create a custom entry” to submit this milestone. HRMO will review and approve.
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* Navigation */}
+        <div className="mt-6 flex items-center justify-between px-1 sm:px-2">
 
-            {/* manual nav (visible on all, spaced tighter on mobile) */}
-            <div className="mt-2 sm:mt-3 flex justify-between">
-              <button
-                className="text-xs underline underline-offset-4 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  pause();
-                  const idx = keys.indexOf(active);
-                  setActive(keys[(idx - 1 + keys.length) % keys.length]);
-                }}
-              >
-                ← Previous
-              </button>
-              <button
-                className="text-xs underline underline-offset-4 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  pause();
-                  const idx = keys.indexOf(active);
-                  setActive(keys[(idx + 1) % keys.length]);
-                }}
-              >
-                Next →
-              </button>
-            </div>
-          </TabsContent>
-        ))}
-      </Tabs>
+          <button
+            className="group flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 hover:text-emerald-500 transition-colors"
+            onClick={() => {
+              pause();
+              const idx = keys.indexOf(active);
+              setActive(keys[(idx - 1 + keys.length) % keys.length]);
+            }}
+          >
+            <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+            Previous
+          </button>
 
-      {/* hide scrollbar utility (scoped) */}
-      <style jsx>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
-    </div>
+          <div className="flex gap-1.5">
+            {keys.map((k) => (
+              <div
+                key={k}
+                className={clsx(
+                  "h-1.5 rounded-full transition-all duration-300",
+                  k === active
+                    ? "w-8 bg-emerald-500"
+                    : "w-1.5 bg-slate-300 dark:bg-slate-700"
+                )}
+              />
+            ))}
+          </div>
+
+          <button
+            className="group flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 hover:text-emerald-500 transition-colors"
+            onClick={() => {
+              pause();
+              const idx = keys.indexOf(active);
+              setActive(keys[(idx + 1) % keys.length]);
+            }}
+          >
+            Next
+            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </button>
+        </div>
+      </TabsContent>
+    ))}
+  </Tabs>
+
+  <style jsx>{`
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  `}</style>
+</div>
+
   );
 }

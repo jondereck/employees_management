@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import WorkSchedulePreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/work-schedule-preview";
 import AwardPreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/award-preview";
 import EmploymentEventPreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/employment-event-preview";
+import { cn } from "@/lib/utils";
 
 
 export const dynamic = "force-dynamic";
@@ -518,195 +519,131 @@ if (!isAdmin) {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <BrandHeader />
-      <main className="flex-1 ">
-        <div className="px-4 py-10 sm:px-6 lg:px-8 mx-auto max-w-auto">
-          {/* Header card */}
-          <div
-            className="relative overflow-hidden rounded-2xl border shadow-sm bg-white p-5 sm:p-6"
-            style={{
-              borderColor: normalizeHex(publicData.employeeType?.value) ?? "#e5e7eb",
-              // fallback gray-200 if no color
-            }}
-          >
-            {/* Watermark */}
-            <div aria-hidden className="pointer-events-none absolute inset-0">
-              <div className="absolute -right-10 -bottom-10 opacity-10">
-                <Image
-                  src="/logo.png"
-                  alt=""
-                  width={240}
-                  height={240}
-                  className="select-none"
-                  priority={false}
-                />
-              </div>
-            </div>
+<main className="flex-1 relative overflow-hidden bg-slate-50 dark:bg-slate-950">
+  {/* Liquid background blobs for a dynamic feel */}
+  <div 
+    className="absolute top-0 right-0 w-96 h-96 blur-[120px] opacity-20 pointer-events-none rounded-full"
+    style={{ backgroundColor: normalizeHex(publicData.employeeType?.value) ?? "#4f46e5" }}
+  />
 
-            <div className="flex items-start gap-2 border">
-              {/* Photo */}
-              <div className="shrink-0">
-                <PublicHeadshot src={headshot} employeeNo={publicData?.employeeNo} />
-              </div>
+  <div className="px-4 py-10 sm:px-6 lg:px-8  relative z-10">
+    {/* Header card: The Main Glass Vessel */}
+    <div
+      className="relative overflow-hidden rounded-[32px] border backdrop-blur-xl bg-white/70 dark:bg-slate-900/60 p-6 sm:p-8 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] transition-all duration-500"
+      style={{
+        borderColor: `${normalizeHex(publicData.employeeType?.value) ?? "#e5e7eb"}44`, // 44 adds 25% opacity
+      }}
+    >
+      {/* Watermark: Submerged effect */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -right-16 -bottom-16 opacity-[0.03] dark:opacity-[0.05] rotate-12">
+          <Image
+            src="/logo.png"
+            alt=""
+            width={350}
+            height={350}
+            className="select-none grayscale"
+            priority={false}
+          />
+        </div>
+      </div>
 
+      <div className="flex flex-col md:flex-row items-center md:items-start gap-6 relative z-10">
+        {/* Photo: Framed with a glass halo */}
+        <div className="shrink-0 relative">
+          <div className="absolute inset-0 blur-2xl opacity-20 scale-110 rounded-full"
+               style={{ backgroundColor: normalizeHex(publicData.employeeType?.value) ?? "#6366f1" }} />
+          <PublicHeadshot src={headshot} employeeNo={publicData?.employeeNo} className="ring-4 ring-white/50 dark:ring-white/10 shadow-2xl" />
+        </div>
 
-              {/* Name + meta */}
-              <div className="min-w-0 flex-1">
-                {/* TOP: Chips */}
-                <div className="flex items-center mt-2 gap-2 mb-1">
-                  {employmentType && (
-                    <span
-                      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border"
-                      style={buildBadgeStyle(typeHex)}
-                      title="Employment Type"
-                    >
-                      {employmentType}
-                    </span>
-                  )}
-                </div>
-
-
-                {/* FULL NAME */}
-                <div className="relative">
-                  {/* one-line, full width, horizontal scroll if needed */}
-                  <div
-                    className="flex items-center whitespace-nowrap overflow-x-auto pr-1 no-scrollbar"
-                    aria-label="Employee name"
-                  >
-                    <h1 className="font-bold text-sm leading-tight text-[clamp(1rem,3.8vw,1.25rem)] sm:text-[clamp(1.125rem,2vw,1.5rem)]">
-                      {fullName}
-                    </h1>
-
-                    {!publicData.isArchived && (
-                      <span className="shrink-0" title="Active employee" aria-label="Active employee">
-                        <ActiveBadge className="h-4 w-4 sm:h-5 sm:w-5" />
-                        <span className="sr-only">Active</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {/* Working line */}
-                <p className="mt-1 text-xs sm:text-md font-light">{workingLine}</p>
-
-                {/* Position */}
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <p className="text-sm sm:text-md font-bold text-muted-foreground break-words">
-                    {publicData.position || "—"}
-                  </p>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Status banner */}
-            {isInactive ? (
-              <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                This employee is currently <strong>Inactive</strong>.
-              </div>
-            ) : (
-              <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-                This employee is currently <strong>Active</strong>.
-              </div>
+        {/* Name + meta */}
+        <div className="min-w-0 flex-1 text-center md:text-left">
+          <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+            {employmentType && (
+              <span
+                className="inline-flex items-center rounded-xl px-3 py-1 text-[10px] font-bold uppercase tracking-widest border backdrop-blur-md shadow-sm"
+                style={buildBadgeStyle(typeHex)}
+              >
+                {employmentType}
+              </span>
             )}
-            <div className="mt-3">
-              {/* Auto log a pageview (no UI) */}
-              <AutoTrackPublicView
-                viewedEmployeeId={params.employeeId}
-                departmentId={params.departmentId}
-              />
+          </div>
 
-            </div>
-
-            {/* Details mini-grid */}
-            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="rounded-lg border p-3">
-                <dl className="text-sm">
-                  <dt className="text-muted-foreground">Biometric/Employee No.</dt>
-                  <dd className="font-medium">{publicData.employeeNo || "—"}</dd>
-                </dl>
-              </div>
-
-              <div className="rounded-lg border p-3">
-                <dl className="text-sm">
-                  <dt className="text-muted-foreground">Office</dt>
-                  <dd className="font-medium">{publicData.offices?.name || "—"}</dd>
-                </dl>
-              </div>
-
-              {/* Optional: show Start Date explicitly (can remove if you don’t want) */}
-              <div className="rounded-lg border p-3">
-                <dl className="text-sm">
-                  <dt className="text-muted-foreground">Start Date</dt>
-                  <dd className="font-medium">
-                    {startDate ? formatUpdatedAt(startDate) : "—"}
-                  </dd>
-                </dl>
-              </div>
-              {/* ⟵ UPDATED: smarter Years of Service */}
-              <div className="rounded-lg border p-3">
-                <dl className="text-sm">
-                  <dt className="text-muted-foreground">Service Rendered</dt>
-                  <dd className="font-medium">
-                    {tenureLabel}
-                    {startDate && tenureLabel !== "—" && (
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        {/* (since {formatDateShort(startDate)}) */}
-                      </span>
-                    )}
-                  </dd>
-                </dl>
-              </div>
-              {/* Eligibility — same UI pattern */}
-              {showEligibility && (
-                <div className="rounded-lg border p-3">
-                  <dl className="text-sm">
-                    <dt className="text-muted-foreground">Eligibility</dt>
-                    <dd className="font-medium">{eligName}</dd>
-                  </dl>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-center md:justify-start gap-2">
+              <h1 className="font-black tracking-tight text-slate-900 dark:text-white text-[clamp(1.5rem,5vw,2.25rem)] leading-tight">
+                {fullName}
+              </h1>
+              {!publicData.isArchived && (
+                <div className="relative flex items-center justify-center h-6 w-6">
+                  <div className="absolute inset-0 bg-green-500/20 blur-md rounded-full animate-ping" />
+                  <ActiveBadge className="h-5 w-5 text-green-500 relative z-10" />
                 </div>
               )}
-
-              {/* Educational Attainment — same UI pattern */}
-              {showEducation && (
-                <div className="rounded-lg border p-3">
-                  <dl className="text-sm">
-                    <dt className="text-muted-foreground">Educational Attainment</dt>
-                    <dd className="font-medium">
-                      {eduNormalized.length > 1 ? (
-                        <ul className="mt-1 list-disc pl-5 space-y-1">
-                          {eduNormalized.map((e, i) => (
-                            <li key={i}>{e}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        eduNormalized[0]
-                      )}
-                    </dd>
-                  </dl>
-                </div>
-              )}
-
-              <section className="rounded-lg border p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-base font-semibold">Awards & Recognition</h3>
-                </div>
-                <PublicAwardsGallery employeeId={employeeId} />
-              </section>
-
-              <section className="rounded-lg border p-4">
-                <PublicTimeline employeeId={employeeId} />
-              </section>
-
             </div>
-
-            <p className="mt-4 text-[11px] leading-4 text-muted-foreground">
-              Verified by HRMO • Updated: {formatUpdatedAt(publicData.updatedAt)}
-            </p>
-            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-              Public view • Some details may be limited for privacy.
+            <p className="text-sm sm:text-lg font-medium text-slate-500 dark:text-slate-400">{workingLine}</p>
+            <p className="text-lg sm:text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-600 to-slate-900 dark:from-white dark:via-slate-400 dark:to-white">
+              {publicData.position || "—"}
             </p>
           </div>
         </div>
-      </main>
+      </div>
+
+      {/* Status banner: Liquid-styled message */}
+      <div className={cn(
+        "mt-8 flex items-center gap-3 rounded-[20px] px-4 py-3 text-sm font-semibold border backdrop-blur-md transition-all",
+        isInactive 
+          ? "bg-rose-500/5 border-rose-500/20 text-rose-700 dark:text-rose-400 shadow-[inset_0_0_20px_rgba(244,63,94,0.05)]" 
+          : "bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-400 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]"
+      )}>
+        <div className={cn("h-2 w-2 rounded-full", isInactive ? "bg-rose-500" : "bg-emerald-500")} />
+        This employee is currently <span className="uppercase tracking-wide">{isInactive ? 'Inactive' : 'Active'}</span>
+      </div>
+
+      {/* Details mini-grid: Floating frosted tiles */}
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {[
+          { label: "Employee No.", value: publicData.employeeNo },
+          { label: "Office", value: publicData.offices?.name },
+          { label: "Start Date", value: startDate ? formatUpdatedAt(startDate) : null },
+          { label: "Service Rendered", value: tenureLabel }
+        ].map((item, idx) => (
+          <div key={idx} className="group rounded-[22px] border border-white/40 dark:border-white/5 bg-white/30 dark:bg-white/[0.02] p-4 transition-all hover:bg-white/50 dark:hover:bg-white/[0.05]">
+            <dt className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500 mb-1">{item.label}</dt>
+            <dd className="text-sm font-bold text-slate-800 dark:text-slate-200">{item.value || "—"}</dd>
+          </div>
+        ))}
+        
+        {/* Full width sections for education and awards */}
+        <section className="sm:col-span-2 rounded-[24px] border border-white/40 dark:border-white/5 bg-white/20 dark:bg-white/[0.01] p-5">
+           <h3 className="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4 flex items-center gap-2">
+            <span className="h-1 w-4 bg-emerald-500 rounded-full" />
+            Awards & Recognition
+           </h3>
+           <PublicAwardsGallery employeeId={employeeId} />
+        </section>
+
+        <section className="sm:col-span-2 rounded-[24px] border border-white/40 dark:border-white/5 bg-white/20 dark:bg-white/[0.01] p-5">
+           <h3 className="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4 flex items-center gap-2">
+            <span className="h-1 w-4 bg-indigo-500 rounded-full" />
+            Service History
+           </h3>
+           <PublicTimeline employeeId={employeeId} />
+        </section>
+      </div>
+
+      <div className="mt-8 pt-6 border-t border-white/20 dark:border-white/5 flex flex-col sm:flex-row justify-between gap-4">
+        <div className="space-y-1">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Verified by HRMO</p>
+          <p className="text-[11px] text-muted-foreground">Updated: {formatUpdatedAt(publicData.updatedAt)}</p>
+        </div>
+        <p className="text-[11px] italic text-muted-foreground self-end opacity-60">
+          Some details may be limited for privacy.
+        </p>
+      </div>
+    </div>
+  </div>
+</main>
 
       <section id="self-service" className="rounded-lg border p-4">
         <PublicSelfServiceActions

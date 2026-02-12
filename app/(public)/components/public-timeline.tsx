@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarIcon, Award as AwardIcon, ArrowUpRight, Landmark, GraduationCap, UserCheck, Pencil, Trash, Plus, Calendar, CalendarCheck, BadgeCheck, Building2, FileEdit, MoveRight, Gift, RefreshCcw, ShieldEllipsisIcon, BookOpen } from "lucide-react";
+import { CalendarIcon, Award as AwardIcon, ArrowUpRight, Landmark, GraduationCap, UserCheck, Pencil, Trash, Plus, Calendar, CalendarCheck, BadgeCheck, Building2, FileEdit, MoveRight, Gift, RefreshCcw, ShieldEllipsisIcon, BookOpen, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -298,65 +298,116 @@ export default function PublicTimeline({ employeeId, version = 0 }: PublicTimeli
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-base font-semibold">Service Timeline</h3>
+      <>
+  <div className="mb-6 flex items-center justify-between px-2">
 
-      </div>
+    <div className="h-px flex-1 bg-gradient-to-r from-slate-200 dark:from-slate-800 to-transparent ml-4" />
+  </div>
+<div className="relative pl-6 sm:pl-8">
 
-      <ol className="relative ml-3 border-l pl-5">
-        {items.map((e, idx) => (
-          <li key={e.id} className={cn("mb-6", idx === items.length - 1 && "mb-0")}>
-            <span className="absolute -left-3 mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+    {/* The Timeline Spine: A liquid gradient stroke */}
+    <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-gradient-to-b from-emerald-500 via-indigo-500 to-slate-200 dark:to-slate-800 rounded-full opacity-40" />
+
+    <ol className="space-y-8">
+      {items.map((e, idx) => (
+        <li key={e.id} className="relative pl-10 group">
+          {/* Floating Droplet (The Icon Node) */}
+          <span className="absolute -left-[13px] top-1 flex h-7 w-7 items-center justify-center rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-lg group-hover:scale-110 group-hover:border-emerald-500/50 transition-all duration-500">
+            <div className="absolute inset-0 bg-emerald-500/5 rounded-full blur-sm opacity-0 group-hover:opacity-100 transition-opacity" />
+            <span className="relative z-10 scale-75 text-slate-600 dark:text-slate-300 group-hover:text-emerald-500 transition-colors">
               {iconMap[e.type]}
             </span>
-            <div className="flex flex-wrap items-center gap-2">
-              <h4 className="font-semibold">{e.title}</h4>
-              <time className="text-xs text-muted-foreground">{new Date(e.occurredAt).toLocaleDateString()}</time>
-              <div className="ml-auto flex items-center gap-2">
-                {/* Icon-only buttons like admin */}
+          </span>
+
+          <div className="flex flex-col gap-1 p-4 rounded-[22px] border border-transparent hover:border-white/40 hover:bg-white/30 dark:hover:bg-white/[0.02] hover:backdrop-blur-md transition-all duration-500">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-col">
+                <h4 className="font-bold text-slate-800 dark:text-white leading-tight">
+                  {e.title}
+                </h4>
+                <time className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">
+                  {new Date(e.occurredAt).toLocaleDateString("en-PH", {
+                    year: "numeric",
+                    month: "short",
+                    day: "2-digit"
+                  })}
+                </time>
+              </div>
+
+              {/* Action Bubbles: Visible on hover */}
+              <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all duration-300">
                 <Button
                   size="icon"
-                  variant="outline"
-                  className="h-8 w-8"
+                  variant="ghost"
+                  className="h-8 w-8 rounded-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-md border border-white/20 shadow-sm hover:text-emerald-600"
                   onClick={() => {
                     setActive(e);
                     isAwardType(e.type) ? setAwardEditOpen(true) : setEditOpen(true);
                   }}
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   size="icon"
-                  variant="destructive"
-                  className="h-8 w-8"
+                  variant="ghost"
+                  className="h-8 w-8 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-600 hover:bg-rose-500 hover:text-white"
                   onClick={() => {
                     setActive(e);
                     isAwardType(e.type) ? setAwardDeleteOpen(true) : setDeleteOpen(true);
                   }}
                 >
-                  <Trash className="h-4 w-4" />
+                  <Trash className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
 
-            {e.description && <p className="mt-1 text-sm text-muted-foreground">{e.description}</p>}
-            {e.attachment && (
-              <a href={e.attachment} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs underline hover:opacity-80">
-                View attachment
-              </a>
+            {e.description && (
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-prose">
+                {e.description}
+              </p>
             )}
-          </li>
-        ))}
-      </ol>
-      <>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            Keep your record up to date — submissions go to HRMO for approval.
-          </span>
-        </div>
 
-        <SuggestionTabs onCreate={() => setCreateOpen(true)} />
-      </>
+            {e.attachment && (
+              <div className="mt-3">
+                <a 
+                  href={e.attachment} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-600 transition-colors"
+                >
+                  <Paperclip className="h-3 w-3" />
+                  View Reference
+                </a>
+              </div>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
+  </div>
+
+  {/* Integrated Suggestion Section */}
+
+    <div className="flex flex-col items-center text-center">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+          Submission PortalVerified by HRMO
+        </span>
+      </div>
+      <p className="text-xs text-slate-400 max-w-[240px] mb-4">
+        Keep your record up to date — all changes are validated by HRMO.
+      </p>
+      <SuggestionTabs onCreate={() => setCreateOpen(true)} />
+    </div>
+
+
+  <p className="mt-4 text-center text-[10px] font-medium text-slate-400 italic">
+    Verified Service Record History
+  </p>
+</>
+
+
       {/* VIEW dialog */}
       <Dialog open={!!active && !editOpen && !deleteOpen && !awardEditOpen && !awardDeleteOpen} onOpenChange={(o) => { if (!o) setActive(null); }}>
         <DialogContent className="max-w-lg">
