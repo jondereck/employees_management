@@ -116,73 +116,93 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   const toolsSectionActive = pathname.startsWith(`/${departmentId}/tools`);
 
   return (
-    <>
-      {loading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-black/80">
-          <Loading />
-        </div>
-      )}
+  <>
+  {loading && (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/40 dark:bg-black/40 backdrop-blur-md">
+      <div className="p-8 rounded-full bg-white/20 border border-white/30 shadow-2xl animate-pulse">
+        <Loading />
+      </div>
+    </div>
+  )}
 
-      <nav
+<nav
+  className={cn(
+    "relative flex w-full items-center gap-1 overflow-x-auto whitespace-nowrap px-4 py-3 no-scrollbar",
+    "bg-white/5 dark:bg-black/20 backdrop-blur-xl border-b border-white/10",
+    /* This mask creates the "fading" effect at the edges on mobile */
+    "sm:[mask-image:none] [mask-image:linear-gradient(to_right,rgba(0,0,0,0)_0%,rgba(0,0,0,1)_10%,rgba(0,0,0,1)_90%,rgba(0,0,0,0)_100%)]",
+    className
+  )}
+  {...props}
+>
+  <div className="flex items-center gap-1 md:gap-2">
+    {routes.map(({ href, label, active, icon }) => (
+      <button
+        key={href}
+        type="button"
+        onClick={() => handleNavClick(href)}
         className={cn(
-          "flex w-full items-center gap-3 overflow-x-auto whitespace-nowrap px-1 text-sm text-muted-foreground",
-          className
+          "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2 rounded-xl transition-all duration-500",
+          active
+            ? "text-green-600 dark:text-green-400 font-bold"
+            : "text-muted-foreground hover:bg-white/10 hover:text-foreground"
         )}
-        {...props}
       >
-        {routes.map(({ href, label, active, icon }) => (
-          <button
-            key={href}
-            type="button"
-            onClick={() => handleNavClick(href)}
-            className={cn(
-              "inline-flex flex-shrink-0 items-center border-b-2 px-3 py-2 transition-colors duration-300",
-              active
-                ? "border-green-600 text-green-700 font-semibold"
-                : "border-transparent hover:border-green-400 hover:text-green-600"
-            )}
-          >
-            {icon}
-            <span className="text-base">{label}</span>
-          </button>
-        ))}
+        {/* Active Background Capsule */}
+        {active && (
+          <div className="absolute inset-0 bg-green-500/10 rounded-xl border border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)] animate-in fade-in zoom-in duration-300" />
+        )}
+        
+        <span className={cn("relative z-10", active && "scale-110")}>
+          {icon}
+        </span>
+        
+        {/* Hide text on very small screens to save space, or keep it—Liquid UI often prefers icons + thin text */}
+        <span className="relative z-10 text-sm md:text-base">{label}</span>
+      </button>
+    ))}
 
-        <EmployeesMenu
-          manageRoute={manageRoute}
-          quickLinks={quickLinks}
-          activeRoute={activeEmployeesRoute}
-          onNavigate={handleNavClick}
-          className="flex-shrink-0"
-        />
+    {/* Small divider that disappears or shrinks on mobile */}
+    <div className="h-4 w-[1px] bg-white/10 mx-1 md:mx-2 flex-shrink-0" />
 
-        <button
-          type="button"
-          onClick={() => handleNavClick(`/${departmentId}/tools`)}
-          className={cn(
-            "inline-flex flex-shrink-0 items-center border-b-2 px-3 py-2 text-base transition-colors duration-300",
-            toolsSectionActive
-              ? "border-green-600 text-green-700 font-semibold"
-              : "border-transparent hover:border-green-400 hover:text-green-600"
-          )}
-        >
-          <Wrench className="mr-2 h-5 w-5" aria-hidden="true" />
-          Tools
-        </button>
+    <EmployeesMenu
+      manageRoute={manageRoute}
+      quickLinks={quickLinks}
+      activeRoute={activeEmployeesRoute}
+      onNavigate={handleNavClick}
+      className="flex-shrink-0"
+    />
 
-        <button
-          type="button"
-          onClick={() => handleNavClick(`/${departmentId}/settings`)}
-          className={cn(
-            "inline-flex flex-shrink-0 items-center border-b-2 px-3 py-2 text-base transition-colors duration-300",
-            pathname === `/${departmentId}/settings`
-              ? "border-green-600 text-green-700 font-semibold"
-              : "border-transparent hover:border-green-400 hover:text-green-600"
-          )}
-        >
-          <Settings className="mr-2 h-5 w-5" aria-hidden="true" />
-          Settings
-        </button>
-      </nav>
-    </>
+    {/* Secondary Actions */}
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => handleNavClick(`/${departmentId}/tools`)}
+        className={cn(
+          "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 rounded-xl transition-all duration-300",
+          toolsSectionActive ? "text-green-600 font-bold" : "text-muted-foreground hover:bg-white/10"
+        )}
+      >
+        {toolsSectionActive && <div className="absolute inset-0 bg-green-500/5 rounded-xl border border-green-500/20" />}
+        <Wrench className="h-4 w-4 md:h-5 md:w-5 relative z-10" />
+        <span className="text-sm md:text-base relative z-10">Tools</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => handleNavClick(`/${departmentId}/settings`)}
+        className={cn(
+          "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 rounded-xl transition-all duration-300",
+          pathname === `/${departmentId}/settings` ? "text-green-600 font-bold" : "text-muted-foreground hover:bg-white/10"
+        )}
+      >
+        {pathname === `/${departmentId}/settings` && <div className="absolute inset-0 bg-green-500/5 rounded-xl border border-green-500/20" />}
+        <Settings className="h-4 w-4 md:h-5 md:w-5 relative z-10" />
+        <span className="text-sm md:text-base relative z-10">Settings</span>
+      </button>
+    </div>
+  </div>
+</nav>
+</>
   );
 }

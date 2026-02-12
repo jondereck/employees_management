@@ -47,7 +47,8 @@ export function EmployeesMenu({
         <button
           type="button"
           className={cn(
-            "inline-flex flex-shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors duration-300",
+            "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2 rounded-xl transition-all duration-500 text-sm md:text-base"
+,
             activeRoute
               ? "border-green-600 text-green-700"
               : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600",
@@ -63,13 +64,16 @@ export function EmployeesMenu({
       <DropdownMenuContent align="start" sideOffset={8} className="z-70 w-[560px] p-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-[200px_1fr_1fr]">
           <button
-            type="button"
-            onClick={() => handleNavigate(manageRoute.href)}
-            className={cn(
-              "flex h-full flex-col justify-between rounded-md border bg-emerald-50 p-4 text-left transition-colors duration-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 md:row-span-2",
-              manageRoute.active ? "border-emerald-300 ring-1 ring-emerald-400" : "border-emerald-200"
-            )}
-          >
+  type="button"
+  onClick={() => handleNavigate(manageRoute.href)}
+  className={cn(
+    "relative z-10 flex h-full flex-col justify-between rounded-md border p-4 text-left text-sm md:text-base transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 md:row-span-2",
+    manageRoute.active
+      ? "bg-emerald-100 border-emerald-400 ring-1 ring-emerald-400 shadow-sm"
+      : "bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+  )}
+>
+
             <div className="text-lg font-semibold leading-tight">{manageRoute.label}</div>
             <p className="mt-2 text-sm text-emerald-900/80">{manageRoute.description}</p>
           </button>
