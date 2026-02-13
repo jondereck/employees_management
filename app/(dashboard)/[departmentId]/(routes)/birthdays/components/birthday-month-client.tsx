@@ -25,6 +25,7 @@ import {
   BirthdayTheme,
   getAutoTheme,
 } from "@/themes/birthdays";
+import { getOrgDateParts, orgDatePartsToDate } from "@/lib/org-timezone";
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -143,8 +144,9 @@ function monthName(m: number) {
   ][m];
 }
 function safeDate(d: string | Date) {
-  const dt = new Date(d);
-  return isNaN(dt.getTime()) ? null : dt;
+  const parts = getOrgDateParts(d);
+  if (!parts) return null;
+  return orgDatePartsToDate(parts);
 }
 function displayName(p: Person) {
   const nick = (p.nickname ?? "").trim();

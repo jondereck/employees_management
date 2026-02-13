@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Download, Share2, Gift } from "lucide-react";
+import { formatOrgMonthDay, getOrgDateParts } from "@/lib/org-timezone";
 
 type Person = {
   id: string;
@@ -64,8 +65,9 @@ function buildNicknameOrFirst(p: Person) {
 
 /** Formats “Oct 12” */
 function shortDate(dateIso: string) {
-  const d = new Date(dateIso);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const parts = getOrgDateParts(dateIso);
+  if (!parts) return "";
+  return formatOrgMonthDay(parts);
 }
 
 /** Single square card optimized for mobile (aspect-square) */
@@ -303,23 +305,22 @@ export default function MobileBirthdayGreeter({
   photoZoom
 }: Props) {
   // Current local month (Asia/Manila assumed server-side; client just uses local)
-  const now = new Date();
-  const month = (typeof monthOverride === "number" ? monthOverride : now.getMonth()) | 0;
+  const nowParts = getOrgDateParts(new Date());
+  const month = (typeof monthOverride === "number" ? monthOverride : nowParts?.monthIndex ?? new Date().getMonth()) | 0;
 
   const [useFullName, setUseFullName] = useState(false);
   const [showDate, setShowDate] = useState(true);
 
   const celebrants = useMemo(() => {
     return people
-      .filter((p) => {
-        const d = new Date(p.birthday);
-        return d.getMonth() === month;
+      .flatMap((person) => {
+        const parts = getOrgDateParts(person.birthday);
+        if (!parts) return [];
+        return [{ person, parts }];
       })
-      .sort((a, b) => {
-        const da = new Date(a.birthday).getDate();
-        const db = new Date(b.birthday).getDate();
-        return da - db;
-      });
+      .filter(({ parts }) => parts.monthIndex === month)
+      .sort((a, b) => a.parts.day - b.parts.day)
+      .map(({ person }) => person);
   }, [people, month]);
 
   const first = celebrants[0];
