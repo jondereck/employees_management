@@ -299,7 +299,7 @@ export default function PublicTimeline({ employeeId, version = 0 }: PublicTimeli
 
   return (
     <>
-      <>
+     <div className="relative rounded-[40px] border border-emerald-500/30 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl shadow-[0_30px_80px_rgba(16,185,129,0.08)] p-2">
         <div className="mb-6 flex items-center justify-between">
 
           <div className="h-px flex-1 bg-gradient-to-r from-slate-200 dark:from-slate-800 to-transparent ml-4" />
@@ -397,7 +397,7 @@ export default function PublicTimeline({ employeeId, version = 0 }: PublicTimeli
 
         </div>
 
-      </>
+      </div>
 
 
       {/* VIEW dialog */}

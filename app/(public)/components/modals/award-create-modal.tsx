@@ -164,39 +164,67 @@ export default function AwardCreateModal({ employeeId, open, onOpenChange }: {
           </div>
         </div>
       </section>
+  <section className="space-y-4 p-5 rounded-[32px] bg-indigo-500/[0.03] dark:bg-white/[0.02] border border-indigo-500/10 dark:border-white/5">
+    <div className="flex items-center gap-2">
+      <div className="h-1 w-4 bg-emerald-500 rounded-full" />
+      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+        Media & Tags
+      </span>
+    </div>
 
+    <div className="space-y-4">
+
+      {/* Certificate URL */}
+      <div className="space-y-1.5">
+        <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          Certificate Source URL
+        </label>
+        <div className="relative">
+          <Link2Icon className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input
+            className="pl-11 rounded-2xl border-white/40 dark:border-white/10 bg-white dark:bg-black/40"
+            value={form.fileUrl}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, fileUrl: e.target.value }))
+            }
+          />
+        </div>
+      </div>
+
+      {/* Thumbnail + Tags */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Thumbnail Preview
+          </label>
+          <Input
+            className="rounded-2xl border-white/40 dark:border-white/10 bg-white dark:bg-black/40"
+            value={form.thumbnail}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, thumbnail: e.target.value }))
+            }
+            placeholder="https://image-url.com/thumb.jpg"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Category Tags
+          </label>
+          <Input
+            className="rounded-2xl border-white/40 dark:border-white/10 bg-white dark:bg-black/40"
+            value={form.tags}
+            onChange={(e) =>
+              setForm((s) => ({ ...s, tags: e.target.value }))
+            }
+            placeholder="Excellence, 2026, Leadership"
+          />
+        </div>
+      </div>
+    </div>
+  </section>
       {/* Group 2: Evidence / Files */}
-      <section className="space-y-4 p-5 rounded-[32px] bg-slate-100/50 dark:bg-white/5 border border-white/40 dark:border-white/5">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="h-1 w-4 bg-indigo-500 rounded-full" />
-          <span className="text-[10px] font-black uppercase tracking-tighter text-slate-400">Verification Assets</span>
-        </div>
-
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Certificate URL (PDF/JPG)</label>
-            <div className="relative">
-              <Link2Icon className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input 
-                className="pl-11 rounded-2xl border-white/40 dark:border-white/10 bg-white dark:bg-black/40" 
-                value={form.fileUrl} 
-                onChange={e => setForm(s => ({ ...s, fileUrl: e.target.value }))} 
-                placeholder="https://cloud-storage.com/cert.pdf" 
-              />
-            </div>
-          </div>
-          
-          <div className="space-y-1.5">
-            <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Tags</label>
-            <Input 
-              className="rounded-2xl border-white/40 dark:border-white/10 bg-white dark:bg-black/40" 
-              value={form.tags} 
-              onChange={e => setForm(s => ({ ...s, tags: e.target.value }))} 
-              placeholder="Excellence, 2026, Leadership" 
-            />
-          </div>
-        </div>
-      </section>
+     
 
       {/* Group 3: Narration */}
       <section className="space-y-4">

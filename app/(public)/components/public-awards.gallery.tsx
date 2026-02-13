@@ -100,7 +100,7 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
   if (awards === null) return <AwardsSkeleton />;
 
   return (
-  <>
+  <div className="relative rounded-[40px] border border-emerald-500/30 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl shadow-[0_30px_80px_rgba(16,185,129,0.08)] p-2">
  
 
   {awards.length === 0 ? (
@@ -429,6 +429,6 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
       />
 
       
-</>
+</div>
   );
 }

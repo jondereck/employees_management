@@ -673,7 +673,7 @@ if (!isAdmin) {
               </h3>
               <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-white/10 to-transparent" />
             </div>
-            <div className="rounded-[32px] bg-slate-50/50 dark:bg-black/20 p-2 sm:p-6 border border-white/20">
+            <div>
                <PublicAwardsGallery employeeId={employeeId} />
             </div>
           </section>
