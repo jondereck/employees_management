@@ -5,12 +5,13 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { ExternalLink, FileText, Pencil, Plus, ShieldCheck, Trash, Trophy } from "lucide-react";
+import { ExternalLink, FileText, FileWarning, Maximize2, Pencil, Plus, ShieldCheck, Trash, Trophy } from "lucide-react";
 
 // Public modals (suggest-only)
 import AwardCreateModal from "@/app/(public)/components/modals/award-create-modal";
 import AwardEditModal from "@/app/(public)/components/modals/award-edit-modal";
 import AwardDeleteModal from "@/app/(public)/components/modals/award-delete-modal";
+import { Separator } from "@/components/ui/separator";
 
 export type PublicAwardsGalleryProps = { employeeId: string; version?: number };
 
@@ -100,17 +101,7 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
 
   return (
   <>
-  <div className="mb-6 flex items-center justify-between">
-    <Button 
-      size="sm" 
-      variant="ghost" 
-      onClick={() => setCreateOpen(true)}
-      className="rounded-full bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold transition-all active:scale-95"
-    >
-      <Plus className="h-4 w-4 mr-2" />
-      Suggest new award
-    </Button>
-  </div>
+ 
 
   {awards.length === 0 ? (
     <div className="flex flex-col items-center justify-center py-10 rounded-[32px] border border-dashed border-white/20 bg-white/5 backdrop-blur-sm">
@@ -209,6 +200,19 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
     </div>
   )}
 
+<Separator />
+   <div className="mt-6 flex items-center justify-center md:justify-start gap-2">
+    <Button 
+      size="sm" 
+      variant="ghost" 
+      onClick={() => setCreateOpen(true)}
+      className="rounded-full bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold transition-all active:scale-95"
+    >
+      <Plus className="h-4 w-4 mr-2" />
+      Suggest new award
+    </Button>
+  </div>
+
   {/* VIEW DIALOG: Deep Glassmorphism */}
   <Dialog open={open} onOpenChange={setOpen}>
     <DialogContent className="max-w-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border-white/30 dark:border-white/10 rounded-[40px] shadow-[0_50px_100px_rgba(0,0,0,0.3)]">
@@ -255,7 +259,7 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
 
             {active.description && (
               <p className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300 bg-white/30 dark:bg-white/5 p-4 rounded-2xl border border-white/40 dark:border-white/5 shadow-inner italic">
-                "{active.description}"
+                {active.description}
               </p>
             )}
 
@@ -278,81 +282,125 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
     </DialogContent>
   </Dialog>
 
-  {/* Footer Info */}
-  <div className="mt-6 flex items-center gap-2 px-2 py-2 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-    <ShieldCheck className="h-4 w-4 text-emerald-500" />
-    <p className="text-[10px] font-bold text-emerald-700/70 dark:text-emerald-400/70 uppercase tracking-tight">
-      Self-service verification system • HRMO Approval Required
-    </p>
-  </div>
+
 
     {/* VIEW DIALOG */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl">
-          {active && (
-            <div className="space-y-3">
-              {/* Preview */}
-              <div className="relative w-full overflow-hidden rounded-md bg-muted">
-                {getCover(active) ? (
-                  <div className="relative aspect-[4/3] w-full">
-                    <Image
-                      src={getCover(active)!}
-                      alt={active.title}
-                      fill
-                      className="object-cover"
-                      priority
-                    />
-                  </div>
-                ) : (
-                  <div className="aspect-[4/3] w-full flex items-center justify-center text-xs text-muted-foreground">
-                    No preview
-                    {active.fileUrl && (
-                      <a
-                        href={active.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline ml-1"
-                      >
-                        Open
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Details */}
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="font-semibold">{active.title}</h3>
-                <time className="text-xs text-muted-foreground">
-                  {new Date(active.givenAt).toLocaleDateString("en-PH", {
-                    year: "numeric",
-                    month: "short",
-                    day: "2-digit",
-                  })}
-                </time>
-              </div>
-
-              {active.issuer && (
-                <p className="text-xs text-muted-foreground">Issuer: {active.issuer}</p>
-              )}
-              {active.description && (
-                <p className="text-sm leading-relaxed">{active.description}</p>
-              )}
-
+   <Dialog open={open} onOpenChange={setOpen}>
+  <DialogContent className="max-w-3xl p-0 border-none bg-white/80 dark:bg-slate-900/90 backdrop-blur-3xl rounded-[40px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.4)] overflow-hidden">
+    {active && (
+      <div className="flex flex-col">
+        {/* The "Stage" - Top Section */}
+        <div className="relative group overflow-hidden bg-slate-200 dark:bg-black/40">
+          {/* Decorative Spotlight Glow */}
+          <div className="absolute -top-[50%] -left-[10%] h-[200%] w-[120%] bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.15)_0%,_transparent_70%)] pointer-events-none z-10" />
+          
+          {getCover(active) ? (
+            <div className="relative aspect-[16/10] w-full overflow-hidden">
+              <Image
+                src={getCover(active)!}
+                alt={active.title}
+                fill
+                className="object-cover transition-transform duration-700 group-hover:scale-105"
+                priority
+              />
+              {/* Floating "View Original" Button */}
               {active.fileUrl && (
                 <a
                   href={active.fileUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-block text-xs underline hover:opacity-80"
+                  className="absolute bottom-6 right-6 z-20 flex items-center gap-2 rounded-full bg-white/20 dark:bg-black/20 backdrop-blur-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white border border-white/20 hover:bg-white/40 transition-all"
                 >
-                  Open certificate
+                  <Maximize2 className="h-3 w-3" />
+                  View Original
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="aspect-[16/10] w-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-600">
+              <div className="h-20 w-20 rounded-full border-2 border-dashed border-current flex items-center justify-center mb-4 opacity-20">
+                <FileWarning className="h-8 w-8" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest">No Preview Available</span>
+              {active.fileUrl && (
+                <a href={active.fileUrl} target="_blank" className="mt-4 text-xs underline font-bold text-indigo-500">
+                  Open Source File
                 </a>
               )}
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+        </div>
+
+        {/* The "Info Panel" - Bottom Section */}
+        <div className="p-8 sm:p-10 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#DA1677] animate-pulse" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Award Certificate</span>
+              </div>
+              <h3 className="text-2xl font-black tracking-tight text-slate-800 dark:text-white">
+                {active.title}
+              </h3>
+            </div>
+            
+            <div className="shrink-0 flex flex-col items-end">
+              <time className="px-4 py-1.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-bold text-slate-600 dark:text-slate-400 shadow-sm">
+                {new Date(active.givenAt).toLocaleDateString("en-PH", {
+                  year: "numeric",
+                  month: "long",
+                  day: "2-digit",
+                })}
+              </time>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-6 border-y border-slate-100 dark:border-white/5">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Issuing Organization</span>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{active.issuer || "Not Specified"}</p>
+            </div>
+            <div className="md:col-span-2 space-y-1">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Accomplishment Details</span>
+              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                {active.description || "No further details provided for this milestone."}
+              </p>
+            </div>
+          </div>
+
+          {/* Tags / Footer */}
+          {/* Tags / Footer */}
+<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  
+<div className="flex flex-wrap gap-2">
+  {active?.tags
+    ?.map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0)
+    .map((tag, i) => (
+      <span
+        key={i}
+        className="text-[9px] font-black uppercase px-2 py-1 rounded-md bg-[#DA1677]/10 text-[#DA1677] border border-[#DA1677]/10"
+      >
+        #{tag}
+      </span>
+    ))}
+</div>
+
+  <Button
+    variant="ghost"
+    size="sm"
+    className="rounded-full text-[10px] font-black uppercase tracking-widest text-slate-400 self-end sm:self-auto"
+    onClick={() => setOpen(false)}
+  >
+    Close View
+  </Button>
+</div>
+
+        </div>
+      </div>
+    )}
+  </DialogContent>
+</Dialog>
 
 
       {/* Suggest Modals */}
@@ -380,9 +428,7 @@ export default function PublicAwardsGallery({ employeeId, version = 0 }: PublicA
         }}
       />
 
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Changes appear only after HRMO approval.
-      </p>
+      
 </>
   );
 }

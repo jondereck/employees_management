@@ -31,6 +31,7 @@ import WorkSchedulePreview from "@/app/(dashboard)/[departmentId]/(routes)/(fron
 import AwardPreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/award-preview";
 import EmploymentEventPreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/employment-event-preview";
 import { cn } from "@/lib/utils";
+import { Building2, CalendarCheck, Fingerprint, History, Hourglass, ShieldCheck, Trophy } from "lucide-react";
 
 
 export const dynamic = "force-dynamic";
@@ -519,127 +520,198 @@ if (!isAdmin) {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <BrandHeader />
-<main className="flex-1 relative overflow-hidden bg-slate-50 dark:bg-slate-950">
-  {/* Liquid background blobs for a dynamic feel */}
+<main className="flex-1 relative overflow-hidden bg-[#f8fafc] dark:bg-[#020617] min-h-screen">
+  {/* Dynamic Liquid Background - Ambient Aura */}
   <div 
-    className="absolute top-0 right-0 w-96 h-96 blur-[120px] opacity-20 pointer-events-none rounded-full"
+    className="absolute -top-24 -right-24 w-[500px] h-[500px] blur-[150px] opacity-30 pointer-events-none rounded-full animate-pulse transition-colors duration-1000"
     style={{ backgroundColor: normalizeHex(publicData.employeeType?.value) ?? "#4f46e5" }}
   />
+  <div 
+    className="absolute bottom-0 left-0 w-[400px] h-[400px] blur-[120px] opacity-10 pointer-events-none rounded-full"
+    style={{ backgroundColor: normalizeHex(publicData.employeeType?.value) ?? "#6366f1" }}
+  />
 
-  <div className="px-4 py-10 sm:px-6 lg:px-8  relative z-10">
-    {/* Header card: The Main Glass Vessel */}
+  <div className="px-4 py-12 sm:px-6 lg:px-8 relative z-20 max-w-5xl mx-auto">
+    {/* Header Card: The Main Glass Vessel */}
     <div
-      className="relative overflow-hidden rounded-[32px] border backdrop-blur-xl bg-white/70 dark:bg-slate-900/60 p-6 sm:p-8 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] transition-all duration-500"
+      className="relative overflow-hidden rounded-[40px] border backdrop-blur-3xl bg-white/60 dark:bg-slate-900/40 p-1 sm:p-1.5 shadow-[0_40px_80px_-15px_rgba(0,0,0,0.1)] transition-all duration-500"
       style={{
-        borderColor: `${normalizeHex(publicData.employeeType?.value) ?? "#e5e7eb"}44`, // 44 adds 25% opacity
+        borderColor: `${normalizeHex(publicData.employeeType?.value) ?? "#e5e7eb"}33`,
       }}
     >
-      {/* Watermark: Submerged effect */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -right-16 -bottom-16 opacity-[0.03] dark:opacity-[0.05] rotate-12">
-          <Image
-            src="/logo.png"
-            alt=""
-            width={350}
-            height={350}
-            className="select-none grayscale"
-            priority={false}
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-col md:flex-row items-center md:items-start gap-6 relative z-10">
-        {/* Photo: Framed with a glass halo */}
-        <div className="shrink-0 relative">
-          <div className="absolute inset-0 blur-2xl opacity-20 scale-110 rounded-full"
-               style={{ backgroundColor: normalizeHex(publicData.employeeType?.value) ?? "#6366f1" }} />
-          <PublicHeadshot src={headshot} employeeNo={publicData?.employeeNo} className="ring-4 ring-white/50 dark:ring-white/10 shadow-2xl" />
-        </div>
-
-        {/* Name + meta */}
-        <div className="min-w-0 flex-1 text-center md:text-left">
-          <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
-            {employmentType && (
-              <span
-                className="inline-flex items-center rounded-xl px-3 py-1 text-[10px] font-bold uppercase tracking-widest border backdrop-blur-md shadow-sm"
-                style={buildBadgeStyle(typeHex)}
-              >
-                {employmentType}
-              </span>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-center md:justify-start gap-2">
-              <h1 className="font-black tracking-tight text-slate-900 dark:text-white text-[clamp(1.5rem,5vw,2.25rem)] leading-tight">
-                {fullName}
-              </h1>
-              {!publicData.isArchived && (
-                <div className="relative flex items-center justify-center h-6 w-6">
-                  <div className="absolute inset-0 bg-green-500/20 blur-md rounded-full animate-ping" />
-                  <ActiveBadge className="h-5 w-5 text-green-500 relative z-10" />
-                </div>
-              )}
-            </div>
-            <p className="text-sm sm:text-lg font-medium text-slate-500 dark:text-slate-400">{workingLine}</p>
-            <p className="text-lg sm:text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-600 to-slate-900 dark:from-white dark:via-slate-400 dark:to-white">
-              {publicData.position || "—"}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Status banner: Liquid-styled message */}
-      <div className={cn(
-        "mt-8 flex items-center gap-3 rounded-[20px] px-4 py-3 text-sm font-semibold border backdrop-blur-md transition-all",
-        isInactive 
-          ? "bg-rose-500/5 border-rose-500/20 text-rose-700 dark:text-rose-400 shadow-[inset_0_0_20px_rgba(244,63,94,0.05)]" 
-          : "bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-400 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]"
-      )}>
-        <div className={cn("h-2 w-2 rounded-full", isInactive ? "bg-rose-500" : "bg-emerald-500")} />
-        This employee is currently <span className="uppercase tracking-wide">{isInactive ? 'Inactive' : 'Active'}</span>
-      </div>
-
-      {/* Details mini-grid: Floating frosted tiles */}
-      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {[
-          { label: "Employee No.", value: publicData.employeeNo },
-          { label: "Office", value: publicData.offices?.name },
-          { label: "Start Date", value: startDate ? formatUpdatedAt(startDate) : null },
-          { label: "Service Rendered", value: tenureLabel }
-        ].map((item, idx) => (
-          <div key={idx} className="group rounded-[22px] border border-white/40 dark:border-white/5 bg-white/30 dark:bg-white/[0.02] p-4 transition-all hover:bg-white/50 dark:hover:bg-white/[0.05]">
-            <dt className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500 mb-1">{item.label}</dt>
-            <dd className="text-sm font-bold text-slate-800 dark:text-slate-200">{item.value || "—"}</dd>
-          </div>
-        ))}
+      {/* Inner Glow/Bezel effect */}
+      <div className="relative overflow-hidden rounded-[36px] bg-white/40 dark:bg-slate-900/20 p-2 sm:p-10">
         
-        {/* Full width sections for education and awards */}
-        <section className="sm:col-span-2 rounded-[24px] border border-white/40 dark:border-white/5 bg-white/20 dark:bg-white/[0.01] p-5">
-           <h3 className="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4 flex items-center gap-2">
-            <span className="h-1 w-4 bg-emerald-500 rounded-full" />
-            Awards & Recognition
-           </h3>
-           <PublicAwardsGallery employeeId={employeeId} />
-        </section>
-
-        <section className="sm:col-span-2 rounded-[24px] border border-white/40 dark:border-white/5 bg-white/20 dark:bg-white/[0.01] p-5">
-           <h3 className="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4 flex items-center gap-2">
-            <span className="h-1 w-4 bg-indigo-500 rounded-full" />
-            Service History
-           </h3>
-           <PublicTimeline employeeId={employeeId} />
-        </section>
-      </div>
-
-      <div className="mt-8 pt-6 border-t border-white/20 dark:border-white/5 flex flex-col sm:flex-row justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Verified by HRMO</p>
-          <p className="text-[11px] text-muted-foreground">Updated: {formatUpdatedAt(publicData.updatedAt)}</p>
+        {/* Watermark: Deep Layer */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden select-none">
+          <div className="absolute -right-20 -bottom-20 opacity-[0.04] dark:opacity-[0.08] rotate-[15deg]">
+            <Image
+              src="/logo.png"
+              alt=""
+              width={400}
+              height={400}
+              className="grayscale"
+              priority={false}
+            />
+          </div>
         </div>
-        <p className="text-[11px] italic text-muted-foreground self-end opacity-60">
-          Some details may be limited for privacy.
-        </p>
+
+    <div className="flex flex-col md:flex-row items-center md:items-start gap-2 relative z-10">
+
+  {/* PHOTO */}
+  <div className="shrink-0 relative group">
+    
+    {/* Soft Halo */}
+    <div 
+      className="absolute inset-0 blur-2xl opacity-20 scale-110 rounded-full transition-transform duration-500 group-hover:scale-125"
+      style={{ backgroundColor: normalizeHex(publicData.employeeType?.value) ?? "#DA1677" }} 
+    />
+
+    <PublicHeadshot 
+      src={headshot} 
+      employeeNo={publicData?.employeeNo} 
+      className="relative z-10 w-32 h-32 sm:w-40 sm:h-40 rounded-3xl object-cover ring-6 ring-white/80 dark:ring-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.18)]" 
+    />
+  </div>
+
+  {/* IDENTITY */}
+  <div className="min-w-0 flex-1 text-center md:text-left">
+
+    {/* Employment Type Badge */}
+    {employmentType && (
+      <div className="mb-4 flex justify-center md:justify-start">
+        <span
+          className="inline-flex items-center rounded-full px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] border backdrop-blur-xl shadow-md"
+          style={buildBadgeStyle(typeHex)}
+        >
+          {employmentType}
+        </span>
+      </div>
+    )}
+
+    {/* NAME + ACTIVE */}
+    <div className="flex flex-col items-center md:items-start gap-2">
+      
+<div className="flex flex-col gap-1">
+  {/* Name + Badge Group */}
+  <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-3 gap-y-1">
+    <h1 className="font-black tracking-tight text-slate-900 dark:text-white text-[clamp(1.5rem,5vw,2.25rem)] leading-[1.1]">
+      {fullName}
+      {!publicData.isArchived && (
+        <span className="inline-flex ml-3 align-middle">
+          <div className="relative flex items-center justify-center h-7 w-7">
+            {/* The Liquid Ripple: Multiple layers of glow */}
+            <div className="absolute inset-0 bg-emerald-500/30 blur-md rounded-full animate-pulse" />
+            <div className="absolute inset-0 bg-emerald-400/20 blur-xl rounded-full animate-ping shadow-[0_0_20px_rgba(16,185,129,0.4)]" />
+            
+            {/* The Badge: Using a standard SVG or your ActiveBadge component */}
+            
+               <ActiveBadge className="h-5 w-5 text-emerald-500 fill-emerald-500/10" />
+          
+          </div>
+        </span>
+      )}
+    </h1>
+  </div>
+
+</div>
+
+      {/* Working Line */}
+      <p className="text-sm sm:text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-slate-600 via-slate-400 to-slate-600 dark:from-slate-300 dark:via-white dark:to-slate-300 italic opacity-80">
+        {workingLine}
+      </p>
+
+      {/* Position */}
+      <p className="text-xs font-black uppercase tracking-widest text-slate-500 pt-1">
+        {publicData.position}
+      </p>
+
+    </div>
+  </div>
+</div>
+
+
+        {/* Separator / Status Bar */}
+        <div className={cn(
+          "mt-10 flex items-center justify-center md:justify-start gap-4 rounded-2xl px-6 py-4 border backdrop-blur-md shadow-inner",
+          isInactive 
+            ? "bg-rose-500/5 border-rose-500/10 text-rose-700 dark:text-rose-300" 
+            : "bg-emerald-500/5 border-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+        )}>
+          <div className={cn("h-3 w-3 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.1)]", isInactive ? "bg-rose-500" : "bg-emerald-500")} />
+          <p className="text-[11px] font-black uppercase tracking-[0.2em]">
+           Employment Status: <span className="underline underline-offset-4 decoration-2">{isInactive ? 'Inactive' : 'Active'}</span>
+          </p>
+        </div>
+
+        {/* Tiles Grid: Frosted Separation */}
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: "Employee ID", value: publicData.employeeNo, icon: Fingerprint },
+            { label: "Department", value: publicData.offices?.name, icon: Building2 },
+            { label: "Date Hired", value: startDate ? formatUpdatedAt(startDate) : null, icon: CalendarCheck },
+            { label: "Service Tenure", value: tenureLabel, icon: Hourglass }
+          ].map((item, idx) => (
+            <div key={idx} className="relative group overflow-hidden rounded-3xl border border-white/40 dark:border-white/5 bg-white/40 dark:bg-white/[0.03] p-5 transition-all hover:-translate-y-1 hover:shadow-xl">
+              <div className="absolute top-0 right-0 p-3 opacity-[0.05] group-hover:opacity-10 transition-opacity">
+                {item.icon && <item.icon className="h-8 w-8" />}
+              </div>
+              <dt className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">{item.label}</dt>
+              <dd className="text-sm font-black text-slate-800 dark:text-slate-100">{item.value || "—"}</dd>
+            </div>
+          ))}
+        </div>
+
+        {/* Major Sections: Physical Spacing */}
+        <div className="mt-12 space-y-12">
+          <section className="relative">
+            <div className="flex items-center gap-4 mb-8">
+              <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-white/10 to-transparent" />
+              <h3 className="shrink-0 text-[11px] font-black uppercase tracking-[0.4em] text-slate-400 flex items-center gap-3">
+                <Trophy className="h-4 w-4 text-[#DA1677]" />
+                Gallery of Honors
+              </h3>
+              <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-white/10 to-transparent" />
+            </div>
+            <div className="rounded-[32px] bg-slate-50/50 dark:bg-black/20 p-2 sm:p-6 border border-white/20">
+               <PublicAwardsGallery employeeId={employeeId} />
+            </div>
+          </section>
+
+          <section className="relative">
+             <div className="flex items-center gap-4 mb-8">
+              <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-white/10 to-transparent" />
+              <h3 className="shrink-0 text-[11px] font-black uppercase tracking-[0.4em] text-slate-400 flex items-center gap-3">
+                <History className="h-4 w-4 text-indigo-500" />
+                Timeline
+              </h3>
+              <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-white/10 to-transparent" />
+            </div>
+            <div className="rounded-[32px] bg-slate-50/50 dark:bg-black/20 p-2 border border-white/20">
+               <PublicTimeline employeeId={employeeId} />
+            </div>
+          </section>
+        </div>
+
+        {/* Footer: Etched Glass */}
+        <footer className="mt-2 pt-8 border-t border-slate-200 dark:border-white/10 flex flex-col sm:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-4">
+             <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center">
+                <ShieldCheck className="h-5 w-5 text-emerald-500" />
+             </div>
+             <div className="space-y-0.5">
+               <p className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest">Identity Authenticated</p>
+         
+             </div>
+          </div>
+          
+          <div className="text-center sm:text-right space-y-1">
+             <p className="text-[11px] font-bold text-slate-400">Last HRMO Audit: {formatUpdatedAt(publicData.updatedAt)}</p>
+             <p className="text-[9px] font-medium text-slate-400/60 max-w-[200px] leading-tight">
+               Official Public Profile of LGU Lingayen. Privacy protected via Tier-1 encryption.
+             </p>
+          </div>
+        </footer>
       </div>
     </div>
   </div>

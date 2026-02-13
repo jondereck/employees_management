@@ -1,184 +1,241 @@
-// components/public/PublicHeadshot.tsx
 "use client";
 
 import { useState } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Download, Copy, Maximize2 } from "lucide-react";
+import { Dialog, DialogClose, DialogContent, DialogPortal } from "@/components/ui/dialog";
+import { Download, Copy, Maximize2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { DialogOverlay } from "@radix-ui/react-dialog";
 
 function empBase(s?: string | null) {
   return (s ?? "").split(",")[0]?.trim() || "photo";
-}
-
-async function downloadBlob(src: string, filename: string) {
-  const tid = toast.loading("Preparing download…");
-  try {
-    const res = await fetch(src, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast.success(`Saved as ${filename}`, { id: tid });
-  } catch (e) {
-    toast.error("Direct download blocked. Opening in a new tab…", { id: tid });
-    window.open(src, "_blank");
-  }
-}
-
-async function copyImageToClipboard(src: string) {
-  const tid = toast.loading("Copying image…");
-  try {
-    const res = await fetch(src, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-
-    await navigator.clipboard.write([new window.ClipboardItem({ [blob.type]: blob })]);
-    toast.success("Copied image to clipboard!", { id: tid });
-  } catch {
-    toast.error("Copy failed. Some browsers block image clipboard.", { id: tid });
-  }
 }
 
 export default function PublicHeadshot({
   src,
   employeeNo,
   className,
-  sizes = "(min-width:1280px) 13rem, (min-width:1024px) 11rem, (min-width:640px) 10rem, 8rem",
   bgSrc = "/bday_bg.png",
 }: {
   src?: string | null;
   employeeNo?: string | null;
   className?: string;
-  sizes?: string;
-   bgSrc?: string;  
+  bgSrc?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<"download" | "copy" | null>(null);
 
   if (!src) {
     return (
-      <div className={cn(
-        "rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-xs",
-        "w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 xl:w-32 xl:h-32",
-        className
-      )}>
-        No photo
+      <div
+        className={cn(
+          "flex items-center justify-center rounded-2xl bg-slate-100 text-slate-400 text-xs",
+          "w-32 h-32 sm:w-40 sm:h-40",
+          className
+        )}
+      >
+        No Photo
       </div>
     );
   }
 
   const filename = `${empBase(employeeNo)}.png`;
 
+  const handleDownload = async () => {
+    setBusy("download");
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Downloaded image.");
+    } catch {
+      toast.error("Download failed.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleCopy = async () => {
+    setBusy("copy");
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+
+      if (!("clipboard" in navigator) || !("ClipboardItem" in window)) {
+        throw new Error();
+      }
+
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob }),
+      ]);
+
+      toast.success("Copied image.");
+    } catch {
+      toast.error("Clipboard not supported.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <>
-          <div
+      {/* MAIN CARD */}
+      <div
         className={cn(
-          // sizing
-          "relative rounded-2xl p-1.5 sm:p-2",
-          "w-32 h-32 sm:w-40 sm:h-40 lg:w-44 lg:h-44 xl:w-52 xl:h-52",
+          "group relative aspect-square w-32 sm:w-40 rounded-3xl overflow-hidden",
+          "border-4 border-white shadow-xl ring-1 ring-slate-200",
           className
         )}
         style={{
           backgroundImage: `url(${bgSrc})`,
-          backgroundRepeat: "no-repeat",
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
       >
         <Image
           src={src}
-          alt="Profile photo"
+          alt="Profile"
           fill
-          sizes={sizes}
-          className="object-cover block"
-          priority
+          onLoadStart={() => setLoading(true)}
+          onLoadingComplete={() => setLoading(false)}
+          className={cn(
+            "object-cover transition-transform duration-500 group-hover:scale-110",
+            loading ? "opacity-0" : "opacity-100"
+          )}
         />
 
-        {/* Floating action buttons */}
-        <div className="absolute bottom-2 right-2 z-10 flex gap-2">
+        {/* Loading Overlay */}
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-sm">
+            <Loader2 className="h-6 w-6 animate-spin text-slate-600" />
+          </div>
+        )}
+
+        {/* Hover Action Bar */}
+        <div className="absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 bg-gradient-to-t from-black/60 to-transparent p-3 flex justify-center gap-2">
           <Button
             size="icon"
             variant="secondary"
-            className="h-7 w-7 md:h-8 md:w-8 rounded-xl shadow-md"
-            disabled={busy !== null}
-            onClick={async () => {
-              try { setBusy("download"); await downloadBlob(src, filename); }
-              finally { setBusy(null); }
-            }}
-            title={`Download (${filename})`}
+            className="h-8 w-8 rounded-full"
+            onClick={handleDownload}
+            disabled={busy === "download"}
           >
-            <Download className={`md:h-4 md:w-4 h-3.5 w-3.5 ${busy === "download" ? "animate-pulse" : ""}`} />
+            <Download className="h-4 w-4" />
           </Button>
 
-
-            <Button
-              size="icon"
-              variant="secondary"
-              className="h-7 w-7 md:h-8 md:w-8 rounded-xl shadow-md"
-              disabled={busy !== null}
-              onClick={async () => { try { setBusy("copy"); await copyImageToClipboard(src); } finally { setBusy(null); } }}
-              title="Copy image to clipboard"
-            >
-              <Copy className={`md:h-4 md:w-4 h-3.5 w-3.5 ${busy==="copy" ? "animate-pulse" : ""}`} />
-            </Button>
+          <Button
+            size="icon"
+            variant="secondary"
+            className="h-8 w-8 rounded-full"
+            onClick={handleCopy}
+            disabled={busy === "copy"}
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
 
           <Button
             size="icon"
             variant="secondary"
-            className="h-7 w-7 md:h-8 md:w-8 rounded-xl shadow-md"
+            className="h-8 w-8 rounded-full"
             onClick={() => setOpen(true)}
-            title="Expand"
           >
-            <Maximize2 className="md:h-4 md:w-4 h-3.5 w-3.5" />
+            <Maximize2 className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
- {/* Expand dialog with full-bleed background (no black bars) */}
-<Dialog open={open} onOpenChange={setOpen}>
-  <DialogContent className="sm:max-w-[1000px] p-0 bg-transparent border-0 shadow-none">
-    <div className="relative w-[96vw] max-w-[1000px] rounded-2xl overflow-hidden shadow-2xl mx-auto">
-      {/* Background layer */}
-      <div className="relative w-full h-[68vh] sm:h-[70vh]">
-        <Image
-          src={bgSrc ?? "/bday_bg.png"}
-          alt=""
-          fill
-          className="object-cover"     // 👈 always fills; no letterboxing
-          priority
-        />
-        {/* optional darken for contrast */}
-        <div className="absolute inset-0 bg-black/20" />
+      {/* EXPAND DIALOG */}
+     <Dialog open={open} onOpenChange={setOpen}>
+  <DialogPortal>
+    {/* Dark overlay */}
+    <DialogOverlay className="bg-black/80 backdrop-blur-sm" />
 
-        {/* Foreground (your headshot), slightly inset so the BG is visible */}
-        <div className="absolute inset-0 flex items-center justify-center p-4 sm:p-6">
-          <div className="relative w-full max-w-[820px] aspect-[4/5] sm:aspect-video rounded-xl overflow-hidden ring-1 ring-black/10 bg-black/50">
+    <DialogContent className="max-w-3xl overflow-hidden border-none bg-transparent p-0 shadow-2xl sm:rounded-2xl">
+      <div className="group relative flex flex-col">
+
+        {/* Main Image Container */}
+        <div
+          className="relative aspect-square w-full overflow-hidden bg-slate-950 flex items-center justify-center transition-all"
+          style={{
+            backgroundImage: `url(${bgSrc ?? "/bday_bg.png"})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        >
+          {src && (
             <Image
               src={src}
-              alt="Profile photo expanded"
+              alt="Full View"
               fill
-              sizes="100vw"
-              className="object-contain"
               priority
+              onLoadStart={() => setLoading(true)}
+              onLoadingComplete={() => setLoading(false)}
+              className={cn(
+                "object-contain transition-transform duration-500 hover:scale-105",
+                loading ? "opacity-0" : "opacity-100"
+              )}
             />
+          )}
+
+          {loading && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+              <Loader2 className="h-10 w-10 animate-spin text-white" />
+            </div>
+          )}
+
+          {/* Floating Close Button */}
+          <div className="absolute top-4 right-4 z-10">
+            <DialogClose className="rounded-full bg-black/20 p-2 text-white/70 backdrop-blur-md transition-all hover:bg-black/40 hover:text-white">
+              <X className="h-5 w-5" />
+            </DialogClose>
           </div>
         </div>
 
+        {/* Floating Bottom Action Bar */}
+        <div className="absolute bottom-6 left-1/2 flex w-[90%] -translate-x-1/2 items-center justify-between rounded-2xl border border-white/10 bg-black/40 p-4 text-white backdrop-blur-xl transition-all group-hover:bottom-8 group-hover:bg-black/60">
 
+          <div className="flex flex-col gap-0.5 overflow-hidden">
+            <span className="text-sm font-semibold tracking-tight">
+              HD Profile Image
+            </span>
+            <span className="truncate text-[10px] uppercase tracking-widest text-white/50">
+              {filename}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-full text-white/80 hover:bg-white/10 hover:text-white"
+              onClick={handleCopy}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+
+            <Button
+              size="sm"
+              className="rounded-full bg-white px-5 text-slate-900 transition-transform active:scale-95 hover:bg-slate-100"
+              onClick={handleDownload}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download
+            </Button>
+          </div>
+
+        </div>
       </div>
-    </div>
-  </DialogContent>
+    </DialogContent>
+  </DialogPortal>
 </Dialog>
-
 
     </>
   );

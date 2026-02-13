@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useRef } from "react";
 import PreSubmitAgreement from "../agreements/pre-submit-agreement";
+import { Link2, PencilLine, ShieldCheck } from "lucide-react";
 
 
 
@@ -147,81 +148,163 @@ useEffect(() => {
     }
   }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6"
-        // iOS smooth scrolling
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        <h3 className="text-base font-semibold">Suggest an edit (Award)</h3>
-        <p className="text-xs text-muted-foreground">Your changes will be reviewed by HRMO before publication.</p>
-        <div className="space-y-3 mt-3">
-          <div>
-            <label className="text-xs text-muted-foreground">Title</label>
-            <Input value={form.title} onChange={e => setForm(s => ({ ...s, title: e.target.value }))} />
+  <Dialog open={open} onOpenChange={onOpenChange}>
+  <DialogContent
+    className="w-[calc(100vw-2rem)] sm:max-w-xl max-h-[90vh] overflow-y-auto p-0 border-none bg-white/80 dark:bg-slate-900/90 backdrop-blur-2xl rounded-[40px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)]"
+    style={{ WebkitOverflowScrolling: "touch" }}
+  >
+    {/* Header: Refinement Aesthetic */}
+    <div className="sticky top-0 z-20 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md p-6 border-b border-white/20">
+      <div className="flex items-center gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/20">
+          <PencilLine className="h-6 w-6" />
+        </div>
+        <div>
+          <h3 className="text-xl font-black tracking-tight text-slate-800 dark:text-white">Update Award</h3>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">Modification Request</p>
+        </div>
+      </div>
+    </div>
+
+    <div className="p-6 space-y-8">
+      {/* Group: Identity */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="h-1 w-4 bg-indigo-500 rounded-full" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Identity & Origin</span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Official Title</label>
+            <Input 
+              className="rounded-2xl border-white/40 dark:border-white/10 bg-white/50 dark:bg-black/20 focus:ring-indigo-500"
+              value={form.title} 
+              onChange={e => setForm(s => ({ ...s, title: e.target.value }))} 
+            />
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Issuer</label>
-            <Input value={form.issuer} onChange={e => setForm(s => ({ ...s, issuer: e.target.value }))} />
+
+          <div className="space-y-1.5">
+            <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Issuing Body</label>
+            <Input 
+              className="rounded-2xl border-white/40 dark:border-white/10 bg-white/50 dark:bg-black/20 focus:ring-indigo-500"
+              value={form.issuer} 
+              onChange={e => setForm(s => ({ ...s, issuer: e.target.value }))} 
+            />
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Date Given (ISO)</label>
+
+          <div className="space-y-1.5">
+            <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Date Given</label>
             <Input
               type="date"
-              max={todayYMD}               // ⛔ prevent picking future dates
+              max={todayYMD}
+              className="rounded-2xl border-white/40 dark:border-white/10 bg-white/50 dark:bg-black/20"
               value={form.givenAt}
               onChange={(e) => setForm((s) => ({ ...s, givenAt: e.target.value }))}
             />
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Certificate URL (image/pdf)</label>
-            <Input value={form.fileUrl} onChange={e => setForm(s => ({ ...s, fileUrl: e.target.value }))} placeholder="https://…" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Thumbnail URL</label>
-            <Input value={form.thumbnail} onChange={e => setForm(s => ({ ...s, thumbnail: e.target.value }))} placeholder="https://…" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Tags (comma-separated)</label>
-            <Input value={form.tags} onChange={e => setForm(s => ({ ...s, tags: e.target.value }))} />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Notes to HRMO (optional)</label>
-            <Textarea value={form.note} onChange={e => setForm(s => ({ ...s, note: e.target.value }))} />
-          </div>
         </div>
-        <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSubmitClick} disabled={loading}>{loading ? "Submitting…" : "Submit for approval"}</Button>
-          <PreSubmitAgreement
-            actionId="awards.request-edit"
-            open={agreeOpen}
-            onOpenChange={setAgreeOpen}
-            onConfirm={() => {
-              if (payloadRef.current) {
-                doSubmit(payloadRef.current);
-              } else {
-                const p = buildPayloadOrToast();
-                if (p) doSubmit(p);
-              }
-            }}
-            disabled={loading}
-            title="Before you submit these changes"
-            confirmLabel="I understand — submit"
-          >
-            <p>
-              HRMO may request supporting documents (e.g., certificate files, letters) to verify authenticity.
-              Ensure your updates match official records.
-            </p>
-            <ul className="list-disc pl-5">
-              <li>Provide a clear certificate image or PDF if requested</li>
-              <li>Use correct dates, issuer, and titles</li>
-              <li>Misrepresentation may lead to rejection</li>
-            </ul>
-          </PreSubmitAgreement>
+      </section>
 
+      {/* Group: Media & Discovery */}
+      <section className="space-y-4 p-5 rounded-[32px] bg-indigo-500/[0.03] dark:bg-white/[0.02] border border-indigo-500/10 dark:border-white/5">
+        <div className="flex items-center gap-2">
+          <div className="h-1 w-4 bg-emerald-500 rounded-full" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Media & Tags</span>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Certificate Source URL</label>
+            <div className="relative">
+              <Link2 className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input 
+                className="pl-11 rounded-2xl border-white/40 dark:border-white/10 bg-white dark:bg-black/40" 
+                value={form.fileUrl} 
+                onChange={e => setForm(s => ({ ...s, fileUrl: e.target.value }))} 
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Thumbnail Preview</label>
+              <Input 
+                className="rounded-2xl border-white/40 dark:border-white/10 bg-white dark:bg-black/40" 
+                value={form.thumbnail} 
+                onChange={e => setForm(s => ({ ...s, thumbnail: e.target.value }))} 
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Category Tags</label>
+              <Input 
+                className="rounded-2xl border-white/40 dark:border-white/10 bg-white dark:bg-black/40" 
+                value={form.tags} 
+                onChange={e => setForm(s => ({ ...s, tags: e.target.value }))} 
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Group: HRMO Dialogue */}
+      <section className="space-y-4">
+        <div className="space-y-1.5">
+          <label className="ml-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Notes for HRMO Review</label>
+          <Textarea 
+            placeholder="Explain why these changes are being made..."
+            className="rounded-[24px] border-white/40 dark:border-white/10 bg-white/50 dark:bg-black/20 min-h-[100px] resize-none"
+            value={form.note} 
+            onChange={e => setForm(s => ({ ...s, note: e.target.value }))} 
+          />
+        </div>
+      </section>
+    </div>
+
+    {/* Footer Actions */}
+    <div className="sticky bottom-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md p-6 border-t border-white/20 flex flex-col sm:flex-row gap-3">
+      <Button 
+        variant="ghost" 
+        className="rounded-full font-bold text-slate-400 hover:text-slate-600 dark:hover:bg-white/5 order-2 sm:order-1" 
+        onClick={() => onOpenChange(false)}
+      >
+        Cancel
+      </Button>
+      <Button 
+        className="flex-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-500/20 transition-all active:scale-95 order-1 sm:order-2"
+        onClick={handleSubmitClick} 
+        disabled={loading}
+      >
+        {loading ? "Processing..." : "Update Record"}
+      </Button>
+    </div>
+
+    {/* Agreement Sub-Dialog */}
+    <PreSubmitAgreement
+      actionId="awards.request-edit"
+      open={agreeOpen}
+      onOpenChange={setAgreeOpen}
+      onConfirm={() => {
+        if (payloadRef.current) doSubmit(payloadRef.current);
+        else {
+          const p = buildPayloadOrToast();
+          if (p) doSubmit(p);
+        }
+      }}
+      disabled={loading}
+      title="Verify Modifications"
+      confirmLabel="Apply Changes"
+    >
+      <div className="space-y-4 py-2">
+        <div className="flex gap-4 p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10">
+          <ShieldCheck className="h-6 w-6 text-indigo-500 shrink-0" />
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Updating an existing record requires a higher level of scrutiny. Ensure your links and dates exactly match your physical certificate.
+          </p>
+        </div>
+      </div>
+    </PreSubmitAgreement>
+  </DialogContent>
+</Dialog>
   );
 }

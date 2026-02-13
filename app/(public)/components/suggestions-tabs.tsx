@@ -107,32 +107,33 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
   };
 
   return (
-  <div
+<div
   ref={containerRef}
-  className="relative w-full overflow-hidden rounded-3xl border border-emerald-500/20 bg-emerald-500/5 backdrop-blur-md px-4 py-6 sm:p-8 transition-all duration-500 hover:shadow-[0_20px_50px_rgba(16,185,129,0.1)]"
+  className="relative w-full overflow-hidden rounded-3xl border border-[#DA1677]/20 bg-[#DA1677]/5 backdrop-blur-md px-4 py-6 sm:p-8 transition-all duration-500 hover:shadow-[0_20px_50px_rgba(218,22,119,0.12)]"
 >
-  {/* Liquid Glow */}
-  <div className="pointer-events-none absolute -top-24 -left-24 h-48 w-48 rounded-full bg-emerald-500/10 blur-[70px] opacity-70" />
+  {/* Glow Accent */}
+  <div className="pointer-events-none absolute -top-24 -left-24 h-48 w-48 rounded-full bg-[#DA1677]/10 blur-[70px] opacity-70" />
 
-  {/* Header */}
+  {/* HEADER */}
   <div className="relative z-10 mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
     <div className="space-y-1">
       <h3 className="flex items-center gap-2 text-base sm:text-lg font-black tracking-tight text-slate-800 dark:text-white">
-        <Sparkles className="h-5 w-5 text-emerald-500 shrink-0" />
+        <Sparkles className="h-5 w-5 text-[#DA1677] shrink-0" />
         Growth Milestones
       </h3>
 
-      <p className="text-sm font-medium text-slate-500 dark:text-slate-400 max-w-md">
-        Your journey is evolving. Add new achievements to keep your official profile synchronized with your career.
+      <p className="text-sm font-medium text-slate-500 dark:text-slate-400 max-w-md leading-relaxed">
+        Your journey is evolving. Add new achievements to keep your official
+        profile synchronized with your career.
       </p>
     </div>
 
     <Button
       size="lg"
       onClick={onCreate}
-      className="group w-full sm:w-auto rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold px-6 shadow-xl transition-all hover:scale-105 active:scale-95"
+      className="group w-full sm:w-auto rounded-full bg-[#DA1677] text-white font-bold px-6 shadow-xl transition-all hover:scale-105 active:scale-95"
     >
-      <FileEdit className="mr-2 h-4 w-4 transition-transform group-hover:rotate-12" />
+      <FileEdit className="mr-2 h-4 w-4 transition-transform group-hover:rotate-12 "  />
       Submit Milestone
     </Button>
   </div>
@@ -142,45 +143,61 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
     onValueChange={(v) => setActive(v as K)}
     className="relative z-10"
   >
-    {/* Tabs */}
-    <div className="relative mb-6">
-      <TabsList
-        ref={listRef as any}
-        className="flex w-full justify-start overflow-x-auto no-scrollbar gap-2 snap-x snap-mandatory bg-transparent p-0"
-      >
+    {/* TABS */}
+<div className="relative mb-6 hidden sm:block">
+    <TabsList
+  ref={listRef as any}
+  className="flex w-full overflow-x-auto no-scrollbar gap-3 px-10 sm:px-0 snap-x snap-mandatory bg-transparent p-0 justify-center sm:justify-start"
+>
+
         {tabs.map(({ key, title }) => (
           <TabsTrigger
             key={key}
             value={key}
-            className={clsx(
-              "snap-start whitespace-nowrap rounded-full px-4 sm:px-5 py-2 text-[10px] sm:text-xs font-bold uppercase tracking-widest transition-all",
-              "data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/30",
-              "data-[state=inactive]:bg-white/60 dark:data-[state=inactive]:bg-white/5 data-[state=inactive]:text-slate-500 data-[state=inactive]:hover:bg-white/80"
-            )}
+         className={clsx(
+  "min-w-max snap-start whitespace-nowrap rounded-full",
+  "px-4 sm:px-5 py-2 sm:py-2.5",
+  "text-[10px] sm:text-xs",
+  "font-bold uppercase",
+  "tracking-wide sm:tracking-widest",
+  "transition-all duration-200 hidden sm:inline-flex " ,
+
+  "data-[state=active]:bg-[#DA1677] data-[state=active]:text-white",
+  "data-[state=active]:shadow-md sm:data-[state=active]:shadow-lg",
+  "data-[state=active]:shadow-[#DA1677]/30",
+
+  "data-[state=inactive]:bg-white/70",
+  "dark:data-[state=inactive]:bg-white/5",
+  "data-[state=inactive]:text-slate-500",
+  "data-[state=inactive]:hover:bg-white/90" 
+)}
+
           >
             {title}
           </TabsTrigger>
         ))}
       </TabsList>
 
-      {/* Mobile Arrows */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center sm:hidden">
+      {/* Left Arrow */}
+      <div className="absolute inset-y-0 left-0  items-center hidden sm:flex
+">
         <button
           type="button"
           onClick={() => scrollTabs("left")}
-          className="pointer-events-auto rounded-full bg-white/90 dark:bg-slate-800/90 p-2 shadow-xl border border-white/20 backdrop-blur-md"
+          className="rounded-full bg-white/90 dark:bg-slate-800/90 p-2 shadow-lg border border-white/20 backdrop-blur-md"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 text-[#DA1677]" />
         </button>
       </div>
 
-      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center sm:hidden">
+      {/* Right Arrow */}
+      <div className="absolute inset-y-0 right-0  items-center hidden sm:flex">
         <button
           type="button"
           onClick={() => scrollTabs("right")}
-          className="pointer-events-auto rounded-full bg-white/90 dark:bg-slate-800/90 p-2 shadow-xl border border-white/20 backdrop-blur-md"
+          className="rounded-full bg-white/90 dark:bg-slate-800/90 p-2 shadow-lg border border-white/20 backdrop-blur-md"
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4 text-[#DA1677]" />
         </button>
       </div>
     </div>
@@ -191,10 +208,13 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
 
           <div className="flex flex-col sm:flex-row items-start gap-5 sm:gap-6">
 
-            {/* Icon */}
-            <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-transform group-hover:rotate-6">
-              <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
-            </div>
+            {/* ICON */}
+    <div className="flex w-full sm:w-auto justify-center sm:justify-start">
+  <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#DA1677] to-[#b0125f] text-white shadow-lg shadow-[#DA1677]/20 transition-transform group-hover:rotate-6">
+    <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
+  </div>
+</div>
+
 
             <div className="flex-1 space-y-4 w-full">
 
@@ -202,29 +222,29 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
                 <div className="text-base sm:text-lg font-black text-slate-800 dark:text-white leading-tight">
                   {title}
                 </div>
-                <div className="mt-2 h-1 w-10 sm:w-12 bg-emerald-500 rounded-full" />
+                <div className="mt-2 h-1 w-12 bg-[#DA1677] rounded-full" />
               </div>
 
-              {/* Grid */}
+              {/* GRID */}
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {lines.map((t, i) => (
                   <li
                     key={i}
                     className="flex items-start gap-2 text-sm font-medium text-slate-600 dark:text-slate-400"
                   >
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <CheckCircle2 className="h-4 w-4 text-[#DA1677] shrink-0 mt-0.5" />
                     {t}
                   </li>
                 ))}
               </ul>
 
-              {/* Quick Tip */}
-              <div className="rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 p-4 border border-emerald-500/10">
-                <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-tight text-emerald-700 dark:text-emerald-400">
+              {/* TIP */}
+              <div className="rounded-2xl bg-[#DA1677]/5 dark:bg-[#DA1677]/10 p-4 border border-[#DA1677]/10">
+                <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-tight text-[#DA1677]">
                   <Info className="h-3.5 w-3.5" />
                   Quick Tip
                 </p>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                   Use the{" "}
                   <span className="font-bold italic text-slate-900 dark:text-white">
                     “Submit Milestone”
@@ -236,11 +256,11 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* NAVIGATION */}
         <div className="mt-6 flex items-center justify-between px-1 sm:px-2">
 
           <button
-            className="group flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 hover:text-emerald-500 transition-colors"
+            className="group flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-[#DA1677] transition-colors"
             onClick={() => {
               pause();
               const idx = keys.indexOf(active);
@@ -258,7 +278,7 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
                 className={clsx(
                   "h-1.5 rounded-full transition-all duration-300",
                   k === active
-                    ? "w-8 bg-emerald-500"
+                    ? "w-8 bg-[#DA1677]"
                     : "w-1.5 bg-slate-300 dark:bg-slate-700"
                 )}
               />
@@ -266,7 +286,7 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
           </div>
 
           <button
-            className="group flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 hover:text-emerald-500 transition-colors"
+            className="group flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-[#DA1677] transition-colors"
             onClick={() => {
               pause();
               const idx = keys.indexOf(active);
@@ -282,10 +302,16 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
   </Tabs>
 
   <style jsx>{`
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
   `}</style>
 </div>
+
 
   );
 }
