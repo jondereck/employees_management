@@ -267,7 +267,8 @@ const Notifications = ({ data }: NotificationsProps) => {
               <div className="p-2 bg-yellow-100 rounded-xl">
                 <Cake className="h-5 w-5 text-yellow-600" />
               </div>
-              Today's Celebrants
+              {"Today's Celebrants"}
+              
             </h3>
             <TodaysBirthdays celebrantsToday={celebrantsToday} closeParentModal={closeModal} />
           </div>
@@ -345,6 +346,7 @@ const Notifications = ({ data }: NotificationsProps) => {
                 <Cake className="h-4 w-4 text-yellow-600" />
               </div>
               Today's Celebrants
+              {"Today's Celebrants"}
             </h3>
             <TodaysBirthdays celebrantsToday={celebrantsToday} closeParentModal={() => { }} />
           </div>
