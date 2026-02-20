@@ -230,41 +230,51 @@ const [terminationDate, setTerminationDate] = useState<string | null>(null);
   }
 };
 
-  const handleBulkPublicToggle = async (enable: boolean) => {
-    try {
-      setLoading(true);
+const handleBulkPublicToggle = async (enable: boolean) => {
+  try {
+    setLoading(true);
 
-      const target = (enable ? eligibleForEnablePublic : eligibleForDisablePublic).map(e => e.id);
+    const target = (enable
+      ? eligibleForEnablePublic
+      : eligibleForDisablePublic
+    ).map((e) => e.id);
 
-      if (target.length === 0) {
-        toast.message("No eligible employees", {
-          description: enable
-            ? "All selected are already public."
-            : "All selected are already private.",
-        });
-        return;
-      }
+    if (target.length === 0) return;
 
-      await axios.patch(`/api/${departmentId}/employees/toggle-public/bulk`, {
+    // ✅ OPTIMISTIC UPDATE FIRST
+    await mutate(
+      `/api/${departmentId}/employees`,
+      (current: any[] | undefined) => {
+        if (!current) return current;
+
+        return current.map((emp) =>
+          target.includes(emp.id)
+            ? { ...emp, publicEnabled: enable }
+            : emp
+        );
+      },
+      false // don't revalidate yet
+    );
+
+    // THEN call API
+    await axios.patch(
+      `/api/${departmentId}/employees/toggle-public/bulk`,
+      {
         employeeIds: target,
         enable,
-      });
+      }
+    );
 
-      toast.success(
-        enable
-          ? `${target.length} employees set as public`
-          : `${target.length} employees set as private`
-      );
+    // THEN revalidate silently
+    mutate(`/api/${departmentId}/employees`);
 
-      mutate(`/api/${departmentId}/employees`);
-      table.resetRowSelection();
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to toggle public profile");
-    } finally {
-      setLoading(false);
-    }
-  };
+    table.resetRowSelection();
+  } catch (error) {
+    toast.error("Failed to toggle public profile");
+  } finally {
+    setLoading(false);
+  }
+};
 
 
   return (

@@ -16,6 +16,7 @@ import { LINGAYEN_HOTLINES } from "./lingayen-hotline/data";
 import SimplePdfLinkTile from "./pdf-viewer-tile";
 import { FloatingShortcuts } from "./modals/floating-shorcuts";
 import MobileBirthdayGreeter from "./mobile-bday-greeter";
+import { cn } from "@/lib/utils";
 
 
 type Props = {
@@ -221,336 +222,280 @@ export default function PublicSelfServiceActions({
       </section>
   )}
      
-      <section>
-        <TooltipProvider delayDuration={200}>
-          <Card className="rounded-lg border">
-            <CardHeader className="flex items-center justify-between space-y-0">
-              <CardTitle className="text-base font-semibold">Self-Service</CardTitle>
-              <Badge variant="secondary" className="gap-1">
-                <Wrench className="h-3.5 w-3.5" />
-                Ongoing
-              </Badge>
-            </CardHeader>
+     <section>
+  <TooltipProvider delayDuration={200}>
+    {/* Main Container: High-Depth Glass Card */}
+    <Card className="rounded-[2.5rem] border-white/40 bg-white/30 backdrop-blur-2xl shadow-2xl overflow-hidden transition-all duration-500">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6 border-b border-white/20">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-500/30">
+            <Wrench className="h-5 w-5 text-white" />
+          </div>
+          <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-800">
+            Self-Service
+          </CardTitle>
+        </div>
+        <Badge 
+          variant="secondary" 
+          className="gap-1.5 bg-white/50 text-slate-600 border-white/60 px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-wider"
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+          </span>
+          Ongoing
+        </Badge>
+      </CardHeader>
 
-            {/* Floating shortcuts: Self-Service + Hotline */}
-     <FloatingShortcuts />
+ 
 
-
-            {/* Responsive grid: 1 / 2 / 3 cols */}
-            <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {/* Primary: COE/SR (single action that adapts) */}
-              {!isActive && biometricsFolderUrl && (
-                <div className="rounded-md border p-3 flex flex-col">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Fingerprint className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="font-medium text-sm sm:text-base">Biometrics Logs</span>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <Badge variant="outline">Drive</Badge>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        title="Refresh"
-                        onClick={() => fetchBiometricsMeta(biometricsFolderUrl)}
-                        disabled={bioLoading}
-                      >
-                        <RotateCcw className={`h-4 w-4 ${bioLoading ? "animate-spin" : ""}`} />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-3">
-                    Download your monthly attendance files. This is the same data we email—scan the QR, open Self-Service, and get it anytime.
-                  </p>
-
-                  <div className="mt-auto flex flex-col sm:flex-row gap-2">
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full sm:w-auto"
-                      onClick={() => setBioGuideOpen(true)}
-                    >
-                      Guide
-                    </Button>
-                    <PreActionGuard
-                      storageKey="biometrics_warn"
-                      policyId="2025-09"            // bump this when you change wording/policy to re-show dialog
-                      href={biometricsFolderUrl}
-                      newTab
-                      title="Before you open the Biometrics folder"
-                      subtitle="Google Drive → Biometrics"
-                      description="To ensure proper use:"
-                      bullets={[
-                        <>Use only the files for your <strong>office/BIO group</strong>.</>,
-                        <>Verify using your <strong>Employee No. / BIO number</strong> on your profile.</>,
-                        <>Match your <strong>BIO Group, Office/Building</strong>, and <strong>Index Code</strong> from the <strong>guide</strong>.</>,
-                        <>Misuse or misrepresentation may lead to rejection or administrative action.</>,
-                      ]}
-                      buttonText={<>Open Drive Folder</>}
-                      buttonIconLeft={<Download className="h-4 w-4" />}
-                      buttonProps={{ size: "sm", className: "w-full sm:w-auto" }}
-                    />
-
-                  </div>
-
-                  {/* Status line */}
-                  <div className="mt-2 text-[11px] text-muted-foreground">
-                    {bioLoading && <span>Checking last update…</span>}
-                    {!bioLoading && bioError && <span className="text-red-600">Error: {bioError}</span>}
-                    {!bioLoading && !bioError && lastUpdated && <span className="text-red-600">Last Update: {fmtPH(lastUpdated)}</span>}
-                    {!bioLoading && !bioError && !lastUpdated && <span>No files detected yet.</span>}
-                  </div>
-                </div>
-              )}
-
-
-              {/* Downloadable Forms (single place) */}
-              <div className="rounded-md border p-3 flex flex-col">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    {/* Left: icon + label */}
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="font-medium text-sm sm:text-base truncate">
-                        Downloadable Forms
-                      </span>
-                    </div>
-
-                    {/* Right: badge */}
-                    <Badge variant="outline" className="whitespace-nowrap shrink-0">
-                      Download
-                    </Badge>
-                  </div>
-
-                </div>
-                <ul className="text-sm space-y-2 mb-2">
-                  {forms.map((f) => (
-                    <li key={f.label} className="flex items-center justify-between gap-2">
-                      <span className="text-xs sm:text-sm">{f.label}</span>
-                      <a href={f.href} target="_blank" rel="noreferrer">
-                        <Button size="sm" variant="outline" className="h-7">
-                          <Download className="h-3.5 w-3.5 mr-1" />
-                          Get
-                        </Button>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-
+      <CardContent className="grid gap-6 p-6 sm:grid-cols-2 lg:grid-cols-3">
+        
+        {/* 1. BIOMETRICS LOGS TILE */}
+        {!isActive && biometricsFolderUrl && (
+          <div className="group relative flex flex-col rounded-[2rem] border border-white/40 bg-white/40 p-5 shadow-sm transition-all hover:bg-white/60 hover:shadow-xl hover:-translate-y-1">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600 shadow-inner">
+                <Fingerprint className="h-6 w-6" />
               </div>
-              <div className="rounded-md border p-3 flex flex-col">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <PrimaryIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="font-medium text-sm sm:text-base">{primary.title}</span>
-                  </div>
-                  <Badge variant="secondary">Ongoing</Badge>
-                </div>
-                <p className="text-xs sm:text-sm text-muted-foreground mb-3 flex-grow">
-                  {primary.key === "sr"
-                    ? "Available for Permanent, Co-terminous, and Casual employees."
-                    : "Submit a COE request. Processing and release by HRMO."}
-                </p>
-                <Button size="sm" className="w-full sm:w-auto mt-auto" onClick={() => setDocOpen(true)}>
-                  {primary.btn}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 rounded-xl hover:bg-indigo-100"
+                onClick={() => fetchBiometricsMeta(biometricsFolderUrl)}
+                disabled={bioLoading}
+              >
+                <RotateCcw className={`h-4 w-4 text-indigo-600 ${bioLoading ? "animate-spin" : ""}`} />
+              </Button>
+            </div>
+
+            <h3 className="font-black text-slate-800 uppercase tracking-tight text-sm mb-1">Biometrics Logs</h3>
+            <p className="text-[11px] font-medium text-slate-500 leading-relaxed mb-4">
+              Access monthly attendance files via Drive. Match your BIO Group and sync anytime.
+            </p>
+
+            <div className="mt-auto flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="flex-1 rounded-xl bg-slate-900/5 text-slate-600 font-bold text-[10px] uppercase tracking-wider hover:bg-slate-900/10"
+                onClick={() => setBioGuideOpen(true)}
+              >
+                Guide
+              </Button>
+              <PreActionGuard
+                storageKey="biometrics_warn"
+                policyId="2025-09"
+                href={biometricsFolderUrl}
+                newTab
+                title="Before you open Biometrics"
+                subtitle="Google Drive → Biometrics"
+                description="To ensure proper use:"
+                bullets={[
+                  <>Use only files for your <strong>office/BIO group</strong>.</>,
+                  <>Verify your <strong>Employee No.</strong> on your profile.</>,
+                  <>Match <strong>BIO Group</strong> and <strong>Index Code</strong>.</>,
+                  <>Misuse may lead to administrative action.</>,
+                ]}
+                buttonText="Open Drive"
+                buttonIconLeft={<Download className="h-4 w-4" />}
+                buttonProps={{ 
+                  size: "sm", 
+                  className: "flex-[2] rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 font-black text-[10px] uppercase tracking-widest" 
+                }}
+              />
+            </div>
+            
+            <div className="mt-3 flex items-center gap-1.5 px-1">
+               <div className={cn("h-1.5 w-1.5 rounded-full", lastUpdated ? "bg-emerald-500" : "bg-slate-300")} />
+               <span className="text-[10px] font-black uppercase tracking-tighter text-slate-400">
+                 {bioLoading ? "Syncing..." : lastUpdated ? `Last Update: ${fmtPH(lastUpdated)}` : bioError ? "Error Loading" : "No files detected"}
+               </span>
+            </div>
+          </div>
+        )}
+
+        {/* 2. DOWNLOADABLE FORMS TILE */}
+        <div className="flex flex-col rounded-[2rem] border border-white/40 bg-white/40 p-5 shadow-sm transition-all hover:bg-white/60">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 shadow-inner">
+            <FileText className="h-6 w-6" />
+          </div>
+          <h3 className="font-black text-slate-800 uppercase tracking-tight text-sm mb-3">Downloadable Forms</h3>
+          
+          <div className="space-y-2 flex-grow">
+            {forms.map((f) => (
+              <div key={f.label} className="flex items-center justify-between p-2 rounded-xl bg-white/30 border border-white/20">
+                <span className="text-[11px] font-bold text-slate-600 truncate max-w-[180px]">{f.label}</span>
+                <a href={f.href} target="_blank" rel="noreferrer">
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg hover:bg-amber-100 text-amber-600">
+                    <Download className="h-3.5 w-3.5" />
+                  </Button>
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 3. PRIMARY ACTION (COE/SR) TILE */}
+        <div className="flex flex-col rounded-[2rem] border border-white/40 bg-white/40 p-5 shadow-sm transition-all hover:bg-white/60">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-600 shadow-inner">
+              <PrimaryIcon className="h-6 w-6" />
+            </div>
+            <Badge className="bg-violet-100 text-violet-600 border-none font-black text-[9px] uppercase">Ongoing</Badge>
+          </div>
+          <h3 className="font-black text-slate-800 uppercase tracking-tight text-sm mb-1">{primary.title}</h3>
+          <p className="text-[11px] font-medium text-slate-500 leading-relaxed mb-4 flex-grow">
+            {primary.key === "sr"
+              ? "Available for Permanent, Co-terminous, and Casual employees."
+              : "Submit a COE request. Processing and release by HRMO."}
+          </p>
+          <Button 
+            size="sm" 
+            className="w-full rounded-xl bg-violet-600 text-white shadow-lg shadow-violet-500/20 font-black text-[10px] uppercase tracking-widest"
+            onClick={() => setDocOpen(true)}
+          >
+            {primary.btn}
+          </Button>
+        </div>
+
+        {/* 4. LEAVE TILE */}
+        {canFileLeave && (
+          <div className="flex flex-col rounded-[2rem] border border-white/40 bg-white/40 p-5 shadow-sm transition-all hover:bg-white/60">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600 shadow-inner">
+              <Calendar className="h-6 w-6" />
+            </div>
+            <h3 className="font-black text-slate-800 uppercase tracking-tight text-sm mb-1">File a Leave</h3>
+            <p className="text-[11px] font-medium text-slate-500 leading-relaxed mb-4">
+              Download form and submit to your Office HR Focal.
+            </p>
+            <div className="mt-auto flex gap-2">
+              <Button size="sm" variant="ghost" className="flex-1 rounded-xl bg-slate-900/5 text-slate-600 font-bold text-[10px] uppercase hover:bg-slate-900/10" onClick={() => setLeaveOpen(true)}>
+                Guide
+              </Button>
+              <a href={leaveFormUrl} target="_blank" rel="noreferrer" className="flex-[2]">
+                <Button size="sm" className="w-full rounded-xl bg-rose-500 text-white shadow-lg shadow-rose-500/20 font-black text-[10px] uppercase tracking-widest">
+                  <Download className="h-3.5 w-3.5 mr-1" /> Get Form
                 </Button>
-              </div>
+              </a>
+            </div>
+          </div>
+        )}
 
-              {/* File a Leave */}
+      </CardContent>
+    </Card>
 
-              {canFileLeave && (
-                <div className="rounded-md border p-3 flex flex-col">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="font-medium text-sm sm:text-base">File a Leave</span>
-                    </div>
-                    <Badge variant="outline">Download</Badge>
-                  </div>
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-3 flex-grow">
-                    Download the leave form and submit to your Office HR Focal.
-                  </p>
-                  <div className="flex flex-col sm:flex-row gap-2 mt-auto">
-                    <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setLeaveOpen(true)}>
-                      Guide
-                    </Button>
-                    <a href={leaveFormUrl} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
-                      <Button size="sm" className="w-full sm:w-auto">
-                        <Download className="h-4 w-4 mr-1" />
-                        Download Leave Form
-                      </Button>
-                    </a>
-                  </div>
-                </div>
-              )}
+    {/* GLASS DIALOGS */}
 
+    {/* Biometrics Guide Dialog */}
+    <Dialog open={bioGuideOpen} onOpenChange={setBioGuideOpen}>
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg bg-white/80 backdrop-blur-2xl border-white/40 rounded-[2.5rem] shadow-2xl p-6">
+        <DialogHeader>
+          <DialogTitle className="font-black uppercase tracking-tight text-slate-800">Biometrics Folder Guide</DialogTitle>
+          <DialogDescription className="text-xs font-medium text-slate-500">
+            Use this chart to match your BIO Group, Office, and Index Code.
+          </DialogDescription>
+        </DialogHeader>
 
+        <div className="relative w-full overflow-hidden rounded-2xl border border-white/40 bg-slate-100 mt-2">
+          <img src="/biometrics/biometrics-guide.png" alt="Guide" className="block w-full h-auto" />
+          <img src="/logo.png" alt="" className="pointer-events-none absolute inset-0 m-auto h-40 opacity-10 select-none" />
+        </div>
 
+        <div className="flex justify-end gap-3 mt-4">
+          <a href="/biometrics/biometrics-guide.png" target="_blank" rel="noreferrer">
+            <Button variant="ghost" size="sm" className="rounded-xl font-bold text-[10px] uppercase">New Tab</Button>
+          </a>
+          <Button size="sm" className="rounded-xl bg-slate-900 text-white px-6 font-black text-[10px] uppercase tracking-widest" onClick={() => setBioGuideOpen(false)}>
+            Close
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
 
-              {/* Training & Development */}
-              {/* <div className="rounded-md border p-3 flex flex-col">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <GraduationCap className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="font-medium text-sm sm:text-base">Training &amp; Development</span>
-                  </div>
-                  <Badge variant="secondary">Ongoing</Badge>
-                </div>
-                <p className="text-xs sm:text-sm text-muted-foreground mb-3 flex-grow">
-                  View the training calendar or submit a nomination for upcoming programs.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2 mt-auto">
-                  <a href={trainingCalendarUrl} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
-                    <Button size="sm" variant="outline" className="w-full sm:w-auto">
-                      <Calendar className="h-4 w-4 mr-1" />
-                      View Calendar
-                    </Button>
-                  </a>
+    {/* COE/SR Status Dialog */}
+    <Dialog open={docOpen} onOpenChange={setDocOpen}>
+      <DialogContent className="bg-white/80 backdrop-blur-2xl border-white/40 rounded-[2.5rem]">
+        <DialogHeader>
+          <DialogTitle className="font-black uppercase tracking-tight">{primary.title}</DialogTitle>
+          <DialogDescription className="text-sm font-medium">
+            {primary.key === "sr"
+              ? "Please coordinate with HRMO for manual Service Record issuance."
+              : "Please coordinate with HRMO for manual COE issuance."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+            <p className="text-[11px] font-black uppercase tracking-widest text-indigo-600">
+              Feature Roadmap: Online request + Email updates coming soon.
+            </p>
+        </div>
+      </DialogContent>
+    </Dialog>
 
-                  {trainingNominationFormUrl ? (
-                    <a
-                      href={trainingNominationFormUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="w-full sm:w-auto"
-                    >
-                      <Button size="sm" className="w-full sm:w-auto">
-                        <Download className="h-4 w-4 mr-1" />
-                        Nomination Form
-                      </Button>
-                    </a>
-                  ) : (
-                    <Button
-                      size="sm"
-                      className="w-full sm:w-auto"
-                      onClick={() => setTrainingOpen(true)}
-                    >
-                      Nominate
-                    </Button>
-                  )}
-                </div>
-              </div> */}
+    {/* Leave Instructions Dialog */}
+    <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+      <DialogContent className="bg-white/80 backdrop-blur-2xl border-white/40 rounded-[2.5rem] p-8">
+        <DialogHeader>
+          <DialogTitle className="font-black uppercase tracking-tight">Leave Filing Process</DialogTitle>
+          <DialogDescription className="font-medium text-rose-600 uppercase text-[10px] tracking-widest">
+            Current Manual Workflow
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 my-2">
+          {[
+            "Download and print the official form.",
+            "Complete all fields and sign.",
+            "Attach required documents.",
+            "Submit to your Office HR Focal."
+          ].map((step, i) => (
+            <div key={i} className="flex gap-3 items-center">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold">{i+1}</span>
+              <span className="text-sm font-semibold text-slate-700">{step}</span>
+            </div>
+          ))}
+        </div>
+        <div className="pt-4 flex flex-col gap-3">
+          <a href={leaveFormUrl} target="_blank" rel="noreferrer">
+            <Button className="w-full rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-[10px] uppercase tracking-widest">
+              <Download className="h-4 w-4 mr-2" /> Download Official Form
+            </Button>
+          </a>
+          <p className="text-[10px] text-center font-bold text-slate-400 uppercase tracking-tighter">
+            Digital routing and approvals are currently in development.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
 
-
-
-            </CardContent>
-          </Card>
-
-          {/* Biometrics: Guide image with watermark */}
-          <Dialog open={bioGuideOpen} onOpenChange={setBioGuideOpen}>
-            <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-              <DialogHeader>
-                <DialogTitle>Biometrics Folder Guide</DialogTitle>
-                <DialogDescription>
-                  Use this chart to match your BIO Group, Office/Building, and Index Code, then open the correct folder.
-                </DialogDescription>
-              </DialogHeader>
-
-              {/* Image container with watermark overlay */}
-              <div className="relative w-full overflow-hidden rounded-md border">
-                {/* Main guide image */}
-                <img
-                  src="/biometrics/biometrics-guide.png"
-                  alt="BIO Location Guide"
-                  className="block w-full h-auto"
-                  loading="eager"
-                />
-
-
-                <img src="/logo.png" alt="" aria-hidden="true"
-                  className="pointer-events-none select-none absolute inset-0 m-auto h-60 opacity-10" />
-
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <a href="/biometrics/biometrics-guide.png" target="_blank" rel="noreferrer">
-                  <Button variant="outline" size="sm">Open image in new tab</Button>
-                </a>
-                <Button size="sm" onClick={() => setBioGuideOpen(false)}>Close</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Unified COE/SR dialog */}
-          <Dialog open={docOpen} onOpenChange={setDocOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{primary.title}</DialogTitle>
-                <DialogDescription>
-                  {primary.key === "sr"
-                    ? "This feature is under development. For now, coordinate with HRMO for your Service Record."
-                    : "This feature is under development. For now, coordinate with HRMO for your COE."}
-                </DialogDescription>
-              </DialogHeader>
-              <p className="text-[11px] text-muted-foreground">
-                Coming soon: Online request with email updates and pickup schedule.
-              </p>
-            </DialogContent>
-          </Dialog>
-
-          {/* Leave guide dialog */}
-          <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>File a Leave</DialogTitle>
-                <DialogDescription>
-                  Download, fill out, and submit the leave form to your Office HR Focal Person.
-                </DialogDescription>
-              </DialogHeader>
-              <ol className="list-decimal ml-5 text-sm space-y-1">
-                <li>Download the official leave form.</li>
-                <li>Fill out all required fields and sign.</li>
-                <li>Attach supporting documents (if any).</li>
-                <li>Submit to your Office HR Focal for routing and approval.</li>
-              </ol>
-              <div className="pt-3">
-                <a href={leaveFormUrl} target="_blank" rel="noreferrer">
-                  <Button size="sm">
-                    <Download className="h-4 w-4 mr-1" />
-                    Download Leave Form
-                  </Button>
-                </a>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Coming soon: Online leave filing with routing & approvals.
-              </p>
-            </DialogContent>
-          </Dialog>
-
-
-          {/* Training dialog (if no nomination form yet) */}
-          <Dialog open={trainingOpen} onOpenChange={setTrainingOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Training Nomination</DialogTitle>
-                <DialogDescription>
-                  This feature is under development. Coordinate with the HRMO Training Unit for nominations.
-                </DialogDescription>
-              </DialogHeader>
-              {trainingNominationFormUrl ? (
-                <a href={trainingNominationFormUrl} target="_blank" rel="noreferrer">
-                  <Button size="sm">
-                    <Download className="h-4 w-4 mr-1" />
-                    Download Nomination Form
-                  </Button>
-                </a>
-              ) : null}
-              <p className="text-[11px] text-muted-foreground">
-                Coming soon: Online nomination with supervisor approval workflow.
-              </p>
-            </DialogContent>
-          </Dialog>
-
-        </TooltipProvider>
-      </section>
+    {/* Training Placeholder Dialog */}
+    <Dialog open={trainingOpen} onOpenChange={setTrainingOpen}>
+      <DialogContent className="bg-white/80 backdrop-blur-2xl border-white/40 rounded-[2.5rem]">
+        <DialogHeader>
+          <DialogTitle className="font-black uppercase tracking-tight">Training Nomination</DialogTitle>
+          <DialogDescription className="text-sm">
+            Coordinate with HRMO Training Unit for nomination procedures.
+          </DialogDescription>
+        </DialogHeader>
+        {trainingNominationFormUrl && (
+          <a href={trainingNominationFormUrl} target="_blank" rel="noreferrer" className="mt-2">
+            <Button size="sm" className="w-full rounded-xl bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest">
+              <Download className="h-4 w-4 mr-2" /> Download Nomination Form
+            </Button>
+          </a>
+        )}
+        
+      </DialogContent>
+    </Dialog>
+<FloatingShortcuts />
+  </TooltipProvider>
+</section>
       <section id="hotlines">
 
         <HotlineDirectory items={LINGAYEN_HOTLINES} className="pt-6" />
       </section>
+
+           {/* Floating shortcuts integrated inside the glass bounds */}
+      
     </div>
 
 

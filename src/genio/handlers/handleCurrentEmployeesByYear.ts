@@ -2,14 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { streamReply } from "../utils";
 
 function startOfYear(year: number) {
-  return new Date(year, 0, 1); // Jan 1
+  return new Date(year, 0, 1);
 }
 
 function endOfYear(year: number) {
-  return new Date(year, 11, 31, 23, 59, 59, 999); // Dec 31
+  return new Date(year, 11, 31, 23, 59, 59, 999);
 }
 
-// MM/DD/YYYY → Date
 function parseUSDate(value?: string | null): Date | null {
   if (!value) return null;
 
@@ -27,7 +26,7 @@ export async function handleCurrentEmployeesByYear(
   const yearEnd = endOfYear(targetYear);
 
   /* ===============================
-     FETCH EMPLOYEES (NO isArchived)
+     FETCH EMPLOYEES
      =============================== */
   const employees = await prisma.employee.findMany({
     where: {
@@ -38,29 +37,25 @@ export async function handleCurrentEmployeesByYear(
       firstName: true,
       lastName: true,
       dateHired: true,
-      terminateDate: true, // MM/DD/YYYY
-      officeId: true,
+      terminateDate: true,
       employeeTypeId: true,
+      employeeType: {
+        select: { id: true, name: true },
+      },
     },
     orderBy: { lastName: "asc" },
   });
 
   /* ===============================
-     APPLY "CURRENT BY END OF YEAR"
+     FILTER CURRENT
      =============================== */
   const currentEmployees = employees.filter((e) => {
     const termination = parseUSDate(e.terminateDate);
 
-    // still employed
     if (!termination) return true;
-
-    // terminated AFTER the year
     return termination > yearEnd;
   });
 
-  /* ===============================
-     RESPONSE
-     =============================== */
   if (currentEmployees.length === 0) {
     return streamReply(
       `No current employees as of **${targetYear}**.`,
@@ -69,6 +64,24 @@ export async function handleCurrentEmployeesByYear(
     );
   }
 
+  /* ===============================
+     BREAKDOWN BY EMPLOYEE TYPE
+     =============================== */
+  const breakdownMap: Record<string, number> = {};
+
+  currentEmployees.forEach((e) => {
+    const typeName = e.employeeType?.name ?? "Unknown";
+    breakdownMap[typeName] = (breakdownMap[typeName] || 0) + 1;
+  });
+
+  const breakdownList = Object.entries(breakdownMap)
+    .sort((a, b) => b[1] - a[1]) // highest first
+    .map(([name, count]) => `• **${name}** — ${count}`)
+    .join("\n");
+
+  /* ===============================
+     OPTIONAL: PREVIEW LIST
+     =============================== */
   const list = currentEmployees
     .slice(0, 20)
     .map(
@@ -81,27 +94,31 @@ export async function handleCurrentEmployeesByYear(
       ? `\n\n…and ${currentEmployees.length - 20} more.`
       : "";
 
-context = {
-  ...context,
-  lastCountQuery: {
-    type: "currentEmployeesByYear",
-    year: targetYear,
-
-    // Base Prisma filter (safe)
-    where: {
-      dateHired: { lte: yearEnd },
+  /* ===============================
+     SAVE CONTEXT
+     =============================== */
+  context = {
+    ...context,
+    lastCountQuery: {
+      type: "currentEmployeesByYear",
+      year: targetYear,
+      where: {
+        dateHired: { lte: yearEnd },
+      },
+      postFilter: {
+        excludeTerminatedOnOrBefore: targetYear,
+      },
     },
+  };
 
-    // 🔑 tell export this is special
-    postFilter: {
-      excludeTerminatedOnOrBefore: targetYear,
-    },
-  },
-};
-
-
+  /* ===============================
+     FINAL RESPONSE
+     =============================== */
   return streamReply(
-    `There are **${currentEmployees.length} current employees** as of **${targetYear}**.\n\n${list}${more}`,
+    `There are **${currentEmployees.length} current employees** as of **${targetYear}**.\n\n` +
+      `### Breakdown by Employee Type\n` +
+      `${breakdownList}\n\n` +
+      `### Sample List\n${list}${more}`,
     context,
     null,
     { canExport: true }

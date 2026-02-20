@@ -48,7 +48,7 @@ if (confidence < 2) {
     intent.action = aiAction;
   }
 }
-console.log("INTENT:", intent);
+
 
   
   switch (intent.action) {

@@ -12,6 +12,7 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   children?: React.ReactNode;
+  className?: string;
   contentClassName?: string;
   headerClassName?: string;
   bodyClassName?: string;
@@ -24,6 +25,7 @@ const Modal = ({
   isOpen,
   onClose,
   children,
+  className,  
   contentClassName,
   headerClassName,
   bodyClassName,
@@ -47,11 +49,12 @@ const Modal = ({
   
   return (
     <Dialog open={isOpen} onOpenChange={onChange}>
-     <DialogContent
-        className={cn(
-          "w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6",
-          contentClassName
-        )}
+ <DialogContent
+  className={cn(
+    "w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto p-4 sm:p-6",
+    className,          // 👈 allow external override
+    contentClassName    // 👈 keep backward compatibility
+  )}
         // iOS smooth scrolling
         style={{ WebkitOverflowScrolling: "touch" }}
       >

@@ -42,23 +42,23 @@ export default function SimplePdfModalTile({
   const [pdfLoading, setPdfLoading] = React.useState(true);
   const [pdfError, setPdfError] = React.useState<string | null>(null);
   const loadingRef = React.useRef(pdfLoading);
-const fileParam = encodeURIComponent(pdfUrl); // e.g. '/_pdf/employee-handbook.pdf'
-const src = `/pdfjs-legacy/web/viewer.html?file=${fileParam}`;
-  
+  const fileParam = encodeURIComponent(pdfUrl); // e.g. '/_pdf/employee-handbook.pdf'
+  const src = `/pdfjs-legacy/web/viewer.html?file=${fileParam}`;
 
-React.useEffect(() => {
-  loadingRef.current = pdfLoading;
-  if (!pdfLoading) setPdfError(null); // clear any old “still loading…” text
-}, [pdfLoading]);
 
-function needsPdfJsViewer() {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent;
-  // iOS Safari, Samsung Internet, some mobile Chrome variants are unreliable
-  return /iPhone|iPad|iPod|SamsungBrowser|FxiOS|CriOS/i.test(ua);
-}
+  React.useEffect(() => {
+    loadingRef.current = pdfLoading;
+    if (!pdfLoading) setPdfError(null); // clear any old “still loading…” text
+  }, [pdfLoading]);
 
-const [iframeSrc, setIframeSrc] = React.useState<string>("");
+  function needsPdfJsViewer() {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent;
+    // iOS Safari, Samsung Internet, some mobile Chrome variants are unreliable
+    return /iPhone|iPad|iPod|SamsungBrowser|FxiOS|CriOS/i.test(ua);
+  }
+
+  const [iframeSrc, setIframeSrc] = React.useState<string>("");
 
 
 
@@ -76,10 +76,10 @@ const [iframeSrc, setIframeSrc] = React.useState<string>("");
   }, [pdfUrl, watermarkText, watermarkImageUrl, wmSize, wmOpacity, wmRotationDeg]);
 
   const nativeUrl = viewerUrl; // your watermarked PDF
-const pdfJsUrl = React.useMemo(
-  () => `/pdfjs-legacy/web/viewer.html?file=${encodeURIComponent(nativeUrl)}`,
-  [nativeUrl]
-);
+  const pdfJsUrl = React.useMemo(
+    () => `/pdfjs-legacy/web/viewer.html?file=${encodeURIComponent(nativeUrl)}`,
+    [nativeUrl]
+  );
 
   const handleDownload = React.useCallback(() => {
     const a = document.createElement("a");
@@ -91,209 +91,197 @@ const pdfJsUrl = React.useMemo(
   }, [viewerUrl, downloadFileName]);
 
   // when modal opens or URL changes, reset loading state
-React.useEffect(() => {
-  if (!open) return;
-  // try native first
-  setIframeSrc(nativeUrl);
-  setPdfLoading(true);
-  loadingRef.current = true;
-
-  // if the browser is known-problematic, or it still hasn't finished quickly,
-  // swap to pdf.js viewer
-  const swapFast = needsPdfJsViewer();
-  const t = setTimeout(() => {
-    if (loadingRef.current) {
-      setIframeSrc(pdfJsUrl);
-      // keep loader; pdf.js will trigger onLoad soon after
-    }
-  }, swapFast ? 100 : 1500); // Samsung/iOS: swap almost immediately
-
-  return () => clearTimeout(t);
-}, [open, nativeUrl, pdfJsUrl]);
-
-async function ensurePdfJs() {
-  // legacy build works best in Next.js
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
-  // tell it where the worker is (you already have this path)
-  (pdfjs as any).GlobalWorkerOptions.workerSrc = "/pdfjs-legacy/build/pdf.worker.min.js";
-  return pdfjs;
-}
-function usePdfThumbnail(pdfUrl: string, targetWidth = 96) {
-  const [thumb, setThumb] = React.useState<string | null>(null);
-  const [thumbErr, setThumbErr] = React.useState<string | null>(null);
-
   React.useEffect(() => {
-    let cancelled = false;
+    if (!open) return;
+    // try native first
+    setIframeSrc(nativeUrl);
+    setPdfLoading(true);
+    loadingRef.current = true;
 
-    async function run() {
-      setThumb(null);
-      setThumbErr(null);
-      try {
-        const pdfjs = await ensurePdfJs();
-        const loadingTask = (pdfjs as any).getDocument({
-          url: pdfUrl, // absolute or public path
-          // safer defaults in Next/Edge:
-          isEvalSupported: false,
-          useWorkerFetch: true,
-          useSystemFonts: true,
-        });
-        const pdf = await loadingTask.promise;
-        const page = await pdf.getPage(1);
-
-        const viewport = page.getViewport({ scale: 1 });
-        const scale = targetWidth / viewport.width;
-        const scaled = page.getViewport({ scale });
-
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d")!;
-        canvas.width = Math.max(1, Math.floor(scaled.width));
-        canvas.height = Math.max(1, Math.floor(scaled.height));
-
-        // Render
-        await page.render({ canvasContext: ctx, viewport: scaled }).promise;
-
-        if (!cancelled) {
-          setThumb(canvas.toDataURL("image/png"));
-        }
-      } catch (e: any) {
-        if (!cancelled) setThumbErr(e?.message ?? "thumb-failed");
+    // if the browser is known-problematic, or it still hasn't finished quickly,
+    // swap to pdf.js viewer
+    const swapFast = needsPdfJsViewer();
+    const t = setTimeout(() => {
+      if (loadingRef.current) {
+        setIframeSrc(pdfJsUrl);
+        // keep loader; pdf.js will trigger onLoad soon after
       }
-    }
-    run();
+    }, swapFast ? 100 : 1500); // Samsung/iOS: swap almost immediately
 
-    return () => { cancelled = true; };
-  }, [pdfUrl, targetWidth]);
+    return () => clearTimeout(t);
+  }, [open, nativeUrl, pdfJsUrl]);
 
-  return { thumb, thumbErr };
-}
+  async function ensurePdfJs() {
+    // legacy build works best in Next.js
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+    // tell it where the worker is (you already have this path)
+    (pdfjs as any).GlobalWorkerOptions.workerSrc = "/pdfjs-legacy/build/pdf.worker.min.js";
+    return pdfjs;
+  }
+  function usePdfThumbnail(pdfUrl: string, targetWidth = 96) {
+    const [thumb, setThumb] = React.useState<string | null>(null);
+    const [thumbErr, setThumbErr] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+      let cancelled = false;
+
+      async function run() {
+        setThumb(null);
+        setThumbErr(null);
+        try {
+          const pdfjs = await ensurePdfJs();
+          const loadingTask = (pdfjs as any).getDocument({
+            url: pdfUrl, // absolute or public path
+            // safer defaults in Next/Edge:
+            isEvalSupported: false,
+            useWorkerFetch: true,
+            useSystemFonts: true,
+          });
+          const pdf = await loadingTask.promise;
+          const page = await pdf.getPage(1);
+
+          const viewport = page.getViewport({ scale: 1 });
+          const scale = targetWidth / viewport.width;
+          const scaled = page.getViewport({ scale });
+
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d")!;
+          canvas.width = Math.max(1, Math.floor(scaled.width));
+          canvas.height = Math.max(1, Math.floor(scaled.height));
+
+          // Render
+          await page.render({ canvasContext: ctx, viewport: scaled }).promise;
+
+          if (!cancelled) {
+            setThumb(canvas.toDataURL("image/png"));
+          }
+        } catch (e: any) {
+          if (!cancelled) setThumbErr(e?.message ?? "thumb-failed");
+        }
+      }
+      run();
+
+      return () => { cancelled = true; };
+    }, [pdfUrl, targetWidth]);
+
+    return { thumb, thumbErr };
+  }
 
 
-const { thumb } = usePdfThumbnail(pdfUrl, 48); // 48–96 is good for the tile
+  const { thumb } = usePdfThumbnail(pdfUrl, 48); // 48–96 is good for the tile
   return (
-
-
-
-      <Dialog open={open} onOpenChange={setOpen}>
-
-        {/* Trigger tile — equal height & consistent icon */}
-        <DialogTrigger asChild>
+  <Dialog open={open} onOpenChange={setOpen}>
+  {/* TRIGGER TILE - GLASS OVERHAUL */}
+  <DialogTrigger asChild>
     <button
       type="button"
-      className="w-full rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
+      className="w-full rounded-[2rem] outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 group"
     >
       <Card
         className={cn(
-          "group relative flex items-center gap-3 sm:gap-4 rounded-xl border transition hover:shadow-md",
-          "p-3 sm:p-4",
-          "min-h-[100px] sm:min-h-[112px]" // consistent but compact
+          "relative flex items-center gap-4 rounded-[2rem] transition-all duration-300",
+          "p-4 border-white/40 bg-white/40 backdrop-blur-md shadow-lg hover:shadow-xl hover:bg-white/60",
+          "min-h-[112px]" 
         )}
       >
-        
-       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-lg bg-muted overflow-hidden">
-  {thumb ? (
-    <img
-      src={thumb}
-      alt=""
-      className="h-full w-full object-cover"
-      loading="lazy"
-      decoding="async"
-    />
-  ) : (
-    // fallback while rendering the thumb
-    <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-foreground/70" />
-  )}
-</div>
-        <div className="min-w-0 flex-1 text-center sm:text-left">
-          <div className="text-sm sm:text-base font-semibold leading-tight">{title}</div>
-          <div className="text-xs sm:text-sm text-muted-foreground leading-snug">{description}</div>
+        {/* Thumbnail Squircle */}
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-500/10 overflow-hidden border border-white/20 shadow-inner">
+          {thumb ? (
+            <img
+              src={thumb}
+              alt=""
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <FileText className="h-6 w-6 text-indigo-600" />
+          )}
         </div>
-        <div className="ml-auto hidden sm:block text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition">
+
+        {/* Text Content */}
+        <div className="min-w-0 flex-1 text-left">
+          <div className="text-sm sm:text-base font-black text-slate-800 leading-tight uppercase tracking-tight">
+            {title}
+          </div>
+          <div className="text-[11px] font-medium text-slate-500 leading-snug mt-1 line-clamp-2">
+            {description}
+          </div>
+        </div>
+
+        {/* Glass Button "Open" */}
+        <div className="hidden sm:flex items-center justify-center h-8 px-3 rounded-xl bg-indigo-600/10 text-indigo-600 text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
           Open
         </div>
       </Card>
     </button>
   </DialogTrigger>
 
-        {/* Simple modal viewer — background remains visible behind it */}
-        <DialogContent
-          className={cn(
-            // wide but not full; keep backdrop visible
-            "sm:max-w-4xl w-[calc(100vw-2rem)] p-0 overflow-hidden",
-            // remove default gaps so iframe can fill
-            "gap-0"
-          )}
-        >
-          <DialogHeader className="px-4 pt-4 pb-2">
-            <DialogTitle className="text-base">{title}</DialogTitle>
-            <DialogDescription className="sr-only">View {title} inside the app</DialogDescription>
-          </DialogHeader>
+  {/* MODAL VIEWER - FROST GLASS OVERHAUL */}
+  <DialogContent
+    className={cn(
+      "sm:max-w-5xl w-[calc(100vw-2rem)] p-0 gap-0 overflow-hidden",
+      "bg-white/70 backdrop-blur-3xl border-white/40 rounded-[2.5rem] shadow-2xl"
+    )}
+  >
+    <DialogHeader className="px-6 pt-6 pb-4">
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-indigo-600 rounded-xl">
+          <FileText className="h-4 w-4 text-white" />
+        </div>
+        <div>
+          <DialogTitle className="text-sm font-black uppercase tracking-widest text-slate-800">
+            {title}
+          </DialogTitle>
+          <DialogDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+            Internal Document Viewer
+          </DialogDescription>
+        </div>
+      </div>
+    </DialogHeader>
 
-          {/* Small top bar inside modal (download optional) */}
-          <div className="flex items-center justify-between px-4 pb-3">
-            <div className="text-xs text-muted-foreground">Read & download</div>
-            <Button size="sm" variant="outline" onClick={handleDownload}>
-              <Download className="mr-2 h-4 w-4" />
-              Download
-            </Button>
+    {/* Controls Bar */}
+    <div className="flex items-center justify-between px-6 pb-4 border-b border-white/20">
+      <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-100/50 px-3 py-1 rounded-full">
+        Read-Only Mode
+      </div>
+      <Button 
+        size="sm" 
+        className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20 text-[10px] font-black uppercase tracking-widest"
+        onClick={handleDownload}
+      >
+        <Download className="mr-2 h-3.5 w-3.5" />
+        Download PDF
+      </Button>
+    </div>
+
+    {/* PDF Viewport */}
+    <div className="h-[70vh] w-full bg-slate-900/5 relative">
+      {pdfLoading && (
+        <div className="absolute inset-0 z-10 grid place-items-center bg-white/40 backdrop-blur-md">
+          <div className="flex flex-col items-center gap-4">
+            {/* Custom Spinner */}
+            <div className="relative h-12 w-12">
+               <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20" />
+               <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin" />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">
+              Initializing Secure Viewer...
+            </p>
           </div>
+        </div>
+      )}
 
-          <div className="h-[75vh] w-full bg-muted/20">
-            {/* Loader overlay */}
-            {pdfLoading && (
-              <div
-                className="absolute inset-0 z-10 grid place-items-center bg-background/50 backdrop-blur-[1px]"
-                aria-live="polite"
-                aria-busy="true"
-              >
-                <div className="flex flex-col items-center gap-3">
-                  {/* spinner */}
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
-                  {/* indeterminate bar */}
-                  <div className="relative h-1 w-64 overflow-hidden rounded-full bg-muted">
-                    <div className="absolute inset-y-0 left-0 w-1/3 animate-[loader_1.2s_infinite_linear] rounded-full bg-primary" />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Loading {title}…{pdfError ? <span className="ml-1 text-foreground/70">{pdfError}</span> : null}
-                  </p>
-                  <a
-                    href={viewerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs underline text-primary hover:opacity-80"
-                  >
-                    Open in a new tab instead
-                  </a>
-                </div>
-              </div>
-            )}
-
-            {/* PDF viewport */}
-
-<iframe
-  key={src}
-  title={title}
-  src={src}
-  className="block h-full w-full border-0"
-  onLoad={() => { setPdfLoading(false); loadingRef.current = false; }}
-  onError={() => {
-    setPdfLoading(false);
-    loadingRef.current = false;
-    setPdfError("Failed to load PDF.");
-  }}
-/>
-
-
-
-            <style jsx>{`
-  @keyframes loader {
-    0% { transform: translateX(-100%); }
-    50% { transform: translateX(30%); }
-    100% { transform: translateX(100%); }
-  }
-`}</style>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <iframe
+        key={src}
+        title={title}
+        src={src}
+        className="block h-full w-full border-0 brightness-[0.98] grayscale-[0.1]"
+        onLoad={() => { setPdfLoading(false); loadingRef.current = false; }}
+      />
+    </div>
+  </DialogContent>
+</Dialog>
 
 
   );

@@ -213,120 +213,164 @@ const Notifications = ({ data }: NotificationsProps) => {
   return (
     <div className="relative flex items-center">
       {isMobile ? (
-        <>
-          <button onClick={() => setIsModalOpen(true)}>
-            <NotificationBell hasDot={hasDot} />
-          </button>
+       <>
+  {/* Notification Trigger Button */}
+  <button 
+    onClick={() => setIsModalOpen(true)}
+    className="relative p-2 rounded-full transition-active active:scale-90"
+  >
+    <NotificationBell hasDot={hasDot} />
+  </button>
 
-          <Modal
-            title="Notifications"
-            description="Live approvals and birthdays"
-            isOpen={isModalOpen}
-            onClose={() => { setIsModalOpen(false); markApprovalsSeen(); }}
+  <Modal
+    title="Notifications"
+    description="Live approvals and birthdays"
+    isOpen={isModalOpen}
+    onClose={() => { setIsModalOpen(false); markApprovalsSeen(); }}
+    /* Customizing the modal container to be Frosted Glass */
+    className="bg-white/70 backdrop-blur-2xl border-white/40 rounded-[2.5rem] shadow-2xl"
+  >
+    <div className="w-full">
+      <Tabs defaultValue="approvals" className="w-full" onValueChange={handleTabChange}>
+        
+        {/* FROSTED TAB LIST */}
+        <TabsList className="grid grid-cols-2 p-1 bg-slate-200/40 backdrop-blur-md rounded-2xl border border-white/20">
+          <TabsTrigger 
+            value="approvals" 
+            className="rounded-xl font-bold text-xs uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm"
           >
-            <div className="w-full">
-              <Tabs defaultValue="approvals" className="w-full" onValueChange={handleTabChange}>
-                <TabsList className="grid grid-cols-2">
-                  <TabsTrigger value="approvals">Approvals</TabsTrigger>
-                  <TabsTrigger value="birthdays" className="relative">
-                    Birthdays
-                    {hasBirthdayDot && (
-                      <span className="ml-1 inline-block h-2 w-2 rounded-full bg-red-500" />
-                    )}
-                  </TabsTrigger>
+            Approvals
+          </TabsTrigger>
+          <TabsTrigger 
+            value="birthdays" 
+            className="relative rounded-xl font-bold text-xs uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-pink-600 data-[state=active]:shadow-sm"
+          >
+            Birthdays
+            {hasBirthdayDot && (
+              <span className="absolute top-1 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+            )}
+          </TabsTrigger>
+        </TabsList>
 
+        <TabsContent value="approvals" className="mt-4 focus-visible:outline-none">
+          {/* Glass Card for Approval Content */}
+          <div className="rounded-3xl bg-white/40 p-1 border border-white/40">
+            <ApprovalsRealtimeTab departmentId={departmentId} />
+          </div>
+        </TabsContent>
 
-                </TabsList>
+        <TabsContent value="birthdays" className="mt-4 space-y-4 focus-visible:outline-none">
+          
+          {/* TODAY'S BIRTHDAY SECTION */}
+          <div className="p-4 rounded-3xl bg-gradient-to-br from-white/60 to-white/20 backdrop-blur-md border border-white/50 shadow-sm">
+            <h3 className="text-sm font-black text-slate-800 flex items-center gap-3 mb-4 uppercase tracking-tighter">
+              <div className="p-2 bg-yellow-100 rounded-xl">
+                <Cake className="h-5 w-5 text-yellow-600" />
+              </div>
+              Today's Celebrants
+            </h3>
+            <TodaysBirthdays celebrantsToday={celebrantsToday} closeParentModal={closeModal} />
+          </div>
 
-                <TabsContent value="approvals">
-                  <ApprovalsRealtimeTab departmentId={departmentId} />
-                </TabsContent>
+          {/* UPCOMING BIRTHDAY SECTION */}
+          <div className="p-4 rounded-3xl bg-white/30 backdrop-blur-sm border border-white/30">
+            <h3 className="text-sm font-black text-slate-800 flex items-center gap-3 mb-4 uppercase tracking-tighter">
+              <div className="p-2 bg-rose-100 rounded-xl">
+                <Calendar className="h-5 w-5 text-rose-600" />
+              </div>
+              Upcoming (7 Days)
+            </h3>
+            <UpcomingBirthdays
+              celebrantsUpcoming={upcomingBirthdays}
+              onOpenPreview={(emp) => {
+                setNotification(false);
+                usePreviewModal.getState().onOpen(emp);
+              }}
+              closeParentModal={closeModal}
+              limit={8}
+            />
+          </div>
 
-                <TabsContent value="birthdays">
-                  <div className="p-2">
-                    {/* Today's Birthdays */}
-                    <h3 className="text-lg font-semibold text-center flex items-center justify-start gap-2 mb-6">
-                      <Cake className="h-6 w-6 text-yellow-700" />
-                      Todays Birthday
-                    </h3>
-                    <TodaysBirthdays celebrantsToday={celebrantsToday} closeParentModal={closeModal} />
-                  </div>
-                  {/* Upcoming Birthdays */}
-                  <div className="p-2">
-                    <h3 className="text-md font-semibold text-center flex items-center justify-start gap-2 mb-6">
-                      <Calendar className="h-6 w-6 text-red-700" />
-                      Upcoming Birthdays (7 days)
-                    </h3>
-                    <UpcomingBirthdays
-                      celebrantsUpcoming={upcomingBirthdays}
-                      onOpenPreview={(emp) => {
-                        setNotification(false);
-                        usePreviewModal.getState().onOpen(emp);
-                      }}
-                      closeParentModal={closeModal}
-                      limit={8}
-                    />
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-
-          </Modal>
-
-        </>
+        </TabsContent>
+      </Tabs>
+    </div>
+  </Modal>
+</>
       ) : (
-        <Popover onOpenChange={(open) => { if (open) markApprovalsSeen(); }}>
-          <PopoverTrigger>
-            <NotificationBell hasDot={hasDot} />
-          </PopoverTrigger>
-          <PopoverContent className="w-96 p-0" align="end">
-             <Tabs defaultValue="approvals" className="w-full" onValueChange={handleTabChange}>
-              <TabsList className="grid grid-cols-2">
-                <TabsTrigger value="approvals">Approvals</TabsTrigger>
-                <TabsTrigger value="birthdays" className="relative">
-                  Birthdays
-                  {hasBirthdayDot && (
-                    <span className="ml-1 inline-block h-2 w-2 rounded-full bg-red-500" />
-                  )}
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="approvals">
-                <ApprovalsRealtimeTab departmentId={departmentId} />
-              </TabsContent>
-              <TabsContent value="birthdays">
-                <div className="p-2">
-                  {/* Today's Birthdays */}
-                  <h3 className="text-lg font-semibold text-center flex items-center justify-start gap-2 mb-6">
-                    <Cake className="h-6 w-6 text-yellow-700" />
-                    Todays Birthdays
-                  </h3>
-                  <TodaysBirthdays celebrantsToday={celebrantsToday} closeParentModal={() => { }} />
+  <Popover onOpenChange={(open) => { if (open) markApprovalsSeen(); }}>
+  <PopoverTrigger asChild>
+    <button className="relative p-2 rounded-full transition-all hover:bg-white/20 active:scale-95">
+      <NotificationBell hasDot={hasDot} />
+    </button>
+  </PopoverTrigger>
+  
+  <PopoverContent 
+    className="w-[420px] p-0 border-white/40 bg-white/70 backdrop-blur-2xl rounded-[2rem] shadow-2xl overflow-hidden mr-4 mt-2" 
+    align="end"
+  >
+    <Tabs defaultValue="approvals" className="w-full" onValueChange={handleTabChange}>
+      {/* FROSTED TAB LIST */}
+      <div className="p-4 pb-2">
+        <TabsList className="grid grid-cols-2 p-1 bg-slate-200/40 backdrop-blur-md rounded-2xl border border-white/20">
+          <TabsTrigger 
+            value="approvals" 
+            className="rounded-xl font-black text-[10px] uppercase tracking-widest transition-all data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm"
+          >
+            Approvals
+          </TabsTrigger>
+          <TabsTrigger 
+            value="birthdays" 
+            className="relative rounded-xl font-black text-[10px] uppercase tracking-widest transition-all data-[state=active]:bg-white data-[state=active]:text-pink-600 data-[state=active]:shadow-sm"
+          >
+            Birthdays
+            {hasBirthdayDot && (
+              <span className="ml-2 inline-block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+            )}
+          </TabsTrigger>
+        </TabsList>
+      </div>
 
-                </div>
-                {/* Upcoming Birthdays */}
-                <div className="p-2">
-                  <h3 className="text-md font-semibold text-center flex items-center justify-start gap-2 mb-6">
-                    <Calendar className="h-6 w-6 text-red-700" />
-                    Upcoming Birthdays (7 days)
-                  </h3>
+      <div className="max-h-[500px] overflow-y-auto no-scrollbar px-4 pb-6">
+        <TabsContent value="approvals" className="mt-2 outline-none">
+          <div className="rounded-2xl bg-white/40 p-1 border border-white/40">
+            <ApprovalsRealtimeTab departmentId={departmentId} />
+          </div>
+        </TabsContent>
 
-                  <UpcomingBirthdays
-                    celebrantsUpcoming={upcomingBirthdays}
-                    onOpenPreview={(emp) => {
-                      setNotification(false);
-                      usePreviewModal.getState().onOpen(emp);
-                    }}
-                    limit={5}
-                  />
+        <TabsContent value="birthdays" className="mt-2 space-y-6 outline-none">
+          {/* Today's Birthdays Section */}
+          <div className="p-4 rounded-3xl bg-gradient-to-br from-white/60 to-white/20 backdrop-blur-md border border-white/50 shadow-sm">
+            <h3 className="text-[11px] font-black text-slate-800 flex items-center gap-3 mb-4 uppercase tracking-tighter">
+              <div className="p-2 bg-yellow-100/80 rounded-xl shadow-inner">
+                <Cake className="h-4 w-4 text-yellow-600" />
+              </div>
+              Today's Celebrants
+            </h3>
+            <TodaysBirthdays celebrantsToday={celebrantsToday} closeParentModal={() => { }} />
+          </div>
 
-                </div>
-
-              </TabsContent>
-
-            </Tabs>
-          </PopoverContent>
-
-        </Popover>
+          {/* Upcoming Birthdays Section */}
+          <div className="p-4 rounded-3xl bg-white/30 backdrop-blur-sm border border-white/30">
+            <h3 className="text-[11px] font-black text-slate-800 flex items-center gap-3 mb-4 uppercase tracking-tighter">
+              <div className="p-2 bg-rose-100/80 rounded-xl shadow-inner">
+                <Calendar className="h-4 w-4 text-rose-600" />
+              </div>
+              Upcoming (7 Days)
+            </h3>
+            <UpcomingBirthdays
+              celebrantsUpcoming={upcomingBirthdays}
+              onOpenPreview={(emp) => {
+                setNotification(false);
+                usePreviewModal.getState().onOpen(emp);
+              }}
+              limit={5}
+            />
+          </div>
+        </TabsContent>
+      </div>
+    </Tabs>
+  </PopoverContent>
+</Popover>
 
       )
       }

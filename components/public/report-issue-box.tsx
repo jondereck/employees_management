@@ -54,46 +54,53 @@ export default function ReportIssueBox({
   }, [messengerIdOrUsername, employeeName, employeeNo, pageUrl]);
 
   return (
-    <section className={`mt-6 rounded-lg border bg-slate-50 p-3 sm:p-4 ${className}`}>
-      <p className="text-sm text-slate-700">
-        May napansing mali, kulang o katanungan ? Ipaalam sa HRMO para ma-update namin ang public record na ito.
+<section className={`mt-10 rounded-[2rem] border border-white/40 bg-white/20 backdrop-blur-md p-5 sm:p-6 shadow-xl ${className}`}>
+  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-1">
+      <h4 className="text-sm font-black uppercase tracking-widest text-slate-800">
+        Public Record Verification
+      </h4>
+      <p className="text-sm font-medium text-slate-600 leading-relaxed max-w-xl">
+        May napansing mali, kulang o katanungan? Ipaalam sa HRMO para ma-update namin ang public record na ito.
       </p>
+    </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {/* Email button */}
+    <div className="flex flex-wrap gap-3">
+      {/* Email button: Soft Indigo Glow */}
+      <a
+        href={mailto}
+        className="inline-flex items-center gap-2 rounded-xl border border-white/60 bg-white/50 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-indigo-700 shadow-sm transition-all hover:bg-white/80 hover:shadow-indigo-500/10 active:scale-95"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+        </svg>
+        Notify via Email
+      </a>
+
+      {/* Messenger button: Soft Sky Glow */}
+      {messengerIdOrUsername && (
         <a
-          href={mailto}
-          className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-100"
+          href={messengerHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-xl border border-white/60 bg-white/50 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-sky-700 shadow-sm transition-all hover:bg-white/80 hover:shadow-sky-500/10 active:scale-95"
+          aria-label="Chat with HRMO via Messenger"
         >
-          {/* mail icon (inline svg) */}
-          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden className="opacity-80">
-            <path d="M4 6h16a2 2 0 0 1 2 2v.217l-10 6.25-10-6.25V8a2 2 0 0 1 2-2Zm16 12H4a2 2 0 0 1-2-2V9.61l9.4 5.875a2 2 0 0 0 2.2 0L22 9.61V16a2 2 0 0 1-2 2Z" fill="currentColor"/>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m7.9 20 2.8-2.8c.7.2 1.5.3 2.3.3 4.4 0 8-3.1 8-7s-3.6-7-8-7-8 3.1-8 7c0 1.7.7 3.3 2 4.6l-2.1 4.9Z"/>
           </svg>
-          Notify HRMO via Email
+          Messenger Chat
         </a>
+      )}
+    </div>
+  </div>
 
-        {/* Messenger button (only if provided) */}
-        {messengerIdOrUsername && (
-          <a
-            href={messengerHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-slate-100"
-            aria-label="Chat with HRMO via Messenger"
-          >
-            {/* Messenger icon (inline svg) */}
-            <svg width="16" height="16" viewBox="0 0 36 36" aria-hidden className="opacity-80">
-              <path fill="#0099FF" d="M18 3C9.716 3 3 9.21 3 17.3c0 4.293 1.932 8.153 5.03 10.72.262.212.419.526.426.86l.086 3.04a1 1 0 0 0 1.43.87l3.398-1.687a1.6 1.6 0 0 1 1.03-.11c1.011.28 2.082.43 3.2.43 8.284 0 15-6.21 15-14.3S26.284 3 18 3Z"/>
-              <path fill="#fff" d="m28.5 14.832-5.94 3.86a1.2 1.2 0 0 1-1.5-.12l-2.43-2.262a1.2 1.2 0 0 0-1.62-.04l-5.37 4.39c-.79.65-1.88-.38-1.23-1.19l5.94-7.28a1.2 1.2 0 0 1 1.71-.18l2.67 2.16a1.2 1.2 0 0 0 1.46.07l5.94-3.86c.83-.54 1.72.57 1.04 1.39Z"/>
-            </svg>
-            Chat via Messenger
-          </a>
-        )}
-      </div>
-
-      <p className="mt-2 text-[11px] text-slate-500">
-        Huwag maglalagay ng personal/sensitive info (e.g., address, ID numbers).
-      </p>
-    </section>
+  <div className="mt-4 flex items-center gap-2 border-t border-white/20 pt-4">
+    <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+    <p className="text-[10px] font-bold uppercase tracking-tighter text-slate-500">
+      Security Reminder: Huwag maglalagay ng personal/sensitive info (e.g., address, ID numbers).
+    </p>
+  </div>
+</section>
   );
 }

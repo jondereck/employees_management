@@ -64,19 +64,29 @@ export const UpcomingBirthdays = ({
             const displayDate = next ? getFormattedDate(addOneDay(next)) : "-";
 
             return (
-              <li
-                key={(emp as any).id ?? `${emp.firstName}-${emp.lastName}-${index}`}
-                className="flex items-center justify-between p-2 border-b border-gray-200 hover:bg-gray-50 rounded-md"
-              >
-                <button
-                  onClick={() => handleOpen(emp)}
-                  className="text-sm text-blue-600 font-medium hover:underline focus:outline-none flex items-center gap-2"
-                >
-                  <Calendar className="h-4 w-4 opacity-60" />
-                  <span>{emp.firstName} {emp.lastName}</span>
-                </button>
-                <span className="text-xs text-gray-500">{displayDate}</span>
-              </li>
+            <li
+  key={(emp as any).id ?? `${emp.firstName}-${emp.lastName}-${index}`}
+  className="group flex items-center justify-between p-3 bg-white/30 backdrop-blur-md border border-white/40 rounded-2xl transition-all duration-300 hover:bg-white/50 active:scale-[0.98]"
+>
+  {/* Name and Icon Container */}
+  <button
+    onClick={() => handleOpen(emp)}
+    className="flex items-center gap-3 text-left focus:outline-none min-w-0 flex-1 group"
+  >
+
+    {/* SINGLE LINE NAME WITH ELLIPSIS */}
+    <span className="text-sm font-bold text-slate-700 truncate group-hover:text-indigo-600 transition-colors">
+      {emp.firstName} {emp.lastName}
+    </span>
+  </button>
+
+  {/* Date Badge */}
+  <div className="ml-3 shrink-0">
+    <span className="inline-flex items-center rounded-full bg-slate-900/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500 border border-slate-200/50">
+      {displayDate}
+    </span>
+  </div>
+</li>
             );
           })}
         </ul>

@@ -39,10 +39,13 @@ export function FloatingShortcuts() {
   return (
     <>
       {/* floating container */}
-      <div
-        className="fixed right-[calc(1rem+env(safe-area-inset-right))] z-50 flex gap-2 print:hidden"
-        style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
-      >
+    <div
+  className="fixed z-50 flex flex-col items-end gap-3 print:hidden"
+  style={{
+    right: "calc(1rem + env(safe-area-inset-right))",
+    bottom: "calc(5rem + env(safe-area-inset-bottom))",
+  }}
+>
         {/* Self-Service */}
         <Button
           ref={aRef}

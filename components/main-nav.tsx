@@ -127,10 +127,8 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
 
 <nav
   className={cn(
-    "relative flex w-full items-center gap-1 overflow-x-auto whitespace-nowrap px-4 py-3 no-scrollbar",
-    "bg-white/5 dark:bg-black/20 backdrop-blur-xl border-b border-white/10",
-    /* This mask creates the "fading" effect at the edges on mobile */
-    "sm:[mask-image:none] [mask-image:linear-gradient(to_right,rgba(0,0,0,0)_0%,rgba(0,0,0,1)_10%,rgba(0,0,0,1)_90%,rgba(0,0,0,0)_100%)]",
+    "relative flex w-full items-center gap-1 overflow-x-auto whitespace-nowrap  py-3 no-scrollbar",
+   
     className
   )}
   {...props}
