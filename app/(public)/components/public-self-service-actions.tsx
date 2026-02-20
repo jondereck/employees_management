@@ -316,7 +316,7 @@ export default function PublicSelfServiceActions({
         )}
 
         {/* 2. DOWNLOADABLE FORMS TILE */}
-        <div className="flex flex-col rounded-[2rem] border border-white/40 bg-white/40 p-5 shadow-sm transition-all hover:bg-white/60">
+        <div  className="group relative flex flex-col rounded-[2rem] border border-white/40 bg-white/40 p-5 shadow-sm transition-all hover:bg-white/60 hover:shadow-xl hover:-translate-y-1">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 shadow-inner">
             <FileText className="h-6 w-6" />
           </div>
@@ -337,7 +337,7 @@ export default function PublicSelfServiceActions({
         </div>
 
         {/* 3. PRIMARY ACTION (COE/SR) TILE */}
-        <div className="flex flex-col rounded-[2rem] border border-white/40 bg-white/40 p-5 shadow-sm transition-all hover:bg-white/60">
+        <div  className="group relative flex flex-col rounded-[2rem] border border-white/40 bg-white/40 p-5 shadow-sm transition-all hover:bg-white/60 hover:shadow-xl hover:-translate-y-1">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-600 shadow-inner">
               <PrimaryIcon className="h-6 w-6" />

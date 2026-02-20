@@ -56,7 +56,7 @@ export default function ReportIssueBox({
   return (
 <section className={`mt-10 rounded-[2rem] border border-white/40 bg-white/20 backdrop-blur-md p-5 sm:p-6 shadow-xl ${className}`}>
   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-    <div className="space-y-1">
+    <div className="space-y-1 justify-between">
       <h4 className="text-sm font-black uppercase tracking-widest text-slate-800">
         Public Record Verification
       </h4>

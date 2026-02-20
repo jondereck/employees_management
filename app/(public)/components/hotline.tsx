@@ -126,15 +126,32 @@ export function HotlineDirectory({
   return (
    <section className={cn("mt-10", className)}>
   {/* Header with Frosted Badge */}
-  <div className="mb-5 flex items-center justify-between gap-2 px-1">
-    <div>
-      <h2 className="text-sm font-black uppercase tracking-widest text-slate-800">{title}</h2>
-      <p className="text-[11px] font-medium text-slate-500 uppercase tracking-tight">{description}</p>
-    </div>
-    <Badge className="bg-white/40 backdrop-blur-md border-white/60 text-slate-600 font-black text-[10px] px-2.5 py-1 rounded-full shadow-sm">
-      {shown.length} / {filtered.length}
-    </Badge>
+<div className="mb-5 flex items-center justify-between px-1">
+  <div className="min-w-0">
+    <h2 className="text-sm font-black uppercase tracking-widest text-slate-800 truncate">
+      {title}
+    </h2>
+    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-tight truncate">
+      {description}
+    </p>
   </div>
+
+  <Badge
+    className="
+      ml-3 shrink-0
+      whitespace-nowrap
+      bg-white/50 backdrop-blur-md
+      border border-white/60
+      text-slate-700
+      font-bold text-[11px]
+      px-3 py-1
+      rounded-full
+      shadow-sm
+    "
+  >
+    {shown.length} / {filtered.length}
+  </Badge>
+</div>
 
   {/* Search Bar - Frosted Input */}
   <div className="relative mb-4 group">
