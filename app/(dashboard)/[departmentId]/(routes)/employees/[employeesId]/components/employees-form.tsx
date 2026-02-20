@@ -831,7 +831,15 @@ export const EmployeesForm = ({
                     formatModes={["none", "upper", "title"]}
                     disabled={loading}
                   />} />
-                  <FormField control={form.control} name="nickname" render={({ field }) => <AutoField kind="text" label="Nickname" field={field} />} />
+
+                   <FormField control={form.control} name="nickname" render={({ field }) => <AutoField
+                    kind="text"
+                    label="Nickname"
+                    field={field}
+                    formatMode="upper"
+                    disabled={loading}
+                  />} />
+               
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

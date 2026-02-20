@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 // Cleaned up imports
-import TogglePublicBadge from "../../../../settings/components/toggle-public-button"; 
+import TogglePublicBadge from "../../../../settings/components/toggle-public-button";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -58,9 +58,9 @@ const EmployeeHeader = ({ employee }: Props) => {
 
             {/* Active/Archived Badge */}
             <span className={cn(
-               "inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border",
-               !employee.isArchived 
-                ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
+              "inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border",
+              !employee.isArchived
+                ? "bg-emerald-50 text-emerald-600 border-emerald-200"
                 : "bg-red-50 text-red-700 border-red-200"
             )}>
               {!employee.isArchived ? <BadgeCheck className="h-3 w-3" /> : <Ban className="h-3 w-3" />}
@@ -74,20 +74,30 @@ const EmployeeHeader = ({ employee }: Props) => {
             <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight leading-none uppercase">
               {fullName}
             </h1>
-            <div className="flex items-center gap-2 text-slate-500 font-medium">
-              
-              <Briefcase className="h-4 w-4" />
-              <span className="text-lg">{employee.position}</span>
-              {employee.salaryGrade && (
-                <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-md text-xs font-bold border border-indigo-100">
-                  SG-{employee.salaryGrade}
-                </span>
-              )}
+            <div className="flex items-start gap-2 text-slate-600">
 
-              
-          
+
+              <div className="flex flex-col leading-tight">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-base font-semibold text-slate-800">
+                    {employee.position}
+                  </span>
+
+                  {employee.salaryGrade && (
+                    <span className="bg-indigo-100 text-indigo-700 px-2 py-[2px] rounded-full text-[10px] font-bold tracking-wide">
+                      SG-{employee.salaryGrade}
+                    </span>
+                  )}
+                </div>
+
+                {employee.note && (
+                  <span className="text-xs text-slate-400 mt-0.5 line-clamp-1 italic">
+                    {employee.note}
+                  </span>
+                )}
+              </div>
             </div>
-              {employee.employeeType && (
+            {employee.employeeType && (
               <Badge
                 style={{ backgroundColor: employee.employeeType.value, color: "white" }}
                 className="px-2.5 py-1 text-[10px] font-black uppercase border-none shadow-sm"
@@ -148,7 +158,7 @@ const EmployeeHeader = ({ employee }: Props) => {
             publicId={employee.publicId}
             publicVersion={employee.publicVersion}
             publicEnabled={employee.publicEnabled}
-            size={120} 
+            size={120}
           />
         </div>
         <div className="mt-4 text-center">

@@ -48,6 +48,9 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
   const countArchived = selectedEmployees.filter(e => e.isArchived).length;
   const countNotArchived = selectedEmployees.length - countArchived;
 
+  const [archiveSheetOpen, setArchiveSheetOpen] = useState(false);
+const [terminationDate, setTerminationDate] = useState<string | null>(null);
+
   const handleBatchDownload = async () => {
     setLoading(true);
 
@@ -197,6 +200,36 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
     }
   };
 
+  const handleArchiveWithDate = async () => {
+  try {
+    setLoading(true);
+
+    const ids = selectedRows.map(
+      (row) => (row.original as any).id
+    );
+
+    await axios.patch(`/api/${departmentId}/employees/archive`, {
+      employeeIds: ids,
+      archived: true,
+      terminationDate: terminationDate
+        ? new Date(terminationDate).toISOString()
+        : undefined,
+    });
+
+    toast.success(`${ids.length} employees archived`);
+
+    mutate(`/api/${departmentId}/employees`);
+    table.resetRowSelection();
+    setArchiveSheetOpen(false);
+    setTerminationDate(null);
+  } catch (error) {
+    console.error(error);
+    toast.error("Failed to archive employees.");
+  } finally {
+    setLoading(false);
+  }
+};
+
   const handleBulkPublicToggle = async (enable: boolean) => {
     try {
       setLoading(true);
@@ -285,7 +318,7 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-44">
                     <DropdownMenuItem
-                      onClick={() => handleBulkArchive(true)}
+                     onClick={() => setArchiveSheetOpen(true)}
                       disabled={eligibleForArchive.length === 0}
                       className="gap-2"
                     >
@@ -445,10 +478,41 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
                   </SheetContent>
                 </Sheet>
               </div>
+              <Sheet open={archiveSheetOpen} onOpenChange={setArchiveSheetOpen}>
+  <SheetContent side="right" className="w-[400px]">
+    <SheetHeader>
+      <SheetTitle>Archive Employees</SheetTitle>
+    </SheetHeader>
+
+    <div className="mt-6 space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Set termination date (optional). If not set, today will be used.
+      </p>
+
+      <input
+        type="date"
+        className="w-full border rounded-md px-3 py-2 text-sm"
+        onChange={(e) => setTerminationDate(e.target.value)}
+      />
+
+      <Button
+        className="w-full"
+        disabled={loading}
+        onClick={async () => {
+          await handleArchiveWithDate();
+        }}
+      >
+        Confirm Archive
+      </Button>
+    </div>
+  </SheetContent>
+</Sheet>
             </div>
           </Card>
         </motion.div>
       )}
     </AnimatePresence>
+
+    
   );
 }
