@@ -706,7 +706,7 @@ export const EmployeesForm = ({
                             <div className="relative flex items-center group">
                               <div className="flex-1">
                                 <AutoField
-                                  kind="number"
+                                  kind="text"
                                   label=""
                                   field={{
                                     ...field,

@@ -248,25 +248,22 @@ function TextField({
   autoFormatOnBlur = true,
   liveFormat
 }: TextProps) {
-  const sanitize = (raw: string) => {
-    let v = raw ?? "";
-    if (nameSafe) {
-      // keep letters (with diacritics), spaces, hyphen, apostrophe
-      v = v.replace(/[^\p{L}\p{M}\s'\-]/gu, "");
-    }
+const sanitize = (raw: string) => {
+  let v = raw ?? "";
 
-    if (liveFormat) {
-      v = softApplyFormat(v, formatMode);
-    }
+  if (normalizeWhitespace) {
+    v = v.replace(/\s+/g, " ").trim();
+  }
 
-    field.onChange(v);
+  if (liveFormat) {
+    v = softApplyFormat(v, formatMode);
+  }
 
-    if (normalizeWhitespace) {
-      v = v.replace(/\s+/g, " ").trim();
-    }
-    v = applyFormat(v, formatMode); // uses your existing applyFormat
-    return v;
-  };
+  v = applyFormat(v, formatMode);
+
+  field.onChange(v);
+  return v;
+};
 
   return (
 <FormItem className={cn("space-y-1.5", className)}>
@@ -297,7 +294,7 @@ function TextField({
       autoCapitalize="words"
       onChange={(e) => {
         const v = e.target.value;
-        const soft = nameSafe ? v.replace(/[^\p{L}\p{M}\s'\-]/gu, "") : v;
+        const soft = nameSafe ?v.replace(/[^\p{L}\p{M}0-9\s'\-,]/gu, "") : v;
         field.onChange(soft);
       }}
       onBlur={(e) => {
