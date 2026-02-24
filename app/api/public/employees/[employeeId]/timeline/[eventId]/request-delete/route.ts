@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { ApprovalEvent } from "@/lib/types/realtime";
 import { pusherServer } from "@/lib/pusher";
+import { Prisma } from "@prisma/client";
 
 const BodySchema = z.object({
   reason: z.string().trim().min(3, "Reason is required"),
@@ -29,27 +30,32 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     if (!emp.publicEnabled) return NextResponse.json({ error: "Public suggestions disabled" }, { status: 403 });
 
     const event = await prismadb.employmentEvent.findFirst({
-      where: { id: params.eventId, employeeId: emp.id },
-      select: { id: true },
-    });
-    if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  where: { id: params.eventId, employeeId: emp.id },
+});
+if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
-    const cr = await prismadb.changeRequest.create({
-      data: {
-        departmentId: emp.departmentId,
-        employeeId: emp.id,
-        entityType: "TIMELINE",
-        entityId: event.id,
-        action: "DELETE",
-        status: "PENDING",
-        note: reason,                 // keep the user's reason
-        submittedName,                // optional
-        submittedEmail,               // optional
-        newValues: {},                // nothing to update, it's a delete request
-      },
-      select: { id: true },
-    });
+const oldValues = {
+  type: event.type,
+  occurredAt: event.occurredAt,
+  details: event.details,
+};
 
+const cr = await prismadb.changeRequest.create({
+  data: {
+    departmentId: emp.departmentId,
+    employeeId: emp.id,
+    entityType: "TIMELINE",
+    entityId: event.id,
+    action: "DELETE",
+    status: "PENDING",
+    oldValues: oldValues,
+    newValues: Prisma.DbNull,
+    note: reason,
+    submittedName,
+    submittedEmail,
+  },
+  select: { id: true },
+});
     /* ✅ NEW: realtime emit (request to DELETE timeline) */
     const actor = submittedEmail ?? submittedName ?? "public";
     const payload: ApprovalEvent = {

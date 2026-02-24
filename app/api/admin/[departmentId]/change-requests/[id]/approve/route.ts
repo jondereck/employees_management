@@ -274,7 +274,7 @@ export async function POST(
 );
 
     // ⬇️ Emit AFTER the transaction succeeded
-   if (rt) {
+if (rt && rt.type !== "deleted") {
   await pusherServer.trigger(
     `dept-${rt.departmentId}-approvals`,
     "approval:event",

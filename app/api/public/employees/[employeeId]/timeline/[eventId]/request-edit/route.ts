@@ -61,12 +61,17 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     });
     if (!emp?.publicEnabled) return NextResponse.json({ error: "Public suggestions disabled" }, { status: 403 });
 
-    const event = await prismadb.employmentEvent.findFirst({
-      where: { id: params.eventId, employeeId: emp.id },
-      select: { id: true },
-    });
+const event = await prismadb.employmentEvent.findFirst({
+  where: { id: params.eventId, employeeId: emp.id },
+});
     if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
+
+    const oldValues = {
+  type: event.type,
+  occurredAt: event.occurredAt,
+  details: event.details,
+};
     const nv: any = {};
     if (parsed.data.type !== undefined) nv.type = uiToDb(parsed.data.type);
     if (parsed.data.occurredAt !== undefined) {
@@ -78,13 +83,14 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
 
     const cr = await prismadb.changeRequest.create({
       data: {
-        departmentId: emp.departmentId,
-        employeeId: emp.id,
-        entityType: "TIMELINE",
-        entityId: event.id,
-        action: "UPDATE",
-        status: "PENDING",
-        newValues: nv as Prisma.InputJsonValue,
+         departmentId: emp.departmentId,
+    employeeId: emp.id,
+    entityType: "TIMELINE",
+    entityId: event.id,
+    action: "UPDATE",
+    status: "PENDING",
+    oldValues: oldValues as Prisma.InputJsonValue,
+    newValues: nv as Prisma.InputJsonValue,
         note: parsed.data.note,
         submittedName: parsed.data.submittedName,
         submittedEmail: parsed.data.submittedEmail,

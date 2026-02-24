@@ -335,6 +335,19 @@ export default function PublicTimeline({ employeeId, version = 0 }: PublicTimeli
                       </time>
                     </div>
 
+                  {e.attachment && (
+                    <div className="mt-3">
+                      <a
+                        href={e.attachment}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-600 transition-colors"
+                      >
+                        <Paperclip className="h-3 w-3" />
+                        View Reference
+                      </a>
+                    </div>
+                  )}
                     {/* Action Bubbles: Visible on hover */}
                     <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all duration-300">
                       <Button
@@ -362,25 +375,12 @@ export default function PublicTimeline({ employeeId, version = 0 }: PublicTimeli
                     </div>
                   </div>
 
-                  {e.description && (
+                  {/* {e.description && (
                     <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-prose">
                       {e.description}
                     </p>
-                  )}
+                  )} */}
 
-                  {e.attachment && (
-                    <div className="mt-3">
-                      <a
-                        href={e.attachment}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-600 transition-colors"
-                      >
-                        <Paperclip className="h-3 w-3" />
-                        View Reference
-                      </a>
-                    </div>
-                  )}
                 </div>
               </li>
             ))}

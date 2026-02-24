@@ -33,7 +33,7 @@ function toISO(raw: string) {
 }
 function assertNotFuture(iso: string) {
   const d = new Date(iso), t = new Date();
-  d.setHours(0,0,0,0); t.setHours(0,0,0,0);
+  d.setHours(0, 0, 0, 0); t.setHours(0, 0, 0, 0);
   return d.getTime() <= t.getTime();
 }
 
@@ -51,9 +51,18 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
 
     const award = await prismadb.award.findFirst({
       where: { id: params.awardId, employeeId: emp.id },
-      select: { id: true },
     });
     if (!award) return NextResponse.json({ error: "Award not found" }, { status: 404 });
+
+    const oldValues = {
+      title: award.title,
+      issuer: award.issuer,
+      givenAt: award.givenAt,
+      description: award.description,
+      fileUrl: award.fileUrl,
+      thumbnail: award.thumbnail,
+      tags: award.tags,
+    };
 
     const nv: any = {};
     if (parsed.data.title !== undefined) nv.title = parsed.data.title ?? "";
@@ -76,6 +85,7 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
         entityId: award.id,
         action: "UPDATE",
         status: "PENDING",
+        oldValues: oldValues as Prisma.InputJsonValue,
         newValues: nv as Prisma.InputJsonValue,
         note: parsed.data.note,
         submittedName: parsed.data.submittedName,
