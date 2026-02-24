@@ -21,24 +21,25 @@ export default function ApprovalsRealtime() {
           return m?.[1] ?? "";
         })();
 
-  useEffect(() => {
-    if (!departmentId) return;
+useEffect(() => {
+  if (!departmentId) return;
 
-    const chName = `dept-${departmentId}-approvals`;
-    const ch = pusherClient.subscribe(chName);
+  const chName = `dept-${departmentId}-approvals`;
+  const ch = pusherClient.subscribe(chName);
 
-    const handler = (_e: ApprovalEvent) => {
-      // Re-fetch the server component page list
-      router.refresh();
-    };
+  const handler = () => {
+    router.refresh();
+  };
 
-    ch.bind("approval:event", handler);
+  ch.bind("approval:event", handler);
+  ch.bind("approval:resolved", handler); // 🔥 add this too
 
-    return () => {
-      ch.unbind("approval:event", handler);
-      pusherClient.unsubscribe(chName);
-    };
-  }, [departmentId, router]);
+  return () => {
+    ch.unbind("approval:event", handler);
+    ch.unbind("approval:resolved", handler);
+    pusherClient.unsubscribe(chName);
+  };
+}, [departmentId]); // ❌ remove router from deps
 
   return null;
 }
