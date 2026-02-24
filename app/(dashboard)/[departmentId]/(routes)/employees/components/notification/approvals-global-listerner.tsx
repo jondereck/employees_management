@@ -1,18 +1,20 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
-import { useParams, usePathname } from "next/navigation";
+import { useCallback, useEffect, useRef } from "react";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FileCheck } from "lucide-react";
 
 import { pusherClient } from "@/lib/pusher-client";
 import { useApprovalToast } from "@/hooks/use-approval-toast";
-import { ApprovalEvent } from "@/lib/types/realtime";
+import { ApprovalEvent, ApprovalResolvedEvent } from "@/lib/types/realtime";
 
 export default function ApprovalsGlobalListener() {
   const params = useParams();
   const pathname = usePathname();
-  const { push } = useApprovalToast();
+  const router = useRouter();
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { push, removeByApprovalId } = useApprovalToast();
 
   const departmentId =
     typeof (params as any)?.departmentId === "string"
@@ -21,6 +23,17 @@ export default function ApprovalsGlobalListener() {
       ? (params as any).departmentId[0]
       : pathname?.match(/^\/([^/]+)/)?.[1] ?? "";
 
+
+
+  const scheduleApprovalsRefresh = useCallback(() => {
+    if (!departmentId) return;
+    if (!pathname?.startsWith(`/${departmentId}/approvals`)) return;
+
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      router.refresh();
+    }, 120);
+  }, [departmentId, pathname, router]);
   const onEvent = useCallback(
     (e: ApprovalEvent) => {
       if (!e.type.startsWith("request_")) return;
@@ -45,8 +58,10 @@ export default function ApprovalsGlobalListener() {
           onClick: () => (window.location.href = `/${e.departmentId}/approvals`),
         },
       });
+
+      scheduleApprovalsRefresh();
     },
-    [push]
+    [push, scheduleApprovalsRefresh]
   );
 
   useEffect(() => {
@@ -54,13 +69,21 @@ export default function ApprovalsGlobalListener() {
 
     const channelName = `dept-${departmentId}-approvals`;
     const channel = pusherClient.subscribe(channelName);
+    const onResolved = (e: ApprovalResolvedEvent) => {
+      removeByApprovalId(e.approvalId);
+      scheduleApprovalsRefresh();
+    };
+
     channel.bind("approval:event", onEvent);
+    channel.bind("approval:resolved", onResolved);
 
     return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
       channel.unbind("approval:event", onEvent);
+      channel.unbind("approval:resolved", onResolved);
       pusherClient.unsubscribe(channelName);
     };
-  }, [departmentId, onEvent]);
+  }, [departmentId, onEvent, removeByApprovalId, scheduleApprovalsRefresh]);
 
   return null;
 }
