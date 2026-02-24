@@ -57,7 +57,7 @@ function normalizeDetails(v: any): string | null | undefined {
 /* ---------------- realtime payload ---------------- */
 
 type RealtimeApprovalPayload = {
-  type: "created" | "updated" | "deleted";
+  type: "approved";
   entity: "timeline" | "award";
   approvalId: string;
   departmentId: string;
@@ -110,7 +110,7 @@ export async function POST(
           });
 
           rt = {
-            type: "created",
+            type: "approved",
             entity: "award",
             approvalId: cr.id,
             departmentId: cr.departmentId,
@@ -145,7 +145,7 @@ export async function POST(
           });
 
           rt = {
-            type: "updated",
+            type: "approved",
             entity: "award",
             approvalId: cr.id,
             departmentId: cr.departmentId,
@@ -167,7 +167,7 @@ export async function POST(
           await tx.award.delete({ where: { id: aw.id } });
 
           rt = {
-            type: "deleted",
+            type: "approved",
             entity: "award",
             approvalId: cr.id,
             departmentId: cr.departmentId,
@@ -194,7 +194,7 @@ export async function POST(
           });
 
           rt = {
-            type: "created",
+            type: "approved",
             entity: "timeline",
             approvalId: cr.id,
             departmentId: cr.departmentId,
@@ -225,7 +225,7 @@ export async function POST(
           });
 
           rt = {
-            type: "updated",
+            type: "approved",
             entity: "timeline",
             approvalId: cr.id,
             departmentId: cr.departmentId,
@@ -247,7 +247,7 @@ export async function POST(
           await tx.employmentEvent.delete({ where: { id: ev.id } });
 
           rt = {
-            type: "deleted",
+            type: "approved",
             entity: "timeline",
             approvalId: cr.id,
             departmentId: cr.departmentId,
@@ -273,14 +273,6 @@ export async function POST(
   { approvalId: cr.id, departmentId: cr.departmentId, status: "APPROVED" }
 );
 
-    // ⬇️ Emit AFTER the transaction succeeded
-if (rt && rt.type !== "deleted") {
-  await pusherServer.trigger(
-    `dept-${rt.departmentId}-approvals`,
-    "approval:event",
-    rt
-  );
-}
 
     return NextResponse.json({ ok: true, status: "APPROVED" });
   } catch (e: any) {

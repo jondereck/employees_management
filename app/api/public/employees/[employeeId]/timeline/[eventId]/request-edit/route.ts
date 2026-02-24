@@ -101,7 +101,7 @@ const event = await prismadb.employmentEvent.findFirst({
     /* ✅ NEW: realtime emit (request to UPDATE timeline) */
     const actor = parsed.data.submittedEmail ?? parsed.data.submittedName ?? "public";
     const payload: ApprovalEvent = {
-      type: "updated",                // request to update
+      type: "request_updated",                // request to update
       entity: "timeline",
       approvalId: cr.id,              // changeRequest id
       departmentId: emp.departmentId,

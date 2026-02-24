@@ -1,6 +1,14 @@
 // types/realtime.ts
 export type ApprovalEvent = {
-  type: "created" | "updated" | "request_deleted";
+  type:
+    | "request_created"
+    | "request_updated"
+    | "request_deleted"
+    | "approved"
+    | "rejected"
+    | "created"
+    | "updated"
+    | "deleted";
   entity: "timeline" | "award";
   approvalId: string;
   departmentId: string;

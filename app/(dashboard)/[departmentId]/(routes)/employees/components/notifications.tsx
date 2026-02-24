@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, Cake, Calendar, CheckCircle, FileCheck, History } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Bell, Cake, Calendar, CheckCircle, History } from "lucide-react";
 
 import {
   Popover,
@@ -24,9 +24,6 @@ import { UpcomingBirthdays } from "./notification/upcoming-birthday";
 
 import { useApprovalToast } from "@/hooks/use-approval-toast";
 import { useParams, usePathname } from "next/navigation";
-import { toast } from "sonner";
-import { useApprovalsRealtime } from "@/hooks/use-approvals-realtime";
-import { ApprovalEvent } from "@/lib/types/realtime";
 import { useApprovalsIndicator } from "@/hooks/use-approvals-indicator";
 import ApprovalsRealtimeTab from "./notification/approval-realtime-notification-tab";
 import { hasBirthdayDotForToday, useBirthdayIndicator } from "@/hooks/use-birthday-indicator";
@@ -64,7 +61,7 @@ const Notifications = ({ data }: NotificationsProps) => {
   }, []);
 
   const [isNotification, setNotification] = useState(true);
-  const { push, unseenCount, lastEvents, markSeen } = useApprovalToast();
+  const { unseenCount, lastEvents, markSeen } = useApprovalToast();
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 640);
@@ -106,52 +103,12 @@ const Notifications = ({ data }: NotificationsProps) => {
     });
   }, [data, today]);
 
-  // ----- Realtime Approvals subscription -----
+
   const labelMap: Record<string, string> = {
-  created: "Created",
-  updated: "Updated",
-  deleted: "Deleted",
-  request_deleted: "Delete Requested",
-};
-const onApprovalEvent = useCallback((e: ApprovalEvent) => {
-  push(e);
-
-  const title = (() => {
-    switch (e.type) {
-      case "created":
-        return `New ${e.entity} approval created`;
-
-      case "updated":
-        return `${e.entity} approval updated`;
-
-      case "request_deleted":
-        return `${e.entity} deleted`;
-
-      case "request_deleted":
-        return `${e.entity} delete requested`;
-
-      default:
-        return `${e.entity} activity`;
-    }
-  })();
-
-  toast(title, {
-    description:
-      e.title
-        ? `${e.title} • ${new Date(e.when).toLocaleString()}`
-        : new Date(e.when).toLocaleString(),
-    icon: <FileCheck className="w-4 h-4" />,
-    action: {
-      label: "Open",
-      onClick: () => {
-        window.location.href = `/${e.departmentId}/approvals`;
-      },
-    },
-    duration: 5000,
-  });
-}, [push]);
-
-  useApprovalsRealtime(departmentId ?? "", onApprovalEvent);
+    request_created: "Create Requested",
+    request_updated: "Update Requested",
+    request_deleted: "Delete Requested",
+  };
 
   // Badge dot should turn on if there are birthdays today OR unseen approval events
   const hasBirthdayDot = hasBirthdayDotForToday(

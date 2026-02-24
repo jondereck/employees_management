@@ -76,7 +76,7 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     /* ✅ NEW: realtime notify reviewers */
     const actor = parsed.data.submittedEmail ?? parsed.data.submittedName ?? "public";
     const payload: ApprovalEvent = {
-      type: "created",
+      type: "request_created",
       entity: "award",
       approvalId: cr.id,
       departmentId: emp.departmentId,
