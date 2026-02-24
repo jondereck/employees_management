@@ -54,21 +54,6 @@ function normalizeDetails(v: any): string | null | undefined {
   try { return JSON.stringify(v); } catch { return String(v); }
 }
 
-/* ---------------- realtime payload ---------------- */
-
-type RealtimeApprovalPayload = {
-  type: "created" | "updated" | "deleted";
-  entity: "timeline" | "award";
-  approvalId: string;
-  departmentId: string;
-  employeeId: string;
-  targetId?: string;
-  title?: string | null;
-  occurredAt?: string | null;
-  givenAt?: string | null;
-  actorId: string;
-  when: string;
-};
 
 /* ---------------- route ---------------- */
 
@@ -88,8 +73,6 @@ export async function POST(
   const action = normalizeAction(cr.action);
   const nv = (cr.newValues ?? {}) as any;
 
-  // We will fill this inside the transaction and emit AFTER success
-  let rt: RealtimeApprovalPayload | undefined;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -108,19 +91,6 @@ export async function POST(
             },
             select: { id: true, title: true, givenAt: true },
           });
-
-          rt = {
-            type: "created",
-            entity: "award",
-            approvalId: cr.id,
-            departmentId: cr.departmentId,
-            employeeId: cr.employeeId,
-            targetId: created.id,
-            title: created.title ?? null,
-            givenAt: created.givenAt?.toISOString() ?? null,
-            actorId: userId,
-            when: new Date().toISOString(),
-          };
         } else if (action === "UPDATE") {
           const aw = await tx.award.findUnique({
             where: { id: cr.entityId! },
@@ -143,19 +113,6 @@ export async function POST(
             data: patch,
             select: { id: true, title: true, givenAt: true },
           });
-
-          rt = {
-            type: "updated",
-            entity: "award",
-            approvalId: cr.id,
-            departmentId: cr.departmentId,
-            employeeId: cr.employeeId,
-            targetId: updated.id,
-            title: updated.title ?? null,
-            givenAt: updated.givenAt?.toISOString() ?? null,
-            actorId: userId,
-            when: new Date().toISOString(),
-          };
         } else if (action === "DELETE") {
           const aw = await tx.award.findUnique({
             where: { id: cr.entityId! },
@@ -165,19 +122,6 @@ export async function POST(
             throw new Error("Award not found for employee");
           }
           await tx.award.delete({ where: { id: aw.id } });
-
-          rt = {
-            type: "deleted",
-            entity: "award",
-            approvalId: cr.id,
-            departmentId: cr.departmentId,
-            employeeId: cr.employeeId,
-            targetId: aw.id,
-            title: aw.title ?? null,
-            givenAt: aw.givenAt?.toISOString() ?? null,
-            actorId: userId,
-            when: new Date().toISOString(),
-          };
         }
       }
 
@@ -192,19 +136,6 @@ export async function POST(
             },
             select: { id: true, type: true, occurredAt: true },
           });
-
-          rt = {
-            type: "created",
-            entity: "timeline",
-            approvalId: cr.id,
-            departmentId: cr.departmentId,
-            employeeId: cr.employeeId,
-            targetId: created.id,
-            title: created.type, // use enum as label
-            occurredAt: created.occurredAt?.toISOString() ?? null,
-            actorId: userId,
-            when: new Date().toISOString(),
-          };
         } else if (action === "UPDATE") {
           const ev = await tx.employmentEvent.findUnique({
             where: { id: cr.entityId! },
@@ -223,19 +154,6 @@ export async function POST(
             data: patch,
             select: { id: true, type: true, occurredAt: true },
           });
-
-          rt = {
-            type: "updated",
-            entity: "timeline",
-            approvalId: cr.id,
-            departmentId: cr.departmentId,
-            employeeId: cr.employeeId,
-            targetId: updated.id,
-            title: updated.type,
-            occurredAt: updated.occurredAt?.toISOString() ?? null,
-            actorId: userId,
-            when: new Date().toISOString(),
-          };
         } else if (action === "DELETE") {
           const ev = await tx.employmentEvent.findUnique({
             where: { id: cr.entityId! },
@@ -245,19 +163,6 @@ export async function POST(
             throw new Error("EmploymentEvent not found for employee");
           }
           await tx.employmentEvent.delete({ where: { id: ev.id } });
-
-          rt = {
-            type: "deleted",
-            entity: "timeline",
-            approvalId: cr.id,
-            departmentId: cr.departmentId,
-            employeeId: cr.employeeId,
-            targetId: ev.id,
-            title: ev.type,
-            occurredAt: ev.occurredAt?.toISOString() ?? null,
-            actorId: userId,
-            when: new Date().toISOString(),
-          };
         }
       }
 
@@ -273,14 +178,6 @@ export async function POST(
   { approvalId: cr.id, departmentId: cr.departmentId, status: "APPROVED" }
 );
 
-    // ⬇️ Emit AFTER the transaction succeeded
-if (rt && rt.type !== "deleted") {
-  await pusherServer.trigger(
-    `dept-${rt.departmentId}-approvals`,
-    "approval:event",
-    rt
-  );
-}
 
     return NextResponse.json({ ok: true, status: "APPROVED" });
   } catch (e: any) {

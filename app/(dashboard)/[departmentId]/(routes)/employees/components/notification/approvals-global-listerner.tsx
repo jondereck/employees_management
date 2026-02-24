@@ -1,22 +1,21 @@
-// app/components/notifications/ApprovalsGlobalListener.tsx
 "use client";
 
-import { useEffect, useCallback } from "react";
-import { useParams, usePathname } from "next/navigation";
-import { pusherClient } from "@/lib/pusher-client";
-
+import { useCallback, useEffect, useRef } from "react";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FileCheck } from "lucide-react";
+
+import { pusherClient } from "@/lib/pusher-client";
 import { useApprovalToast } from "@/hooks/use-approval-toast";
 import { ApprovalEvent, ApprovalResolvedEvent } from "@/lib/types/realtime";
 
 export default function ApprovalsGlobalListener() {
   const params = useParams();
   const pathname = usePathname();
-
+  const router = useRouter();
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { push, removeByApprovalId } = useApprovalToast();
 
-  // robust deptId (navbar may be above the segment)
   const departmentId =
     typeof (params as any)?.departmentId === "string"
       ? (params as any).departmentId
@@ -24,15 +23,31 @@ export default function ApprovalsGlobalListener() {
       ? (params as any).departmentId[0]
       : pathname?.match(/^\/([^/]+)/)?.[1] ?? "";
 
-  const onEvent = useCallback((e: ApprovalEvent) => {
-    // 1) save to store (increments unseen + keeps list)
-    push(e);
-    // 2) optional toast (you can remove if you only want dot/panel)
-    toast(
-      e.type === "created"
-        ? `New ${e.entity} request created`
-        : `${e.entity} request ${e.type}`,
-      {
+
+
+  const scheduleApprovalsRefresh = useCallback(() => {
+    if (!departmentId) return;
+    if (!pathname?.startsWith(`/${departmentId}/approvals`)) return;
+
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      router.refresh();
+    }, 120);
+  }, [departmentId, pathname, router]);
+  const onEvent = useCallback(
+    (e: ApprovalEvent) => {
+      if (!e.type.startsWith("request_")) return;
+
+      push(e);
+
+      const title =
+        e.type === "request_created"
+          ? `New ${e.entity} request created`
+          : e.type === "request_updated"
+          ? `${e.entity} request updated`
+          : `${e.entity} request deleted`;
+
+      toast(title, {
         description: e.title
           ? `${e.title} • ${new Date(e.when).toLocaleString()}`
           : new Date(e.when).toLocaleString(),
@@ -42,25 +57,33 @@ export default function ApprovalsGlobalListener() {
           label: "Open",
           onClick: () => (window.location.href = `/${e.departmentId}/approvals`),
         },
-      }
-    );
-  }, [push]);
+      });
+
+      scheduleApprovalsRefresh();
+    },
+    [push, scheduleApprovalsRefresh]
+  );
 
   useEffect(() => {
     if (!departmentId) return;
-    const chName = `dept-${departmentId}-approvals`;
-    const ch = pusherClient.subscribe(chName);
-    ch.bind("approval:event", onEvent);
 
-    ch.bind("approval:resolved", (e: ApprovalResolvedEvent) => {
-  removeByApprovalId(e.approvalId);
-});
+    const channelName = `dept-${departmentId}-approvals`;
+    const channel = pusherClient.subscribe(channelName);
+    const onResolved = (e: ApprovalResolvedEvent) => {
+      removeByApprovalId(e.approvalId);
+      scheduleApprovalsRefresh();
+    };
+
+    channel.bind("approval:event", onEvent);
+    channel.bind("approval:resolved", onResolved);
 
     return () => {
-      ch.unbind("approval:event", onEvent);
-      pusherClient.unsubscribe(chName);
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      channel.unbind("approval:event", onEvent);
+      channel.unbind("approval:resolved", onResolved);
+      pusherClient.unsubscribe(channelName);
     };
-  }, [departmentId, onEvent]);
+  }, [departmentId, onEvent, removeByApprovalId, scheduleApprovalsRefresh]);
 
   return null;
 }
