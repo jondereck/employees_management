@@ -1,22 +1,19 @@
-// app/components/notifications/ApprovalsGlobalListener.tsx
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useParams, usePathname } from "next/navigation";
-import { pusherClient } from "@/lib/pusher-client";
-
 import { toast } from "sonner";
 import { FileCheck } from "lucide-react";
+
+import { pusherClient } from "@/lib/pusher-client";
 import { useApprovalToast } from "@/hooks/use-approval-toast";
-import { ApprovalEvent, ApprovalResolvedEvent } from "@/lib/types/realtime";
+import { ApprovalEvent } from "@/lib/types/realtime";
 
 export default function ApprovalsGlobalListener() {
   const params = useParams();
   const pathname = usePathname();
+  const { push } = useApprovalToast();
 
-  const { push, removeByApprovalId } = useApprovalToast();
-
-  // robust deptId (navbar may be above the segment)
   const departmentId =
     typeof (params as any)?.departmentId === "string"
       ? (params as any).departmentId
@@ -24,15 +21,20 @@ export default function ApprovalsGlobalListener() {
       ? (params as any).departmentId[0]
       : pathname?.match(/^\/([^/]+)/)?.[1] ?? "";
 
-  const onEvent = useCallback((e: ApprovalEvent) => {
-    // 1) save to store (increments unseen + keeps list)
-    push(e);
-    // 2) optional toast (you can remove if you only want dot/panel)
-    toast(
-      e.type === "created"
-        ? `New ${e.entity} request created`
-        : `${e.entity} request ${e.type}`,
-      {
+  const onEvent = useCallback(
+    (e: ApprovalEvent) => {
+      if (!e.type.startsWith("request_")) return;
+
+      push(e);
+
+      const title =
+        e.type === "request_created"
+          ? `New ${e.entity} request created`
+          : e.type === "request_updated"
+          ? `${e.entity} request updated`
+          : `${e.entity} request deleted`;
+
+      toast(title, {
         description: e.title
           ? `${e.title} • ${new Date(e.when).toLocaleString()}`
           : new Date(e.when).toLocaleString(),
@@ -42,23 +44,21 @@ export default function ApprovalsGlobalListener() {
           label: "Open",
           onClick: () => (window.location.href = `/${e.departmentId}/approvals`),
         },
-      }
-    );
-  }, [push]);
+      });
+    },
+    [push]
+  );
 
   useEffect(() => {
     if (!departmentId) return;
-    const chName = `dept-${departmentId}-approvals`;
-    const ch = pusherClient.subscribe(chName);
-    ch.bind("approval:event", onEvent);
 
-    ch.bind("approval:resolved", (e: ApprovalResolvedEvent) => {
-  removeByApprovalId(e.approvalId);
-});
+    const channelName = `dept-${departmentId}-approvals`;
+    const channel = pusherClient.subscribe(channelName);
+    channel.bind("approval:event", onEvent);
 
     return () => {
-      ch.unbind("approval:event", onEvent);
-      pusherClient.unsubscribe(chName);
+      channel.unbind("approval:event", onEvent);
+      pusherClient.unsubscribe(channelName);
     };
   }, [departmentId, onEvent]);
 

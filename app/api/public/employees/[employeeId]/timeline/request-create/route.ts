@@ -56,7 +56,7 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     /* ✅ NEW: fire realtime event so reviewers see it instantly */
     // We reuse the ApprovalEvent shape so your bell shows it in the Approvals tab.
     const payload: ApprovalEvent = {
-      type: "created",                // a new (pending) request was created
+      type: "request_created",                // a new (pending) request was created
       entity: "timeline",
       approvalId: cr.id,              // use changeRequest id
       departmentId: emp.departmentId,
