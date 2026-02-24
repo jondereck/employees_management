@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import {
   BarChart3,
+  CheckCircle2,
   Copy,
   FileSpreadsheet,
   Fingerprint,
@@ -24,8 +25,8 @@ const TOOL_CARD_CONFIG: Array<{
 }> = [
   {
     key: "biometrics",
-    label: "Biometrics Uploader",
-    description: "Upload biometrics logs and export attendance summaries.",
+    label: "Timekeeping Analyzer",
+    description: "Analyze biometric logs for tardiness, undertime, and overtime.",
     slug: "tools/biometrics",
     icon: Fingerprint,
   },
@@ -38,8 +39,8 @@ const TOOL_CARD_CONFIG: Array<{
   },
   {
     key: "attendance-import",
-    label: "CSV Attendance Import",
-    description: "Normalize CSV attendance files into roster-ready sheets.",
+    label: "Event Attendance Import",
+    description: "Import QR-based attendance records for events and ceremonies.",
     slug: "tools/attendance-import",
     icon: FileSpreadsheet,
   },
@@ -52,10 +53,17 @@ const TOOL_CARD_CONFIG: Array<{
   },
   {
     key: "sg-range",
-    label: "SG Range Analytics (SG 1–33)",
-    description: "Live counts and salary totals by SG range with filters",
+    label: "SG Range Analytics",
+    description: "Live counts and salary totals across SG levels with filters.",
     slug: "tools/sg-range",
     icon: BarChart3,
+  },
+  {
+    key: "approvals",
+    label: "Approval Center",
+    description: "Review and process employee data changes and requests.",
+    slug: "approvals",
+    icon: CheckCircle2,
   },
   {
     key: "org-chart",
