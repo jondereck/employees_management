@@ -33,6 +33,7 @@ import {
   Cake,
   Wrench,
   GitBranch,
+  CheckSquare,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
@@ -52,7 +53,7 @@ type NavGroup = {
 
 const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
   biometrics: {
-    label: "Biometrics Uploader",
+    label: "Timekeeping Analyzer",
     path: "tools/biometrics",
     icon: Fingerprint,
   },
@@ -62,7 +63,7 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     icon: ImageIcon,
   },
   "attendance-import": {
-    label: "CSV Attendance Import",
+    label: "Event Attendance Import",
     path: "tools/attendance-import",
     icon: FileSpreadsheet,
   },
@@ -77,9 +78,14 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     icon: GitBranch,
   },
   "sg-range": {
-    label: "SG Range",
+    label: "SG Range Analytics",
     path: "tools/sg-range",
     icon: FileSpreadsheet,
+  },
+  approvals: {
+    label: "Approval Center",
+    path: "approvals",
+    icon: CheckSquare,
   },
 };
 
