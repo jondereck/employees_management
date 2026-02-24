@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import * as XLSX from "xlsx-js-style";
 import { toast } from "sonner";
-import { Loader2, UploadCloud, X, Check, Undo2 } from "lucide-react";
+import { Loader2, UploadCloud, X, Check, Undo2, Download, Copy } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useParams } from "next/navigation";
 
@@ -940,27 +940,41 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
 
 
   return (
-    <div className="space-y-4">
-      {filesInfo.length > 1 && (
-        <div className="flex items-center gap-2 text-sm justify-between">
-          <span className="text-sm font-medium">Copy mapping</span>
-          <Select onValueChange={(from: any) => copyMapping(from, mapTarget)} disabled={mapTarget === MAP_ALL}>
-            <SelectTrigger className="w-[240px]">
-              <SelectValue placeholder="From file..." />
-            </SelectTrigger>
-            <SelectContent>
-              {filesInfo
-                .filter(f => f.name !== mapTarget)
-                .map(f => <SelectItem key={f.name} value={f.name}>{f.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <span>to</span>
-          <code className="px-2 py-1 bg-muted rounded">{mapTarget === MAP_ALL ? "ALL" : mapTarget}</code>
-          <div className="flex items-center gap-2">
-        <div className="text-sm font-medium">Mapping scope</div>
+<div className="space-y-6">
+  {/* Step 1: Global Mapping Controls (Only if multiple files) */}
+  {filesInfo.length > 1 && (
+    <div className="flex flex-wrap items-center gap-4 rounded-3xl border border-white/40 bg-white/30 p-4 backdrop-blur-md shadow-sm">
+      <div className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+          <Copy className="h-4 w-4" />
+        </div>
+        <span className="text-xs font-black uppercase tracking-widest text-slate-500">Copy Mapping</span>
+      </div>
+      
+      <div className="flex flex-1 items-center gap-3">
+        <Select onValueChange={(from: any) => copyMapping(from, mapTarget)} disabled={mapTarget === MAP_ALL}>
+          <SelectTrigger className="h-9 w-[200px] rounded-xl bg-white/50 border-white/60">
+            <SelectValue placeholder="From file..." />
+          </SelectTrigger>
+          <SelectContent>
+            {filesInfo
+              .filter(f => f.name !== mapTarget)
+              .map(f => <SelectItem key={f.name} value={f.name}>{f.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        
+        <span className="text-xs font-bold text-slate-400">TO</span>
+        
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-tighter">
+          {mapTarget === MAP_ALL ? "All Files" : mapTarget}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
+        <span className="text-xs font-bold text-slate-500">Target:</span>
         <Select value={mapTarget} onValueChange={setMapTarget}>
-          <SelectTrigger className="w-[320px]">
-            <SelectValue placeholder="Choose file to map" />
+          <SelectTrigger className="h-9 w-[240px] rounded-xl bg-white/50 border-white/60">
+            <SelectValue placeholder="Choose target" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={MAP_ALL}>Apply to ALL files</SelectItem>
@@ -970,428 +984,405 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
           </SelectContent>
         </Select>
       </div>
-        </div>
-      )}
+    </div>
+  )}
 
-
-      
-
-      <Card>
-        <CardHeader>
-          <CardTitle>CSV Attendance Import</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <input
-              ref={fileRef}
-              id="csvFiles"
-              type="file"
-              accept=".csv,text/csv"
-              multiple
-              onChange={onFiles}
-              className="sr-only"
-            />
-
+  {/* Step 2: Main Import Card */}
+  <Card className="overflow-hidden border-white/40 bg-white/30 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl">
+<CardHeader className="border-b border-white/40 bg-white/20 py-6">
+  <div className="flex justify-end">
+    <label
+      htmlFor="dedup"
+      className="flex items-center gap-2 rounded-2xl bg-white/50 px-4 py-2 border border-white cursor-pointer"
+    >
+      <input
+        type="checkbox"
+        id="dedup"
+        checked={dedup}
+        onChange={(e) => setDedup(e.target.checked)}
+        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+      />
+      <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">
+        Deduplicate Logs
+      </span>
+    </label>
+  </div>
+</CardHeader>
+    <CardContent className="space-y-8 p-8">
+      {/* Upload Area */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+            <input ref={fileRef} id="csvFiles" type="file" accept=".csv,text/csv" multiple onChange={onFiles} className="sr-only" />
             <div
-              className={cn(
-                "flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-8 text-center transition",
-                isDragging ? "border-primary bg-primary/10" : "border-muted-foreground/30 bg-muted/10",
-                (isParsing || isPreviewing) ? "pointer-events-none opacity-60" : "cursor-pointer"
-              )}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => {
-                if (isParsing || isPreviewing) return;
-                fileRef.current?.click();
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if ((event.key === "Enter" || event.key === " ") && !isParsing && !isPreviewing) {
-                  event.preventDefault();
-                  fileRef.current?.click();
-                }
-              }}
-            >
-              <UploadCloud className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-              <p className="mt-2 text-sm font-medium">Drag & drop attendance CSV files here</p>
-              <p className="text-xs text-muted-foreground">or click to choose files</p>
-              {filesInfo.length > 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {`${filesInfo.length} file${filesInfo.length > 1 ? "s" : ""} selected`}
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
+                className={cn(
+                    "relative group flex h-48 w-full flex-col items-center justify-center rounded-[2rem] border-2 border-dashed transition-all duration-300",
+                    isDragging ? "border-indigo-500 bg-indigo-500/5" : "border-slate-300 bg-slate-50/50 hover:bg-white/80",
+                    (isParsing || isPreviewing) ? "pointer-events-none opacity-60" : "cursor-pointer"
+                )}
+                onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
                 onClick={() => fileRef.current?.click()}
-                disabled={isParsing || isPreviewing}
-              >
-                Choose Files
-              </Button>
-
-              <span className="text-sm">
-                {filesInfo.length
-                  ? `${filesInfo.length} file${filesInfo.length > 1 ? "s" : ""} selected`
-                  : "No file selected"}
-              </span>
-
-              {filesInfo.length > 0 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={clearFile}
-                  aria-label="Clear all files"
-                  className="h-8 w-8"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={dedup}
-                    onChange={(e) => setDedup(e.target.checked)}
-                  />
-                  Deduplicate by ID + Date + Time
-                </label>
-              </div>
+            >
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm transition-transform group-hover:scale-110">
+                    <UploadCloud className="h-6 w-6 text-indigo-600" />
+                </div>
+                <p className="mt-4 text-sm font-black text-slate-800">Drop attendance files here</p>
+                <p className="text-xs font-medium text-slate-400 italic">Supports multiple .csv files</p>
             </div>
+        </div>
 
-            <Select value={idType} onValueChange={(v: any) => setIdType(v)} disabled={isParsing || isPreviewing}>
-              <SelectTrigger className="w-[220px]"><SelectValue placeholder="ID Type" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="employeeId">employee.id (UUID)</SelectItem>
-                <SelectItem value="employeeNo">employee.employeeNo (Number)</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="flex flex-col justify-center space-y-4 rounded-[2rem] bg-slate-900/5 p-6 border border-white/60">
+            <div className="space-y-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Selected Files</span>
+                <div className="flex items-center justify-between">
+                    <span className="text-lg font-black text-slate-800">{filesInfo.length} Files</span>
+                    {filesInfo.length > 0 && (
+                        <Button variant="ghost" size="sm" onClick={clearFile} className="h-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded-xl font-bold text-xs">
+                            <X className="mr-1 h-3 w-3" /> Clear
+                        </Button>
+                    )}
+                </div>
+            </div>
+            
+            <div className="space-y-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Match Employees By</span>
+                <Select value={idType} onValueChange={(v: any) => setIdType(v)} disabled={isParsing || isPreviewing}>
+                    <SelectTrigger className="rounded-xl bg-white border-none shadow-sm font-bold text-slate-700">
+                        <SelectValue placeholder="ID Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="employeeId">System UUID</SelectItem>
+                        <SelectItem value="employeeNo">Employee Number</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+        </div>
+      </div>
+
+      {/* Mapping Configuration */}
+      {!!headers.length && (
+        <div className="animate-in fade-in slide-in-from-top-4 duration-500 rounded-[2rem] bg-indigo-500/5 p-8 border border-indigo-100">
+          <div className="mb-6 flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-indigo-500" />
+            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-indigo-900">Column Mapping Configuration</h3>
           </div>
 
-          {!!headers.length && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Scan Text Column (contains the QR payload)</div>
-                <Select
-                  value={(mapTarget === MAP_ALL ? mapping.scanText : mappingByFile[mapTarget]?.scanText) as any}
-                  onValueChange={(v) => updateMapField("scanText", v)}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select column" /></SelectTrigger>
-                  <SelectContent>
-                    {headersForScope().map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            {/* Identity Group */}
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <label className="text-xs font-black uppercase tracking-tight text-slate-500">Scan Data Source</label>
+                <div className="space-y-3">
+                    <Select
+                        value={(mapTarget === MAP_ALL ? mapping.scanText : mappingByFile[mapTarget]?.scanText) as any}
+                        onValueChange={(v) => updateMapField("scanText", v)}
+                    >
+                        <SelectTrigger className="rounded-xl bg-white"><SelectValue placeholder="QR / Scan Text Column" /></SelectTrigger>
+                        <SelectContent>{headersForScope().map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <p className="px-1 text-[10px] font-medium text-slate-400 italic leading-tight">Parses ID from raw QR payload using regex below.</p>
+                </div>
 
-                <div className="text-xs text-muted-foreground">Optional if you already have a pure ID column.</div>
-                <div className="text-sm font-medium mt-3">OR Direct ID Column</div>
+                <div className="relative flex items-center py-2">
+                    <div className="flex-grow border-t border-slate-200"></div>
+                    <span className="flex-shrink mx-4 text-[10px] font-black text-slate-300">OR DIRECT ID</span>
+                    <div className="flex-grow border-t border-slate-200"></div>
+                </div>
+
                 <Select
                   value={(mapTarget === MAP_ALL ? mapping.idColumn : mappingByFile[mapTarget]?.idColumn) as any}
                   onValueChange={(v) => updateMapField("idColumn", v)}
                 >
-                  <SelectTrigger><SelectValue placeholder="Select column" /></SelectTrigger>
-                  <SelectContent>
-                    {headersForScope().map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                  </SelectContent>
+                  <SelectTrigger className="rounded-xl bg-white"><SelectValue placeholder="Direct ID Column" /></SelectTrigger>
+                  <SelectContent>{headersForScope().map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
                 </Select>
 
-                <div className="text-xs text-muted-foreground">If provided, we skip regex/scan text parsing.</div>
-
-                <div className="text-sm font-medium mt-3">Custom Regex (optional)</div>
-                <Input
-                  placeholder="e.g. employee\\/(\\w[\\w-]+) or id=(\\w+)"
-                  value={regex}
-                  onChange={(e) => setRegex(e.target.value)}
-                />
-                <div className="text-xs text-muted-foreground">Must include a capturing group for the ID (group 1).</div>
+                <div className="pt-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Extraction Regex</label>
+                    <Input
+                        className="mt-1 rounded-xl bg-white font-mono text-xs"
+                        placeholder="e.g. id=(\\w+)"
+                        value={regex}
+                        onChange={(e) => setRegex(e.target.value)}
+                    />
+                </div>
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Timestamp Column</div>
+            {/* Time Group */}
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <label className="text-xs font-black uppercase tracking-tight text-slate-500">Temporal Data</label>
                 <Select
                   value={(mapTarget === MAP_ALL ? mapping.timestamp : mappingByFile[mapTarget]?.timestamp) as any}
                   onValueChange={(v) => updateMapField("timestamp", v)}
                 >
-                  <SelectTrigger><SelectValue placeholder="Select column" /></SelectTrigger>
-                  <SelectContent>
-                    {headersForScope().map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                  </SelectContent>
+                  <SelectTrigger className="rounded-xl bg-white"><SelectValue placeholder="Unified Timestamp Column" /></SelectTrigger>
+                  <SelectContent>{headersForScope().map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
                 </Select>
 
-                <div className="text-xs text-muted-foreground">If your CSV has a single date-time field.</div>
-
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <div className="text-sm font-medium">Date Column</div>
-                    <Select
-                      value={(mapTarget === MAP_ALL ? mapping.date : mappingByFile[mapTarget]?.date) as any}
-                      onValueChange={(v) => updateMapField("date", v)}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select column" /></SelectTrigger>
-                      <SelectContent>
-                        {headersForScope().map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Time Column</div>
-                    <Select value={mapping.time} onValueChange={(v) => setMapping(m => ({ ...m, time: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                      <SelectContent>
-                        {headers.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="relative flex items-center py-2">
+                    <div className="flex-grow border-t border-slate-200"></div>
+                    <span className="flex-shrink mx-4 text-[10px] font-black text-slate-300">OR SPLIT FIELDS</span>
+                    <div className="flex-grow border-t border-slate-200"></div>
                 </div>
-                <div className="text-xs text-muted-foreground">If you set Date+Time, Timestamp is ignored.</div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Select
+                    value={(mapTarget === MAP_ALL ? mapping.date : mappingByFile[mapTarget]?.date) as any}
+                    onValueChange={(v) => updateMapField("date", v)}
+                  >
+                    <SelectTrigger className="rounded-xl bg-white"><SelectValue placeholder="Date Col" /></SelectTrigger>
+                    <SelectContent>{headersForScope().map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                  </Select>
+
+                  <Select value={mapping.time} onValueChange={(v) => setMapping(m => ({ ...m, time: v }))}>
+                    <SelectTrigger className="rounded-xl bg-white"><SelectValue placeholder="Time Col" /></SelectTrigger>
+                    <SelectContent>{headers.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <p className="px-1 text-[10px] font-medium text-slate-400 italic">Split fields take priority over Unified Timestamp.</p>
               </div>
             </div>
-          )}
-
-          <div className="flex gap-3">
-            <Button onClick={resolvePreview} disabled={!headers.length || isPreviewing || isParsing}>
-              {isPreviewing ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Previewing...</>) : "Preview"}
-            </Button>
-            <Button variant="outline" onClick={exportExcel} disabled={!preview.length || isExporting}>
-              {isExporting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting...</>) : "Export to Excel"}
-            </Button>
           </div>
+        </div>
+      )}
 
-          {!!preview.length && (
-            <Tabs
-              value={activeTab}
-              onValueChange={(value) =>
-                setActiveTab(value as "preview" | "summary" | "absentees")
-              }
-              className="mt-4"
+      {/* Actions */}
+      <div className="flex items-center justify-between border-t border-slate-100 pt-6">
+        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Status: {headers.length ? "Ready to Preview" : "Awaiting File Upload"}
+        </div>
+        <div className="flex gap-3">
+            <Button 
+                variant="outline" 
+                onClick={exportExcel} 
+                disabled={!preview.length || isExporting}
+                className="rounded-xl font-bold px-6 border-slate-200 hover:bg-slate-50"
             >
-              <TabsList>
-                <TabsTrigger value="preview">Preview{preview.length ? ` (${preview.length.toLocaleString()})` : ""}</TabsTrigger>
-                <TabsTrigger value="summary" disabled={!officeSummary.length}>
-                  Office Summary{officeSummary.length ? ` (${officeSummary.length})` : ""}
-                </TabsTrigger>
-                <TabsTrigger value="absentees" disabled={!absentEmployees.length}>
-                  Manual Check{pendingAbsentees.length ? ` (${pendingAbsentees.length})` : ""}
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="preview" className="mt-3">
-                <div className="border rounded-md overflow-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-muted">
-                      <tr>
-                        {['Date', 'Time', 'Employee No', 'Name', 'Office', 'Matched'].map((h) => (
-                          <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {preview.slice(0, 50).map((r, i) => (
-                        <tr key={i} className="border-t">
-                          <td className="px-3 py-1">{r.date}</td>
-                          <td className="px-3 py-1">{r.time}</td>
-                          <td className="px-3 py-1">{toDisplayEmployeeNo(r.employeeNo)}</td>
-                          <td className="px-3 py-1">{r.name}</td>
-                          <td className="px-3 py-1">{r.office}</td>
-                          <td className="px-3 py-1">{r.idMatched ? 'Yes' : 'No'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="px-3 py-2 text-xs text-muted-foreground">Showing first 50 rows.</div>
-                </div>
-              </TabsContent>
-              <TabsContent value="summary" className="mt-3">
-                {officeSummary.length ? (
-                  <div className="border rounded-md overflow-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-muted">
+                {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                Export to Excel
+            </Button>
+            <Button 
+                onClick={resolvePreview} 
+                disabled={!headers.length || isPreviewing || isParsing}
+                className="rounded-xl font-black bg-slate-900 text-white px-8 shadow-lg shadow-slate-900/20 hover:-translate-y-0.5 transition-all"
+            >
+                {isPreviewing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Run Reconciler"}
+            </Button>
+        </div>
+      </div>
+
+      {/* Tabs / Results Section */}
+      {!!preview.length && (
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="mt-10">
+          <TabsList className="h-12 w-full justify-start gap-6 bg-transparent border-b border-slate-100 rounded-none px-0">
+            <TabsTrigger value="preview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:bg-transparent font-black text-xs uppercase tracking-widest">
+                Data Preview {preview.length > 0 && `(${preview.length.toLocaleString()})`}
+            </TabsTrigger>
+            <TabsTrigger value="summary" disabled={!officeSummary.length} className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:bg-transparent font-black text-xs uppercase tracking-widest">
+                Office Summary
+            </TabsTrigger>
+            <TabsTrigger value="absentees" disabled={!absentEmployees.length} className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:bg-transparent font-black text-xs uppercase tracking-widest">
+                Manual Verification
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="preview" className="mt-6 animate-in fade-in duration-500">
+             {/* Preview Table remains as requested but with updated border-radius */}
+             <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                <table className="w-full text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-100">
                         <tr>
-                          <th className="px-3 py-2 text-left font-medium">Office</th>
-                          {CATEGORY_ORDER.map((cat) => (
-                            <th key={`head-all-${cat}`} className="px-3 py-2 text-right font-medium">
-                              {CATEGORY_LABEL[cat]}
-                            </th>
-                          ))}
-                          <th className="px-3 py-2 text-right font-medium">Total</th>
-                          {CATEGORY_ORDER.map((cat) => (
-                            <th key={`head-att-${cat}`} className="px-3 py-2 text-right font-medium">
-                              {`Attended ${CATEGORY_LABEL[cat]}`}
-                            </th>
-                          ))}
-                          <th className="px-3 py-2 text-right font-medium">Attendance Total</th>
-                          <th className="px-3 py-2 text-right font-medium">Variance</th>
+                            {['Date', 'Time', 'Employee No', 'Name', 'Office', 'Status'].map((h) => (
+                                <th key={h} className="px-4 py-3 text-left font-black uppercase tracking-tighter text-slate-500">{h}</th>
+                            ))}
                         </tr>
-                      </thead>
-                      <tbody>
-                        {officeSummary.map((row) => (
-                          <tr key={row.office} className="border-t">
-                            <td className="px-3 py-1 font-medium">{row.office}</td>
-                            {CATEGORY_ORDER.map((cat) => (
-                              <td
-                                key={`${row.office}-${cat}-total`}
-                                className="px-3 py-1 text-right"
-                              >
-                                {row.counts[cat].toLocaleString()}
-                              </td>
-                            ))}
-                            <td className="px-3 py-1 text-right font-medium">
-                              {row.total.toLocaleString()}
-                            </td>
-                            {CATEGORY_ORDER.map((cat) => (
-                              <td
-                                key={`${row.office}-${cat}-att`}
-                                className="px-3 py-1 text-right text-emerald-600"
-                              >
-                                {row.attendance[cat].toLocaleString()}
-                              </td>
-                            ))}
-                            <td className="px-3 py-1 text-right text-emerald-600 font-medium">
-                              {row.attendanceTotal.toLocaleString()}
-                            </td>
-                            <td className="px-3 py-1 text-right">
-                              {(row.total - row.attendanceTotal).toLocaleString()}
-                            </td>
-                          </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                        {preview.slice(0, 50).map((r, i) => (
+                            <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-4 py-2 font-medium">{r.date}</td>
+                                <td className="px-4 py-2 font-medium">{r.time}</td>
+                                <td className="px-4 py-2 font-mono text-indigo-600">{toDisplayEmployeeNo(r.employeeNo)}</td>
+                                <td className="px-4 py-2 font-bold text-slate-700">{r.name}</td>
+                                <td className="px-4 py-2 text-slate-500">{r.office}</td>
+                                <td className="px-4 py-2">
+                                    <span className={cn(
+                                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-tight",
+                                        r.idMatched ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                                    )}>
+                                        {r.idMatched ? 'Matched' : 'Unlinked'}
+                                    </span>
+                                </td>
+                            </tr>
                         ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t font-semibold bg-muted/60">
-                          <td className="px-3 py-2">Grand total</td>
-                          {CATEGORY_ORDER.map((cat) => (
-                            <td key={`grand-${cat}`} className="px-3 py-2 text-right">
-                              {summaryTotals.counts[cat].toLocaleString()}
-                            </td>
-                          ))}
-                          <td className="px-3 py-2 text-right">
-                            {summaryTotals.total.toLocaleString()}
-                          </td>
-                          {CATEGORY_ORDER.map((cat) => (
-                            <td key={`grand-att-${cat}`} className="px-3 py-2 text-right text-emerald-700">
-                              {summaryTotals.attendance[cat].toLocaleString()}
-                            </td>
-                          ))}
-                          <td className="px-3 py-2 text-right text-emerald-700">
-                            {summaryTotals.attendanceTotal.toLocaleString()}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {(summaryTotals.total - summaryTotals.attendanceTotal).toLocaleString()}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="border rounded-md px-3 py-4 text-sm text-muted-foreground bg-muted/50">
-                    No office summary available.
-                  </div>
-                )}
-              </TabsContent>
-              <TabsContent value="absentees" className="mt-3 space-y-4">
-                {!absentEmployees.length ? (
-                  <div className="border rounded-md px-3 py-4 text-sm text-muted-foreground bg-muted/50">
-                    Everyone in the roster already has a recorded scan for the selected files.
-                  </div>
-                ) : (
-                  <>
-                    {manuallyMarkedAbsentees.length > 0 && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                        {manuallyMarkedAbsentees.length} employee
-                        {manuallyMarkedAbsentees.length > 1 ? "s" : ""} manually marked as present.
-                        Office totals above reflect these adjustments.
-                      </div>
-                    )}
+                    </tbody>
+                </table>
+                <div className="bg-slate-50/50 px-4 py-2 text-[10px] font-bold text-slate-400 uppercase">First 50 reconciliation results shown</div>
+             </div>
+          </TabsContent>
 
-                    {pendingAbsentees.length ? (
-                      <div className="border rounded-md overflow-auto">
-                        <table className="min-w-full text-sm">
-                          <thead className="bg-muted">
-                            <tr>
-                              <th className="px-3 py-2 text-left font-medium">Employee No</th>
-                              <th className="px-3 py-2 text-left font-medium">Name</th>
-                              <th className="px-3 py-2 text-left font-medium">Office</th>
-                              <th className="px-3 py-2 text-left font-medium">Employee Type</th>
-                              <th className="px-3 py-2 text-right font-medium">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {pendingAbsentees.map((emp) => (
-                              <tr key={getAbsentKey(emp)} className="border-t">
-                                <td className="px-3 py-1">{toDisplayEmployeeNo(emp.employeeNo)}</td>
-                                <td className="px-3 py-1">{emp.name}</td>
-                                <td className="px-3 py-1">{normalizeOfficeName(emp.office)}</td>
-                                <td className="px-3 py-1">{emp.employeeTypeName || "-"}</td>
-                                <td className="px-3 py-1 text-right">
-                                  <Button
-                                    size="sm"
-                                    onClick={() => toggleManualAttendance(emp)}
-                                    className="inline-flex items-center gap-1"
-                                  >
-                                    <Check className="h-4 w-4" />
-                                    Mark Present
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="border rounded-md px-3 py-4 text-sm text-muted-foreground bg-muted/50">
-                        All flagged employees have been manually marked as present.
-                      </div>
-                    )}
-
-                    {manuallyMarkedAbsentees.length > 0 && (
-                      <div className="border rounded-md overflow-auto">
-                        <div className="border-b px-3 py-2 text-sm font-medium">
-                          Manually marked as present
-                        </div>
-                        <table className="min-w-full text-sm">
-                          <thead className="bg-muted">
-                            <tr>
-                              <th className="px-3 py-2 text-left font-medium">Employee No</th>
-                              <th className="px-3 py-2 text-left font-medium">Name</th>
-                              <th className="px-3 py-2 text-left font-medium">Office</th>
-                              <th className="px-3 py-2 text-left font-medium">Employee Type</th>
-                              <th className="px-3 py-2 text-right font-medium">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {manuallyMarkedAbsentees.map((emp) => (
-                              <tr key={`marked-${getAbsentKey(emp)}`} className="border-t">
-                                <td className="px-3 py-1">{toDisplayEmployeeNo(emp.employeeNo)}</td>
-                                <td className="px-3 py-1">{emp.name}</td>
-                                <td className="px-3 py-1">{normalizeOfficeName(emp.office)}</td>
-                                <td className="px-3 py-1">{emp.employeeTypeName || "-"}</td>
-                                <td className="px-3 py-1 text-right">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => toggleManualAttendance(emp)}
-                                    className="inline-flex items-center gap-1"
-                                  >
-                                    <Undo2 className="h-4 w-4" />
-                                    Undo
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                )}
-              </TabsContent>
-            </Tabs>
-          )}
-
-        </CardContent>
-      </Card>
+          <TabsContent value="summary" className="mt-6 animate-in fade-in duration-500">
+  {officeSummary.length ? (
+    <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-slate-900 text-white">
+            <tr>
+              <th className="sticky left-0 bg-slate-900 px-4 py-4 text-left font-black uppercase tracking-widest">Office</th>
+              {CATEGORY_ORDER.map((cat) => (
+                <th key={`head-all-${cat}`} className="px-3 py-4 text-right font-black uppercase tracking-tighter opacity-70">
+                  {CATEGORY_LABEL[cat]}
+                </th>
+              ))}
+              <th className="px-4 py-4 text-right font-black uppercase tracking-widest bg-slate-800">Roster Total</th>
+              {CATEGORY_ORDER.map((cat) => (
+                <th key={`head-att-${cat}`} className="px-3 py-4 text-right font-black uppercase tracking-tighter text-emerald-400">
+                  {CATEGORY_LABEL[cat]} (Att)
+                </th>
+              ))}
+              <th className="px-4 py-4 text-right font-black uppercase tracking-widest text-emerald-400 bg-slate-800">Attendance</th>
+              <th className="px-4 py-4 text-right font-black uppercase tracking-widest text-rose-400 bg-slate-800 border-l border-slate-700">Var</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {officeSummary.map((row) => (
+              <tr key={row.office} className="hover:bg-slate-50 transition-colors">
+                <td className="sticky left-0 bg-white group-hover:bg-slate-50 px-4 py-3 font-black text-slate-900 border-r border-slate-100">
+                  {row.office}
+                </td>
+                {CATEGORY_ORDER.map((cat) => (
+                  <td key={`${row.office}-${cat}-total`} className="px-3 py-3 text-right font-medium text-slate-500">
+                    {row.counts[cat].toLocaleString()}
+                  </td>
+                ))}
+                <td className="px-4 py-3 text-right font-black bg-slate-50/50">{row.total.toLocaleString()}</td>
+                {CATEGORY_ORDER.map((cat) => (
+                  <td key={`${row.office}-${cat}-att`} className="px-3 py-3 text-right font-bold text-emerald-600">
+                    {row.attendance[cat].toLocaleString()}
+                  </td>
+                ))}
+                <td className="px-4 py-3 text-right font-black text-emerald-600 bg-emerald-50/30">
+                  {row.attendanceTotal.toLocaleString()}
+                </td>
+                <td className={`px-4 py-3 text-right font-black border-l border-slate-100 ${
+                  (row.total - row.attendanceTotal) > 0 ? 'text-rose-600 bg-rose-50/30' : 'text-slate-400'
+                }`}>
+                  {(row.total - row.attendanceTotal).toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="bg-slate-50 font-black">
+            <tr>
+              <td className="px-4 py-4 text-slate-900 border-r border-slate-200 uppercase tracking-widest">Grand Total</td>
+              {CATEGORY_ORDER.map((cat) => (
+                <td key={`grand-${cat}`} className="px-3 py-4 text-right text-slate-500">
+                  {summaryTotals.counts[cat].toLocaleString()}
+                </td>
+              ))}
+              <td className="px-4 py-4 text-right bg-slate-200/50">{summaryTotals.total.toLocaleString()}</td>
+              {CATEGORY_ORDER.map((cat) => (
+                <td key={`grand-att-${cat}`} className="px-3 py-4 text-right text-emerald-600">
+                  {summaryTotals.attendance[cat].toLocaleString()}
+                </td>
+              ))}
+              <td className="px-4 py-4 text-right text-emerald-700 bg-emerald-100/50">{summaryTotals.attendanceTotal.toLocaleString()}</td>
+              <td className="px-4 py-4 text-right text-rose-700 bg-rose-100/50 border-l border-slate-200">
+                {(summaryTotals.total - summaryTotals.attendanceTotal).toLocaleString()}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
+  ) : (
+    <div className="rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center text-slate-400 font-bold uppercase tracking-widest">
+      No data to summarize
+    </div>
+  )}
+</TabsContent>
+
+<TabsContent value="absentees" className="mt-6 space-y-6 animate-in fade-in duration-500">
+  {!absentEmployees.length ? (
+    <div className="rounded-2xl border-2 border-dashed border-emerald-200 p-12 text-center bg-emerald-50/30">
+      <Check className="mx-auto h-8 w-8 text-emerald-500 mb-3" />
+      <p className="text-emerald-800 font-black uppercase tracking-widest">100% Attendance Achieved</p>
+    </div>
+  ) : (
+    <>
+      {/* Pending Table */}
+      <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+          <h3 className="font-black text-slate-900 uppercase tracking-tighter text-xs">Awaiting Verification</h3>
+          <span className="bg-slate-900 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
+            {pendingAbsentees.length}
+          </span>
+        </div>
+        <table className="w-full text-xs">
+          <tbody className="divide-y divide-slate-50">
+            {pendingAbsentees.map((emp) => (
+              <tr key={getAbsentKey(emp)} className="group hover:bg-indigo-50/30 transition-colors">
+                <td className="px-4 py-3">
+                  <div className="font-black text-slate-900">{emp.name}</div>
+                  <div className="text-[10px] font-mono text-slate-400">{toDisplayEmployeeNo(emp.employeeNo)}</div>
+                </td>
+                <td className="px-4 py-3 text-slate-500 font-bold uppercase tracking-tighter">
+                  {normalizeOfficeName(emp.office)}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <Button
+                    size="sm"
+                    onClick={() => toggleManualAttendance(emp)}
+                    className="h-8 rounded-xl bg-slate-900 text-white hover:bg-indigo-600 transition-all font-black text-[10px] uppercase px-4"
+                  >
+                    Mark Present
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Manually Marked Section */}
+      {manuallyMarkedAbsentees.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50/20 shadow-sm opacity-80">
+          <div className="bg-emerald-50 px-4 py-3 border-b border-emerald-100 flex justify-between items-center">
+            <h3 className="font-black text-emerald-900 uppercase tracking-tighter text-xs">Manually Verified</h3>
+          </div>
+          <table className="w-full text-xs">
+            <tbody className="divide-y divide-emerald-100/50">
+              {manuallyMarkedAbsentees.map((emp) => (
+                <tr key={`marked-${getAbsentKey(emp)}`} className="bg-white/50">
+                  <td className="px-4 py-3 italic text-slate-500">{emp.name}</td>
+                  <td className="px-4 py-3 text-[10px] font-mono text-slate-400">
+                    {toDisplayEmployeeNo(emp.employeeNo)}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => toggleManualAttendance(emp)}
+                      className="h-8 text-rose-500 hover:text-rose-700 hover:bg-rose-50 font-black text-[10px] uppercase"
+                    >
+                      <Undo2 className="mr-2 h-3 w-3" />
+                      Undo
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  )}
+</TabsContent>
+        </Tabs>
+      )}
+    </CardContent>
+  </Card>
+</div>
   );
 }

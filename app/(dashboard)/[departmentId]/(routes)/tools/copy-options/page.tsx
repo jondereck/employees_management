@@ -20,7 +20,7 @@ export default function CopyOptionsPage({
       title="Copy Options"
       description="Choose which fields appear when copying employee profiles and how they are formatted."
       breadcrumbs={[{ label: "Copy Options" }]}
-      contentClassName="max-w-3xl space-y-4"
+      contentClassName="space-y-6"
     >
       <CopyOptionsCard />
     </ToolsLayout>

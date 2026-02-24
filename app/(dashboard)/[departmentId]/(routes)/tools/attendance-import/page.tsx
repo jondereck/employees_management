@@ -9,10 +9,10 @@ export default function AttendanceImportPage({
   return (
     <ToolsLayout
       params={params}
-      title="CSV Attendance Import"
-      description="Upload attendance CSV exports and convert them into clean employee summaries."
-      breadcrumbs={[{ label: "CSV Attendance Import" }]}
-      contentClassName="max-w-4xl space-y-4"
+      title="Event Attendance Import"
+      description="Import QR-based attendance records for events and ceremonies. Upload the CSV export from your QR check-in system, and we’ll match it against employee records to generate clean attendance lists and reports."
+      breadcrumbs={[{ label: "Event Attendance Import" }]}
+      contentClassName="space-y-6"
     >
       <CsvAttendanceImport />
     </ToolsLayout>

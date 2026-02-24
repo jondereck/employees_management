@@ -1,15 +1,18 @@
 import { CaseUpper, CaseLower, Text, Undo2 } from "lucide-react"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
+import { cn } from "@/lib/utils" // Import cn for clean class merging
 
 type Format = "uppercase" | "lowercase" | "capitalize" | "toggle"
 
 export function FormatToggleGroup({
   value,
   onChange,
+  className, // Added className here
 }: {
   value: Format
   onChange: (format: Format) => void
+  className?: string // And here
 }) {
   return (
     <ToggleGroup
@@ -18,15 +21,19 @@ export function FormatToggleGroup({
       onValueChange={(val) => {
         if (val) onChange(val as Format)
       }}
-      className="flex gap-2"
+      // Merged the incoming className with your default flex gap
+      className={cn("flex gap-2", className)} 
     >
       <ActionTooltip label="Uppercase">
         <ToggleGroupItem
           value="uppercase"
           aria-label="Uppercase"
-          className={value === "uppercase" ? "bg-primary text-white" : ""}
+          className={cn(
+            "rounded-xl transition-all", 
+            value === "uppercase" ? "bg-slate-900 text-white shadow-md" : ""
+          )}
         >
-          <CaseUpper className="w-6 h-6" />
+          <CaseUpper className="w-5 h-5" />
         </ToggleGroupItem>
       </ActionTooltip>
 
@@ -34,9 +41,12 @@ export function FormatToggleGroup({
         <ToggleGroupItem
           value="lowercase"
           aria-label="Lowercase"
-          className={value === "lowercase" ? "bg-primary text-white" : ""}
+          className={cn(
+            "rounded-xl transition-all",
+            value === "lowercase" ? "bg-slate-900 text-white shadow-md" : ""
+          )}
         >
-          <CaseLower className="w-6 h-6" />
+          <CaseLower className="w-5 h-5" />
         </ToggleGroupItem>
       </ActionTooltip>
 
@@ -44,9 +54,12 @@ export function FormatToggleGroup({
         <ToggleGroupItem
           value="capitalize"
           aria-label="Capitalize Each Word"
-          className={value === "capitalize" ? "bg-primary text-white" : ""}
+          className={cn(
+            "rounded-xl transition-all",
+            value === "capitalize" ? "bg-slate-900 text-white shadow-md" : ""
+          )}
         >
-          <Text className="w-6 h-6" />
+          <Text className="w-5 h-5" />
         </ToggleGroupItem>
       </ActionTooltip>
 
@@ -54,9 +67,12 @@ export function FormatToggleGroup({
         <ToggleGroupItem
           value="toggle"
           aria-label="Toggle Case"
-          className={value === "toggle" ? "bg-primary text-white" : ""}
+          className={cn(
+            "rounded-xl transition-all",
+            value === "toggle" ? "bg-slate-900 text-white shadow-md" : ""
+          )}
         >
-          <Undo2 className="w-6 h-6" />
+          <Undo2 className="w-5 h-5" />
         </ToggleGroupItem>
       </ActionTooltip>
     </ToggleGroup>

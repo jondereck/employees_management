@@ -15,6 +15,7 @@ import prismadb from "@/lib/prismadb";
 import { extractToolAccess, type ToolKey } from "@/lib/tool-access";
 import { ToolsLayout } from "@/components/layouts/tools-layout";
 import { ToolNavigationLink } from "@/components/tools/navigation-link";
+import { cn } from "@/lib/utils";
 
 const TOOL_CARD_CONFIG: Array<{
   key: ToolKey;
@@ -107,46 +108,69 @@ export default async function ToolsLandingPage({
     : "space-y-4";
 
   return (
-    <ToolsLayout
-      params={params}
-      title="Tools"
-      description="Browse and launch the utilities available to your department."
-      breadcrumbs={[]}
-      contentClassName={contentClassName}
-    >
-      {cards.length > 0 ? (
-        cards.map((card) => {
-          const Icon = card.icon;
-          const href =
-            card.key === "sg-range" && sgRangeQuery
-              ? `/${departmentId}/${card.slug}?${sgRangeQuery}`
-              : `/${departmentId}/${card.slug}`;
+   <ToolsLayout
+  params={params}
+  title="Tools"
+  description="Browse and launch the utilities available to your department."
+  breadcrumbs={[]}
+  contentClassName={cn("grid gap-6 sm:grid-cols-2 lg:grid-cols-3", contentClassName)}
+>
+  {cards.length > 0 ? (
+    cards.map((card) => {
+      const Icon = card.icon;
+      const href =
+        card.key === "sg-range" && sgRangeQuery
+          ? `/${departmentId}/${card.slug}?${sgRangeQuery}`
+          : `/${departmentId}/${card.slug}`;
 
-          return (
-            <ToolNavigationLink
-              key={card.key}
-              href={href}
-              className="group block focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-            >
-              <Card className="h-full transition-shadow group-hover:shadow-md">
-                <CardHeader className="flex gap-3">
-                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                    <Icon className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <CardTitle className="text-lg">{card.label}</CardTitle>
-                    <CardDescription>{card.description}</CardDescription>
-                  </div>
-                </CardHeader>
-              </Card>
-            </ToolNavigationLink>
-          );
-        })
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          You do not have access to any tools yet.
-        </p>
-      )}
-    </ToolsLayout>
+      return (
+        <ToolNavigationLink
+          key={card.key}
+          href={href}
+          className="group block outline-none"
+        >
+          <Card className="relative h-full overflow-hidden border-white/40 bg-white/30 backdrop-blur-xl rounded-[2rem] p-2 transition-all duration-500 hover:bg-white/50 hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-1.5 active:scale-[0.98]">
+            {/* Soft Glow Background Decoration */}
+            <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-indigo-500/5 blur-3xl transition-opacity group-hover:opacity-100" />
+            
+            <CardHeader className="flex flex-col items-start gap-4 p-6">
+              {/* Icon Container with Neumorphic touch */}
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-100 text-indigo-600 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3">
+                <Icon className="h-6 w-6" aria-hidden="true" />
+              </div>
+              
+              <div className="space-y-1.5">
+                <CardTitle className="text-base font-black tracking-tight text-slate-800 flex items-center gap-2">
+                  {card.label}
+                  <svg 
+                    className="h-3 w-3 opacity-0 -translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 text-indigo-500" 
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"
+                  >
+                    <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </CardTitle>
+                <CardDescription className="text-xs font-medium leading-relaxed text-slate-500 line-clamp-2">
+                  {card.description}
+                </CardDescription>
+              </div>
+            </CardHeader>
+
+            {/* Bottom Accent Line */}
+            <div className="absolute bottom-0 left-1/2 h-[2px] w-0 -translate-x-1/2 bg-gradient-to-r from-transparent via-indigo-500 to-transparent transition-all duration-500 group-hover:w-full" />
+          </Card>
+        </ToolNavigationLink>
+      );
+    })
+  ) : (
+    <div className="col-span-full flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed border-slate-200 bg-white/30 backdrop-blur-sm">
+      <p className="text-sm font-bold uppercase tracking-widest text-slate-400">
+        Access Restricted
+      </p>
+      <p className="text-xs text-slate-500 mt-1">
+        You do not have access to any tools yet.
+      </p>
+    </div>
+  )}
+</ToolsLayout>
   );
 }

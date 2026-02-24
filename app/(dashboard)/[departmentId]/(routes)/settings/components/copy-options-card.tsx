@@ -69,86 +69,125 @@ export default function CopyOptionsCard() {
   if (!hydrated) return null;
 
   return (
-    <Card id="copy-options" className="mx-auto w-full  border">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Copy Options</CardTitle>
-        <CardDescription>
-          Configure the fields and formatting used when copying employee info.
-        </CardDescription>
-      </CardHeader>
+ <Card id="copy-options" className="mx-auto w-full border-slate-100 shadow-xl shadow-slate-200/50 rounded-3xl overflow-hidden bg-white/80 backdrop-blur-md">
 
-      <CardContent className="space-y-6">
-        {/* Selected summary */}
-        <div className="flex flex-wrap items-center gap-2">
-          {options.fields.length ? (
-            options.fields.map((f) => (
-              <Badge key={f} variant="secondary" className="capitalize">
-                {f}
-              </Badge>
-            ))
-          ) : (
-            <span className="text-sm text-muted-foreground">No fields selected yet</span>
-          )}
+
+  <CardContent className="p-6 space-y-8">
+    {/* Active Selection Tags */}
+    <div className="space-y-3">
+      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Active Pipeline</h4>
+      <div className="flex flex-wrap items-center gap-2 min-h-[32px]">
+        {options.fields.length ? (
+          options.fields.map((f) => (
+            <Badge key={f} className="rounded-lg bg-indigo-50 text-indigo-700 border-indigo-100 px-3 py-1 font-bold capitalize animate-in zoom-in duration-300">
+              {f === 'fullName' ? 'Full Name' : f}
+            </Badge>
+          ))
+        ) : (
+          <span className="text-sm text-slate-400 italic">No fields selected...</span>
+        )}
+      </div>
+    </div>
+
+    {/* Field Selection Tiles */}
+    <div className="space-y-4">
+      <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Include in Clipboard</h4>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {(["fullName", "position", "office"] as Field[]).map((field) => {
+          const isActive = options.fields.includes(field);
+          return (
+            <label 
+              key={field} 
+              className={`flex items-center justify-between p-3 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
+                isActive 
+                ? "border-indigo-600 bg-indigo-50/50 shadow-sm" 
+                : "border-slate-100 bg-white hover:border-slate-200"
+              }`}
+            >
+              <span className={`text-sm font-bold capitalize ${isActive ? "text-indigo-900" : "text-slate-600"}`}>
+                {field === 'fullName' ? 'Full Name' : field}
+              </span>
+              <Checkbox
+                className="rounded-full border-slate-300 data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
+                checked={isActive}
+                onCheckedChange={(checked) => {
+                  if (checked !== "indeterminate") toggleField(field);
+                }}
+              />
+            </label>
+          );
+        })}
+      </div>
+    </div>
+
+    {/* Formatting Controls */}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+      <div className="space-y-3">
+        <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Transformation</h4>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 p-1 bg-slate-100 rounded-2xl flex">
+             <FormatToggleGroup 
+                value={options.format} 
+                onChange={onChangeFormat} 
+                className="w-full bg-transparent"
+             />
+          </div>
+          <Button 
+            type="button" 
+            variant="outline" 
+            size="icon" 
+            onClick={handleReset} 
+            className="rounded-xl border-slate-200 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
         </div>
+        <p className="text-[11px] leading-relaxed text-slate-500 font-medium">
+          <span className="text-indigo-600 font-bold">Smart Capitalize:</span> Auto-corrects minor words (of/the) and keeps acronyms like (COMELEC) in uppercase.
+        </p>
+      </div>
 
-        <Separator />
-
-        {/* Fields */}
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Fields to include</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {(["fullName", "position", "office"] as Field[]).map((field) => (
-              <label key={field} className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={options.fields.includes(field)}
-                  onCheckedChange={(checked) => {
-                    if (checked !== "indeterminate") toggleField(field);
-                  }}
-                />
-                <span className="capitalize">{field}</span>
-              </label>
-            ))}
+      {/* Live Preview Console */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Live Preview</h4>
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleCopyTest}
+            className="h-7 text-[10px] font-black uppercase tracking-tighter hover:bg-slate-900 hover:text-white rounded-lg"
+          >
+            <Copy className="mr-1.5 h-3 w-3" />
+            Test Copy
+          </Button>
+        </div>
+        <div className="relative group">
+          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-2xl blur opacity-10 group-hover:opacity-20 transition duration-500"></div>
+          <div className="relative rounded-xl border border-slate-900 bg-slate-900 p-4 font-mono text-xs leading-relaxed text-indigo-300 shadow-2xl min-h-[60px] flex items-center">
+            {preview || <span className="text-slate-600 italic">Select fields to generate preview...</span>}
           </div>
         </div>
+      </div>
+    </div>
+  </CardContent>
 
-        {/* Formatting */}
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Formatting</h4>
-          <div className="flex items-center gap-3">
-            <FormatToggleGroup value={options.format} onChange={onChangeFormat} />
-            <Button type="button" variant="ghost" size="icon" onClick={handleReset} title="Reset to default">
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            “Capitalize” uses smart title-case (minor words like “on/of/and” are lowercased; acronyms in
-            parentheses are uppercased). For <b>office</b>, e.g. <i>Commission On Election (Comelec)</i> becomes{" "}
-            <b>Commission on Election (COMELEC)</b>.
-          </p>
-        </div>
-
-        {/* Preview */}
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium">Preview</h4>
-          <div className="rounded-md border bg-muted p-3 text-sm font-mono leading-relaxed">
-            {preview || <span className="text-muted-foreground">Nothing selected</span>}
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">This preview uses a sample; real copy uses the same rules.</p>
-            <Button type="button" variant="outline" size="sm" onClick={handleCopyTest}>
-              <Copy className="mr-2 h-3.5 w-3.5" />
-              Copy test
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-
-      <CardFooter className="flex items-center justify-end gap-2">
-        <Button variant="secondary" onClick={handleReset}>Reset</Button>
-        <Button onClick={handleSave} disabled={options.fields.length === 0}>
-          Save Settings
-        </Button>
-      </CardFooter>
-    </Card>
+  <CardFooter className="flex items-center justify-end gap-3 p-6 bg-slate-50/50 border-t border-slate-100">
+    <Button 
+      variant="ghost" 
+      onClick={handleReset}
+      className="font-bold text-slate-500 hover:text-rose-600"
+    >
+      Reset
+    </Button>
+    <Button 
+      onClick={handleSave} 
+      disabled={options.fields.length === 0}
+      className="bg-slate-900 text-white hover:bg-indigo-600 px-8 rounded-xl font-black uppercase tracking-widest transition-all disabled:opacity-30 shadow-lg shadow-slate-200"
+    >
+      Save Configuration
+    </Button>
+  </CardFooter>
+</Card>
   );
 }
