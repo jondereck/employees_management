@@ -59,7 +59,7 @@ const cr = await prismadb.changeRequest.create({
     /* ✅ NEW: realtime emit (request to DELETE timeline) */
     const actor = submittedEmail ?? submittedName ?? "public";
     const payload: ApprovalEvent = {
-      type: "deleted",               // request to delete
+     type: "request_deleted",               // request to delete
       entity: "timeline",
       approvalId: cr.id,             // changeRequest id
       departmentId: emp.departmentId,

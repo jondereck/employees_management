@@ -107,29 +107,49 @@ const Notifications = ({ data }: NotificationsProps) => {
   }, [data, today]);
 
   // ----- Realtime Approvals subscription -----
-  const onApprovalEvent = useCallback((e: ApprovalEvent) => {
-    push(e);
-    toast(
-      e.type === "created"
-        ? `New ${e.entity} approval created`
-        : `${e.entity} approval updated`,
-      {
-        description:
-          e.title
-            ? `${e.title} • ${new Date(e.when).toLocaleString()}`
-            : new Date(e.when).toLocaleString(),
-        icon: <FileCheck className="w-4 h-4" />,
-        action: {
-          label: "Open",
-          onClick: () => {
-            // optional: route to your approvals page
-            window.location.href = `/${e.departmentId}/approvals`;
-          },
-        },
-        duration: 5000,
-      }
-    );
-  }, [push]);
+  const labelMap: Record<string, string> = {
+  created: "Created",
+  updated: "Updated",
+  deleted: "Deleted",
+  request_deleted: "Delete Requested",
+};
+const onApprovalEvent = useCallback((e: ApprovalEvent) => {
+  push(e);
+
+  const title = (() => {
+    switch (e.type) {
+      case "created":
+        return `New ${e.entity} approval created`;
+
+      case "updated":
+        return `${e.entity} approval updated`;
+
+      case "request_deleted":
+        return `${e.entity} deleted`;
+
+      case "request_deleted":
+        return `${e.entity} delete requested`;
+
+      default:
+        return `${e.entity} activity`;
+    }
+  })();
+
+  toast(title, {
+    description:
+      e.title
+        ? `${e.title} • ${new Date(e.when).toLocaleString()}`
+        : new Date(e.when).toLocaleString(),
+    icon: <FileCheck className="w-4 h-4" />,
+    action: {
+      label: "Open",
+      onClick: () => {
+        window.location.href = `/${e.departmentId}/approvals`;
+      },
+    },
+    duration: 5000,
+  });
+}, [push]);
 
   useApprovalsRealtime(departmentId ?? "", onApprovalEvent);
 
@@ -185,7 +205,7 @@ const Notifications = ({ data }: NotificationsProps) => {
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
                   <span className="text-sm font-medium capitalize">
-                    {e.entity} • {e.type}
+                {e.entity} • {labelMap[e.type] ?? e.type}
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-1 truncate">

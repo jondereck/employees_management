@@ -126,35 +126,65 @@ export default function ChangeRequestCard({
   const { removeByApprovalId } = useApprovalToast();
 
   const onApprove = async () => {
-    try {
-      setLoading("approve");
-      const res = await fetch(`/api/admin/${departmentId}/change-requests/${cr.id}/approve`, { method: "POST" });
-      if (!res.ok) throw new Error("Approve failed");
-     toast.success("Change approved and applied.");
-  removeByApprovalId(cr.id); // ⬅ optimistic local clear
-  startTransition(() => router.refresh());
-    } catch (e: any) {
-      toast.error(e.message || "Error approving change");
-    } finally {
-      setLoading(null);
-    }
-  };
+  const toastId = toast.loading("Approving change...");
 
-  const onReject = async () => {
-    try {
-      setLoading("reject");
-      const res = await fetch(`/api/admin/${departmentId}/change-requests/${cr.id}/reject`, { method: "POST" });
-      if (!res.ok) throw new Error("Reject failed");
-      toast.success("Change request rejected.");
-  removeByApprovalId(cr.id); // ⬅ optimistic local clear
-  startTransition(() => router.refresh());
+  try {
+    setLoading("approve");
 
-    } catch (e: any) {
-      toast.error(e.message || "Error rejecting change");
-    } finally {
-      setLoading(null);
-    }
-  };
+    const res = await fetch(
+      `/api/admin/${departmentId}/change-requests/${cr.id}/approve`,
+      { method: "POST" }
+    );
+
+    if (!res.ok) throw new Error("Approve failed");
+
+    removeByApprovalId(cr.id);
+
+    startTransition(() => router.refresh());
+
+    toast.success("Change approved and applied.", {
+      id: toastId,
+    });
+  } catch (e: any) {
+    toast.error(e.message || "Error approving change", {
+      id: toastId,
+    });
+  } finally {
+    setLoading(null);
+  }
+};
+
+const onReject = async () => {
+  const toastId = toast.loading("Rejecting change...");
+
+  try {
+    setLoading("reject");
+
+    const res = await fetch(
+      `/api/admin/${departmentId}/change-requests/${cr.id}/reject`,
+      { method: "POST" }
+    );
+
+    if (!res.ok) throw new Error("Reject failed");
+
+    removeByApprovalId(cr.id);
+
+    // Wait a frame before refresh
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    startTransition(() => {
+      router.refresh();
+    });
+
+    toast.success("Change request rejected.", { id: toastId });
+  } catch (e: any) {
+    toast.error(e.message || "Error rejecting change", {
+      id: toastId,
+    });
+  } finally {
+    setLoading(null);
+  }
+};
 
   const rows = fieldRows(
   cr.oldValues as any,

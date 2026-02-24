@@ -114,7 +114,7 @@ const event = await prismadb.employmentEvent.findFirst({
       when: new Date().toISOString(),
     };
 
-    await pusherServer.trigger(`dept-${emp.departmentId}-approvals`, "approval:event", payload);
+    // await pusherServer.trigger(`dept-${emp.departmentId}-approvals`, "approval:event", payload);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

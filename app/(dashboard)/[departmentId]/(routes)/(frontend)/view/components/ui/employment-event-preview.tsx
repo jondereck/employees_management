@@ -33,6 +33,17 @@ const EmploymentEventPreview = ({ events }: Props) => {
     new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
   );
 
+
+  function getEventTitle(details?: string | null) {
+  if (!details) return "Status Update";
+
+  try {
+    const parsed = JSON.parse(details);
+    return parsed.title || parsed.description || "Status Update";
+  } catch {
+    return details;
+  }
+}
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       {/* HEADER */}
@@ -75,9 +86,9 @@ const EmploymentEventPreview = ({ events }: Props) => {
                       )}
                     </div>
                     
-                    <h3 className="text-sm font-bold text-slate-900 leading-none">
-                      {event.details || "Status Update"}
-                    </h3>
+        <h3 className="text-sm font-bold text-slate-900 leading-none">
+  {getEventTitle(event.details)}
+</h3>
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">

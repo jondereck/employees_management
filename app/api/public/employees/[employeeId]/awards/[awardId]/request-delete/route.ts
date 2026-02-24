@@ -53,7 +53,7 @@ export async function POST(req: Request, { params }: { params: { employeeId: str
     /* ✅ NEW: realtime emit (delete request) */
     const actor = parsed.data.submittedEmail ?? parsed.data.submittedName ?? "public";
     const payload: ApprovalEvent = {
-      type: "deleted",
+      type: "request_deleted",
       entity: "award",
       approvalId: cr.id,
       departmentId: award.employee.departmentId,

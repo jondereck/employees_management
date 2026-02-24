@@ -3,7 +3,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import Container from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/container";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import ChangeRequestCard from "./components/change-request-card";
-import ApprovalsRealtime from "./components/approvals-realtime";
+
 
 
 export const revalidate = 0;                 // no static caching
@@ -65,7 +65,7 @@ export default async function ApprovalsPage({
   return (
 <div className="min-h-screen bg-[#f8fafc] bg-[radial-gradient(at_top_right,_#f1f5f9_0%,_#ffffff_100%)]">
   {/* Realtime listener remains invisible but active */}
-  <ApprovalsRealtime />
+
   
   <Container>
     <div className="max-w-5xl mx-auto space-y-8 px-4 py-12 sm:px-6 lg:px-8">
