@@ -1,46 +1,17 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, History, FileCheck } from "lucide-react";
-import { toast } from "sonner";
-import { useApprovalsRealtime } from "@/hooks/use-approvals-realtime";
+import { CheckCircle, History } from "lucide-react";
 import { useApprovalToast } from "@/hooks/use-approval-toast";
-import { ApprovalEvent } from "@/lib/types/realtime";
 
 type Props = {
   departmentId: string;
   onNavigate?: (href: string) => void; // optional custom nav, defaults to window.location
 };
 
-export default function ApprovalsRealtimeTab({ departmentId, onNavigate }: Props) {
-  const { push, unseenCount, lastEvents } = useApprovalToast();
+export default function ApprovalsRealtimeTab({ onNavigate }: Props) {
+  const { unseenCount, lastEvents } = useApprovalToast();
 
-  const onApprovalEvent = useCallback((e: ApprovalEvent) => {
-    push(e);
-    toast(
-      e.type === "created"
-        ? `New ${e.entity} approval created`
-        : `${e.entity} approval ${e.type}`,
-      {
-        description: e.title
-          ? `${e.title} • ${new Date(e.when).toLocaleString()}`
-          : new Date(e.when).toLocaleString(),
-        icon: <FileCheck className="w-4 h-4" />,
-        action: {
-          label: "Open",
-          onClick: () => {
-            const href = `/${e.departmentId}/approvals`;
-            if (onNavigate) onNavigate(href);
-            else window.location.href = href;
-          },
-        },
-        duration: 5000,
-      }
-    );
-  }, [onNavigate, push]);
-
-  useApprovalsRealtime(departmentId || "", onApprovalEvent);
 
   return (
    <div className="p-2">
