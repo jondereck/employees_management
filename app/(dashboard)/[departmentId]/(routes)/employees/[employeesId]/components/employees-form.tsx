@@ -1276,7 +1276,7 @@ function formatNumberPs(input: string): string {
                               {...field}
                               onChange={(e) => {
                                 const inputValue = e.target.value;
-                                if (inputValue.length <= 16) {
+                                if (inputValue.length <= 19) {
                                   const formattedValue = formatNumberPs(inputValue);
                                   field.onChange(formattedValue);
                                 }
