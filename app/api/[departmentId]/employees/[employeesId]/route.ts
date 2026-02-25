@@ -1,5 +1,6 @@
 import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs";
+import { MaritalStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 
@@ -21,14 +22,6 @@ export async function PATCH(
 
     
     const body = await req.json();
-
-console.log({
-  salaryMode: body.salaryMode,
-  salary: body.salary,
-  salaryGrade: body.salaryGrade,
-  salaryStep: body.salaryStep,
-});
-console.groupEnd();
     const {
       prefix,
       employeeNo,
@@ -72,6 +65,9 @@ console.groupEnd();
       employeeLink,
       note,
       designationId,
+      maritalStatus,
+      email,
+      philSysNumber,
     } = body;
 
     const normalizeStep = (v: any) => {
@@ -81,6 +77,12 @@ console.groupEnd();
 
     const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
     const normalizedEmployeeNo = normalizeBio(employeeNo);
+    const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
+    const normalizedPhilSysNumber = typeof philSysNumber === "string" && philSysNumber.trim() ? philSysNumber.trim() : null;
+    const normalizedMaritalStatus =
+      typeof maritalStatus === "string" && Object.values(MaritalStatus).includes(maritalStatus as MaritalStatus)
+        ? (maritalStatus as MaritalStatus)
+        : null;
     // Validation
     if (!firstName) return new NextResponse("First Name is required", { status: 400 });
     if (!lastName) return new NextResponse("Last Name is required", { status: 400 });
@@ -124,6 +126,32 @@ console.groupEnd();
       }
     }
 
+    if (normalizedEmail) {
+      const emailExists = await prismadb.employee.findFirst({
+        where: {
+          id: { not: params.employeesId },
+          email: normalizedEmail,
+        },
+        select: { id: true },
+      });
+      if (emailExists) {
+        return new NextResponse(JSON.stringify({ error: "Email already exists." }), { status: 400 });
+      }
+    }
+
+    if (normalizedPhilSysNumber) {
+      const philSysNumberExists = await prismadb.employee.findFirst({
+        where: {
+          id: { not: params.employeesId },
+          philSysNumber: normalizedPhilSysNumber,
+        },
+        select: { id: true },
+      });
+      if (philSysNumberExists) {
+        return new NextResponse(JSON.stringify({ error: "PhilSys Number already exists." }), { status: 400 });
+      }
+    }
+
     if (normalizedEmployeeNo) {
       const duplicateEmpNo = await prismadb.employee.findFirst({
         where: {
@@ -149,6 +177,9 @@ console.groupEnd();
         salaryMode: true,
         salaryGrade: true,
         salaryStep: true,
+        maritalStatus: true,
+        email: true,
+        philSysNumber: true,
       },
     });
 
@@ -238,6 +269,9 @@ console.groupEnd();
         emergencyContactName,
         emergencyContactNumber,
         employeeLink,
+        maritalStatus: maritalStatus === undefined ? existing.maritalStatus : normalizedMaritalStatus,
+        email: email === undefined ? existing.email : normalizedEmail,
+        philSysNumber: philSysNumber === undefined ? existing.philSysNumber : normalizedPhilSysNumber,
 
         images: {
           deleteMany: {},
@@ -252,6 +286,15 @@ console.groupEnd();
 
     return NextResponse.json(employee);
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const target = (error.meta?.target as string[] | undefined) ?? [];
+      if (target.includes("email")) {
+        return new NextResponse(JSON.stringify({ error: "Email already exists." }), { status: 400 });
+      }
+      if (target.includes("philSysNumber")) {
+        return new NextResponse(JSON.stringify({ error: "PhilSys Number already exists." }), { status: 400 });
+      }
+    }
     console.log("[EMPLOYEES_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }

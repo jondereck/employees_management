@@ -108,6 +108,9 @@ const Info = ({ data }: InfoProps) => {
           {renderItem("Full Name", fullName)}
           {renderItem("Employee Id", data.employeeNo)}
           {renderItem("Gender", data.gender)}
+          {renderItem("Marital Status", data.maritalStatus)}
+          {renderItem("Email", data.email)}
+          {renderItem("PhilSys Number", data.philSysNumber)}
           {renderItem("Birthday", formattedBirthday)}
           {renderItem("Age", `${age} years old`)}
           {renderItem("Education", data.education)}

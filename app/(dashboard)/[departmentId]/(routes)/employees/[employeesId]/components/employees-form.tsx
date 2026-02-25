@@ -1,7 +1,7 @@
 "use client";
 import * as z from "zod";
 import { mutate as globalMutate } from "swr";
-import { Eligibility, Employee, EmployeeType, Gender, Image, Offices } from "@prisma/client";
+import { Eligibility, Employee, EmployeeType, Gender, Image, MaritalStatus, Offices } from "@prisma/client";
 import { Archive, CalendarIcon, CalendarX, Check, ChevronDown, FileText, HelpCircle, LinkIcon, Loader2, ShieldCheck, Star, Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -73,6 +73,25 @@ const formSchema = z.object({
   gender: z.string().min(1, {
     message: "Gender is required"
   }),
+  maritalStatus: z
+    .nativeEnum(MaritalStatus)
+    .optional()
+    .nullable()
+    .or(z.literal(""))
+    .transform((value) => (value === "" ? null : value)),
+  email: z
+    .string()
+    .trim()
+    .email({ message: "Please enter a valid email address" })
+    .optional()
+    .or(z.literal("")),
+  philSysNumber: z
+    .string()
+    .trim()
+    .min(5, { message: "PhilSys Number must be at least 5 characters" })
+    .max(30, { message: "PhilSys Number must be 30 characters or less" })
+    .optional()
+    .or(z.literal("")),
   employeeTypeId: z.string().min(1, {
     message: "Appointment  is required"
   }),
@@ -162,6 +181,9 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   firstName: "",
   middleName: "",
   gender: "",
+  maritalStatus: null,
+  email: "",
+  philSysNumber: "",
   employeeTypeId: "",
   officeId: "",
   eligibilityId: "",
@@ -227,6 +249,9 @@ function mapToDefaults(src: any): EmployeesFormValues {
     // others
     employeeNo: src.employeeNo ?? "",
     gender: src.gender ?? "",
+    maritalStatus: src.maritalStatus ?? null,
+    email: src.email ?? "",
+    philSysNumber: src.philSysNumber ?? "",
     contactNumber: src.contactNumber ?? "",
     position: src.position ?? "",
     education: src.education ?? "",
@@ -456,6 +481,9 @@ export const EmployeesForm = ({
         ...values,
         salaryGrade: String(values.salaryGrade ?? ""),
         salary: Number(values.salary ?? 0),
+        email: values.email?.trim() || null,
+        philSysNumber: values.philSysNumber?.trim() || null,
+        maritalStatus: values.maritalStatus || null,
       };
       if (contact) payload.contactNumber = contact;
       // Call the API
@@ -530,6 +558,7 @@ export const EmployeesForm = ({
 
 
   const genderOptions = Object.values(Gender);
+  const maritalStatusOptions = Object.values(MaritalStatus);
 
 
 
@@ -863,6 +892,62 @@ export const EmployeesForm = ({
                     />
 
                   )} />
+
+                  <FormField
+                    control={form.control}
+                    name="maritalStatus"
+                    render={({ field }) => (
+                      <AutoField
+                        kind="select"
+                        label="Marital Status"
+                        field={{ ...field, value: field.value ?? "" }}
+                        options={maritalStatusOptions.map((status) => ({
+                          value: status,
+                          label: status,
+                        }))}
+                        placeholder="Select marital status"
+                      />
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            disabled={loading}
+                            placeholder="name@example.com"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="philSysNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>PhilSys Number</FormLabel>
+                        <FormControl>
+                          <Input
+                            disabled={loading}
+                            placeholder="PhilSys Number"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <FormField
                     control={form.control}
