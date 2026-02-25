@@ -1,8 +1,22 @@
 import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 
+
+
+const maritalStatusSchema = z.enum(["SINGLE", "MARRIED", "SEPARATED", "WIDOWED", "DIVORCED"]);
+const employeeOptionalFieldsSchema = z.object({
+  maritalStatus: maritalStatusSchema.optional(),
+  email: z.string().email().optional(),
+  philSysNumber: z.string().regex(/^\d{4}-\d{4}-\d{4}$/).optional(),
+});
+
+const sanitizeEmployeeResponse = <T extends Record<string, any>>(employee: T): Omit<T, "philSysNumber"> => {
+  const { philSysNumber, ...rest } = employee;
+  return rest;
+};
 
 export async function PATCH(
   req: Request,
@@ -72,7 +86,20 @@ console.groupEnd();
       employeeLink,
       note,
       designationId,
+      maritalStatus,
+      email,
+      philSysNumber,
     } = body;
+
+    const parsedOptionalFields = employeeOptionalFieldsSchema.safeParse({
+      maritalStatus,
+      email,
+      philSysNumber,
+    });
+
+    if (!parsedOptionalFields.success) {
+      return new NextResponse(JSON.stringify({ error: parsedOptionalFields.error.flatten() }), { status: 400 });
+    }
 
     const normalizeStep = (v: any) => {
   const n = Number(v);
@@ -112,6 +139,33 @@ console.groupEnd();
         },
       });
       if (exists) return new NextResponse(JSON.stringify({ error: "Contact number already exists" }), { status: 400 });
+    }
+
+
+    if (Object.prototype.hasOwnProperty.call(body, "email") && parsedOptionalFields.data.email) {
+      const emailExists = await prismadb.employee.findFirst({
+        where: {
+          id: { not: params.employeesId },
+          email: parsedOptionalFields.data.email,
+        },
+        select: { id: true },
+      });
+      if (emailExists) {
+        return new NextResponse(JSON.stringify({ error: "Email already exists" }), { status: 400 });
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "philSysNumber") && parsedOptionalFields.data.philSysNumber) {
+      const philSysExists = await prismadb.employee.findFirst({
+        where: {
+          id: { not: params.employeesId },
+          philSysNumber: parsedOptionalFields.data.philSysNumber,
+        },
+        select: { id: true },
+      });
+      if (philSysExists) {
+        return new NextResponse(JSON.stringify({ error: "PhilSys number already exists" }), { status: 400 });
+      }
     }
 
     if (designationId) {
@@ -246,11 +300,14 @@ console.groupEnd();
 
         note: note ?? null,
         designationId: designationId ?? null,
+        ...(Object.prototype.hasOwnProperty.call(body, "maritalStatus") ? { maritalStatus: parsedOptionalFields.data.maritalStatus } : {}),
+        ...(Object.prototype.hasOwnProperty.call(body, "email") ? { email: parsedOptionalFields.data.email } : {}),
+        ...(Object.prototype.hasOwnProperty.call(body, "philSysNumber") ? { philSysNumber: parsedOptionalFields.data.philSysNumber } : {}),
       },
     });
 
 
-    return NextResponse.json(employee);
+    return NextResponse.json(sanitizeEmployeeResponse(employee));
   } catch (error) {
     console.log("[EMPLOYEES_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -288,7 +345,7 @@ const employee = await prismadb.employee.findUnique({
 
 
 
-    return NextResponse.json(employee);
+    return NextResponse.json(employee ? sanitizeEmployeeResponse(employee) : employee);
 
     
 
