@@ -41,6 +41,7 @@ const Info = ({ data }: InfoProps) => {
   const formattedTerminateDate = formatTerminateDate(data.terminateDate);
   const formattedDateHired = getBirthday(data.dateHired);
   const formattedCNumber = formatContactNumber(data.contactNumber)
+
   const formattedENumber = formatContactNumber(data.emergencyContactNumber)
   const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment)
 
@@ -109,12 +110,12 @@ const Info = ({ data }: InfoProps) => {
           {renderItem("Employee Id", data.employeeNo)}
           {renderItem("Gender", data.gender)}
           {renderItem("Marital Status", data.maritalStatus)}
-          {renderItem("Email", data.email)}
-          {renderItem("PhilSys Number", data.philSysNumber)}
+
           {renderItem("Birthday", formattedBirthday)}
           {renderItem("Age", `${age} years old`)}
           {renderItem("Education", data.education)}
           {renderItem("Contact Number", formattedCNumber)}
+          {renderItem("Email", data.email)}
           <div className="sm:col-span-2 lg:col-span-3">
             {renderItem("Address", addressFormat(data))}
           </div>
@@ -178,8 +179,10 @@ const Info = ({ data }: InfoProps) => {
             {renderItem("TIN", data.tinNo)}
             {renderItem("Pag-IBIG No", data.pagIbigNo)}
             {renderItem("PhilHealth No", data.philHealthNo)}
+            {renderItem("PhilSys Number", data.philSysNumber)}
+            {renderItem("Member Policy No", data.memberPolicyNo)}
             <div className="sm:col-span-2">
-              {renderItem("Member Policy No", data.memberPolicyNo)}
+
             </div>
           </div>
         </section>

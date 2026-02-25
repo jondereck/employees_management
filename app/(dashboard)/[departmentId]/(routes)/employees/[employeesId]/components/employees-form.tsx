@@ -468,7 +468,7 @@ export const EmployeesForm = ({
     });
   };
   const onSubmit = async (values: EmployeesFormValues) => {
-   
+
     const contact = (values.contactNumber ?? "").trim();
     setLoading(true);
 
@@ -571,6 +571,12 @@ export const EmployeesForm = ({
     return groups ? groups.join('-') : '';
   }
 
+
+function formatNumberPs(input: string): string {
+  const numericValue = input.replace(/\D/g, '').slice(0, 16); // limit to 16 digits
+  const groups = numericValue.match(/.{1,4}/g);
+  return groups ? groups.join('-') : '';
+}
 
   const formatDate = (input: string) => {
     // Remove non-numeric characters
@@ -861,14 +867,14 @@ export const EmployeesForm = ({
                     disabled={loading}
                   />} />
 
-                   <FormField control={form.control} name="nickname" render={({ field }) => <AutoField
+                  <FormField control={form.control} name="nickname" render={({ field }) => <AutoField
                     kind="text"
                     label="Nickname"
                     field={field}
                     formatMode="upper"
                     disabled={loading}
                   />} />
-               
+
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -910,44 +916,18 @@ export const EmployeesForm = ({
                     )}
                   />
 
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            disabled={loading}
-                            placeholder="name@example.com"
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
 
-                  <FormField
-                    control={form.control}
-                    name="philSysNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>PhilSys Number</FormLabel>
-                        <FormControl>
-                          <Input
-                            disabled={loading}
-                            placeholder="PhilSys Number"
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <FormField control={form.control} name="education" render={({ field }) => <AutoField
+                    kind="datalist"
+                    label="Education"
+                    field={field}
+                    endpoint="/api/autofill/educations"
+                    priorityEndpoint={`/api/autofill/popular?field=education&limit=2`}
+                    pinSuggestions
+                    formatMode="title"
+
+                  />} />
+
 
                   <FormField
                     control={form.control}
@@ -974,16 +954,27 @@ export const EmployeesForm = ({
                     disabled={loading}
                   />} />
 
-                  <FormField control={form.control} name="education" render={({ field }) => <AutoField
-                    kind="datalist"
-                    label="Education"
-                    field={field}
-                    endpoint="/api/autofill/educations"
-                    priorityEndpoint={`/api/autofill/popular?field=education&limit=2`}
-                    pinSuggestions
-                    formatMode="title"
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            disabled={loading}
+                            placeholder="name@example.com"
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                  />} />
+
                 </div>
 
               </section>
@@ -1142,30 +1133,30 @@ export const EmployeesForm = ({
 
 
                   {/* 2. Termination Date - ONLY SHOWS IF ARCHIVED IS CHECKED */}
-                <FormField
-                  control={form.control}
-                  name="terminateDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Termination Date </FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="MM-DD-YYYY"
-                          {...field}
-                          onChange={(e) => {
-                            const formattedValue = formatDate(e.target.value);
-                            field.onChange(formattedValue);
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        This field is optional for employee is terminated/retired.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={form.control}
+                    name="terminateDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Termination Date </FormLabel>
+                        <FormControl>
+                          <Input
+                            disabled={loading}
+                            placeholder="MM-DD-YYYY"
+                            {...field}
+                            onChange={(e) => {
+                              const formattedValue = formatDate(e.target.value);
+                              field.onChange(formattedValue);
+                            }}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          This field is optional for employee is terminated/retired.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 {/* Administrative Notes (Textarea) remains at the very bottom */}
@@ -1264,11 +1255,39 @@ export const EmployeesForm = ({
                         />
 
                       </FormControl>
+
+
                       <FormDescription>
                         {field.value && field.value.length !== 11 && <span className="text-red-600">TIN number must be 9 characters long.</span>}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>} />
+
+                    <FormField
+                      control={form.control}
+                      name="philSysNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>PhilSys Number</FormLabel>
+                          <FormControl>
+                            <Input
+                              disabled={loading}
+                              placeholder="0000-0000-0000-0000"
+                              {...field}
+                              onChange={(e) => {
+                                const inputValue = e.target.value;
+                                if (inputValue.length <= 16) {
+                                  const formattedValue = formatNumberPs(inputValue);
+                                  field.onChange(formattedValue);
+                                }
+                              }}
+
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                     <FormField control={form.control} name="memberPolicyNo" render={({ field }) => <FormItem>
                       <FormLabel className="text-xs">Member Policy Number</FormLabel>
                       <FormControl>
