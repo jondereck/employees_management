@@ -3,10 +3,30 @@
 import { findFirstFreeBioFlat } from "@/lib/bio-utils";
 import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs/server"; // ⬅️ server import
-import { Prisma } from "@prisma/client";
+import { Prisma, MaritalStatus } from "@prisma/client";
+import { z } from "zod";
 import { NextResponse } from "next/server";
 
 // helper: respect local calendar day, then pin to 12:00 UTC
+
+const optionalEmployeeProfileSchema = z.object({
+  maritalStatus: z.nativeEnum(MaritalStatus).optional(),
+  email: z.string().email().optional(),
+  philSysNumber: z.string().regex(/^\d{4}-\d{4}-\d{4}$/, "PhilSys Number must match ####-####-####").optional(),
+});
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function sanitizeEmployee<T extends Record<string, unknown> | null>(employee: T) {
+  if (!employee) return employee;
+  const { philSysNumber: _philSysNumber, ...safeEmployee } = employee;
+  return safeEmployee;
+}
+
 function toUTCNoonFromLocalDate(d: Date) {
   const y = d.getFullYear();   // local parts (avoid off-by-one)
   const m = d.getMonth();
@@ -33,6 +53,14 @@ export async function POST(
     const body = await req.json();
 
 
+
+    const optionalProfile = optionalEmployeeProfileSchema.parse({
+      maritalStatus: body.maritalStatus,
+      email: normalizeOptionalString(body.email),
+      philSysNumber: normalizeOptionalString(body.philSysNumber),
+    });
+
+    const { maritalStatus, email, philSysNumber } = optionalProfile;
 
     const {
       prefix,
@@ -271,6 +299,9 @@ if (normalizedEmployeeNo) {
               employeeLink,
               note: note ?? null,
               designationId: designationId ?? null,
+              maritalStatus,
+              email,
+              philSysNumber,
               publicEnabled: true,
             },
             include: employeeInclude,
@@ -312,7 +343,7 @@ if (normalizedEmployeeNo) {
       return employeeRow;
     });
 
-    return NextResponse.json(created);
+    return NextResponse.json(sanitizeEmployee(created));
 
   } catch (error) {
     console.log("[EMPLOYEE_POST]", error);
@@ -400,7 +431,7 @@ export async function GET(
       },
     });
 
-    return NextResponse.json(employees);
+    return NextResponse.json(employees.map((employee) => sanitizeEmployee(employee)));
   } catch (error) {
     console.log("[EMPLOYEES_GET]", error);
     return new NextResponse("Internal error", { status: 500 });
