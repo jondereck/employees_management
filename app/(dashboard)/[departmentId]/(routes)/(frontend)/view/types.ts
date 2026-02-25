@@ -81,6 +81,9 @@ export interface Employees {
   lastName: string;
   suffix: string;
   gender: string;
+  maritalStatus: "SINGLE" | "MARRIED" | "SEPARATED" | "WIDOWED" | "DIVORCED" | null;
+  email: string | null;
+  philSysNumber: string | null;
   contactNumber: string;
   position: string;
   birthday: string
