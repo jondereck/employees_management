@@ -1,7 +1,27 @@
 import prismadb from "@/lib/prismadb";
 import { auth } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
+import { MaritalStatus } from "@prisma/client";
+import { z } from "zod";
 
+
+const optionalEmployeeProfileSchema = z.object({
+  maritalStatus: z.nativeEnum(MaritalStatus).optional(),
+  email: z.string().email().optional(),
+  philSysNumber: z.string().regex(/^\d{4}-\d{4}-\d{4}$/, "PhilSys Number must match ####-####-####").optional(),
+});
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function sanitizeEmployee<T extends Record<string, unknown> | null>(employee: T) {
+  if (!employee) return employee;
+  const { philSysNumber: _philSysNumber, ...safeEmployee } = employee;
+  return safeEmployee;
+}
 
 
 export async function PATCH(
@@ -21,6 +41,12 @@ export async function PATCH(
 
     
     const body = await req.json();
+    const optionalProfile = optionalEmployeeProfileSchema.parse({
+      maritalStatus: body.maritalStatus,
+      email: Object.prototype.hasOwnProperty.call(body, "email") ? normalizeOptionalString(body.email) : undefined,
+      philSysNumber: Object.prototype.hasOwnProperty.call(body, "philSysNumber") ? normalizeOptionalString(body.philSysNumber) : undefined,
+    });
+
 
 console.log({
   salaryMode: body.salaryMode,
@@ -29,6 +55,10 @@ console.log({
   salaryStep: body.salaryStep,
 });
 console.groupEnd();
+    const hasEmail = Object.prototype.hasOwnProperty.call(body, "email");
+    const hasPhilSysNumber = Object.prototype.hasOwnProperty.call(body, "philSysNumber");
+    const hasMaritalStatus = Object.prototype.hasOwnProperty.call(body, "maritalStatus");
+
     const {
       prefix,
       employeeNo,
@@ -73,6 +103,12 @@ console.groupEnd();
       note,
       designationId,
     } = body;
+
+    const profileUpdates = {
+      ...(hasMaritalStatus ? { maritalStatus: optionalProfile.maritalStatus } : {}),
+      ...(hasEmail ? { email: optionalProfile.email ?? null } : {}),
+      ...(hasPhilSysNumber ? { philSysNumber: optionalProfile.philSysNumber ?? null } : {}),
+    };
 
     const normalizeStep = (v: any) => {
   const n = Number(v);
@@ -246,11 +282,12 @@ console.groupEnd();
 
         note: note ?? null,
         designationId: designationId ?? null,
+        ...profileUpdates,
       },
     });
 
 
-    return NextResponse.json(employee);
+    return NextResponse.json(sanitizeEmployee(employee));
   } catch (error) {
     console.log("[EMPLOYEES_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -288,7 +325,7 @@ const employee = await prismadb.employee.findUnique({
 
 
 
-    return NextResponse.json(employee);
+    return NextResponse.json(sanitizeEmployee(employee));
 
     
 

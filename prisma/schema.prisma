@@ -139,6 +139,9 @@ model Employee {
   salaryGrade            Int?
   designationId          String?
   note                   String?
+  maritalStatus          MaritalStatus?
+  email                  String?                 @unique
+  philSysNumber          String?                 @unique
   publicId               String                  @unique @default(dbgenerated("gen_random_uuid()"))
   publicEnabled          Boolean                 @default(false)
   publicVersion          Int                     @default(1)
@@ -327,6 +330,14 @@ enum EligibilityTypes {
 enum Gender {
   Male
   Female
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  SEPARATED
+  WIDOWED
+  DIVORCED
 }
 
 enum EmploymentEventType {

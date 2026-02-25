@@ -1,7 +1,7 @@
 "use client";
 import * as z from "zod";
 import { mutate as globalMutate } from "swr";
-import { Eligibility, Employee, EmployeeType, Gender, Image, Offices } from "@prisma/client";
+import { Eligibility, Employee, EmployeeType, Gender, Image, MaritalStatus, Offices } from "@prisma/client";
 import { Archive, CalendarIcon, CalendarX, Check, ChevronDown, FileText, HelpCircle, LinkIcon, Loader2, ShieldCheck, Star, Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -127,6 +127,11 @@ const formSchema = z.object({
   employeeLink: z.string(),
   designationId: z.string().optional().nullable(), // dropdown can be empty
   note: z.string().optional().nullable(),
+  maritalStatus: z.nativeEnum(MaritalStatus).optional().nullable(),
+  email: z.union([z.literal(""), z.string().email("Invalid email address")]).optional(),
+  philSysNumber: z
+    .union([z.literal(""), z.string().regex(/^\d{4}-\d{4}-\d{4}$/, "PhilSys Number must match ####-####-####")])
+    .optional(),
 })
   .superRefine((data, ctx) => {
     // Require birthday
@@ -199,6 +204,9 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   employeeLink: "",
   designationId: null,
   note: "",
+  maritalStatus: null,
+  email: "",
+  philSysNumber: "",
 };
 
 function mapToDefaults(src: any): EmployeesFormValues {
@@ -255,6 +263,9 @@ function mapToDefaults(src: any): EmployeesFormValues {
     tinNo: src.tinNo ?? "",
     philHealthNo: src.philHealthNo ?? "",
     pagIbigNo: src.pagIbigNo ?? "",
+    maritalStatus: src.maritalStatus ?? null,
+    email: src.email ?? "",
+    philSysNumber: src.philSysNumber ?? "",
 
     images: Array.isArray(src.images) && src.images.length > 0
       ? src.images.map((i: any) => ({ url: i.url }))
