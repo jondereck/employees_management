@@ -127,6 +127,9 @@ const formSchema = z.object({
   employeeLink: z.string(),
   designationId: z.string().optional().nullable(), // dropdown can be empty
   note: z.string().optional().nullable(),
+  maritalStatus: z.enum(["SINGLE", "MARRIED", "SEPARATED", "WIDOWED", "DIVORCED"]).optional(),
+  email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  philSysNumber: z.string().regex(/^\d{4}-\d{4}-\d{4}$/, "PhilSys Number must be in ####-####-#### format").optional().or(z.literal("")),
 })
   .superRefine((data, ctx) => {
     // Require birthday
@@ -199,6 +202,9 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   employeeLink: "",
   designationId: null,
   note: "",
+  maritalStatus: undefined,
+  email: "",
+  philSysNumber: "",
 };
 
 function mapToDefaults(src: any): EmployeesFormValues {
@@ -261,6 +267,9 @@ function mapToDefaults(src: any): EmployeesFormValues {
       : EMPTY_DEFAULTS.images,
     designationId: src.designationId ?? null,
     note: src.note ?? "",
+    maritalStatus: src.maritalStatus ?? undefined,
+    email: src.email ?? "",
+    philSysNumber: src.philSysNumber ?? "",
   };
 }
 
@@ -457,6 +466,10 @@ export const EmployeesForm = ({
         salaryGrade: String(values.salaryGrade ?? ""),
         salary: Number(values.salary ?? 0),
       };
+
+      payload.email = (values.email ?? "").trim() || undefined;
+      payload.philSysNumber = (values.philSysNumber ?? "").trim() || undefined;
+      payload.maritalStatus = values.maritalStatus || undefined;
       if (contact) payload.contactNumber = contact;
       // Call the API
       const res = initialData
