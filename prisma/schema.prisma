@@ -144,6 +144,9 @@ model Employee {
   publicVersion          Int                     @default(1)
   salaryMode             SalaryMode              @default(AUTO)
   legacyQrAllowed        Boolean                 @default(true)
+  maritalStatus          MaritalStatus?
+  email                  String?                 @unique
+  philSysNumber          String?                 @unique
   awards                 Award[]
   biometricsIdentityMaps BiometricsIdentityMap[] @relation("EmployeeToBiometricsIdentityMaps")
   changeRequests         ChangeRequest[]         @relation("EmployeeToChangeRequests")
@@ -361,4 +364,12 @@ enum ScheduleType {
   FIXED
   FLEX
   SHIFT
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  SEPARATED
+  WIDOWED
+  DIVORCED
 }
