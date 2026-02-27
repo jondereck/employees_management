@@ -85,16 +85,16 @@ const formSchema = z.object({
     .email({ message: "Please enter a valid email address" })
     .optional()
     .or(z.literal("")),
-philSysNumber: z
-  .string()
-  .trim()
-  .optional()
-  .refine(
-    (val) => !val || /^\d{4}-\d{4}-\d{4}-\d{4}$/.test(val),
-    {
-      message: "PhilSys number must follow format 0000-0000-0000-0000.",
-    }
-  ),
+  philSysNumber: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (val) => !val || /^\d{4}-\d{4}-\d{4}-\d{4}$/.test(val),
+      {
+        message: "PhilSys number must follow format 0000-0000-0000-0000.",
+      }
+    ),
   employeeTypeId: z.string().min(1, {
     message: "Appointment  is required"
   }),
@@ -131,20 +131,20 @@ philSysNumber: z
   birthday: z.date().optional(),
   salaryMode: z.enum(["AUTO", "MANUAL"]).default("AUTO"),
   // age: z.string(),
-gsisNo: z
-  .string()
-  .trim()
-  .optional()
-  .refine(
-    (val) =>
-      !val ||
-      /^\d{3}-\d{3}-\d{3}-\d$/.test(val) || // NEW
-      /^\d{3}-\d{3}-\d{4}$/.test(val),      // OLD
-    {
-      message:
-        "GSIS number must follow format 000-000-000-0.",
-    }
-  ),
+  gsisNo: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (val) =>
+        !val ||
+        /^\d{3}-\d{3}-\d{3}-\d$/.test(val) || // NEW
+        /^\d{3}-\d{3}-\d{4}$/.test(val),      // OLD
+      {
+        message:
+          "GSIS number must follow format 000-000-000-0.",
+      }
+    ),
   pagIbigNo: z
     .string()
     .trim()
@@ -1106,10 +1106,10 @@ export const EmployeesForm = ({
                     required
                     disabled={loading}
                     placeholder="Select Appointment"
-                     recentKey="employeeTypeId"
-      recentMax={3}
-      recentLabel="Recently used"
-                     
+                    recentKey="employeeTypeId"
+                    recentMax={3}
+                    recentLabel="Recently used"
+
                     pinSuggestions
                     pinnedLabel="Suggestions"
                     options={employeeType
@@ -1229,16 +1229,16 @@ export const EmployeesForm = ({
                         kind="pattern-id"
                         label="GSIS Number"
                         field={field}
-                        placeholder="000-000-0000"
-                        pattern={/^\d{3}-\d{3}-\d{4}$/}
+                        placeholder="000-000-000-0"
+                        pattern={/^\d{3}-\d{3}-\d{3}-\d$/}
                         format={(d) =>
-                          [d.slice(0, 3), d.slice(3, 6), d.slice(6, 10)]
+                          [d.slice(0, 3), d.slice(3, 6), d.slice(6, 9), d.slice(9, 10)]
                             .filter(Boolean)
                             .join("-")
                         }
-                        maxLength={12}
-
+                        maxLength={13}
                       />
+
 
                     </FormItem>} />
                     <FormField
