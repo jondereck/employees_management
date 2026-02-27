@@ -85,13 +85,16 @@ const formSchema = z.object({
     .email({ message: "Please enter a valid email address" })
     .optional()
     .or(z.literal("")),
-  philSysNumber: z
-    .string()
-    .trim()
-    .min(5, { message: "PhilSys Number must be at least 5 characters" })
-    .max(30, { message: "PhilSys Number must be 30 characters or less" })
-    .optional()
-    .or(z.literal("")),
+philSysNumber: z
+  .string()
+  .trim()
+  .optional()
+  .refine(
+    (val) => !val || /^\d{4}-\d{4}-\d{4}-\d{4}$/.test(val),
+    {
+      message: "PhilSys number must follow format 0000-0000-0000-0000.",
+    }
+  ),
   employeeTypeId: z.string().min(1, {
     message: "Appointment  is required"
   }),
@@ -128,17 +131,67 @@ const formSchema = z.object({
   birthday: z.date().optional(),
   salaryMode: z.enum(["AUTO", "MANUAL"]).default("AUTO"),
   // age: z.string(),
-  gsisNo: z.string(),
-  pagIbigNo: z.string(),
-  tinNo: z.string(),
-  philHealthNo: z.string(),
+  gsisNo: z
+    .string()
+    .trim()
+    .transform((v) => v || undefined)
+    .refine(
+      (val) => !val || /^\d{3}-\d{3}-\d{4}$/.test(val),
+      {
+        message: "GSIS number must follow format 000-000-0000.",
+      }
+    )
+    .optional(),
+  pagIbigNo: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (val) => !val || val.replace(/\D/g, "").length === 12,
+      {
+        message: "Pag-IBIG ID must be exactly 12 digits.",
+      }
+    ),
+  tinNo: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (val) => !val || /^\d{3}-\d{3}-\d{3}$/.test(val),
+      {
+        message: "TIN must follow format 000-000-000.",
+      }
+    ),
+  philHealthNo: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (val) =>
+        !val ||
+        /^\d{2}-\d{9}-\d$/.test(val) ||   // NEW format
+        /^\d{3}-\d{3}-\d{3}-\d{3}$/.test(val), // OLD format
+      {
+        message:
+          "PhilHealth number must follow format 00-000000000-0 or 000-000-000-000.",
+      }
+    ),
   dateHired: z.union([z.date(), z.string()]).optional(),
   latestAppointment: z.union([z.date(), z.string()]).optional(),
   terminateDate: z.string(),
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
   isHead: z.boolean(),
-  memberPolicyNo: z.string(),
+  memberPolicyNo: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (val) => !val || val.length === 13,
+      {
+        message: "Member Policy number must be 13 characters.",
+      }
+    ),
   age: z.string(),
   nickname: z.string(),
   emergencyContactName: z.string(),
@@ -572,11 +625,11 @@ export const EmployeesForm = ({
   }
 
 
-function formatNumberPs(input: string): string {
-  const numericValue = input.replace(/\D/g, '').slice(0, 16); // limit to 16 digits
-  const groups = numericValue.match(/.{1,4}/g);
-  return groups ? groups.join('-') : '';
-}
+  function formatNumberPs(input: string): string {
+    const numericValue = input.replace(/\D/g, '').slice(0, 16); // limit to 16 digits
+    const groups = numericValue.match(/.{1,4}/g);
+    return groups ? groups.join('-') : '';
+  }
 
   const formatDate = (input: string) => {
     // Remove non-numeric characters
@@ -958,19 +1011,12 @@ function formatNumberPs(input: string): string {
                     control={form.control}
                     name="email"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            disabled={loading}
-                            placeholder="name@example.com"
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                      <AutoField
+                        kind="email"
+                        label="Email Address"
+                        field={field}
+                        disabled={loading}
+                      />
                     )}
                   />
 
@@ -1057,6 +1103,12 @@ function formatNumberPs(input: string): string {
                     required
                     disabled={loading}
                     placeholder="Select Appointment"
+                     recentKey="employeeTypeId"
+      recentMax={3}
+      recentLabel="Recently used"
+                     
+                    pinSuggestions
+                    pinnedLabel="Suggestions"
                     options={employeeType
                       .slice()
                       .sort((a, b) => a.name.localeCompare(b.name))
@@ -1170,144 +1222,117 @@ function formatNumberPs(input: string): string {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="gsisNo" render={({ field }) => <FormItem>
-                      <FormLabel className="text-xs">GSIS Number</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="000-000-000-0"
-                          {...field}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            if (inputValue.length <= 12) {
-                              // If the input length is 10 or less, update the field value
-                              const formattedValue = formatNumber(inputValue);
-                              field.onChange(formattedValue);
-                            }
-                            // If input length exceeds 10 characters, do not update the field value
-                          }}
-                        />
+                      <AutoField
+                        kind="pattern-id"
+                        label="GSIS Number"
+                        field={field}
+                        placeholder="000-000-0000"
+                        pattern={/^\d{3}-\d{3}-\d{4}$/}
+                        format={(d) =>
+                          [d.slice(0, 3), d.slice(3, 6), d.slice(6, 10)]
+                            .filter(Boolean)
+                            .join("-")
+                        }
+                        maxLength={12}
 
-                      </FormControl>
-                      <FormDescription>
-                        {field.value && field.value.length !== 13 && <span className="text-red-600">GSIS number must be 10 characters long.</span>}
-                      </FormDescription>
-                      <FormMessage />
+                      />
+
                     </FormItem>} />
-                    <FormField control={form.control} name="pagIbigNo" render={({ field }) => <FormItem>
-                      <FormLabel className="text-xs">Pag-IBIG ID</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
+                    <FormField
+                      control={form.control}
+                      name="pagIbigNo"
+                      render={({ field }) => (
+                        <AutoField
+                          kind="pattern-id"
+                          label="Pag-IBIG ID"
+                          field={field}
                           placeholder="000-000-000-000"
-                          {...field}
-
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            if (inputValue.length <= 15) {
-                              const formattedValue = formatNumber(inputValue);
-                              field.onChange(formattedValue);
-                            }
-                          }}
+                          pattern={/^\d{3}-\d{3}-\d{3}-\d{3}$/}
+                          format={(d) =>
+                            [d.slice(0, 3), d.slice(3, 6), d.slice(6, 9), d.slice(9, 12)]
+                              .filter(Boolean)
+                              .join("-")
+                          }
+                          maxLength={15}
                         />
+                      )}
+                    />
 
-                      </FormControl>
-                      <FormDescription>
-                        {field.value && field.value.length !== 15 && <span className="text-red-600">Pagibig Policy number must be 12 characters long.</span>}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>} />
-                    <FormField control={form.control} name="philHealthNo" render={({ field }) => <FormItem>
-                      <FormLabel className="text-xs">PhilHealth No.</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="000-000-000-000"
-                          {...field}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            if (inputValue.length <= 15) {
-                              const formattedValue = formatNumber(inputValue);
-                              field.onChange(formattedValue);
-                            }
-                          }}
+
+                    <FormField
+                      control={form.control}
+                      name="philHealthNo"
+                      render={({ field }) => (
+                        <AutoField
+                          kind="pattern-id"
+                          label="PhilHealth No."
+                          field={field}
+                          placeholder="00-000000000-0"
+                          pattern={/^\d{2}-\d{9}-\d$/}
+                          format={(d) =>
+                            [d.slice(0, 2), d.slice(2, 11), d.slice(11, 12)]
+                              .filter(Boolean)
+                              .join("-")
+                          }
+                          maxLength={14}
                         />
-                      </FormControl>
-                      <FormDescription>
-                        {field.value && field.value.length !== 15 && <span className="text-red-600">TIN number must be 12 characters long.</span>}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>} />
-                    <FormField control={form.control} name="tinNo" render={({ field }) => <FormItem>
-                      <FormLabel className="text-xs">TIN No.</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="tinNo"
+                      render={({ field }) => (
+                        <AutoField
+                          kind="pattern-id"
+                          label="TIN No."
+                          field={field}
                           placeholder="000-000-000"
-                          {...field}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            if (inputValue.length <= 11) {
-                              const formattedValue = formatNumber(inputValue);
-                              field.onChange(formattedValue);
-                            }
-                          }}
-
+                          pattern={/^\d{3}-\d{3}-\d{3}$/}
+                          format={(d) =>
+                            [d.slice(0, 3), d.slice(3, 6), d.slice(6, 9)]
+                              .filter(Boolean)
+                              .join("-")
+                          }
+                          maxLength={11}
                         />
-
-                      </FormControl>
-
-
-                      <FormDescription>
-                        {field.value && field.value.length !== 11 && <span className="text-red-600">TIN number must be 9 characters long.</span>}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>} />
+                      )}
+                    />
 
                     <FormField
                       control={form.control}
                       name="philSysNumber"
                       render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>PhilSys Number</FormLabel>
-                          <FormControl>
-                            <Input
-                              disabled={loading}
-                              placeholder="0000-0000-0000-0000"
-                              {...field}
-                              onChange={(e) => {
-                                const inputValue = e.target.value;
-                                if (inputValue.length <= 19) {
-                                  const formattedValue = formatNumberPs(inputValue);
-                                  field.onChange(formattedValue);
-                                }
-                              }}
-
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
+                        <AutoField
+                          kind="pattern-id"
+                          label="PhilSys Number"
+                          field={field}
+                          placeholder="0000-0000-0000-0000"
+                          pattern={/^\d{4}-\d{4}-\d{4}-\d{4}$/}
+                          format={(d) =>
+                            [d.slice(0, 4), d.slice(4, 8), d.slice(8, 12), d.slice(12, 16)]
+                              .filter(Boolean)
+                              .join("-")
+                          }
+                          maxLength={19}
+                        />
                       )}
                     />
-                    <FormField control={form.control} name="memberPolicyNo" render={({ field }) => <FormItem>
-                      <FormLabel className="text-xs">Member Policy Number</FormLabel>
-                      <FormControl>
-                        <Input
-                          disabled={loading}
-                          placeholder="Member Policy Number"
-                          {...field}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            if (inputValue.length <= 13) {
-                              field.onChange(inputValue);
-                            }
-                          }}
+                    <FormField
+                      control={form.control}
+                      name="memberPolicyNo"
+                      render={({ field }) => (
+                        <AutoField
+                          kind="text"
+                          label="Member Policy Number"
+                          field={field}
+                          placeholder="e.g. LP0206498322"
+                          maxLength={13}
+                          formatMode="upper"
+                          normalizeWhitespace
+                          className="h-10"
                         />
-                      </FormControl>
-                      <FormDescription>
-                        {field.value && field.value.length !== 13 && <span className="text-red-600">Member Policy number must be 13 characters long.</span>}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>} />
+                      )}
+                    />
                   </div>
                 </div>
 

@@ -63,7 +63,13 @@ export function CelebrationView({
   const [filter, setFilter] = useState<FilterValue>(defaultFilter);
   const previewModal = usePreviewModal();
 
-  const [employeeType, setEmployeeType] = useState<string>("all");
+const [employeeType, setEmployeeType] = useState<string>(() => {
+  const permanent = (employeeTypes ?? []).find(
+    (t) => t.name.toLowerCase() === "permanent"
+  );
+
+  return permanent?.value ?? "all";
+});
   const safeEmployeeTypes = employeeTypes ?? [];
   const showFilters = safeEmployeeTypes.length > 0;
 

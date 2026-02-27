@@ -81,11 +81,37 @@ export async function POST(
       philSysNumber,
     } = body;
 
+    // ✅ Normalize optional government IDs (only update if provided)
+    const normalizedGsisNo =
+      gsisNo === undefined
+        ? undefined
+        : gsisNo.trim() || null;
+
+    const normalizedTinNo =
+      tinNo === undefined
+        ? undefined
+        : tinNo.trim() || null;
+
+    const normalizedPagIbigNo =
+      pagIbigNo === undefined
+        ? undefined
+        : pagIbigNo.trim() || null;
+
+    const normalizedPhilHealthNo =
+      philHealthNo === undefined
+        ? undefined
+        : philHealthNo.trim() || null;
+
+    const normalizedMemberPolicyNo =
+      memberPolicyNo === undefined
+        ? undefined
+        : memberPolicyNo.trim() || null;
+
     const safeGrade = Number(body.salaryGrade ?? 1);
     const safeStep = Number(body.salaryStep ?? 1);
     const mode = body.salaryMode ?? "AUTO";
-const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
-const normalizedEmployeeNo = normalizeBio(employeeNo);
+    const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
+    const normalizedEmployeeNo = normalizeBio(employeeNo);
     const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
     const normalizedPhilSysNumber = typeof philSysNumber === "string" && philSysNumber.trim() ? philSysNumber.trim() : null;
     const normalizedMaritalStatus =
@@ -126,7 +152,7 @@ const normalizedEmployeeNo = normalizeBio(employeeNo);
     }
 
 
-    
+
     const departmentByUserId = await prismadb.department.findFirst({
       where: { id: params.departmentId, userId },
       select: { id: true },
@@ -200,22 +226,22 @@ const normalizedEmployeeNo = normalizeBio(employeeNo);
 
     // autoSalary = salaryRecord?.amount ?? 0;
 
-if (normalizedEmployeeNo) {
-  const duplicateEmpNo = await prismadb.employee.findFirst({
-    where: {
-      departmentId: params.departmentId,
-      employeeNo: normalizedEmployeeNo,
-    },
-    select: { id: true },
-  });
+    if (normalizedEmployeeNo) {
+      const duplicateEmpNo = await prismadb.employee.findFirst({
+        where: {
+          departmentId: params.departmentId,
+          employeeNo: normalizedEmployeeNo,
+        },
+        select: { id: true },
+      });
 
-  if (duplicateEmpNo) {
-    return new NextResponse(
-      JSON.stringify({ error: "Employee number already exists." }),
-      { status: 400 }
-    );
-  }
-}
+      if (duplicateEmpNo) {
+        return new NextResponse(
+          JSON.stringify({ error: "Employee number already exists." }),
+          { status: 400 }
+        );
+      }
+    }
 
     // --- CREATE employee + default HIRED event atomically (with collision-safe BIO) ---
     const created = await prismadb.$transaction(async (tx) => {
@@ -276,10 +302,11 @@ if (normalizedEmployeeNo) {
               barangay,
               city,
               province,
-              gsisNo,
-              tinNo,
-              pagIbigNo,
-              philHealthNo,
+              gsisNo: normalizedGsisNo,
+              tinNo: normalizedTinNo,
+              pagIbigNo: normalizedPagIbigNo,
+              philHealthNo: normalizedPhilHealthNo,
+              memberPolicyNo: normalizedMemberPolicyNo,
               dateHired: dateHired ? new Date(dateHired) : new Date(),
               latestAppointment,
               isFeatured,
@@ -292,7 +319,7 @@ if (normalizedEmployeeNo) {
               salaryGrade: safeGrade,
               salaryStep: safeStep,
               salaryMode: mode,
-              memberPolicyNo,
+
               age,
               nickname,
               emergencyContactName,

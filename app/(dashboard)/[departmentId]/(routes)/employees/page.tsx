@@ -61,13 +61,13 @@ const EmployeesPage = async ({
       offices: true,
       employeeType: true,
       eligibility: true,
-     images: {
-      orderBy: [
-        { updatedAt: "desc" },   // primary
-        { createdAt: "desc" },   // fallback if updatedAt is null
-      ],
-      select: { id: true, url: true, createdAt: true, updatedAt: true }, // optional trim
-    },
+      images: {
+        orderBy: [
+          { updatedAt: "desc" },   // primary
+          { createdAt: "desc" },   // fallback if updatedAt is null
+        ],
+        select: { id: true, url: true, createdAt: true, updatedAt: true }, // optional trim
+      },
       designation: { select: { id: true, name: true } },
     },
     orderBy: {
@@ -90,11 +90,11 @@ const EmployeesPage = async ({
     position: item.position,
     birthday: item.birthday ? format(new Date(item.birthday), "M d, yyyy") : '',
     education: item.education,
-    gsisNo: item.gsisNo,
-    tinNo: item.tinNo,
-    philHealthNo: item.philHealthNo,
-    pagIbigNo: item.pagIbigNo,
-    memberPolicyNo: item.memberPolicyNo,
+    gsisNo: item.gsisNo ?? "",
+    tinNo: item.tinNo ?? "",
+    pagIbigNo: item.pagIbigNo ?? "",
+    philHealthNo: item.philHealthNo ?? "",
+    memberPolicyNo: item.memberPolicyNo ?? "",
     salaryGrade: item.salaryGrade?.toString() ?? "",
     salaryStep: item.salaryStep?.toString() ?? "", // <-- add this
     salary: typeof item.salary === "number" ? item.salary.toString() : item.salary,
@@ -105,7 +105,7 @@ const EmployeesPage = async ({
     isFeatured: item.isFeatured,
     isArchived: item.isArchived,
     isHead: item.isHead,
-   
+
 
     eligibility: {
       id: item.eligibility.id,
@@ -138,13 +138,13 @@ const EmployeesPage = async ({
     employeeLink: item.employeeLink,
     note: item.note ?? "",
     designation: item.designation ? { id: item.designation.id, name: item.designation.name } : null,
-   publicEnabled: Boolean(item.publicEnabled),
-publicId: item.publicId ?? "",
-publicVersion: Number(item.publicVersion ?? 0),
+    publicEnabled: Boolean(item.publicEnabled),
+    publicId: item.publicId ?? "",
+    publicVersion: Number(item.publicVersion ?? 0),
 
-     createdAt: item.createdAt?.toISOString() ?? null,
-  updatedAt: item.updatedAt?.toISOString() ?? null,
-  legacyQrAllowed: Boolean(item.legacyQrAllowed),
+    createdAt: item.createdAt?.toISOString() ?? null,
+    updatedAt: item.updatedAt?.toISOString() ?? null,
+    legacyQrAllowed: Boolean(item.legacyQrAllowed),
 
   }));
 

@@ -70,6 +70,24 @@ export async function PATCH(
       philSysNumber,
     } = body;
 
+    // ✅ Normalize optional government IDs (safe for nullable columns)
+const normalizedGsisNo =
+  typeof gsisNo === "string" && gsisNo.trim() ? gsisNo.trim() : null;
+
+const normalizedTinNo =
+  typeof tinNo === "string" && tinNo.trim() ? tinNo.trim() : null;
+
+const normalizedPagIbigNo =
+  typeof pagIbigNo === "string" && pagIbigNo.trim() ? pagIbigNo.trim() : null;
+
+const normalizedPhilHealthNo =
+  typeof philHealthNo === "string" && philHealthNo.trim() ? philHealthNo.trim() : null;
+
+const normalizedMemberPolicyNo =
+  typeof memberPolicyNo === "string" && memberPolicyNo.trim()
+    ? memberPolicyNo.trim()
+    : null;
+
     const normalizeStep = (v: any) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= 1 ? n : 1;
@@ -240,10 +258,12 @@ export async function PATCH(
         barangay,
         city,
         province,
-        gsisNo,
-        tinNo,
-        pagIbigNo,
-        philHealthNo,
+       gsisNo: normalizedGsisNo,
+tinNo: normalizedTinNo,
+pagIbigNo: normalizedPagIbigNo,
+philHealthNo: normalizedPhilHealthNo,
+memberPolicyNo: normalizedMemberPolicyNo,
+       
 
         // ✅ FIXED SALARY HANDLING
         salary: finalSalary,
@@ -263,7 +283,7 @@ export async function PATCH(
         employeeTypeId,
         officeId,
         eligibilityId,
-        memberPolicyNo,
+
         age,
         nickname,
         emergencyContactName,

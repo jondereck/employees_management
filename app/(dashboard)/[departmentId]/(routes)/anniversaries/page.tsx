@@ -170,11 +170,11 @@ const employeeTypes = await prismadb.employeeType.findMany({
 for (const employee of employees) {
 
   // ✅ Priority: latestAppointment → fallback to dateHired
-  const baseDateRaw = employee.latestAppointment || employee.dateHired;
-  if (!baseDateRaw) continue;
+ // ✅ STRICTLY use dateHired only
+if (!employee.dateHired) continue;
 
-  const hireDate = new Date(baseDateRaw);
-  if (Number.isNaN(hireDate.getTime())) continue;
+const hireDate = new Date(employee.dateHired);
+if (Number.isNaN(hireDate.getTime())) continue;
 
   for (const milestone of MILESTONE_YEARS) {
     const milestoneYear = hireDate.getFullYear() + milestone;

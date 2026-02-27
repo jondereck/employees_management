@@ -150,7 +150,16 @@ type TextareaProps = BaseProps & {
 
 
 /** ---------- Props ---------- */
-type Kind = "text" | "datalist" | "phone" | "number" | "date" | "select";
+type Kind =
+  | "text"
+  | "email"
+  | "datalist"
+  | "phone"
+  | "number"
+  | "date"
+  | "select"
+  | "pattern-id";
+
 type RHFField = { value?: any; onChange: (v: any) => void };
 
 type BaseProps = {
@@ -213,13 +222,36 @@ type TextProps = BaseProps & {
   liveFormat?: boolean;
 };
 
+
+type EmailProps = BaseProps & {
+  kind: "email";
+  placeholder?: string;
+  maxLength?: number;
+  showCounter?: boolean;
+};
+
+
+
+
+type PatternIdProps = BaseProps & {
+  kind: "pattern-id";
+  placeholder?: string;
+  pattern: RegExp;
+  format?: (raw: string) => string;
+  errorMessage?: string;
+  maxLength?: number;
+};
+
+
 type AutoFieldProps =
   | DatalistProps
   | PhoneProps
   | NumberProps
   | DateProps
   | TextProps
+  | EmailProps
   | SelectProps
+  | PatternIdProps
   | TextareaProps;
 /** ---------- Component ---------- */
 export function AutoField(props: AutoFieldProps) {
@@ -230,6 +262,8 @@ export function AutoField(props: AutoFieldProps) {
     case "datalist": return <DatalistField {...props} />;
     case "select": return <SelectField {...props} />;
     case "textarea": return <TextareaField {...props} />;
+    case "email": return <EmailField {...props} />;
+    case "pattern-id": return <PatternIdField {...props} />;
     case "text":
     default: return <TextField {...props} />;
   }
@@ -1162,5 +1196,119 @@ function TextareaField({
   
   <FormMessage className="text-[11px] font-medium" />
 </FormItem>
+  );
+}
+
+
+function EmailField({
+  label,
+  field,
+  disabled,
+  description,
+  required,
+  className,
+  placeholder = "example@email.com",
+  maxLength = 100,
+  showCounter,
+}: EmailProps) {
+  const value: string = field.value ?? "";
+
+  const sanitize = (raw: string) => {
+    const cleaned = raw.trim().toLowerCase();
+    field.onChange(cleaned);
+  };
+
+  return (
+    <FormItem className={cn("space-y-1.5", className)}>
+      <div className="flex items-center justify-between">
+        <FormLabel className="text-[13px] font-medium">
+          {label}
+          {required && <span className="ml-1 text-red-600">*</span>}
+        </FormLabel>
+
+        {showCounter && typeof maxLength === "number" && (
+          <span className="text-[10px] font-mono text-muted-foreground/50">
+            {value.length}/{maxLength}
+          </span>
+        )}
+      </div>
+
+      <FormControl>
+        <Input
+          type="email"
+          autoComplete="email"
+          inputMode="email"
+          disabled={disabled}
+          placeholder={placeholder}
+          value={value}
+          maxLength={maxLength}
+          className="h-9"
+          onChange={(e) => field.onChange(e.target.value)}
+          onBlur={(e) => sanitize(e.target.value)}
+        />
+      </FormControl>
+
+      {description && (
+        <p className="text-[11px] text-muted-foreground/70">
+          {description}
+        </p>
+      )}
+      <FormMessage className="text-[11px]" />
+    </FormItem>
+  );
+}
+
+
+function PatternIdField({
+  label,
+  field,
+  disabled,
+  description,
+  required,
+  className,
+  placeholder,
+  pattern,
+  format,
+  errorMessage = "Invalid ID format.",
+  maxLength,
+}: PatternIdProps) {
+  const [touched, setTouched] = useState(false);
+
+  const handleChange = (val: string) => {
+    const digits = val.replace(/\D/g, "");
+    const formatted = format ? format(digits) : digits;
+    field.onChange(formatted);
+  };
+
+
+  return (
+    <FormItem className={cn("space-y-1.5", className)}>
+      <FormLabel className="text-[13px] font-medium">
+        {label}
+     
+      </FormLabel>
+
+      <FormControl>
+        <Input
+          disabled={disabled}
+          placeholder={placeholder}
+          value={field.value ?? ""}
+          maxLength={maxLength}
+          onChange={(e) => handleChange(e.target.value)}
+          onBlur={() => setTouched(true)}
+    
+        />
+      </FormControl>
+
+      {description && (
+        <p className="text-[11px] text-muted-foreground/60">
+          {description}
+        </p>
+      )}
+
+   
+
+      <FormMessage />
+    </FormItem>
   );
 }

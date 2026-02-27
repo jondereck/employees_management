@@ -113,15 +113,15 @@ model Employee {
   barangay               String                  @default("")
   houseNo                String                  @default("")
   street                 String                  @default("")
-  gsisNo                 String
-  tinNo                  String
-  philHealthNo           String
-  pagIbigNo              String
+  gsisNo                 String?
+  tinNo                  String?
+  philHealthNo           String?
+  pagIbigNo              String?
   salary                 Float
   dateHired              DateTime
   latestAppointment      String                  @default("")
   terminateDate          String                  @default("")
-  memberPolicyNo         String                  @default("")
+  memberPolicyNo         String?                 
   employeeTypeId         String
   eligibilityId          String
   isFeatured             Boolean                 @default(false)
