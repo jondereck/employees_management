@@ -131,17 +131,16 @@ philSysNumber: z
   birthday: z.date().optional(),
   salaryMode: z.enum(["AUTO", "MANUAL"]).default("AUTO"),
   // age: z.string(),
-  gsisNo: z
-    .string()
-    .trim()
-    .transform((v) => v || undefined)
-    .refine(
-      (val) => !val || /^\d{3}-\d{3}-\d{4}$/.test(val),
-      {
-        message: "GSIS number must follow format 000-000-0000.",
-      }
-    )
-    .optional(),
+gsisNo: z
+  .string()
+  .trim()
+  .optional()
+  .refine(
+    (val) => !val || /^\d{3}-\d{3}-\d{3}-\d$/.test(val),
+    {
+      message: "GSIS number must follow format 000-000-000-0.",
+    }
+  ),
   pagIbigNo: z
     .string()
     .trim()
