@@ -136,9 +136,13 @@ gsisNo: z
   .trim()
   .optional()
   .refine(
-    (val) => !val || /^\d{3}-\d{3}-\d{3}-\d$/.test(val),
+    (val) =>
+      !val ||
+      /^\d{3}-\d{3}-\d{3}-\d$/.test(val) || // NEW
+      /^\d{3}-\d{3}-\d{4}$/.test(val),      // OLD
     {
-      message: "GSIS number must follow format 000-000-000-0.",
+      message:
+        "GSIS number must follow format 000-000-000-0.",
     }
   ),
   pagIbigNo: z
@@ -172,7 +176,7 @@ gsisNo: z
         /^\d{3}-\d{3}-\d{3}-\d{3}$/.test(val), // OLD format
       {
         message:
-          "PhilHealth number must follow format 00-000000000-0 or 000-000-000-000.",
+          "PhilHealth number must follow format 00-000000000-0.",
       }
     ),
   dateHired: z.union([z.date(), z.string()]).optional(),
