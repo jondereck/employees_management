@@ -4,6 +4,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import Image from "next/image";
 import prismadb from "@/lib/prismadb";
+import { isBirthdayInMonth } from "@/lib/birthday-utils";
 
 import getEmployee from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/actions/get-employee";
 import getEmployees from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/actions/get-employees";
@@ -310,11 +311,11 @@ if (!isAdmin) {
     },
   });
 
-  const thisMonth = new Date().getMonth();
+  const thisMonth = new Date().getMonth() + 1;
 
   const birthdayPeople =
     publicData && publicData.birthday
-      ? (new Date(publicData.birthday).getMonth() === thisMonth
+      ? (isBirthdayInMonth(publicData.birthday, thisMonth)
         ? [{
           id: params.employeeId,
           firstName: publicData.firstName,

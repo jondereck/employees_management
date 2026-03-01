@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Download, Share2, Gift } from "lucide-react";
+import { compareBirthdayDay, isBirthdayInMonth } from "@/lib/birthday-utils";
 
 type Person = {
   id: string;
@@ -304,22 +305,15 @@ export default function MobileBirthdayGreeter({
 }: Props) {
   // Current local month (Asia/Manila assumed server-side; client just uses local)
   const now = new Date();
-  const month = (typeof monthOverride === "number" ? monthOverride : now.getMonth()) | 0;
+  const month = ((typeof monthOverride === "number" ? monthOverride : now.getMonth()) | 0) + 1;
 
   const [useFullName, setUseFullName] = useState(false);
   const [showDate, setShowDate] = useState(true);
 
   const celebrants = useMemo(() => {
     return people
-      .filter((p) => {
-        const d = new Date(p.birthday);
-        return d.getMonth() === month;
-      })
-      .sort((a, b) => {
-        const da = new Date(a.birthday).getDate();
-        const db = new Date(b.birthday).getDate();
-        return da - db;
-      });
+      .filter((p) => isBirthdayInMonth(p.birthday, month))
+      .sort((a, b) => compareBirthdayDay(a.birthday, b.birthday));
   }, [people, month]);
 
   const first = celebrants[0];
