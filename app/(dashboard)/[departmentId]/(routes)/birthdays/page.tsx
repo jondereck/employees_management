@@ -1,6 +1,7 @@
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import prismadb from "@/lib/prismadb";
 import BirthdayMonthClient from "./components/birthday-month-client";
+import { getOrgDateParts, orgDatePartsToIsoString } from "@/lib/org-timezone";
 
 function clampMonth(m: string | null | undefined, fallback: number) {
   if (m == null) return fallback;
@@ -19,8 +20,11 @@ export default async function BirthdaysPage({
   searchParams?: { month?: string };
 }) {
   const { departmentId } = params;
-  const now = new Date();
-  const month = clampMonth(searchParams?.month, now.getMonth()); // 0..11
+  const nowParts = getOrgDateParts(new Date());
+  const month = clampMonth(
+    searchParams?.month,
+    nowParts?.monthIndex ?? new Date().getMonth()
+  ); // 0..11
   const pgMonth = month + 1; // Postgres EXTRACT(MONTH) is 1..12
 
   // Single round-trip: filter by month and take latest image per employee
@@ -60,18 +64,26 @@ export default async function BirthdaysPage({
   return match ? match[0].toUpperCase() /* + "." if you want a period */ : null;
 };
   // Filter by month on app side (keeps portability across DBs)
-  const people = employees
-    .filter((e) => new Date(e.birthday).getMonth() === month)
-    .sort((a, b) => new Date(a.birthday).getDate() - new Date(b.birthday).getDate())
-    .map((e) => ({
+  const normalizedBirthdays = employees.flatMap((employee) => {
+    const normalized = getOrgDateParts(employee.birthday);
+    if (!normalized) {
+      return [];
+    }
+    return [{ employee, normalized }];
+  });
+
+  const people = normalizedBirthdays
+    .filter(({ normalized }) => normalized.monthIndex === month)
+    .sort((a, b) => a.normalized.day - b.normalized.day)
+    .map(({ employee: e, normalized }) => ({
       id: e.id,
       firstName: e.firstName,
       lastName: e.lastName,
       middleName: toMiddleInitial(e.middleName),
-      suffix:e.suffix,
-      prefix:e.prefix,
+      suffix: e.suffix,
+      prefix: e.prefix,
       nickname: e.nickname ?? null,
-      birthday: new Date(e.birthday).toISOString(),
+      birthday: orgDatePartsToIsoString(normalized),
       imageUrl: e.images?.[0]?.url ?? null,
       isHead: e.isHead,
     }));

@@ -4,6 +4,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import Image from "next/image";
 import prismadb from "@/lib/prismadb";
+import { getOrgDateParts, orgDatePartsToIsoString } from "@/lib/org-timezone";
 
 import getEmployee from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/actions/get-employee";
 import getEmployees from "../../../../../(dashboard)/[departmentId]/(routes)/(frontend)/view/actions/get-employees";
@@ -310,23 +311,29 @@ if (!isAdmin) {
     },
   });
 
-  const thisMonth = new Date().getMonth();
+  const thisMonth = getOrgDateParts(new Date())?.monthIndex ?? new Date().getMonth();
 
   const birthdayPeople =
     publicData && publicData.birthday
-      ? (new Date(publicData.birthday).getMonth() === thisMonth
-        ? [{
-          id: params.employeeId,
-          firstName: publicData.firstName,
-          lastName: publicData.lastName,
-          nickname: publicData.nickname ?? null,
-          prefix: publicData.prefix ?? null,
-          middleName: publicData.middleName ?? null,
-          suffix: publicData.suffix ?? null,
-          imageUrl: publicData.images?.[0]?.url ?? null,
-          birthday: new Date(publicData.birthday).toISOString(),
-        }]
-        : [])
+      ? (() => {
+          const normalized = getOrgDateParts(publicData.birthday);
+          if (!normalized || normalized.monthIndex !== thisMonth) {
+            return [];
+          }
+          return [
+            {
+              id: params.employeeId,
+              firstName: publicData.firstName,
+              lastName: publicData.lastName,
+              nickname: publicData.nickname ?? null,
+              prefix: publicData.prefix ?? null,
+              middleName: publicData.middleName ?? null,
+              suffix: publicData.suffix ?? null,
+              imageUrl: publicData.images?.[0]?.url ?? null,
+              birthday: orgDatePartsToIsoString(normalized),
+            },
+          ];
+        })()
       : [];
 
 
