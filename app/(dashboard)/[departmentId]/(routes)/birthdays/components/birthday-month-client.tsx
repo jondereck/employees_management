@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { getMonthDayInTimeZone } from "@/lib/birthday";
 import { toast } from "sonner";
 import { toastProgress } from "@/lib/linear-progress";
 import { Download, Calendar, Settings2, Share2, EyeOff, ImageIcon, FileImage } from "lucide-react";
@@ -730,16 +731,19 @@ export default function BirthdayMonthClient({
 
   // Filter + sort
   const celebrants = useMemo(() => {
+    const targetMonth = month + 1;
+
     return people
       .filter((p) => {
-        const d = safeDate(p.birthday);
-        return d && d.getMonth() === month;
+        const monthDay = getMonthDayInTimeZone(p.birthday);
+        return monthDay?.month === targetMonth;
       })
       .filter((p) => (headsFilter === "all" ? true : p.isHead))
       .sort((a, b) => {
-        const da = safeDate(a.birthday)!;
-        const db = safeDate(b.birthday)!;
-        return da.getDate() - db.getDate();
+        const aMonthDay = getMonthDayInTimeZone(a.birthday);
+        const bMonthDay = getMonthDayInTimeZone(b.birthday);
+        if (!aMonthDay || !bMonthDay) return 0;
+        return aMonthDay.day - bMonthDay.day;
       });
   }, [people, month, headsFilter]);
 

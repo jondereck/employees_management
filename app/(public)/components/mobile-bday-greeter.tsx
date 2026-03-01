@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Download, Share2, Gift } from "lucide-react";
+import { getMonthDayInTimeZone } from "@/lib/birthday";
 
 type Person = {
   id: string;
@@ -310,15 +311,18 @@ export default function MobileBirthdayGreeter({
   const [showDate, setShowDate] = useState(true);
 
   const celebrants = useMemo(() => {
+    const targetMonth = month + 1;
+
     return people
       .filter((p) => {
-        const d = new Date(p.birthday);
-        return d.getMonth() === month;
+        const monthDay = getMonthDayInTimeZone(p.birthday);
+        return monthDay?.month === targetMonth;
       })
       .sort((a, b) => {
-        const da = new Date(a.birthday).getDate();
-        const db = new Date(b.birthday).getDate();
-        return da - db;
+        const aMonthDay = getMonthDayInTimeZone(a.birthday);
+        const bMonthDay = getMonthDayInTimeZone(b.birthday);
+        if (!aMonthDay || !bMonthDay) return 0;
+        return aMonthDay.day - bMonthDay.day;
       });
   }, [people, month]);
 

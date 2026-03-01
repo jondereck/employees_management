@@ -19,6 +19,7 @@ import EmployeeList from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/v
 import PublicTimeline from "@/app/(public)/components/public-timeline";
 import PublicAwardsGallery from "@/app/(public)/components/public-awards.gallery";
 import PublicSelfServiceActions from "@/app/(public)/components/public-self-service-actions";
+import { getMonthDayInTimeZone } from "@/lib/birthday";
 import DownloadPhotoButton from "@/app/(public)/components/download-photo";
 import PublicHeadshot from "@/app/(public)/components/download-photo";
 import { normalizeEducationLines } from "@/utils/normalize-education";
@@ -310,11 +311,11 @@ if (!isAdmin) {
     },
   });
 
-  const thisMonth = new Date().getMonth();
+  const todayMonthDay = getMonthDayInTimeZone(new Date());
 
   const birthdayPeople =
     publicData && publicData.birthday
-      ? (new Date(publicData.birthday).getMonth() === thisMonth
+      ? (getMonthDayInTimeZone(publicData.birthday)?.month === todayMonthDay?.month
         ? [{
           id: params.employeeId,
           firstName: publicData.firstName,
