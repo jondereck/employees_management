@@ -1,6 +1,7 @@
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import prismadb from "@/lib/prismadb";
 import BirthdayMonthClient from "./components/birthday-month-client";
+import { compareBirthdayDay, isBirthdayInMonth } from "@/lib/birthday-utils";
 
 function clampMonth(m: string | null | undefined, fallback: number) {
   if (m == null) return fallback;
@@ -61,8 +62,8 @@ export default async function BirthdaysPage({
 };
   // Filter by month on app side (keeps portability across DBs)
   const people = employees
-    .filter((e) => new Date(e.birthday).getMonth() === month)
-    .sort((a, b) => new Date(a.birthday).getDate() - new Date(b.birthday).getDate())
+    .filter((e) => isBirthdayInMonth(e.birthday, pgMonth))
+    .sort((a, b) => compareBirthdayDay(a.birthday, b.birthday))
     .map((e) => ({
       id: e.id,
       firstName: e.firstName,
