@@ -1,6 +1,7 @@
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import prismadb from "@/lib/prismadb";
 import BirthdayMonthClient from "./components/birthday-month-client";
+import { getMonthDayInTimeZone } from "@/lib/birthday";
 
 function clampMonth(m: string | null | undefined, fallback: number) {
   if (m == null) return fallback;
@@ -59,10 +60,18 @@ export default async function BirthdaysPage({
   const match = name.match(/[A-Za-z]/); // first alphabetic char
   return match ? match[0].toUpperCase() /* + "." if you want a period */ : null;
 };
-  // Filter by month on app side (keeps portability across DBs)
+  // Filter by month/day numerically in Asia/Manila to avoid timezone drift.
   const people = employees
-    .filter((e) => new Date(e.birthday).getMonth() === month)
-    .sort((a, b) => new Date(a.birthday).getDate() - new Date(b.birthday).getDate())
+    .filter((e) => {
+      const birthMonthDay = getMonthDayInTimeZone(e.birthday);
+      return birthMonthDay?.month === pgMonth;
+    })
+    .sort((a, b) => {
+      const aMonthDay = getMonthDayInTimeZone(a.birthday);
+      const bMonthDay = getMonthDayInTimeZone(b.birthday);
+      if (!aMonthDay || !bMonthDay) return 0;
+      return aMonthDay.day - bMonthDay.day;
+    })
     .map((e) => ({
       id: e.id,
       firstName: e.firstName,

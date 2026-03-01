@@ -26,6 +26,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useApprovalsIndicator } from "@/hooks/use-approvals-indicator";
 import ApprovalsRealtimeTab from "./notification/approval-realtime-notification-tab";
 import { hasBirthdayDotForToday, useBirthdayIndicator } from "@/hooks/use-birthday-indicator";
+import { getMonthDayInTimeZone, isBirthdayOnDate } from "@/lib/birthday";
 
 
 
@@ -64,13 +65,9 @@ const Notifications = ({ data }: NotificationsProps) => {
   const closeModal = () => setIsModalOpen(false);
 
   const celebrantsToday = useMemo(() => {
-    const todayMonthDay = `${today.getMonth() + 1}-${today.getDate()}`;
     return data.filter((emp) => {
-      if (!emp.birthday) return false;
-      const dob = new Date(emp.birthday);
-      if (isNaN(dob.getTime())) return false;
-      const empMonthDay = `${dob.getMonth() + 1}-${dob.getDate()}`;
-      return empMonthDay === todayMonthDay && !emp.isArchived;
+      if (!emp.birthday || emp.isArchived) return false;
+      return isBirthdayOnDate(emp.birthday, today);
     });
   }, [data, today]);
 
@@ -79,14 +76,16 @@ const Notifications = ({ data }: NotificationsProps) => {
   const upcomingBirthdays = useMemo(() => {
     return data.filter((employee) => {
       if (!employee.birthday || employee.isArchived) return false;
-      const birthday = new Date(employee.birthday);
+      const birthMonthDay = getMonthDayInTimeZone(employee.birthday);
+      if (!birthMonthDay) return false;
+
       const thisYearBirthday = new Date(
         today.getFullYear(),
-        birthday.getMonth(),
-        birthday.getDate()
+        birthMonthDay.month - 1,
+        birthMonthDay.day
       );
       if (thisYearBirthday < today) {
-        thisYearBirthday.setFullYear(today.getFullYear());
+        thisYearBirthday.setFullYear(today.getFullYear() + 1);
       }
       const diffTime = thisYearBirthday.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
