@@ -174,7 +174,15 @@ type OvertimePolicyPayload = {
   overtimeOnExcused: boolean;
 };
 
+type TimekeepingTemplate = {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+};
+
 const OVERTIME_STORAGE_PREFIX = "hrps.biometrics.overtimePolicy";
+const TIMEKEEPING_TEMPLATES_STORAGE_KEY = "hrps-timekeeping-templates";
 
 const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
   startTime: "08:00",
@@ -191,6 +199,22 @@ const sanitizeWorkSchedule = (
     startTime: (hhmmPattern.test(startTime) ? startTime : DEFAULT_WORK_SCHEDULE.startTime) as WorkSchedule["startTime"],
     endTime: (hhmmPattern.test(endTime) ? endTime : DEFAULT_WORK_SCHEDULE.endTime) as WorkSchedule["endTime"],
   };
+};
+
+function isTemplate(obj: unknown): obj is TimekeepingTemplate {
+  if (!obj || typeof obj !== "object") return false;
+  const candidate = obj as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.name === "string" &&
+    typeof candidate.startTime === "string" &&
+    typeof candidate.endTime === "string"
+  );
+}
+
+const parseTemplateArray = (value: unknown): TimekeepingTemplate[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isTemplate);
 };
 
 const defaultOvertimePolicy: OvertimePolicyState = {
@@ -1783,6 +1807,11 @@ function BioLogUploaderContent() {
   const [manualExclusionsHydrated, setManualExclusionsHydrated] = useState(false);
   const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicyState>(defaultOvertimePolicy);
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule>(DEFAULT_WORK_SCHEDULE);
+  const [templates, setTemplates] = useState<TimekeepingTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const importTemplateInputRef = useRef<HTMLInputElement | null>(null);
   const [overtimeHydrated, setOvertimeHydrated] = useState(false);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [manualDialogEditing, setManualDialogEditing] = useState<ManualExclusion | null>(null);
@@ -1839,6 +1868,150 @@ function BioLogUploaderContent() {
   const overtimePolicyPayload = useMemo(
     () => toOvertimePolicyPayload(overtimePolicy),
     [overtimePolicy]
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(TIMEKEEPING_TEMPLATES_STORAGE_KEY);
+    if (!raw) {
+      setTemplates([]);
+      return;
+    }
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      setTemplates(parseTemplateArray(parsed));
+    } catch {
+      setTemplates([]);
+    }
+  }, []);
+
+  const saveTemplatesToStorage = useCallback((nextTemplates: TimekeepingTemplate[]) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(TIMEKEEPING_TEMPLATES_STORAGE_KEY, JSON.stringify(nextTemplates));
+  }, []);
+
+  const handleApplyTemplate = useCallback(
+    (value: string) => {
+      setSelectedTemplateId(value);
+      if (value === "none") return;
+      const selectedTemplate = templates.find((template) => template.id === value);
+      if (!selectedTemplate) return;
+      setWorkSchedule(
+        sanitizeWorkSchedule({
+          startTime: selectedTemplate.startTime,
+          endTime: selectedTemplate.endTime,
+        })
+      );
+    },
+    [templates]
+  );
+
+  const handleSaveTemplate = useCallback(() => {
+    const trimmedName = templateName.trim();
+    if (!trimmedName) {
+      toast({ title: "Template name is required", variant: "destructive" });
+      return;
+    }
+    const nextTemplate: TimekeepingTemplate = {
+      id: crypto.randomUUID(),
+      name: trimmedName,
+      startTime: workSchedule.startTime,
+      endTime: workSchedule.endTime,
+    };
+    const nextTemplates = [...templates, nextTemplate];
+    setTemplates(nextTemplates);
+    saveTemplatesToStorage(nextTemplates);
+    setSelectedTemplateId(nextTemplate.id);
+    setTemplateName("");
+    setSaveTemplateOpen(false);
+    toast({ title: "Template saved" });
+  }, [saveTemplatesToStorage, templateName, templates, toast, workSchedule.endTime, workSchedule.startTime]);
+
+  const handleDeleteTemplate = useCallback(() => {
+    if (selectedTemplateId === "none") {
+      toast({ title: "Select a template to delete", variant: "destructive" });
+      return;
+    }
+    const nextTemplates = templates.filter((template) => template.id !== selectedTemplateId);
+    setTemplates(nextTemplates);
+    saveTemplatesToStorage(nextTemplates);
+    setSelectedTemplateId("none");
+    toast({ title: "Template deleted" });
+  }, [saveTemplatesToStorage, selectedTemplateId, templates, toast]);
+
+  const handleExportTemplates = useCallback(() => {
+    const payload = JSON.stringify(templates, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "timekeeping-templates.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [templates]);
+
+  const handleImportTemplates = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const content = await file.text();
+        const parsed: unknown = JSON.parse(content);
+        if (!Array.isArray(parsed)) {
+          toast({ title: "Invalid template file", description: "Expected a JSON array.", variant: "destructive" });
+          return;
+        }
+
+        const validated: TimekeepingTemplate[] = [];
+        for (const item of parsed) {
+          if (!item || typeof item !== "object") {
+            toast({ title: "Invalid template file", description: "Each template entry must be an object.", variant: "destructive" });
+            return;
+          }
+          const candidate = item as Record<string, unknown>;
+          if (
+            typeof candidate.name !== "string" ||
+            typeof candidate.startTime !== "string" ||
+            typeof candidate.endTime !== "string"
+          ) {
+            toast({ title: "Invalid template file", description: "Each template needs name, startTime, and endTime.", variant: "destructive" });
+            return;
+          }
+          const nextTemplate: TimekeepingTemplate = {
+            id: typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : crypto.randomUUID(),
+            name: candidate.name,
+            startTime: candidate.startTime,
+            endTime: candidate.endTime,
+          };
+          validated.push(nextTemplate);
+        }
+
+        const usedIds = new Set(templates.map((template) => template.id));
+        const dedupedImports = validated.map((template) => {
+          if (!usedIds.has(template.id)) {
+            usedIds.add(template.id);
+            return template;
+          }
+          let nextId = crypto.randomUUID();
+          while (usedIds.has(nextId)) {
+            nextId = crypto.randomUUID();
+          }
+          usedIds.add(nextId);
+          return { ...template, id: nextId };
+        });
+
+        const nextTemplates = [...templates, ...dedupedImports];
+        setTemplates(nextTemplates);
+        saveTemplatesToStorage(nextTemplates);
+        toast({ title: "Templates imported", description: `${dedupedImports.length} template(s) added.` });
+      } catch {
+        toast({ title: "Invalid JSON file", variant: "destructive" });
+      } finally {
+        event.target.value = "";
+      }
+    },
+    [saveTemplatesToStorage, templates, toast]
   );
 
   const [columnOrder, setColumnOrder] = useState<SummaryColumnKey[]>(initialColumnSettings.order);
@@ -4154,6 +4327,56 @@ const applyColumnFilters = useCallback(
               Default schedule used when no employee schedule mapping is available.
             </p>
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="template-selector" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Template
+            </Label>
+            <Select value={selectedTemplateId} onValueChange={handleApplyTemplate}>
+              <SelectTrigger id="template-selector" className="h-9 w-full sm:w-[280px]">
+                <SelectValue placeholder="Select Template" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Select Template</SelectItem>
+                {templates.map((template) => (
+                  <SelectItem key={template.id} value={template.id}>
+                    {template.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => setSaveTemplateOpen(true)}>
+              Save Template
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleDeleteTemplate}
+              disabled={selectedTemplateId === "none"}
+            >
+              Delete Template
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={handleExportTemplates}>
+              Export Templates
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => importTemplateInputRef.current?.click()}
+            >
+              Import Templates
+            </Button>
+            <Input
+              ref={importTemplateInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={handleImportTemplates}
+            />
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="work-schedule-start" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -5813,6 +6036,28 @@ const applyColumnFilters = useCallback(
         onClose={() => setResolveTarget(null)}
         onResolve={handleResolveSubmit}
       />
+      <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Template</DialogTitle>
+            <DialogDescription>Save current schedule as a reusable template.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="template-name">Template Name</Label>
+            <Input
+              id="template-name"
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              placeholder="Regular Office"
+            />
+          </div>
+          <div className="flex justify-end">
+            <Button type="button" onClick={handleSaveTemplate}>
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
