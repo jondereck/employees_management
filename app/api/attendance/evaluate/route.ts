@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { evaluateAttendanceEntries, type EvaluationEntry } from "@/lib/attendance/evaluateEntries";
+import type { EvaluationOptions } from "@/types/attendance";
 import type { ManualExclusion } from "@/types/manual-exclusion";
 
 export const runtime = "nodejs";
@@ -72,9 +73,21 @@ const OvertimePolicySchema = z.object({
   overtimeOnExcused: z.boolean().default(true),
 });
 
+const WorkScheduleSchema = z.object({
+  startTime: z.string().regex(hhmmRegex),
+  endTime: z.string().regex(hhmmRegex),
+});
+
+const toHHMM = (value: string): `${number}${number}:${number}${number}` | null => {
+  if (!hhmmRegex.test(value)) return null;
+  const [hours, minutes] = value.split(":");
+  return `${hours.padStart(2, "0")}:${minutes}` as `${number}${number}:${number}${number}`;
+};
+
 const EvaluationOptionsSchema = z
   .object({
     overtime: OvertimePolicySchema,
+    workSchedule: WorkScheduleSchema.optional(),
   })
   .optional();
 
@@ -110,17 +123,30 @@ export async function POST(req: Request) {
       evaluationOptions?.overtime == null
         ? undefined
         : {
-          ...evaluationOptions.overtime,
-          // convert nullable fields to undefined so types align
-          mealDeductMin:
-            evaluationOptions.overtime.mealDeductMin ?? undefined,
-          mealTriggerMin:
-            evaluationOptions.overtime.mealTriggerMin ?? undefined,
-        };
+            ...evaluationOptions.overtime,
+            mealDeductMin: evaluationOptions.overtime.mealDeductMin ?? undefined,
+            mealTriggerMin: evaluationOptions.overtime.mealTriggerMin ?? undefined,
+          };
+
+    const normalizedWorkSchedule = evaluationOptions?.workSchedule
+      ? (() => {
+          const startTime = toHHMM(evaluationOptions.workSchedule.startTime);
+          const endTime = toHHMM(evaluationOptions.workSchedule.endTime);
+          if (!startTime || !endTime) return undefined;
+          return { startTime, endTime };
+        })()
+      : undefined;
+
+    const normalizedOptions: EvaluationOptions | undefined = normalizedOvertime
+      ? {
+          overtime: normalizedOvertime,
+          ...(normalizedWorkSchedule ? { workSchedule: normalizedWorkSchedule } : {}),
+        }
+      : undefined;
 
     const result = await evaluateAttendanceEntries(payloadEntries, {
       manualExclusions: manualExclusions as ManualExclusion[],
-      evaluationOptions: normalizedOvertime ? { overtime: normalizedOvertime } : undefined,
+      evaluationOptions: normalizedOptions,
     });
     return NextResponse.json(result);
   } catch (error) {
