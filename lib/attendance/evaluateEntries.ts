@@ -21,7 +21,7 @@ import {
   type PerEmployeeRow,
 } from "@/utils/parseBioAttendance";
 import { normalizeBiometricToken } from "@/utils/biometricsShared";
-import type { EvaluationOptions, OvertimePolicy } from "@/types/attendance";
+import type { EvaluationOptions, OvertimePolicy, WorkSchedule } from "@/types/attendance";
 import type { ManualExclusion } from "@/types/manual-exclusion";
 
 const MINUTES_IN_DAY = 24 * 60;
@@ -32,6 +32,18 @@ const parseHHMM = (value: HHMM | string | null | undefined): number | null => {
   const minutes = Number(minutesStr);
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
   return hours * 60 + minutes;
+};
+
+const HHMM_PATTERN = /^(?:[01]?\d|2[0-3]):[0-5]\d$/;
+
+const normalizeWorkSchedule = (schedule: WorkSchedule | undefined): WorkSchedule | null => {
+  if (!schedule) return null;
+  const startTime = schedule.startTime.trim();
+  const endTime = schedule.endTime.trim();
+  if (!HHMM_PATTERN.test(startTime) || !HHMM_PATTERN.test(endTime)) {
+    return null;
+  }
+  return { startTime: startTime as HHMM, endTime: endTime as HHMM };
 };
 
 const computeShiftPresenceMinutes = (
@@ -394,6 +406,7 @@ export async function evaluateAttendanceEntries(
 
   const manualExclusions = normalizeManualExclusions(options?.manualExclusions);
   const overtimePolicy = normalizeOvertimePolicy(options?.evaluationOptions?.overtime);
+  const defaultWorkSchedule = normalizeWorkSchedule(options?.evaluationOptions?.workSchedule);
 
   const bioIds = Array.from(new Set(entries.map((row) => row.employeeId)));
   const candidates: { id: string; employeeNo: string | null }[] = [];
@@ -487,7 +500,17 @@ export async function evaluateAttendanceEntries(
   for (const row of entries) {
     const internalEmployeeId = resolveInternalId(row, bioToInternal);
     const scheduleRecord = resolveScheduleForDate(internalEmployeeId, row.dateISO, maps);
-    const normalized = normalizeSchedule(scheduleRecord);
+    const normalizedBase = normalizeSchedule(scheduleRecord);
+    const scheduleSource = normalizedBase.source ?? scheduleRecord.source ?? "DEFAULT";
+    const isDefaultSchedule = scheduleSource === "DEFAULT" || scheduleSource === "NOMAPPING";
+    const normalized =
+      isDefaultSchedule && normalizedBase.type === "FIXED" && defaultWorkSchedule
+        ? {
+            ...normalizedBase,
+            startTime: defaultWorkSchedule.startTime,
+            endTime: defaultWorkSchedule.endTime,
+          }
+        : normalizedBase;
     const earliest = (row.earliest ?? null) as HHMM | null;
     const latest = (row.latest ?? null) as HHMM | null;
     const normalizedAllTimes = normalizePunchTimes(row.allTimes);
@@ -530,8 +553,6 @@ export async function evaluateAttendanceEntries(
       presenceMinutes = computeShiftPresenceMinutes(normalized, earliest, latest, normalizedAllTimes);
     }
     const clampedPresence = Math.max(0, presenceMinutes);
-    const scheduleSource = normalized.source ?? scheduleRecord.source ?? "DEFAULT";
-    const isDefaultSchedule = scheduleSource === "DEFAULT" || scheduleSource === "NOMAPPING";
     const isFallbackFixedSchedule = isDefaultSchedule && normalized.type === "FIXED";
     const dayOfWeek = new Date(`${row.dateISO}T00:00:00Z`).getUTCDay();
     const isDefaultWorkday = dayOfWeek >= 1 && dayOfWeek <= 5;

@@ -140,7 +140,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type { FlexOTMode, OvertimePolicy, OvertimeRounding } from "@/types/attendance";
+import type { FlexOTMode, OvertimePolicy, OvertimeRounding, WorkSchedule } from "@/types/attendance";
 
 const PAGE_SIZE = 25;
 
@@ -175,6 +175,23 @@ type OvertimePolicyPayload = {
 };
 
 const OVERTIME_STORAGE_PREFIX = "hrps.biometrics.overtimePolicy";
+
+const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
+  startTime: "08:00",
+  endTime: "17:00",
+};
+
+const sanitizeWorkSchedule = (
+  schedule: { startTime?: string | null; endTime?: string | null } | null | undefined
+): WorkSchedule => {
+  const hhmmPattern = /^(?:[01]?\d|2[0-3]):[0-5]\d$/;
+  const startTime = (schedule?.startTime ?? "").trim();
+  const endTime = (schedule?.endTime ?? "").trim();
+  return {
+    startTime: (hhmmPattern.test(startTime) ? startTime : DEFAULT_WORK_SCHEDULE.startTime) as WorkSchedule["startTime"],
+    endTime: (hhmmPattern.test(endTime) ? endTime : DEFAULT_WORK_SCHEDULE.endTime) as WorkSchedule["endTime"],
+  };
+};
 
 const defaultOvertimePolicy: OvertimePolicyState = {
   rounding: "nearest15",
@@ -1191,7 +1208,8 @@ const makeEvaluationPayloadKey = (
   manualKey: string,
   rows: ParsedPerDayRow[],
   manualExclusions: ManualExclusion[] | null | undefined,
-  overtimePolicy: OvertimePolicyPayload
+  overtimePolicy: OvertimePolicyPayload,
+  workSchedule: WorkSchedule
 ) => {
   const manualFragment = manualExclusions && manualExclusions.length
     ? manualExclusions
@@ -1212,7 +1230,8 @@ const makeEvaluationPayloadKey = (
     })
     .join("#");
   const policyFragment = serializeOvertimePolicy(overtimePolicy);
-  return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}::${policyFragment}`;
+  const scheduleFragment = `${workSchedule.startTime}-${workSchedule.endTime}`;
+  return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}::${policyFragment}::${scheduleFragment}`;
 };
 
 const getNormalizedTokenForRow = (row: {
@@ -1763,6 +1782,7 @@ function BioLogUploaderContent() {
   const [manualExclusions, setManualExclusions] = useState<ManualExclusion[]>([]);
   const [manualExclusionsHydrated, setManualExclusionsHydrated] = useState(false);
   const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicyState>(defaultOvertimePolicy);
+  const [workSchedule, setWorkSchedule] = useState<WorkSchedule>(DEFAULT_WORK_SCHEDULE);
   const [overtimeHydrated, setOvertimeHydrated] = useState(false);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [manualDialogEditing, setManualDialogEditing] = useState<ManualExclusion | null>(null);
@@ -2779,7 +2799,8 @@ function BioLogUploaderContent() {
       manualKey,
       filteredPerDayRows,
       manualPayload,
-      overtimePolicyPayload
+      overtimePolicyPayload,
+      workSchedule
     );
 
     if (!filteredPerDayRows.length) {
@@ -2815,7 +2836,7 @@ function BioLogUploaderContent() {
             composedFromDayOnly: row.composedFromDayOnly,
           })),
           manualExclusions: manualPayload,
-          evaluationOptions: { overtime: overtimePolicyPayload },
+          evaluationOptions: { overtime: overtimePolicyPayload, workSchedule },
         };
 
         const response = await timeout(
@@ -2880,6 +2901,7 @@ function BioLogUploaderContent() {
     mixedMonthsContext.confirmed,
     overtimeHydrated,
     overtimePolicyPayload,
+    workSchedule,
     toast,
     useManualPeriod,
   ]);
@@ -3468,7 +3490,8 @@ const applyColumnFilters = useCallback(
           manualKey,
           filteredPerDayRows,
           manualPayload,
-          overtimePolicyPayload
+          overtimePolicyPayload,
+          workSchedule
         );
         return;
       }
@@ -3558,7 +3581,8 @@ const applyColumnFilters = useCallback(
         manualKey,
         updatedFilteredRows,
         manualPayload,
-        overtimePolicyPayload
+        overtimePolicyPayload,
+        workSchedule
       );
 
       const hasResolvedEmployee = payload.perEmployee.some((row) => row.resolvedEmployeeId);
@@ -4123,6 +4147,48 @@ const applyColumnFilters = useCallback(
         {manualPeriodError ? (
           <p className="text-xs font-medium text-destructive">{manualPeriodError}</p>
         ) : null}
+        <div className="mt-4 space-y-3 rounded-lg border border-dashed border-muted-foreground/40 bg-background/60 p-4">
+          <div>
+            <p className="text-sm font-semibold">Work schedule</p>
+            <p className="text-xs text-muted-foreground">
+              Default schedule used when no employee schedule mapping is available.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="work-schedule-start" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Start time
+              </Label>
+              <Input
+                id="work-schedule-start"
+                type="time"
+                step={60}
+                value={workSchedule.startTime}
+                onChange={(event) => {
+                  const next = sanitizeWorkSchedule({ ...workSchedule, startTime: event.target.value });
+                  setWorkSchedule(next);
+                }}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="work-schedule-end" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                End time
+              </Label>
+              <Input
+                id="work-schedule-end"
+                type="time"
+                step={60}
+                value={workSchedule.endTime}
+                onChange={(event) => {
+                  const next = sanitizeWorkSchedule({ ...workSchedule, endTime: event.target.value });
+                  setWorkSchedule(next);
+                }}
+                className="h-9"
+              />
+            </div>
+          </div>
+        </div>
         <div className="mt-4 space-y-3 rounded-lg border border-dashed border-muted-foreground/40 bg-background/60 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
