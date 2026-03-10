@@ -6,6 +6,7 @@ export type GenioMemoryMessage = {
 };
 
 const MAX_MEMORY_MESSAGES = 10;
+const MAX_MEMORY_CONTENT_CHARS = 320;
 
 export function getMemory(context: unknown): GenioMemoryMessage[] {
   if (!context || typeof context !== "object") {
@@ -35,11 +36,26 @@ export function getMemory(context: unknown): GenioMemoryMessage[] {
     .slice(-MAX_MEMORY_MESSAGES);
 }
 
+function truncateContent(content: string): string {
+  if (content.length <= MAX_MEMORY_CONTENT_CHARS) {
+    return content;
+  }
+
+  return `${content.slice(0, MAX_MEMORY_CONTENT_CHARS)}…`;
+}
+
 export function updateMemory(
   context: Record<string, unknown>,
   ...messages: GenioMemoryMessage[]
 ): Record<string, unknown> {
-  const nextMemory = [...getMemory(context), ...messages].slice(-MAX_MEMORY_MESSAGES);
+  const normalized = messages
+    .map((message) => ({
+      role: message.role,
+      content: truncateContent(message.content.trim()),
+    }))
+    .filter((message) => message.content.length > 0);
+
+  const nextMemory = [...getMemory(context), ...normalized].slice(-MAX_MEMORY_MESSAGES);
 
   return {
     ...context,

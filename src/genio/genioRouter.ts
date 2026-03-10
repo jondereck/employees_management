@@ -7,9 +7,6 @@ import { genioTools } from "./tools/toolDefinitions";
 
 type GenioContext = Record<string, unknown>;
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 const SYSTEM_PROMPT = `You are Genio, the AI HR analytics assistant for the LGU HRPS system.
 
@@ -32,6 +29,16 @@ Rules:
 When presenting results, use this style:
 - Start with a short heading.
 - Then add key metrics as bullets.`;
+
+function getOpenAIClient(): OpenAI | null {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey || !apiKey.trim()) {
+    return null;
+  }
+
+  return new OpenAI({ apiKey });
+}
 
 function sanitizeMessage(input: unknown): string {
   if (typeof input !== "string") {
@@ -112,6 +119,16 @@ export async function routeGenioMessage(messageInput: unknown, contextInput: unk
 
   context = updateMemory(context, { role: "user", content: message });
 
+  const openai = getOpenAIClient();
+
+  if (!openai) {
+    return streamReply(
+      "Genio is not configured yet. Please set OPENAI_API_KEY in environment variables.",
+      context,
+      null
+    );
+  }
+
   try {
     for (let toolIteration = 0; toolIteration < 4; toolIteration += 1) {
       const completion = await openai.chat.completions.create({
@@ -175,7 +192,7 @@ export async function routeGenioMessage(messageInput: unknown, contextInput: unk
             content: errorMessage,
           };
           messages.push(toolMessage);
-          context = updateMemory(context, { role: "tool", content: `${toolName}: ${errorMessage}` });
+          context = updateMemory(context, { role: "tool", content: `${toolName}: failed` });
           continue;
         }
 
@@ -190,7 +207,7 @@ export async function routeGenioMessage(messageInput: unknown, contextInput: unk
 
         const toolText = await readTextResponse(toolResponse);
         context = getContextFromResponse(toolResponse, context);
-        context = updateMemory(context, { role: "tool", content: `${toolName}: ${toolText}` });
+        context = updateMemory(context, { role: "tool", content: `${toolName}: success` });
 
         const toolMessage: ChatCompletionToolMessageParam = {
           role: "tool",
