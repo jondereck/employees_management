@@ -177,8 +177,40 @@ type OvertimePolicyPayload = {
 type TimekeepingTemplate = {
   id: string;
   name: string;
-  startTime: string;
-  endTime: string;
+  schedule: {
+    startTime: string;
+    endTime: string;
+  };
+  searchQuery: string;
+  filters: {
+    employeeTypes: string[];
+    offices: string[];
+    headStatus: HeadsFilterValue;
+    showUnmatched: boolean;
+    showNoPunchColumn: boolean;
+  };
+  sorting: {
+    column: SummarySortField;
+    direction: SortDirection;
+  };
+  columnVisibility: Record<string, boolean>;
+  metricMode: MetricMode;
+};
+
+const defaultTemplateState = {
+  searchQuery: "",
+  filters: {
+    employeeTypes: [] as string[],
+    offices: [] as string[],
+    headStatus: DEFAULT_SUMMARY_FILTERS.heads,
+    showUnmatched: DEFAULT_SUMMARY_FILTERS.showUnmatched,
+    showNoPunchColumn: DEFAULT_SUMMARY_FILTERS.showNoPunch,
+  },
+  sorting: {
+    column: DEFAULT_SUMMARY_FILTERS.sortBy,
+    direction: DEFAULT_SUMMARY_FILTERS.sortDir,
+  },
+  metricMode: DEFAULT_SUMMARY_FILTERS.metricMode,
 };
 
 const OVERTIME_STORAGE_PREFIX = "hrps.biometrics.overtimePolicy";
@@ -201,20 +233,120 @@ const sanitizeWorkSchedule = (
   };
 };
 
-function isTemplate(obj: unknown): obj is TimekeepingTemplate {
-  if (!obj || typeof obj !== "object") return false;
-  const candidate = obj as Record<string, unknown>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.name === "string" &&
-    typeof candidate.startTime === "string" &&
-    typeof candidate.endTime === "string"
+const buildDefaultColumnVisibility = (): Record<string, boolean> => {
+  const visibleSet = new Set(DEFAULT_SUMMARY_SELECTED_COLUMNS);
+  return ALL_SUMMARY_COLUMN_KEYS.reduce<Record<string, boolean>>((acc, key) => {
+    acc[key] = visibleSet.has(key);
+    return acc;
+  }, {});
+};
+
+const sanitizeTemplateColumnVisibility = (value: unknown): Record<string, boolean> => {
+  const base = buildDefaultColumnVisibility();
+  if (!value || typeof value !== "object") return base;
+  for (const key of ALL_SUMMARY_COLUMN_KEYS) {
+    const candidate = (value as Record<string, unknown>)[key];
+    if (typeof candidate === "boolean") {
+      base[key] = candidate;
+    }
+  }
+  return base;
+};
+
+const migrateTemplate = (value: unknown): TimekeepingTemplate | null => {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.name !== "string" || !candidate.name.trim()) return null;
+
+  const legacySchedule = sanitizeWorkSchedule({
+    startTime: typeof candidate.startTime === "string" ? candidate.startTime : undefined,
+    endTime: typeof candidate.endTime === "string" ? candidate.endTime : undefined,
+  });
+
+  const schedule = sanitizeWorkSchedule(
+    candidate.schedule && typeof candidate.schedule === "object"
+      ? {
+          startTime: (candidate.schedule as Record<string, unknown>).startTime as string | undefined,
+          endTime: (candidate.schedule as Record<string, unknown>).endTime as string | undefined,
+        }
+      : legacySchedule
   );
-}
+
+  const filtersCandidate =
+    candidate.filters && typeof candidate.filters === "object"
+      ? (candidate.filters as Record<string, unknown>)
+      : null;
+
+  const employeeTypes = Array.isArray(filtersCandidate?.employeeTypes)
+    ? filtersCandidate.employeeTypes.filter((entry): entry is string => typeof entry === "string")
+    : defaultTemplateState.filters.employeeTypes;
+  const offices = Array.isArray(filtersCandidate?.offices)
+    ? filtersCandidate.offices.filter((entry): entry is string => typeof entry === "string")
+    : defaultTemplateState.filters.offices;
+  const headStatus =
+    filtersCandidate?.headStatus === "all" ||
+    filtersCandidate?.headStatus === "heads" ||
+    filtersCandidate?.headStatus === "nonHeads"
+      ? filtersCandidate.headStatus
+      : defaultTemplateState.filters.headStatus;
+  const sortingCandidate =
+    candidate.sorting && typeof candidate.sorting === "object"
+      ? (candidate.sorting as Record<string, unknown>)
+      : null;
+  const sortColumn =
+    typeof sortingCandidate?.column === "string" &&
+    (sortingCandidate.column === "employeeName" ||
+      sortingCandidate.column === "employeeNo" ||
+      sortingCandidate.column === "office" ||
+      sortingCandidate.column === "schedule" ||
+      sortingCandidate.column === "days" ||
+      sortingCandidate.column === "noPunch" ||
+      sortingCandidate.column === "absences" ||
+      sortingCandidate.column === "lateDays" ||
+      sortingCandidate.column === "undertimeDays" ||
+      sortingCandidate.column === "latePercent" ||
+      sortingCandidate.column === "undertimePercent" ||
+      sortingCandidate.column === "lateMinutes" ||
+      sortingCandidate.column === "undertimeMinutes" ||
+      sortingCandidate.column === "otTotalMinutes")
+      ? sortingCandidate.column
+      : defaultTemplateState.sorting.column;
+  const sortDirection = sortingCandidate?.direction === "asc" || sortingCandidate?.direction === "desc"
+    ? sortingCandidate.direction
+    : defaultTemplateState.sorting.direction;
+
+  return {
+    id: typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : crypto.randomUUID(),
+    name: candidate.name.trim(),
+    schedule,
+    searchQuery: typeof candidate.searchQuery === "string" ? candidate.searchQuery.slice(0, 200) : defaultTemplateState.searchQuery,
+    filters: {
+      employeeTypes,
+      offices,
+      headStatus,
+      showUnmatched:
+        typeof filtersCandidate?.showUnmatched === "boolean"
+          ? filtersCandidate.showUnmatched
+          : defaultTemplateState.filters.showUnmatched,
+      showNoPunchColumn:
+        typeof filtersCandidate?.showNoPunchColumn === "boolean"
+          ? filtersCandidate.showNoPunchColumn
+          : typeof filtersCandidate?.showNoPunch === "boolean"
+          ? filtersCandidate.showNoPunch
+          : defaultTemplateState.filters.showNoPunchColumn,
+    },
+    sorting: {
+      column: sortColumn,
+      direction: sortDirection,
+    },
+    columnVisibility: sanitizeTemplateColumnVisibility(candidate.columnVisibility),
+    metricMode: candidate.metricMode === "minutes" ? "minutes" : defaultTemplateState.metricMode,
+  };
+};
 
 const parseTemplateArray = (value: unknown): TimekeepingTemplate[] => {
   if (!Array.isArray(value)) return [];
-  return value.filter(isTemplate);
+  return value.map(migrateTemplate).filter((template): template is TimekeepingTemplate => Boolean(template));
 };
 
 const defaultOvertimePolicy: OvertimePolicyState = {
@@ -1811,6 +1943,10 @@ function BioLogUploaderContent() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  const [columnOrder, setColumnOrder] = useState<SummaryColumnKey[]>(initialColumnSettings.order);
+  const [selectedColumnKeys, setSelectedColumnKeys] = useState<SummaryColumnKey[]>(
+    initialColumnSettings.selected
+  );
   const importTemplateInputRef = useRef<HTMLInputElement | null>(null);
   const [overtimeHydrated, setOvertimeHydrated] = useState(false);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -1896,14 +2032,38 @@ function BioLogUploaderContent() {
       if (value === "none") return;
       const selectedTemplate = templates.find((template) => template.id === value);
       if (!selectedTemplate) return;
-      setWorkSchedule(
-        sanitizeWorkSchedule({
-          startTime: selectedTemplate.startTime,
-          endTime: selectedTemplate.endTime,
-        })
+      const visibleColumnKeys = ALL_SUMMARY_COLUMN_KEYS.filter(
+        (key) => selectedTemplate.columnVisibility[key] !== false
       );
+      setWorkSchedule(sanitizeWorkSchedule(selectedTemplate.schedule));
+      setSearch(selectedTemplate.searchQuery);
+      setEmployeeTypes(selectedTemplate.filters.employeeTypes);
+      setOffices(selectedTemplate.filters.offices);
+      setHeads(selectedTemplate.filters.headStatus);
+      setShowUnmatched(selectedTemplate.filters.showUnmatched);
+      setShowNoPunch(selectedTemplate.filters.showNoPunchColumn);
+      setSort({
+        sortBy: selectedTemplate.sorting.column,
+        sortDir: selectedTemplate.sorting.direction,
+        secondarySortBy: null,
+        secondarySortDir: DEFAULT_SUMMARY_FILTERS.secondarySortDir,
+      });
+      setSelectedColumnKeys(visibleColumnKeys.length ? visibleColumnKeys : [...DEFAULT_SUMMARY_SELECTED_COLUMNS]);
+      setMetricMode(selectedTemplate.metricMode);
+      toast({ title: `Template Applied: ${selectedTemplate.name}` });
     },
-    [templates]
+    [
+      setEmployeeTypes,
+      setHeads,
+      setMetricMode,
+      setOffices,
+      setSearch,
+      setShowNoPunch,
+      setShowUnmatched,
+      setSort,
+      templates,
+      toast,
+    ]
   );
 
   const handleSaveTemplate = useCallback(() => {
@@ -1915,8 +2075,27 @@ function BioLogUploaderContent() {
     const nextTemplate: TimekeepingTemplate = {
       id: crypto.randomUUID(),
       name: trimmedName,
-      startTime: workSchedule.startTime,
-      endTime: workSchedule.endTime,
+      schedule: {
+        startTime: workSchedule.startTime,
+        endTime: workSchedule.endTime,
+      },
+      searchQuery: employeeSearch,
+      filters: {
+        employeeTypes: selectedEmployeeTypes,
+        offices: selectedOffices,
+        headStatus: headsFilter,
+        showUnmatched,
+        showNoPunchColumn,
+      },
+      sorting: {
+        column: sortBy,
+        direction: sortDir,
+      },
+      columnVisibility: ALL_SUMMARY_COLUMN_KEYS.reduce<Record<string, boolean>>((acc, key) => {
+        acc[key] = selectedColumnKeys.includes(key);
+        return acc;
+      }, {}),
+      metricMode,
     };
     const nextTemplates = [...templates, nextTemplate];
     setTemplates(nextTemplates);
@@ -1925,7 +2104,24 @@ function BioLogUploaderContent() {
     setTemplateName("");
     setSaveTemplateOpen(false);
     toast({ title: "Template saved" });
-  }, [saveTemplatesToStorage, templateName, templates, toast, workSchedule.endTime, workSchedule.startTime]);
+  }, [
+    employeeSearch,
+    headsFilter,
+    metricMode,
+    saveTemplatesToStorage,
+    selectedColumnKeys,
+    selectedEmployeeTypes,
+    selectedOffices,
+    showNoPunchColumn,
+    showUnmatched,
+    sortBy,
+    sortDir,
+    templateName,
+    templates,
+    toast,
+    workSchedule.endTime,
+    workSchedule.startTime,
+  ]);
 
   const handleDeleteTemplate = useCallback(() => {
     if (selectedTemplateId === "none") {
@@ -1965,26 +2161,16 @@ function BioLogUploaderContent() {
 
         const validated: TimekeepingTemplate[] = [];
         for (const item of parsed) {
-          if (!item || typeof item !== "object") {
-            toast({ title: "Invalid template file", description: "Each template entry must be an object.", variant: "destructive" });
+          const migrated = migrateTemplate(item);
+          if (!migrated) {
+            toast({
+              title: "Invalid template file",
+              description: "Each template needs a valid name and schedule.",
+              variant: "destructive",
+            });
             return;
           }
-          const candidate = item as Record<string, unknown>;
-          if (
-            typeof candidate.name !== "string" ||
-            typeof candidate.startTime !== "string" ||
-            typeof candidate.endTime !== "string"
-          ) {
-            toast({ title: "Invalid template file", description: "Each template needs name, startTime, and endTime.", variant: "destructive" });
-            return;
-          }
-          const nextTemplate: TimekeepingTemplate = {
-            id: typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : crypto.randomUUID(),
-            name: candidate.name,
-            startTime: candidate.startTime,
-            endTime: candidate.endTime,
-          };
-          validated.push(nextTemplate);
+          validated.push(migrated);
         }
 
         const usedIds = new Set(templates.map((template) => template.id));
@@ -2014,10 +2200,6 @@ function BioLogUploaderContent() {
     [saveTemplatesToStorage, templates, toast]
   );
 
-  const [columnOrder, setColumnOrder] = useState<SummaryColumnKey[]>(initialColumnSettings.order);
-  const [selectedColumnKeys, setSelectedColumnKeys] = useState<SummaryColumnKey[]>(
-    initialColumnSettings.selected
-  );
   const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
   const [columnFilters, setColumnFilters] = useState<Partial<Record<SummaryColumnKey, ColumnFilterState>>>(
     {}
