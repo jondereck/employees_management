@@ -558,7 +558,30 @@ const WeeklyPatternTimeline = ({ applied, windows, presence }: WeeklyPatternTime
 };
 
 type ManualDialogOfficeOption = { id: string; name: string };
-type ManualDialogEmployeeOption = { id: string; display: string; name: string };
+type ManualDialogEmployeeOption = {
+  id: string;
+  display: string;
+  name: string;
+  employeeNo: string | null;
+  searchText: string;
+};
+
+const buildEmployeeSearchText = (name: string, employeeNo: string | null) => {
+  const trimmedName = name.trim();
+  const parts = trimmedName
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  const reversedName = parts.length >= 2
+    ? `${parts.slice(1).join(" ")} ${parts[0]}`.trim()
+    : trimmedName;
+
+  return [trimmedName, reversedName, employeeNo ?? ""]
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0)
+    .join(" ");
+};
 
 type ManualExclusionDialogProps = {
   open: boolean;
@@ -853,9 +876,9 @@ const ManualExclusionDialog = ({
                             return (
                               <CommandItem
                                 key={employee.id}
-                                value={employee.id}
-                                onSelect={(value) => {
-                                  toggleEmployee(value);
+                                value={`${employee.id} ${employee.searchText}`}
+                                onSelect={() => {
+                                  toggleEmployee(employee.id);
                                 }}
                                 className="flex items-center gap-2"
                               >
@@ -3392,7 +3415,7 @@ function BioLogUploaderContent() {
 
   const manualEmployeeOptions = useMemo<ManualDialogEmployeeOption[]>(() => {
     if (!dedupedPerEmployee.length) return [];
-    const map = new Map<string, { name: string; display: string }>();
+    const map = new Map<string, { name: string; display: string; employeeNo: string | null; searchText: string }>();
     for (const row of dedupedPerEmployee) {
       const id = row.resolvedEmployeeId?.trim();
       if (!id || map.has(id)) continue;
@@ -3405,10 +3428,21 @@ function BioLogUploaderContent() {
         ? row.employeeId.trim()
         : "Unnamed employee";
       const display = employeeNo && employeeNo.length ? `${baseName} (${employeeNo})` : baseName;
-      map.set(id, { name: baseName, display });
+      map.set(id, {
+        name: baseName,
+        display,
+        employeeNo: employeeNo ?? null,
+        searchText: buildEmployeeSearchText(baseName, employeeNo ?? null),
+      });
     }
     return Array.from(map.entries())
-      .map(([id, value]) => ({ id, name: value.name, display: value.display }))
+      .map(([id, value]) => ({
+        id,
+        name: value.name,
+        display: value.display,
+        employeeNo: value.employeeNo,
+        searchText: value.searchText,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [dedupedPerEmployee]);
 
