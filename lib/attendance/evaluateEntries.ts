@@ -589,8 +589,10 @@ export async function evaluateAttendanceEntries(
     }
 
     const isScheduled = requiredMinutes > 0;
-    const hasAnyPunches = row.punches.length > 0;
-    const absent = excused ? false : isScheduled && !hasAnyPunches;
+    const normalizedPunchCount = normalizedAllTimes.length;
+    const hasCompletePunches = normalizedPunchCount >= 2;
+    const hasSinglePunch = normalizedPunchCount === 1;
+    const absent = excused ? false : isScheduled && normalizedPunchCount === 0;
 
     let statusLabel: string;
     if (excused) {
@@ -602,8 +604,14 @@ export async function evaluateAttendanceEntries(
       } else {
         statusLabel = "Holiday";
       }
+    } else if (absent) {
+      statusLabel = "Absent";
+    } else if (hasSinglePunch) {
+      statusLabel = "Incomplete";
+    } else if (hasCompletePunches) {
+      statusLabel = "Present";
     } else {
-      statusLabel = absent ? "Absent" : "Present";
+      statusLabel = "Present";
     }
 
     const evaluationStatus: DayEvaluationStatus = excused ? "excused" : (evaluation.status as DayEvaluationStatus);
@@ -736,4 +744,3 @@ export async function evaluateAttendanceEntries(
 
   return { perDay: chronological, perEmployee };
 }
-
