@@ -801,9 +801,9 @@ const ManualExclusionDialog = ({
                             return (
                               <CommandItem
                                 key={office.id}
-                                value={office.id}
-                                onSelect={(value) => {
-                                  toggleOffice(value);
+                                value={`${office.id} ${office.name}`}
+                                onSelect={() => {
+                                  toggleOffice(office.id);
                                 }}
                                 className="flex items-center gap-2"
                               >
@@ -853,9 +853,9 @@ const ManualExclusionDialog = ({
                             return (
                               <CommandItem
                                 key={employee.id}
-                                value={employee.id}
-                                onSelect={(value) => {
-                                  toggleEmployee(value);
+                                value={`${employee.id} ${employee.name} ${employee.display}`}
+                                onSelect={() => {
+                                  toggleEmployee(employee.id);
                                 }}
                                 className="flex items-center gap-2"
                               >
