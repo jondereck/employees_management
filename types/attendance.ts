@@ -19,6 +19,7 @@ export interface OvertimePolicy {
 export interface WorkSchedule {
   startTime: HHMM;
   endTime: HHMM;
+  workingDays: number[];
 }
 
 export interface EvaluationOptions {

@@ -76,6 +76,7 @@ const OvertimePolicySchema = z.object({
 const WorkScheduleSchema = z.object({
   startTime: z.string().regex(hhmmRegex),
   endTime: z.string().regex(hhmmRegex),
+  workingDays: z.array(z.number().int().min(0).max(6)).optional(),
 });
 
 const toHHMM = (value: string): `${number}${number}:${number}${number}` | null => {
@@ -133,7 +134,10 @@ export async function POST(req: Request) {
           const startTime = toHHMM(evaluationOptions.workSchedule.startTime);
           const endTime = toHHMM(evaluationOptions.workSchedule.endTime);
           if (!startTime || !endTime) return undefined;
-          return { startTime, endTime };
+          const normalizedWorkingDays = Array.from(new Set(evaluationOptions.workSchedule.workingDays ?? [1, 2, 3, 4, 5]))
+            .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+            .sort((a, b) => a - b);
+          return { startTime, endTime, workingDays: normalizedWorkingDays.length ? normalizedWorkingDays : [1, 2, 3, 4, 5] };
         })()
       : undefined;
 
