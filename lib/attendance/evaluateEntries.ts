@@ -43,7 +43,17 @@ const normalizeWorkSchedule = (schedule: WorkSchedule | undefined): WorkSchedule
   if (!HHMM_PATTERN.test(startTime) || !HHMM_PATTERN.test(endTime)) {
     return null;
   }
-  return { startTime: startTime as HHMM, endTime: endTime as HHMM };
+  const workingDays = Array.from(
+    new Set(
+      (Array.isArray(schedule.workingDays) ? schedule.workingDays : [])
+        .filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6)
+    )
+  ).sort((a, b) => a - b);
+  return {
+    startTime: startTime as HHMM,
+    endTime: endTime as HHMM,
+    workingDays: workingDays.length ? workingDays : [1, 2, 3, 4, 5],
+  };
 };
 
 const computeShiftPresenceMinutes = (
@@ -509,6 +519,7 @@ export async function evaluateAttendanceEntries(
             ...normalizedBase,
             startTime: defaultWorkSchedule.startTime,
             endTime: defaultWorkSchedule.endTime,
+            workingDays: defaultWorkSchedule.workingDays,
           }
         : normalizedBase;
     const earliest = (row.earliest ?? null) as HHMM | null;
@@ -556,7 +567,11 @@ export async function evaluateAttendanceEntries(
     const isFallbackFixedSchedule = isDefaultSchedule && normalized.type === "FIXED";
     const dayOfWeek = new Date(`${row.dateISO}T00:00:00Z`).getUTCDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const isDefaultWorkday = dayOfWeek >= 1 && dayOfWeek <= 5;
+    const configuredWorkingDays =
+      isFallbackFixedSchedule && Array.isArray(defaultWorkSchedule?.workingDays)
+        ? defaultWorkSchedule.workingDays
+        : [1, 2, 3, 4, 5];
+    const isWorkingDay = configuredWorkingDays.includes(dayOfWeek);
 
     let requiredMinutes = evaluation.requiredMinutes ?? 0;
     let isLate = evaluation.isLate;
@@ -564,7 +579,7 @@ export async function evaluateAttendanceEntries(
     let lateMinutesValue: number | null = evaluation.lateMinutes ?? null;
     let undertimeMinutesValue: number | null = evaluation.undertimeMinutes ?? null;
 
-    if (isFallbackFixedSchedule && !isDefaultWorkday) {
+    if (isFallbackFixedSchedule && !isWorkingDay) {
       requiredMinutes = 0;
       isLate = false;
       isUndertime = false;
@@ -593,7 +608,9 @@ export async function evaluateAttendanceEntries(
     const hasAnyPunches = row.punches.length > 0;
     const hasCompletePunchPair = row.punches.length >= 2;
     const hasIncompletePunch = hasAnyPunches && !hasCompletePunchPair;
-    const isRequiredWorkingDay = isScheduled || (normalized.type === "FIXED" && isDefaultWorkday);
+    const isRequiredWorkingDay =
+      isScheduled ||
+      (isFallbackFixedSchedule ? isWorkingDay : normalized.type === "FIXED" && dayOfWeek >= 1 && dayOfWeek <= 5);
     const absent = excused ? false : isRequiredWorkingDay && !hasAnyPunches;
 
     let statusLabel: string;
@@ -606,12 +623,14 @@ export async function evaluateAttendanceEntries(
       } else {
         statusLabel = "Holiday";
       }
+    } else if (isWeekend) {
+      statusLabel = "Weekend";
+    } else if (isFallbackFixedSchedule && !isWorkingDay) {
+      statusLabel = "Off";
     } else if (absent) {
       statusLabel = "Absent";
     } else if (hasIncompletePunch) {
       statusLabel = "Incomplete";
-    } else if (isWeekend) {
-      statusLabel = "Weekend";
     } else if (hasCompletePunchPair) {
       statusLabel = "Present";
     } else {
