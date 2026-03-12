@@ -254,7 +254,7 @@ const isHeaderRow = (row: unknown[]): boolean => {
   return c1 === "1" && c2 === "2" && c3 === "3";
 };
 
-const GRID_SHEET_NAME_PATTERN = /(att\.?\s*log report|attendance record report)/i;
+const GRID_SHEET_NAME_PATTERN = /(att\.?\s*log report|attendance record report|attendance report)/i;
 const GRID_HEADER_SCAN_LIMIT = 20;
 const GRID_MIN_DAY_RUN = 20;
 

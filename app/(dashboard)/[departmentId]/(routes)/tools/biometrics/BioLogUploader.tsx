@@ -180,6 +180,7 @@ type TimekeepingTemplate = {
   schedule: {
     startTime: string;
     endTime: string;
+    workingDays: number[];
   };
   searchQuery: string;
   filters: {
@@ -215,14 +216,37 @@ const defaultTemplateState = {
 
 const OVERTIME_STORAGE_PREFIX = "hrps.biometrics.overtimePolicy";
 const TIMEKEEPING_TEMPLATES_STORAGE_KEY = "hrps-timekeeping-templates";
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+  { value: 0, label: "Sunday" },
+] as const;
+const STANDARD_WORKING_DAYS = [1, 2, 3, 4, 5] as const;
+const FOUR_DAY_WORKING_DAYS = [1, 2, 3, 4] as const;
 
 const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
   startTime: "08:00",
   endTime: "17:00",
+  workingDays: [...STANDARD_WORKING_DAYS],
+};
+
+const sanitizeWorkingDays = (value: unknown): number[] => {
+  if (!Array.isArray(value)) return [...STANDARD_WORKING_DAYS];
+  const allowed = new Set<number>(WEEKDAY_OPTIONS.map((option) => option.value));
+  const unique: number[] = [];
+  for (const day of value) {
+    if (typeof day !== "number" || !Number.isInteger(day) || !allowed.has(day) || unique.includes(day)) continue;
+    unique.push(day);
+  }
+  return unique.length ? unique.sort((a, b) => a - b) : [...STANDARD_WORKING_DAYS];
 };
 
 const sanitizeWorkSchedule = (
-  schedule: { startTime?: string | null; endTime?: string | null } | null | undefined
+  schedule: { startTime?: string | null; endTime?: string | null; workingDays?: unknown } | null | undefined
 ): WorkSchedule => {
   const hhmmPattern = /^(?:[01]?\d|2[0-3]):[0-5]\d$/;
   const startTime = (schedule?.startTime ?? "").trim();
@@ -230,7 +254,19 @@ const sanitizeWorkSchedule = (
   return {
     startTime: (hhmmPattern.test(startTime) ? startTime : DEFAULT_WORK_SCHEDULE.startTime) as WorkSchedule["startTime"],
     endTime: (hhmmPattern.test(endTime) ? endTime : DEFAULT_WORK_SCHEDULE.endTime) as WorkSchedule["endTime"],
+    workingDays: sanitizeWorkingDays(schedule?.workingDays),
   };
+};
+
+const areSameWorkingDays = (left: number[], right: number[]): boolean =>
+  left.length === right.length && left.every((day, index) => day === right[index]);
+
+type SchedulePreset = "standard" | "fourDay" | "custom";
+
+const getSchedulePreset = (workingDays: number[]): SchedulePreset => {
+  if (areSameWorkingDays(workingDays, [...STANDARD_WORKING_DAYS])) return "standard";
+  if (areSameWorkingDays(workingDays, [...FOUR_DAY_WORKING_DAYS])) return "fourDay";
+  return "custom";
 };
 
 const buildDefaultColumnVisibility = (): Record<string, boolean> => {
@@ -268,6 +304,7 @@ const migrateTemplate = (value: unknown): TimekeepingTemplate | null => {
       ? {
           startTime: (candidate.schedule as Record<string, unknown>).startTime as string | undefined,
           endTime: (candidate.schedule as Record<string, unknown>).endTime as string | undefined,
+          workingDays: (candidate.schedule as Record<string, unknown>).workingDays,
         }
       : legacySchedule
   );
@@ -1386,7 +1423,7 @@ const makeEvaluationPayloadKey = (
     })
     .join("#");
   const policyFragment = serializeOvertimePolicy(overtimePolicy);
-  const scheduleFragment = `${workSchedule.startTime}-${workSchedule.endTime}`;
+  const scheduleFragment = `${workSchedule.startTime}-${workSchedule.endTime}-${workSchedule.workingDays.join(",")}`;
   return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}::${policyFragment}::${scheduleFragment}`;
 };
 
@@ -1941,6 +1978,7 @@ function BioLogUploaderContent() {
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule>(DEFAULT_WORK_SCHEDULE);
   const [templates, setTemplates] = useState<TimekeepingTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
+  const schedulePreset = useMemo(() => getSchedulePreset(workSchedule.workingDays), [workSchedule.workingDays]);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [columnOrder, setColumnOrder] = useState<SummaryColumnKey[]>(initialColumnSettings.order);
@@ -2078,6 +2116,7 @@ function BioLogUploaderContent() {
       schedule: {
         startTime: workSchedule.startTime,
         endTime: workSchedule.endTime,
+        workingDays: workSchedule.workingDays,
       },
       searchQuery: employeeSearch,
       filters: {
@@ -2121,6 +2160,7 @@ function BioLogUploaderContent() {
     toast,
     workSchedule.endTime,
     workSchedule.startTime,
+    workSchedule.workingDays,
   ]);
 
   const handleDeleteTemplate = useCallback(() => {
@@ -4591,6 +4631,58 @@ const applyColumnFilters = useCallback(
                 }}
                 className="h-9"
               />
+            </div>
+          </div>
+          <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Schedule preset</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={schedulePreset === "standard" ? "default" : "outline"}
+                  onClick={() => setWorkSchedule((current) => ({ ...current, workingDays: [...STANDARD_WORKING_DAYS] }))}
+                >
+                  Standard 5-Day
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={schedulePreset === "fourDay" ? "default" : "outline"}
+                  onClick={() => setWorkSchedule((current) => ({ ...current, workingDays: [...FOUR_DAY_WORKING_DAYS] }))}
+                >
+                  4-Day Work Week
+                </Button>
+                <Button type="button" size="sm" variant={schedulePreset === "custom" ? "default" : "outline"}>
+                  Custom
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Working days</p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {WEEKDAY_OPTIONS.map((option) => {
+                  const checked = workSchedule.workingDays.includes(option.value);
+                  return (
+                    <label key={option.value} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(state: CheckedState) => {
+                          const isChecked = state === true;
+                          setWorkSchedule((current) => {
+                            const currentDays = current.workingDays;
+                            const nextDays = isChecked
+                              ? sanitizeWorkingDays([...currentDays, option.value])
+                              : sanitizeWorkingDays(currentDays.filter((day) => day !== option.value));
+                            return { ...current, workingDays: nextDays };
+                          });
+                        }}
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>

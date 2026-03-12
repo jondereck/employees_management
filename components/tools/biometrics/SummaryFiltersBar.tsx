@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ArrowUpDown, Check, Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,22 @@ const SummaryFiltersBar = ({
   } = useSummaryFilters();
 
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState(filters.search);
+
+  useEffect(() => {
+    setSearchInput(filters.search);
+  }, [filters.search]);
+
+  useEffect(() => {
+    if (searchInput === filters.search) return;
+    const timeoutId = window.setTimeout(() => {
+      setSearch(searchInput);
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [filters.search, searchInput, setSearch]);
 
   const officeSelectedSet = useMemo(() => new Set(filters.offices), [filters.offices]);
   const employeeTypeSelectedSet = useMemo(() => new Set(filters.employeeTypes), [filters.employeeTypes]);
@@ -172,8 +188,8 @@ const SummaryFiltersBar = ({
       <div className="flex items-center gap-2">
         <SearchIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         <Input
-          value={filters.search}
-          onChange={(event) => setSearch(event.target.value)}
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value.slice(0, 200))}
           placeholder="Search name / employee # / token"
           className="h-9 w-64"
           aria-label="Search employees"
