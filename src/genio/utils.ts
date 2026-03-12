@@ -1,6 +1,70 @@
 // src/genio/utils.ts
 
 
+
+const MAX_CONTEXT_HEADER_BYTES = 6_000;
+
+function createHeaderSafeContext(context: unknown) {
+  if (!context || typeof context !== "object" || Array.isArray(context)) {
+    return {};
+  }
+
+  const base = { ...(context as Record<string, unknown>) };
+
+  const memory = base.memory;
+  if (Array.isArray(memory)) {
+    base.memory = memory
+      .filter((item): item is { role: string; content: string } =>
+        Boolean(item) &&
+        typeof item === "object" &&
+        typeof (item as { role?: unknown }).role === "string" &&
+        typeof (item as { content?: unknown }).content === "string"
+      )
+      .slice(-8)
+      .map((item) => ({
+        role: item.role,
+        content: item.content.slice(0, 220),
+      }));
+  }
+
+  if (
+    base.lastCountQuery &&
+    typeof base.lastCountQuery === "object" &&
+    !Array.isArray(base.lastCountQuery)
+  ) {
+    const lastCountQuery = { ...(base.lastCountQuery as Record<string, unknown>) };
+    if ("where" in lastCountQuery) {
+      delete lastCountQuery.where;
+    }
+    base.lastCountQuery = lastCountQuery;
+  }
+
+  if (
+    base.lastListQuery &&
+    typeof base.lastListQuery === "object" &&
+    !Array.isArray(base.lastListQuery)
+  ) {
+    const lastListQuery = { ...(base.lastListQuery as Record<string, unknown>) };
+    if ("where" in lastListQuery) {
+      delete lastListQuery.where;
+    }
+    base.lastListQuery = lastListQuery;
+  }
+
+  let serialized = JSON.stringify(base);
+
+  if (serialized.length > MAX_CONTEXT_HEADER_BYTES) {
+    delete base.memory;
+    serialized = JSON.stringify(base);
+  }
+
+  if (serialized.length > MAX_CONTEXT_HEADER_BYTES) {
+    return {};
+  }
+
+  return base;
+}
+
 type FormatOptions = {
   style?: "bullet" | "numbered";
   showEmployeeNo?: boolean;
@@ -89,7 +153,7 @@ export function streamReply(
   return new Response(stream, {
     headers: {
       "Content-Type": "text/plain",
-      "x-genio-context": JSON.stringify(context),
+      "x-genio-context": JSON.stringify(createHeaderSafeContext(context)),
       "x-genio-meta": JSON.stringify({
         ...(viewProfileEmployeeId && { viewProfileEmployeeId }),
         ...(meta?.canExport && { canExport: true }),
