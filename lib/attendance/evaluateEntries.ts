@@ -555,6 +555,7 @@ export async function evaluateAttendanceEntries(
     const clampedPresence = Math.max(0, presenceMinutes);
     const isFallbackFixedSchedule = isDefaultSchedule && normalized.type === "FIXED";
     const dayOfWeek = new Date(`${row.dateISO}T00:00:00Z`).getUTCDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const isDefaultWorkday = dayOfWeek >= 1 && dayOfWeek <= 5;
 
     let requiredMinutes = evaluation.requiredMinutes ?? 0;
@@ -590,7 +591,10 @@ export async function evaluateAttendanceEntries(
 
     const isScheduled = requiredMinutes > 0;
     const hasAnyPunches = row.punches.length > 0;
-    const absent = excused ? false : isScheduled && !hasAnyPunches;
+    const hasCompletePunchPair = row.punches.length >= 2;
+    const hasIncompletePunch = hasAnyPunches && !hasCompletePunchPair;
+    const isRequiredWorkingDay = isScheduled || (normalized.type === "FIXED" && isDefaultWorkday);
+    const absent = excused ? false : isRequiredWorkingDay && !hasAnyPunches;
 
     let statusLabel: string;
     if (excused) {
@@ -602,8 +606,16 @@ export async function evaluateAttendanceEntries(
       } else {
         statusLabel = "Holiday";
       }
+    } else if (absent) {
+      statusLabel = "Absent";
+    } else if (hasIncompletePunch) {
+      statusLabel = "Incomplete";
+    } else if (isWeekend) {
+      statusLabel = "Weekend";
+    } else if (hasCompletePunchPair) {
+      statusLabel = "Present";
     } else {
-      statusLabel = absent ? "Absent" : "Present";
+      statusLabel = "Present";
     }
 
     const evaluationStatus: DayEvaluationStatus = excused ? "excused" : (evaluation.status as DayEvaluationStatus);
@@ -736,4 +748,3 @@ export async function evaluateAttendanceEntries(
 
   return { perDay: chronological, perEmployee };
 }
-
