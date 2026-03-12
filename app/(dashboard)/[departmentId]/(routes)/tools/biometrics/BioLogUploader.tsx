@@ -234,6 +234,25 @@ const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
   workingDays: [...STANDARD_WORKING_DAYS],
 };
 
+const HOLIDAY_EXCLUSION_ID_PREFIX = "holiday:";
+
+type HolidayApiItem = {
+  name: string;
+  date: string;
+};
+
+const toHolidayExclusion = (holiday: HolidayApiItem): ManualExclusion => ({
+  id: `${HOLIDAY_EXCLUSION_ID_PREFIX}${holiday.date}`,
+  dates: [holiday.date],
+  scope: "all",
+  reason: "LOCAL_HOLIDAY",
+  note: holiday.name,
+  otEligible: false,
+});
+
+const isHolidayExclusion = (exclusion: Pick<ManualExclusion, "id">): boolean =>
+  exclusion.id.startsWith(HOLIDAY_EXCLUSION_ID_PREFIX);
+
 const sanitizeWorkingDays = (value: unknown): number[] => {
   if (!Array.isArray(value)) return [...STANDARD_WORKING_DAYS];
   const allowed = new Set<number>(WEEKDAY_OPTIONS.map((option) => option.value));
@@ -1974,6 +1993,8 @@ function BioLogUploaderContent() {
   const [manualPeriodHydrated, setManualPeriodHydrated] = useState(false);
   const [manualExclusions, setManualExclusions] = useState<ManualExclusion[]>([]);
   const [manualExclusionsHydrated, setManualExclusionsHydrated] = useState(false);
+  const [holidayExclusions, setHolidayExclusions] = useState<ManualExclusion[]>([]);
+  const [holidayExclusionsHydrated, setHolidayExclusionsHydrated] = useState(false);
   const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicyState>(defaultOvertimePolicy);
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule>(DEFAULT_WORK_SCHEDULE);
   const [templates, setTemplates] = useState<TimekeepingTemplate[]>([]);
@@ -2966,6 +2987,64 @@ function BioLogUploaderContent() {
   }, [manualExclusionStorageKey, manualExclusions, manualExclusionsHydrated]);
 
   useEffect(() => {
+    if (!activePeriod) {
+      setHolidayExclusions([]);
+      setHolidayExclusionsHydrated(true);
+      return;
+    }
+
+    const controller = new AbortController();
+    setHolidayExclusionsHydrated(false);
+
+    const loadHolidays = async () => {
+      try {
+        const response = await fetch(
+          `/api/attendance/holidays?year=${activePeriod.year}&month=${activePeriod.month}`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) {
+          setHolidayExclusions([]);
+          return;
+        }
+        const payload = (await response.json()) as { holidays?: unknown };
+        const monthPrefix = `${activePeriod.year}-${pad2(activePeriod.month)}`;
+        const holidays = Array.isArray(payload.holidays)
+          ? payload.holidays
+              .filter(
+                (value): value is HolidayApiItem =>
+                  typeof value === "object" &&
+                  value !== null &&
+                  typeof (value as { name?: unknown }).name === "string" &&
+                  typeof (value as { date?: unknown }).date === "string"
+              )
+              .map((value) => ({
+                name: value.name.trim(),
+                date: value.date,
+              }))
+              .filter((value) => value.name.length > 0 && /^\d{4}-\d{2}-\d{2}$/.test(value.date) && value.date.startsWith(monthPrefix))
+          : [];
+        setHolidayExclusions(
+          holidays
+            .map(toHolidayExclusion)
+            .sort((a, b) => (a.dates[0] ?? "").localeCompare(b.dates[0] ?? ""))
+        );
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        console.warn("Failed to load holiday exclusions", error);
+        setHolidayExclusions([]);
+      } finally {
+        setHolidayExclusionsHydrated(true);
+      }
+    };
+
+    void loadHolidays();
+
+    return () => {
+      controller.abort();
+    };
+  }, [activePeriod]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (!overtimePolicyStorageKey) {
       setOvertimePolicy(sanitizeOvertimePolicyState(defaultOvertimePolicy));
@@ -3005,7 +3084,8 @@ function BioLogUploaderContent() {
   }, [overtimeHydrated, overtimePolicy, overtimePolicyStorageKey]);
 
   const manualExclusionContext = useMemo(() => {
-    if (!manualExclusions.length) {
+    const merged = [...manualExclusions, ...holidayExclusions];
+    if (!merged.length) {
       return {
         applicable: [] as ManualExclusion[],
         outOfPeriodCounts: new Map<string, number>(),
@@ -3014,7 +3094,7 @@ function BioLogUploaderContent() {
     }
     if (!activePeriod) {
       return {
-        applicable: manualExclusions.map((exclusion) => ({ ...exclusion })),
+        applicable: merged.map((exclusion) => ({ ...exclusion })),
         outOfPeriodCounts: new Map<string, number>(),
         totalOutOfPeriod: 0,
       };
@@ -3022,7 +3102,7 @@ function BioLogUploaderContent() {
     const prefix = `${activePeriod.year}-${pad2(activePeriod.month)}`;
     const outOfPeriodCounts = new Map<string, number>();
     const applicable: ManualExclusion[] = [];
-    for (const exclusion of manualExclusions) {
+    for (const exclusion of merged) {
       const inPeriod = exclusion.dates.filter((date) => date.startsWith(prefix));
       const outCount = exclusion.dates.length - inPeriod.length;
       if (outCount > 0) {
@@ -3037,7 +3117,7 @@ function BioLogUploaderContent() {
       0
     );
     return { applicable, outOfPeriodCounts, totalOutOfPeriod };
-  }, [activePeriod, manualExclusions]);
+  }, [activePeriod, holidayExclusions, manualExclusions]);
 
   const manualApplicableCount = manualExclusionContext.applicable.length;
   const manualOutOfPeriodMap = manualExclusionContext.outOfPeriodCounts;
@@ -3180,7 +3260,7 @@ function BioLogUploaderContent() {
       return;
     }
 
-    if (!manualExclusionsHydrated) return;
+    if (!manualExclusionsHydrated || !holidayExclusionsHydrated) return;
     if (!overtimeHydrated) return;
 
     const manualKey = manualPeriodSelection
@@ -3290,6 +3370,7 @@ function BioLogUploaderContent() {
     identityReady,
     manualExclusionContext,
     manualExclusionsHydrated,
+    holidayExclusionsHydrated,
     manualPeriodSelection,
     manualSelectionValid,
     mergeResult,
@@ -3869,7 +3950,7 @@ const applyColumnFilters = useCallback(
           ? `${manualPeriodSelection.year}-${pad2(manualPeriodSelection.month)}`
           : "auto";
 
-      if (!manualExclusionsHydrated) {
+      if (!manualExclusionsHydrated || !holidayExclusionsHydrated) {
         toast({
           title: "Manual exclusions loading",
           description: "Manual exclusions are still loading. Please try again shortly.",
@@ -3989,6 +4070,7 @@ const applyColumnFilters = useCallback(
       filteredPerDayRows,
       manualExclusionContext,
       manualExclusionsHydrated,
+      holidayExclusionsHydrated,
       manualPeriodSelection,
       removeManualResolved,
       setPerDay,
@@ -4704,11 +4786,11 @@ const applyColumnFilters = useCallback(
               <Plus className="mr-2 h-4 w-4" /> Add exclusion
             </Button>
           </div>
-          {!manualExclusionsHydrated ? (
+          {!manualExclusionsHydrated || !holidayExclusionsHydrated ? (
             <p className="text-xs text-muted-foreground">Loading manual exclusions…</p>
-          ) : manualExclusions.length ? (
+          ) : manualExclusionContext.applicable.length ? (
             <ul className="space-y-2">
-              {manualExclusions.map((exclusion) => {
+              {manualExclusionContext.applicable.map((exclusion) => {
                 const dateLabel = formatManualDateSummary(exclusion.dates);
                 const reasonLabel = formatManualReasonLabel(exclusion.reason, exclusion.note);
                 const officeNames = (exclusion.officeIds ?? []).map(
@@ -4726,6 +4808,7 @@ const applyColumnFilters = useCallback(
                 const scopeDetails = exclusion.scope === "offices" ? officeNames : employeeNames;
                 const outOfPeriod = manualOutOfPeriodMap.get(exclusion.id) ?? 0;
                 const effectiveOtEligible = (exclusion.otEligible ?? overtimePolicy.overtimeOnExcused) === true;
+                const autoHoliday = isHolidayExclusion(exclusion);
                 return (
                   <li
                     key={exclusion.id}
@@ -4759,23 +4842,29 @@ const applyColumnFilters = useCallback(
                       ) : null}
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleEditManualExclusion(exclusion)}
-                      >
-                        <Pencil className="mr-1 h-4 w-4" /> Edit
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveManualExclusion(exclusion.id)}
-                      >
-                        <Trash2 className="mr-1 h-4 w-4" /> Remove
-                      </Button>
+                      {!autoHoliday ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditManualExclusion(exclusion)}
+                          >
+                            <Pencil className="mr-1 h-4 w-4" /> Edit
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveManualExclusion(exclusion.id)}
+                          >
+                            <Trash2 className="mr-1 h-4 w-4" /> Remove
+                          </Button>
+                        </>
+                      ) : (
+                        <Badge variant="secondary">Auto holiday</Badge>
+                      )}
                     </div>
                   </li>
                 );
