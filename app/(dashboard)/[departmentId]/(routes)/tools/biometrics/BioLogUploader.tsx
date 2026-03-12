@@ -180,6 +180,7 @@ type TimekeepingTemplate = {
   schedule: {
     startTime: string;
     endTime: string;
+    workingDays: number[];
   };
   searchQuery: string;
   filters: {
@@ -216,20 +217,42 @@ const defaultTemplateState = {
 const OVERTIME_STORAGE_PREFIX = "hrps.biometrics.overtimePolicy";
 const TIMEKEEPING_TEMPLATES_STORAGE_KEY = "hrps-timekeeping-templates";
 
+const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5] as const;
+const FOUR_DAY_WORKING_DAYS = [1, 2, 3, 4] as const;
+const WORKING_DAY_OPTIONS: ReadonlyArray<{ day: number; label: string }> = [
+  { day: 1, label: "Monday" },
+  { day: 2, label: "Tuesday" },
+  { day: 3, label: "Wednesday" },
+  { day: 4, label: "Thursday" },
+  { day: 5, label: "Friday" },
+  { day: 6, label: "Saturday" },
+  { day: 0, label: "Sunday" },
+];
+
+type SchedulePreset = "standard" | "fourDay" | "custom";
+
 const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
   startTime: "08:00",
   endTime: "17:00",
+  workingDays: [...DEFAULT_WORKING_DAYS],
 };
 
 const sanitizeWorkSchedule = (
-  schedule: { startTime?: string | null; endTime?: string | null } | null | undefined
+  schedule: { startTime?: string | null; endTime?: string | null; workingDays?: number[] | null } | null | undefined
 ): WorkSchedule => {
   const hhmmPattern = /^(?:[01]?\d|2[0-3]):[0-5]\d$/;
   const startTime = (schedule?.startTime ?? "").trim();
   const endTime = (schedule?.endTime ?? "").trim();
+  const workingDays = Array.from(
+    new Set(
+      (Array.isArray(schedule?.workingDays) ? schedule.workingDays : [])
+        .filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6)
+    )
+  ).sort((a, b) => a - b);
   return {
     startTime: (hhmmPattern.test(startTime) ? startTime : DEFAULT_WORK_SCHEDULE.startTime) as WorkSchedule["startTime"],
     endTime: (hhmmPattern.test(endTime) ? endTime : DEFAULT_WORK_SCHEDULE.endTime) as WorkSchedule["endTime"],
+    workingDays: workingDays.length ? workingDays : [...DEFAULT_WORKING_DAYS],
   };
 };
 
@@ -268,6 +291,10 @@ const migrateTemplate = (value: unknown): TimekeepingTemplate | null => {
       ? {
           startTime: (candidate.schedule as Record<string, unknown>).startTime as string | undefined,
           endTime: (candidate.schedule as Record<string, unknown>).endTime as string | undefined,
+          workingDays: Array.isArray((candidate.schedule as Record<string, unknown>).workingDays)
+            ? ((candidate.schedule as Record<string, unknown>).workingDays as unknown[])
+                .filter((day): day is number => typeof day === "number")
+            : undefined,
         }
       : legacySchedule
   );
@@ -1386,7 +1413,7 @@ const makeEvaluationPayloadKey = (
     })
     .join("#");
   const policyFragment = serializeOvertimePolicy(overtimePolicy);
-  const scheduleFragment = `${workSchedule.startTime}-${workSchedule.endTime}`;
+  const scheduleFragment = `${workSchedule.startTime}-${workSchedule.endTime}-${workSchedule.workingDays.join(",")}`;
   return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}::${policyFragment}::${scheduleFragment}`;
 };
 
@@ -1939,6 +1966,12 @@ function BioLogUploaderContent() {
   const [manualExclusionsHydrated, setManualExclusionsHydrated] = useState(false);
   const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicyState>(defaultOvertimePolicy);
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule>(DEFAULT_WORK_SCHEDULE);
+  const schedulePreset: SchedulePreset = useMemo(() => {
+    const key = [...workSchedule.workingDays].sort((a, b) => a - b).join(",");
+    if (key === DEFAULT_WORKING_DAYS.join(",")) return "standard";
+    if (key === FOUR_DAY_WORKING_DAYS.join(",")) return "fourDay";
+    return "custom";
+  }, [workSchedule.workingDays]);
   const [templates, setTemplates] = useState<TimekeepingTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
@@ -2021,6 +2054,27 @@ function BioLogUploaderContent() {
     }
   }, []);
 
+  const handleSchedulePresetChange = useCallback((preset: SchedulePreset) => {
+    if (preset === "standard") {
+      setWorkSchedule((prev) => sanitizeWorkSchedule({ ...prev, workingDays: [...DEFAULT_WORKING_DAYS] }));
+      return;
+    }
+    if (preset === "fourDay") {
+      setWorkSchedule((prev) => sanitizeWorkSchedule({ ...prev, workingDays: [...FOUR_DAY_WORKING_DAYS] }));
+      return;
+    }
+  }, []);
+
+  const toggleWorkingDay = useCallback((day: number, checked: CheckedState) => {
+    const shouldEnable = checked === true;
+    setWorkSchedule((prev) => {
+      const set = new Set(prev.workingDays);
+      if (shouldEnable) set.add(day);
+      else set.delete(day);
+      return sanitizeWorkSchedule({ ...prev, workingDays: Array.from(set) });
+    });
+  }, []);
+
   const saveTemplatesToStorage = useCallback((nextTemplates: TimekeepingTemplate[]) => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(TIMEKEEPING_TEMPLATES_STORAGE_KEY, JSON.stringify(nextTemplates));
@@ -2078,6 +2132,7 @@ function BioLogUploaderContent() {
       schedule: {
         startTime: workSchedule.startTime,
         endTime: workSchedule.endTime,
+        workingDays: workSchedule.workingDays,
       },
       searchQuery: employeeSearch,
       filters: {
@@ -2121,6 +2176,7 @@ function BioLogUploaderContent() {
     toast,
     workSchedule.endTime,
     workSchedule.startTime,
+    workSchedule.workingDays,
   ]);
 
   const handleDeleteTemplate = useCallback(() => {
@@ -4591,6 +4647,48 @@ const applyColumnFilters = useCallback(
                 }}
                 className="h-9"
               />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Schedule preset
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={schedulePreset === "standard" ? "default" : "outline"}
+                onClick={() => handleSchedulePresetChange("standard")}
+              >
+                Standard 5-Day
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={schedulePreset === "fourDay" ? "default" : "outline"}
+                onClick={() => handleSchedulePresetChange("fourDay")}
+              >
+                4-Day Work Week
+              </Button>
+              <Button type="button" size="sm" variant={schedulePreset === "custom" ? "default" : "outline"}>
+                Custom
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Working days
+            </Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {WORKING_DAY_OPTIONS.map((option) => (
+                <label key={option.day} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={workSchedule.workingDays.includes(option.day)}
+                    onCheckedChange={(checked) => toggleWorkingDay(option.day, checked)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
             </div>
           </div>
         </div>
