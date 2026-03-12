@@ -555,6 +555,7 @@ export async function evaluateAttendanceEntries(
     const clampedPresence = Math.max(0, presenceMinutes);
     const isFallbackFixedSchedule = isDefaultSchedule && normalized.type === "FIXED";
     const dayOfWeek = new Date(`${row.dateISO}T00:00:00Z`).getUTCDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const isDefaultWorkday = dayOfWeek >= 1 && dayOfWeek <= 5;
 
     let requiredMinutes = evaluation.requiredMinutes ?? 0;
@@ -609,6 +610,8 @@ export async function evaluateAttendanceEntries(
       statusLabel = "Absent";
     } else if (hasIncompletePunch) {
       statusLabel = "Incomplete";
+    } else if (isWeekend) {
+      statusLabel = "Weekend";
     } else if (hasCompletePunchPair) {
       statusLabel = "Present";
     } else {
