@@ -616,6 +616,11 @@ const WeeklyPatternTimeline = ({ applied, windows, presence }: WeeklyPatternTime
 type ManualDialogOfficeOption = { id: string; name: string };
 type ManualDialogEmployeeOption = { id: string; display: string; name: string };
 
+type HolidayCalendarItem = {
+  dateISO: string;
+  name: string;
+};
+
 type ManualExclusionDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -625,6 +630,7 @@ type ManualExclusionDialogProps = {
   employees: ManualDialogEmployeeOption[];
   activePeriodLabel: string | null;
   activePeriod?: { year: number; month: number } | null;
+  holidayItems?: HolidayCalendarItem[];
 };
 
 const ManualExclusionDialog = ({
@@ -636,6 +642,7 @@ const ManualExclusionDialog = ({
   employees,
   activePeriodLabel,
   activePeriod,
+  holidayItems = [],
 }: ManualExclusionDialogProps) => {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(
     initial ? toDateRangeFromDates(initial.dates) : undefined
@@ -678,6 +685,13 @@ const ManualExclusionDialog = ({
   const selectedDatesLabel = useMemo(
     () => (selectedDates.length ? formatManualDateSummary(selectedDates) : "Select a date"),
     [selectedDates]
+  );
+  const holidayDateModifiers = useMemo(
+    () =>
+      holidayItems
+        .map((holiday) => toUtcDateFromIso(holiday.dateISO))
+        .filter((value): value is Date => value instanceof Date),
+    [holidayItems]
   );
 
   const outOfPeriodCount = useMemo(() => {
@@ -808,6 +822,10 @@ const ManualExclusionDialog = ({
               onSelect={setDateRange}
               numberOfMonths={1}
               initialFocus
+              modifiers={{ holiday: holidayDateModifiers }}
+              modifiersClassNames={{
+                holiday: "bg-amber-100 text-amber-900 font-semibold rounded-md",
+              }}
               className="rounded-xl border bg-card p-3 shadow-sm w-full"
             />
             <p className="text-xs text-muted-foreground">
@@ -817,6 +835,16 @@ const ManualExclusionDialog = ({
               <p className="text-xs text-amber-600">
                 {outOfPeriodCount} date{outOfPeriodCount === 1 ? "" : "s"} outside {activePeriodLabel} will be ignored for this period.
               </p>
+            ) : null}
+            {holidayItems.length ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                <p className="font-medium">Auto-fetched holidays for this period:</p>
+                <p className="mt-1">
+                  {holidayItems
+                    .map((holiday) => `${formatManualDateSummary([holiday.dateISO])} — ${holiday.name}`)
+                    .join(" • ")}
+                </p>
+              </div>
             ) : null}
           </div>
           <div className="space-y-2">
@@ -3122,6 +3150,18 @@ function BioLogUploaderContent() {
   const manualApplicableCount = manualExclusionContext.applicable.length;
   const manualOutOfPeriodMap = manualExclusionContext.outOfPeriodCounts;
   const manualOutOfPeriodTotal = manualExclusionContext.totalOutOfPeriod;
+
+  const holidayCalendarItems = useMemo<HolidayCalendarItem[]>(() => {
+    return holidayExclusions
+      .flatMap((exclusion) =>
+        exclusion.dates.map((dateISO) => ({
+          dateISO,
+          name: exclusion.note?.trim() || "Holiday",
+        }))
+      )
+      .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.dateISO))
+      .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+  }, [holidayExclusions]);
 
   const manualResolvedStorageKey = useMemo(() => {
     if (!departmentId || !activePeriod) return null;
@@ -6379,6 +6419,7 @@ const applyColumnFilters = useCallback(
         employees={manualEmployeeOptions}
         activePeriodLabel={manualActivePeriodLabel}
         activePeriod={activePeriod}
+        holidayItems={holidayCalendarItems}
       />
       <SummaryColumnSelector
         open={columnSelectorOpen}
