@@ -20,7 +20,32 @@ const isHoliday = (value: HolidayApiHoliday): value is Holiday =>
   typeof value.date === "string" &&
   ISO_DATE_PATTERN.test(value.date);
 
-export async function fetchPhilippineHolidays(year: number): Promise<Holiday[]> {
+const toHolidayList = (input: unknown): HolidayApiHoliday[] => {
+  if (Array.isArray(input)) {
+    return input.filter(
+      (value): value is HolidayApiHoliday =>
+        typeof value === "object" && value !== null
+    );
+  }
+
+  if (typeof input === "object" && input !== null) {
+    return Object.values(input)
+      .filter((value) => Array.isArray(value))
+      .flatMap((value) =>
+        value.filter(
+          (entry): entry is HolidayApiHoliday =>
+            typeof entry === "object" && entry !== null
+        )
+      );
+  }
+
+  return [];
+};
+
+export async function fetchPhilippineHolidays(
+  year: number,
+  options?: { month?: number }
+): Promise<Holiday[]> {
   const key = process.env.HOLIDAY_API_KEY;
 
   if (!key) {
@@ -34,19 +59,27 @@ export async function fetchPhilippineHolidays(year: number): Promise<Holiday[]> 
   url.searchParams.set("public", "true");
   url.searchParams.set("key", key);
 
-  const res = await fetch(url.toString());
+  if (
+    typeof options?.month === "number" &&
+    Number.isInteger(options.month) &&
+    options.month >= 1 &&
+    options.month <= 12
+  ) {
+    url.searchParams.set("month", options.month.toString());
+  }
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    cache: "no-store",
+  });
 
   if (!res.ok) {
     throw new Error("Holiday API request failed");
   }
 
   const data: HolidayApiResponse = await res.json();
-  if (!Array.isArray(data.holidays)) {
-    return [];
-  }
 
-  return data.holidays
-    .filter((item): item is HolidayApiHoliday => typeof item === "object" && item !== null)
+  return toHolidayList(data.holidays)
     .filter(isHoliday)
     .map((holiday) => ({
       name: holiday.name.trim(),
