@@ -665,7 +665,7 @@ export function parseBioAttendance(
     if (!sheet) continue;
     const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
 
-    const gridDetection = isGridSheetName(sheetName) ? detectGridHeaderRow(rows) : null;
+    const gridDetection = detectGridHeaderRow(rows);
     if (gridDetection) {
       parserTypes.add("grid-report");
       const { year, month, hints } = detectMonthContext(rows, gridDetection.headerRowIndex);
@@ -920,7 +920,7 @@ export function detectWorkbookParsers(input: ArrayBuffer | WorkBook): WorkbookPa
     if (!sheet) continue;
     const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
 
-    if (isGridSheetName(sheetName) && detectGridHeaderRow(rows)) {
+    if (detectGridHeaderRow(rows)) {
       parserTypes.add("grid-report");
     }
 
