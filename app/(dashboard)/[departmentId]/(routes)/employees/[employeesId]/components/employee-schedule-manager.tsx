@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -29,6 +30,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
 import {
   WEEKLY_EXCLUSION_MODES,
@@ -68,6 +76,31 @@ type WeeklyPatternFormState = Record<WeekdayKey, WeeklyPatternDayForm>;
 type WeeklyPatternErrorState = Record<WeekdayKey, string | null>;
 
 const randomId = () => Math.random().toString(36).slice(2, 10);
+const TEMPLATE_STORAGE_KEY = "hrps-timekeeping-templates";
+
+type TimekeepingTemplate = {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+};
+
+function isTemplate(obj: unknown): obj is TimekeepingTemplate {
+  if (typeof obj !== "object" || obj === null) return false;
+  const candidate = obj as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.name === "string" &&
+    candidate.name.trim().length > 0 &&
+    typeof candidate.startTime === "string" &&
+    typeof candidate.endTime === "string"
+  );
+}
+
+const toTemplateId = () =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 const createEmptyWeeklyPatternState = (): WeeklyPatternFormState => {
   const state = {} as WeeklyPatternFormState;
@@ -473,6 +506,11 @@ export function EmployeeScheduleManager({
   );
   const [weeklyPatternOpen, setWeeklyPatternOpen] = useState(false);
   const [weeklyPatternAutoOpenDisabled, setWeeklyPatternAutoOpenDisabled] = useState(false);
+  const [templates, setTemplates] = useState<TimekeepingTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleAddWeeklyWindow = useCallback((day: WeekdayKey) => {
     setWeeklyPattern((prev) => {
@@ -609,6 +647,37 @@ export function EmployeeScheduleManager({
   const exceptionType = exceptionForm.watch("type");
   const weeklyExclusionMode = weeklyExclusionForm.watch("mode");
   const isEditingWeeklyExclusion = Boolean(editingWeeklyExclusion);
+  const scheduleStartTime = scheduleForm.watch("startTime");
+  const scheduleEndTime = scheduleForm.watch("endTime");
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.id === selectedTemplateId) ?? null,
+    [selectedTemplateId, templates]
+  );
+
+  const persistTemplates = useCallback((nextTemplates: TimekeepingTemplate[]) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(nextTemplates));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const rawValue = window.localStorage.getItem(TEMPLATE_STORAGE_KEY);
+      if (!rawValue) {
+        setTemplates([]);
+        return;
+      }
+      const parsed = JSON.parse(rawValue) as unknown;
+      if (!Array.isArray(parsed)) {
+        setTemplates([]);
+        return;
+      }
+      const validTemplates = parsed.filter(isTemplate);
+      setTemplates(validTemplates);
+    } catch {
+      setTemplates([]);
+    }
+  }, []);
 
   const hasWeeklyPatternConfigured = useMemo(() => {
     return WEEKDAY_KEYS.some((key) => {
@@ -721,6 +790,136 @@ export function EmployeeScheduleManager({
   const handleScheduleButtonClick = useCallback(() => {
     void onSubmitSchedule();
   }, [onSubmitSchedule]);
+
+  const handleTemplateSelect = useCallback(
+    (value: string) => {
+      setSelectedTemplateId(value);
+      const chosen = templates.find((template) => template.id === value);
+      if (!chosen) return;
+      scheduleForm.setValue("startTime", chosen.startTime, { shouldDirty: true });
+      scheduleForm.setValue("endTime", chosen.endTime, { shouldDirty: true });
+    },
+    [scheduleForm, templates]
+  );
+
+  const handleSaveTemplate = useCallback(() => {
+    const safeName = templateName.trim();
+    if (!safeName) {
+      toast.error("Template name is required.");
+      return;
+    }
+    if (!scheduleStartTime || !scheduleEndTime) {
+      toast.error("Set start and end time before saving a template.");
+      return;
+    }
+
+    const nextTemplate: TimekeepingTemplate = {
+      id: toTemplateId(),
+      name: safeName,
+      startTime: scheduleStartTime,
+      endTime: scheduleEndTime,
+    };
+    const nextTemplates = [...templates, nextTemplate];
+    setTemplates(nextTemplates);
+    persistTemplates(nextTemplates);
+    setSelectedTemplateId(nextTemplate.id);
+    setTemplateName("");
+    setIsTemplateDialogOpen(false);
+    toast.success("Template saved.");
+  }, [persistTemplates, scheduleEndTime, scheduleStartTime, templateName, templates]);
+
+  const handleDeleteTemplate = useCallback(() => {
+    if (!selectedTemplate) {
+      toast.error("Select a template to delete.");
+      return;
+    }
+    const nextTemplates = templates.filter((template) => template.id !== selectedTemplate.id);
+    setTemplates(nextTemplates);
+    persistTemplates(nextTemplates);
+    setSelectedTemplateId("none");
+    toast.success("Template deleted.");
+  }, [persistTemplates, selectedTemplate, templates]);
+
+  const handleExportTemplates = useCallback(() => {
+    const payload = JSON.stringify(templates, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "timekeeping-templates.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, [templates]);
+
+  const handleImportButtonClick = useCallback(() => {
+    importInputRef.current?.click();
+  }, []);
+
+  const handleImportTemplates = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text) as unknown;
+        if (!Array.isArray(parsed)) {
+          toast.error("Invalid template file. Expected an array.");
+          return;
+        }
+
+        const importedTemplates: TimekeepingTemplate[] = [];
+        for (const item of parsed) {
+          if (typeof item !== "object" || item === null) {
+            toast.error("Invalid template entry detected.");
+            return;
+          }
+          const entry = item as Record<string, unknown>;
+          if (
+            typeof entry.name !== "string" ||
+            !entry.name.trim() ||
+            typeof entry.startTime !== "string" ||
+            typeof entry.endTime !== "string"
+          ) {
+            toast.error("Template entries must include name, startTime, and endTime.");
+            return;
+          }
+          const incomingId = typeof entry.id === "string" && entry.id.trim() ? entry.id : toTemplateId();
+          importedTemplates.push({
+            id: incomingId,
+            name: entry.name.trim(),
+            startTime: entry.startTime,
+            endTime: entry.endTime,
+          });
+        }
+
+        const usedIds = new Set(templates.map((template) => template.id));
+        const normalizedImports = importedTemplates.map((template) => {
+          if (!usedIds.has(template.id)) {
+            usedIds.add(template.id);
+            return template;
+          }
+          let nextId = toTemplateId();
+          while (usedIds.has(nextId)) {
+            nextId = toTemplateId();
+          }
+          usedIds.add(nextId);
+          return { ...template, id: nextId };
+        });
+
+        const merged = [...templates, ...normalizedImports];
+        setTemplates(merged);
+        persistTemplates(merged);
+        toast.success("Templates imported.");
+      } catch {
+        toast.error("Invalid JSON file.");
+      }
+    },
+    [persistTemplates, templates]
+  );
 
   const onSubmitException = exceptionForm.handleSubmit(async (values) => {
     try {
@@ -1101,6 +1300,50 @@ export function EmployeeScheduleManager({
 
         {/* Dynamic Fields Container - SEE PART 2 BELOW */}
         {/* ... */}
+
+        {(scheduleType === ScheduleType.FIXED || scheduleType === ScheduleType.SHIFT) && (
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/40 p-4">
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <div className="space-y-2">
+                <Label htmlFor="schedule-template">Template</Label>
+                <Select value={selectedTemplateId} onValueChange={handleTemplateSelect}>
+                  <SelectTrigger id="schedule-template" className="bg-white">
+                    <SelectValue placeholder="Select Template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select Template</SelectItem>
+                    {templates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsTemplateDialogOpen(true)}>
+                  Save Template
+                </Button>
+                <Button type="button" variant="outline" onClick={handleDeleteTemplate}>
+                  Delete Template
+                </Button>
+                <Button type="button" variant="outline" onClick={handleExportTemplates}>
+                  Export Templates
+                </Button>
+                <Button type="button" variant="outline" onClick={handleImportButtonClick}>
+                  Import Templates
+                </Button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={handleImportTemplates}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
      {(scheduleType === ScheduleType.FIXED || scheduleType === ScheduleType.SHIFT || scheduleType === ScheduleType.FLEX) && (
           <div className="p-6 rounded-xl bg-slate-50/50 border border-slate-200 space-y-6">
@@ -2061,6 +2304,30 @@ export function EmployeeScheduleManager({
     </TabsContent>
 
 </Tabs>
+      <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="template-name">Template Name</Label>
+            <Input
+              id="template-name"
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              placeholder="e.g. Regular Office"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsTemplateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleSaveTemplate}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
