@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { fetchPhilippineHolidays } from "@/src/lib/holiday-api";
+import { HolidayApiError, fetchPhilippineHolidays } from "@/src/lib/holiday-api";
 
 export const runtime = "nodejs";
 
@@ -37,6 +37,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ holidays });
   } catch (error) {
     console.error("Failed to load holidays", error);
+    if (error instanceof HolidayApiError) {
+      return NextResponse.json(
+        { error: error.message, holidays: [] as Array<{ name: string; date: string }> },
+        { status: error.status }
+      );
+    }
     return NextResponse.json(
       { error: "Unable to fetch holidays", holidays: [] as Array<{ name: string; date: string }> },
       { status: 502 }

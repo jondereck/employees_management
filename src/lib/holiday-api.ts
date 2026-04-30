@@ -6,11 +6,26 @@ export type Holiday = {
 type HolidayApiHoliday = {
   name?: unknown;
   date?: unknown;
+  observed?: unknown;
+  public?: unknown;
 };
 
 type HolidayApiResponse = {
+  status?: unknown;
+  error?: unknown;
+  warning?: unknown;
   holidays?: unknown;
 };
+
+export class HolidayApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "HolidayApiError";
+    this.status = status;
+  }
+}
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -73,11 +88,15 @@ export async function fetchPhilippineHolidays(
     cache: "no-store",
   });
 
-  if (!res.ok) {
-    throw new Error("Holiday API request failed");
-  }
+  const data = (await res.json().catch(() => ({}))) as HolidayApiResponse;
 
-  const data: HolidayApiResponse = await res.json();
+  if (!res.ok) {
+    const message =
+      typeof data.error === "string" && data.error.trim().length
+        ? data.error.trim()
+        : "Holiday API request failed";
+    throw new HolidayApiError(message, res.status);
+  }
 
   return toHolidayList(data.holidays)
     .filter(isHoliday)

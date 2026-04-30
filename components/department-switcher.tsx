@@ -70,12 +70,12 @@ export default function DepartmentSwitcher({
       <CommandList className="max-h-[300px]">
         <div className="flex items-center border-b border-slate-200/50 px-3">
           <CommandInput 
-            placeholder="Search Institution..." 
+            placeholder="Search organization..." 
             className="border-none focus:ring-0 placeholder:text-slate-400 text-sm h-11"
           />
         </div>
         <CommandEmpty className="py-6 text-center text-xs text-slate-500 font-medium">
-          No government institution found.
+          No organization found.
         </CommandEmpty>
         
         <CommandGroup heading={<span className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-2">Departments</span>}>
