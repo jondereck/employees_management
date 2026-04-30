@@ -23,6 +23,7 @@ import {
 import { normalizeBiometricToken } from "@/utils/biometricsShared";
 import type { EvaluationOptions, OvertimePolicy, WorkSchedule } from "@/types/attendance";
 import type { ManualExclusion } from "@/types/manual-exclusion";
+import { fetchPhilippineHolidays, type Holiday } from "@/src/lib/holiday-api";
 
 const MINUTES_IN_DAY = 24 * 60;
 const parseHHMM = (value: HHMM | string | null | undefined): number | null => {
@@ -412,6 +413,34 @@ export async function evaluateAttendanceEntries(
   }
 
   const manualExclusions = normalizeManualExclusions(options?.manualExclusions);
+
+  const years = Array.from(
+    new Set(
+      entries
+        .map((entry) => Number(entry.dateISO.slice(0, 4)))
+        .filter((year): year is number => Number.isInteger(year) && year >= 1900 && year <= 3000)
+    )
+  );
+  const holidayResults = await Promise.allSettled(years.map((year) => fetchPhilippineHolidays(year)));
+  const holidays: Holiday[] = [];
+  for (const result of holidayResults) {
+    if (result.status === "fulfilled") {
+      holidays.push(...result.value);
+    } else {
+      console.warn("Unable to fetch Philippine holidays for this analysis run.", result.reason);
+    }
+  }
+  const holidayMap = new Map(holidays.map((holiday) => [holiday.date, holiday]));
+
+  const exclusions = [
+    ...manualExclusions,
+    ...holidays.map((holiday) => ({
+      type: "holiday" as const,
+      date: holiday.date,
+      name: holiday.name,
+    })),
+  ];
+
   const overtimePolicy = normalizeOvertimePolicy(options?.evaluationOptions?.overtime);
   const defaultWorkSchedule = normalizeWorkSchedule(options?.evaluationOptions?.workSchedule);
 
@@ -591,9 +620,14 @@ export async function evaluateAttendanceEntries(
       { id: resolvedEmployeeId, officeId },
       manualExclusions
     );
+    const holiday = holidayMap.get(row.dateISO);
+    const mergedHolidayExclusion = exclusions.find(
+      (exclusion): exclusion is { type: "holiday"; date: string; name: string } =>
+        "type" in exclusion && exclusion.type === "holiday" && exclusion.date === row.dateISO
+    );
     const nationalHoliday = (exceptionInfo?.type ?? null) === "HOLIDAY";
     const manualExcused = Boolean(manualExclusion);
-    const isHoliday = nationalHoliday;
+    const isHoliday = Boolean(holiday || mergedHolidayExclusion || nationalHoliday);
     const excused = manualExcused || isHoliday;
 
     if (excused) {
@@ -655,6 +689,13 @@ export async function evaluateAttendanceEntries(
     };
     let overtime: OvertimeComputation = emptyOvertime;
     const dayNotes: string[] = [];
+
+    if (isHoliday) {
+      const holidayName = holiday?.name ?? mergedHolidayExclusion?.name;
+      if (holidayName) {
+        dayNotes.push(holidayName);
+      }
+    }
 
     if (manualExcused) {
       if (isHoliday) {

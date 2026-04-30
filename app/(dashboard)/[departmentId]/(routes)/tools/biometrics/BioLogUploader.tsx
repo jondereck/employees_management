@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
 import { Calendar } from "@/components/ui/calendar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import { cn } from "@/lib/utils";
 import SummaryFiltersBar from "@/components/tools/biometrics/SummaryFiltersBar";
@@ -134,15 +135,7 @@ import {
   type MetricMode,
 } from "./insights-types";
 import { Switch } from "@/components/ui/switch";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import type { FlexOTMode, OvertimePolicy, OvertimeRounding, WorkSchedule } from "@/types/attendance";
-
-const PAGE_SIZE = 25;
 
 const MINUTES_IN_DAY = 24 * 60;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -233,6 +226,25 @@ const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
   endTime: "17:00",
   workingDays: [...STANDARD_WORKING_DAYS],
 };
+
+const HOLIDAY_EXCLUSION_ID_PREFIX = "holiday:";
+
+type HolidayApiItem = {
+  name: string;
+  date: string;
+};
+
+const toHolidayExclusion = (holiday: HolidayApiItem): ManualExclusion => ({
+  id: `${HOLIDAY_EXCLUSION_ID_PREFIX}${holiday.date}`,
+  dates: [holiday.date],
+  scope: "all",
+  reason: "LOCAL_HOLIDAY",
+  note: holiday.name,
+  otEligible: false,
+});
+
+const isHolidayExclusion = (exclusion: Pick<ManualExclusion, "id">): boolean =>
+  exclusion.id.startsWith(HOLIDAY_EXCLUSION_ID_PREFIX);
 
 const sanitizeWorkingDays = (value: unknown): number[] => {
   if (!Array.isArray(value)) return [...STANDARD_WORKING_DAYS];
@@ -597,6 +609,11 @@ const WeeklyPatternTimeline = ({ applied, windows, presence }: WeeklyPatternTime
 type ManualDialogOfficeOption = { id: string; name: string };
 type ManualDialogEmployeeOption = { id: string; display: string; name: string };
 
+type HolidayCalendarItem = {
+  dateISO: string;
+  name: string;
+};
+
 type ManualExclusionDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -606,6 +623,7 @@ type ManualExclusionDialogProps = {
   employees: ManualDialogEmployeeOption[];
   activePeriodLabel: string | null;
   activePeriod?: { year: number; month: number } | null;
+  holidayItems?: HolidayCalendarItem[];
 };
 
 const ManualExclusionDialog = ({
@@ -617,6 +635,7 @@ const ManualExclusionDialog = ({
   employees,
   activePeriodLabel,
   activePeriod,
+  holidayItems = [],
 }: ManualExclusionDialogProps) => {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(
     initial ? toDateRangeFromDates(initial.dates) : undefined
@@ -659,6 +678,13 @@ const ManualExclusionDialog = ({
   const selectedDatesLabel = useMemo(
     () => (selectedDates.length ? formatManualDateSummary(selectedDates) : "Select a date"),
     [selectedDates]
+  );
+  const holidayDateModifiers = useMemo(
+    () =>
+      holidayItems
+        .map((holiday) => toUtcDateFromIso(holiday.dateISO))
+        .filter((value): value is Date => value instanceof Date),
+    [holidayItems]
   );
 
   const outOfPeriodCount = useMemo(() => {
@@ -789,6 +815,10 @@ const ManualExclusionDialog = ({
               onSelect={setDateRange}
               numberOfMonths={1}
               initialFocus
+              modifiers={{ holiday: holidayDateModifiers }}
+              modifiersClassNames={{
+                holiday: "bg-amber-100 text-amber-900 font-semibold rounded-md",
+              }}
               className="rounded-xl border bg-card p-3 shadow-sm w-full"
             />
             <p className="text-xs text-muted-foreground">
@@ -798,6 +828,16 @@ const ManualExclusionDialog = ({
               <p className="text-xs text-amber-600">
                 {outOfPeriodCount} date{outOfPeriodCount === 1 ? "" : "s"} outside {activePeriodLabel} will be ignored for this period.
               </p>
+            ) : null}
+            {holidayItems.length ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                <p className="font-medium">Auto-fetched holidays for this period:</p>
+                <p className="mt-1">
+                  {holidayItems
+                    .map((holiday) => `${formatManualDateSummary([holiday.dateISO])} — ${holiday.name}`)
+                    .join(" • ")}
+                </p>
+              </div>
             ) : null}
           </div>
           <div className="space-y-2">
@@ -1356,6 +1396,14 @@ const manualMonthOptions = [
   { value: "12", label: "Dec" },
 ];
 
+const getCurrentManualPeriod = () => {
+  const now = new Date();
+  return {
+    month: String(now.getMonth() + 1),
+    year: String(now.getFullYear()),
+  };
+};
+
 const manualPeriodFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   year: "numeric",
@@ -1477,6 +1525,25 @@ const makeEmployeeDedupeKey = (row: PerEmployeeRow) => {
   const name = row.employeeName?.trim();
   if (name) return `name:${name}`;
   return `row:${row.employeeId ?? ""}:${row.employeeName ?? ""}`;
+};
+
+const makeEmployeeDetailsKey = (
+  row: Pick<
+    PerEmployeeRow | PerDayRow,
+    "resolvedEmployeeId" | "employeeId" | "employeeNo" | "employeeToken" | "employeeName"
+  >
+) => {
+  const resolved = row.resolvedEmployeeId?.trim();
+  if (resolved) return `resolved:${resolved}`;
+  const employeeId = row.employeeId?.trim();
+  if (employeeId) return `id:${employeeId}`;
+  const employeeNo = firstEmployeeNoToken(row.employeeNo)?.trim();
+  if (employeeNo) return `no:${employeeNo}`;
+  const token = row.employeeToken?.trim();
+  if (token) return `token:${token}`;
+  const name = row.employeeName?.trim();
+  if (name) return `name:${name}`;
+  return "";
 };
 
 const getSummarySortValue = (row: PerEmployeeRow, field: SummarySortField): number | string => {
@@ -1722,11 +1789,9 @@ const readInsightsSettings = (): InsightsSettings => {
     const visibleCharts = Array.isArray(parsed.visibleCharts)
       ? (parsed.visibleCharts.filter(isChartId) as ChartId[])
       : undefined;
-    const collapsed = typeof parsed.collapsed === "boolean" ? parsed.collapsed : undefined;
 
     return {
       visibleCharts,
-      collapsed,
     } satisfies InsightsSettings;
   } catch (error) {
     console.warn("Failed to read insights settings", error);
@@ -1959,7 +2024,6 @@ function BioLogUploaderContent() {
   const [manualResolvedHydrated, setManualResolvedHydrated] = useState(false);
   const [perEmployee, setPerEmployee] = useState<PerEmployeeRow[] | null>(null);
   const [perDay, setPerDay] = useState<PerDayRow[] | null>(null);
-  const [page, setPage] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [showMixedMonthsPrompt, setShowMixedMonthsPrompt] = useState(false);
@@ -1974,6 +2038,9 @@ function BioLogUploaderContent() {
   const [manualPeriodHydrated, setManualPeriodHydrated] = useState(false);
   const [manualExclusions, setManualExclusions] = useState<ManualExclusion[]>([]);
   const [manualExclusionsHydrated, setManualExclusionsHydrated] = useState(false);
+  const [holidayExclusions, setHolidayExclusions] = useState<ManualExclusion[]>([]);
+  const [holidayExclusionsHydrated, setHolidayExclusionsHydrated] = useState(false);
+  const [holidayLoadError, setHolidayLoadError] = useState<string | null>(null);
   const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicyState>(defaultOvertimePolicy);
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule>(DEFAULT_WORK_SCHEDULE);
   const [templates, setTemplates] = useState<TimekeepingTemplate[]>([]);
@@ -1989,6 +2056,7 @@ function BioLogUploaderContent() {
   const [overtimeHydrated, setOvertimeHydrated] = useState(false);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [manualDialogEditing, setManualDialogEditing] = useState<ManualExclusion | null>(null);
+  const [detailsEmployee, setDetailsEmployee] = useState<PerEmployeeRow | null>(null);
   const [identityState, setIdentityState] = useState<IdentityStatus>({
     status: "idle",
     total: 0,
@@ -2411,7 +2479,7 @@ function BioLogUploaderContent() {
     return [...DEFAULT_VISIBLE_CHARTS];
   });
   const [insightsCollapsed, setInsightsCollapsed] = useState<boolean>(
-    () => settingsRef.current?.collapsed ?? false
+    false
   );
   const [expandedWarnings, setExpandedWarnings] = useState<Record<string, boolean>>({});
   const [resolveTarget, setResolveTarget] = useState<{
@@ -2498,6 +2566,9 @@ function BioLogUploaderContent() {
     if (typeof window === "undefined") return;
     try {
       const stored = window.localStorage.getItem(MANUAL_STORAGE_KEY);
+      let nextUseManualPeriod = false;
+      let nextManualMonth = "";
+      let nextManualYear = "";
       if (stored) {
         const parsed = JSON.parse(stored) as {
           useManualPeriod?: boolean;
@@ -2505,15 +2576,23 @@ function BioLogUploaderContent() {
           manualYear?: string;
         };
         if (typeof parsed.useManualPeriod === "boolean") {
-          setUseManualPeriod(parsed.useManualPeriod);
+          nextUseManualPeriod = parsed.useManualPeriod;
         }
         if (typeof parsed.manualMonth === "string") {
-          setManualMonth(parsed.manualMonth);
+          nextManualMonth = parsed.manualMonth;
         }
         if (typeof parsed.manualYear === "string") {
-          setManualYear(parsed.manualYear);
+          nextManualYear = parsed.manualYear;
         }
       }
+      if (nextUseManualPeriod && (!nextManualMonth || !nextManualYear)) {
+        const current = getCurrentManualPeriod();
+        nextManualMonth = nextManualMonth || current.month;
+        nextManualYear = nextManualYear || current.year;
+      }
+      setUseManualPeriod(nextUseManualPeriod);
+      setManualMonth(nextManualMonth);
+      setManualYear(nextManualYear);
     } catch (error) {
       console.warn("Failed to load manual period settings", error);
     } finally {
@@ -2966,6 +3045,76 @@ function BioLogUploaderContent() {
   }, [manualExclusionStorageKey, manualExclusions, manualExclusionsHydrated]);
 
   useEffect(() => {
+    if (!activePeriod) {
+      setHolidayExclusions([]);
+      setHolidayLoadError(null);
+      setHolidayExclusionsHydrated(true);
+      return;
+    }
+
+    const controller = new AbortController();
+    setHolidayExclusionsHydrated(false);
+    setHolidayLoadError(null);
+
+    const loadHolidays = async () => {
+      try {
+        const response = await fetch(
+          `/api/attendance/holidays?year=${activePeriod.year}&month=${activePeriod.month}`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as { error?: unknown } | null;
+          setHolidayLoadError(
+            typeof payload?.error === "string"
+              ? payload.error
+              : "Unable to load holidays for this period."
+          );
+          setHolidayExclusions([]);
+          return;
+        }
+        const payload = (await response.json()) as { holidays?: unknown };
+        const monthPrefix = `${activePeriod.year}-${pad2(activePeriod.month)}`;
+        const holidays = Array.isArray(payload.holidays)
+          ? payload.holidays
+              .filter(
+                (value): value is HolidayApiItem =>
+                  typeof value === "object" &&
+                  value !== null &&
+                  typeof (value as { name?: unknown }).name === "string" &&
+                  typeof (value as { date?: unknown }).date === "string"
+              )
+              .map((value) => ({
+                name: value.name.trim(),
+                date: value.date,
+              }))
+              .filter((value) => value.name.length > 0 && /^\d{4}-\d{2}-\d{2}$/.test(value.date) && value.date.startsWith(monthPrefix))
+          : [];
+        setHolidayExclusions(
+          holidays
+            .map(toHolidayExclusion)
+            .sort((a, b) => (a.dates[0] ?? "").localeCompare(b.dates[0] ?? ""))
+        );
+        setHolidayLoadError(null);
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        console.warn("Failed to load holiday exclusions", error);
+        setHolidayLoadError(
+          error instanceof Error ? error.message : "Unable to load holidays for this period."
+        );
+        setHolidayExclusions([]);
+      } finally {
+        setHolidayExclusionsHydrated(true);
+      }
+    };
+
+    void loadHolidays();
+
+    return () => {
+      controller.abort();
+    };
+  }, [activePeriod]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (!overtimePolicyStorageKey) {
       setOvertimePolicy(sanitizeOvertimePolicyState(defaultOvertimePolicy));
@@ -3005,7 +3154,8 @@ function BioLogUploaderContent() {
   }, [overtimeHydrated, overtimePolicy, overtimePolicyStorageKey]);
 
   const manualExclusionContext = useMemo(() => {
-    if (!manualExclusions.length) {
+    const merged = [...manualExclusions, ...holidayExclusions];
+    if (!merged.length) {
       return {
         applicable: [] as ManualExclusion[],
         outOfPeriodCounts: new Map<string, number>(),
@@ -3014,7 +3164,7 @@ function BioLogUploaderContent() {
     }
     if (!activePeriod) {
       return {
-        applicable: manualExclusions.map((exclusion) => ({ ...exclusion })),
+        applicable: merged.map((exclusion) => ({ ...exclusion })),
         outOfPeriodCounts: new Map<string, number>(),
         totalOutOfPeriod: 0,
       };
@@ -3022,7 +3172,7 @@ function BioLogUploaderContent() {
     const prefix = `${activePeriod.year}-${pad2(activePeriod.month)}`;
     const outOfPeriodCounts = new Map<string, number>();
     const applicable: ManualExclusion[] = [];
-    for (const exclusion of manualExclusions) {
+    for (const exclusion of merged) {
       const inPeriod = exclusion.dates.filter((date) => date.startsWith(prefix));
       const outCount = exclusion.dates.length - inPeriod.length;
       if (outCount > 0) {
@@ -3037,11 +3187,23 @@ function BioLogUploaderContent() {
       0
     );
     return { applicable, outOfPeriodCounts, totalOutOfPeriod };
-  }, [activePeriod, manualExclusions]);
+  }, [activePeriod, holidayExclusions, manualExclusions]);
 
   const manualApplicableCount = manualExclusionContext.applicable.length;
   const manualOutOfPeriodMap = manualExclusionContext.outOfPeriodCounts;
   const manualOutOfPeriodTotal = manualExclusionContext.totalOutOfPeriod;
+
+  const holidayCalendarItems = useMemo<HolidayCalendarItem[]>(() => {
+    return holidayExclusions
+      .flatMap((exclusion) =>
+        exclusion.dates.map((dateISO) => ({
+          dateISO,
+          name: exclusion.note?.trim() || "Holiday",
+        }))
+      )
+      .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.dateISO))
+      .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+  }, [holidayExclusions]);
 
   const manualResolvedStorageKey = useMemo(() => {
     if (!departmentId || !activePeriod) return null;
@@ -3180,7 +3342,7 @@ function BioLogUploaderContent() {
       return;
     }
 
-    if (!manualExclusionsHydrated) return;
+    if (!manualExclusionsHydrated || !holidayExclusionsHydrated) return;
     if (!overtimeHydrated) return;
 
     const manualKey = manualPeriodSelection
@@ -3290,6 +3452,7 @@ function BioLogUploaderContent() {
     identityReady,
     manualExclusionContext,
     manualExclusionsHydrated,
+    holidayExclusionsHydrated,
     manualPeriodSelection,
     manualSelectionValid,
     mergeResult,
@@ -3742,9 +3905,12 @@ const applyColumnFilters = useCallback(
     showUnmatched,
   ]);
 
-  useEffect(() => {
-    setPage(0);
-  }, [filteredPerDayPreview]);
+  const detailsRows = useMemo(() => {
+    if (!detailsEmployee) return [] as PerDayRow[];
+    const detailsKey = makeEmployeeDetailsKey(detailsEmployee);
+    if (!detailsKey) return [] as PerDayRow[];
+    return filteredPerDayPreview.filter((row) => makeEmployeeDetailsKey(row) === detailsKey);
+  }, [detailsEmployee, filteredPerDayPreview]);
 
   useEffect(() => {
     if (!selectedScheduleTypes.length) return;
@@ -3799,12 +3965,10 @@ const applyColumnFilters = useCallback(
     if (typeof window === "undefined") return;
     const payload: InsightsSettings = {
       visibleCharts,
-      collapsed: insightsCollapsed,
     };
     window.localStorage.setItem(INSIGHTS_SETTINGS_KEY, JSON.stringify(payload));
   }, [
     visibleCharts,
-    insightsCollapsed,
   ]);
 
   useEffect(() => {
@@ -3869,7 +4033,7 @@ const applyColumnFilters = useCallback(
           ? `${manualPeriodSelection.year}-${pad2(manualPeriodSelection.month)}`
           : "auto";
 
-      if (!manualExclusionsHydrated) {
+      if (!manualExclusionsHydrated || !holidayExclusionsHydrated) {
         toast({
           title: "Manual exclusions loading",
           description: "Manual exclusions are still loading. Please try again shortly.",
@@ -3989,6 +4153,7 @@ const applyColumnFilters = useCallback(
       filteredPerDayRows,
       manualExclusionContext,
       manualExclusionsHydrated,
+      holidayExclusionsHydrated,
       manualPeriodSelection,
       removeManualResolved,
       setPerDay,
@@ -4151,17 +4316,6 @@ const applyColumnFilters = useCallback(
     });
     return rows;
   }, [searchedPerEmployee, secondarySortBy, secondarySortDir, sortBy, sortDir]);
-
-  const pagedPerDay = useMemo(() => {
-    if (!filteredPerDayPreview.length) return [];
-    const start = page * PAGE_SIZE;
-    return filteredPerDayPreview.slice(start, start + PAGE_SIZE);
-  }, [filteredPerDayPreview, page]);
-
-  const totalPages = useMemo(() => {
-    if (!filteredPerDayPreview.length) return 0;
-    return Math.max(1, Math.ceil(filteredPerDayPreview.length / PAGE_SIZE));
-  }, [filteredPerDayPreview]);
 
   const selectedColumnSet = useMemo(() => new Set(selectedColumnKeys), [selectedColumnKeys]);
   const exportColumnKeys = useMemo(
@@ -4458,6 +4612,14 @@ const applyColumnFilters = useCallback(
     });
   }, [toast]);
 
+  const handleManualPeriodToggle = useCallback((checked: boolean) => {
+    setUseManualPeriod(checked);
+    if (!checked) return;
+    const current = getCurrentManualPeriod();
+    setManualMonth((value) => value || current.month);
+    setManualYear((value) => value || current.year);
+  }, []);
+
   const totalFiles = files.length;
   const processedFiles = files.filter((file) => file.status === "parsed" || file.status === "failed").length;
   const progress = totalFiles ? Math.round((processedFiles / totalFiles) * 100) : 0;
@@ -4529,7 +4691,7 @@ const applyColumnFilters = useCallback(
             <Switch
               id="manual-period-toggle"
               checked={useManualPeriod}
-              onCheckedChange={(checked) => setUseManualPeriod(checked)}
+              onCheckedChange={handleManualPeriodToggle}
             />
             <Label htmlFor="manual-period-toggle" className="text-sm font-medium">
               Use manual month/year
@@ -4542,7 +4704,13 @@ const applyColumnFilters = useCallback(
         {manualPeriodError ? (
           <p className="text-xs font-medium text-destructive">{manualPeriodError}</p>
         ) : null}
-        <div className="mt-4 space-y-3 rounded-lg border border-dashed border-muted-foreground/40 bg-background/60 p-4">
+        <Tabs defaultValue="work-schedule" className="mt-4">
+          <TabsList className="grid w-full grid-cols-2 sm:w-[360px]">
+            <TabsTrigger value="work-schedule">Work Schedule</TabsTrigger>
+            <TabsTrigger value="overtime-policy">Overtime Policy</TabsTrigger>
+          </TabsList>
+          <TabsContent value="work-schedule" className="space-y-3">
+        <div className="space-y-3 rounded-lg border border-dashed border-muted-foreground/40 bg-background/60 p-4">
           <div>
             <p className="text-sm font-semibold">Work schedule</p>
             <p className="text-xs text-muted-foreground">
@@ -4704,11 +4872,20 @@ const applyColumnFilters = useCallback(
               <Plus className="mr-2 h-4 w-4" /> Add exclusion
             </Button>
           </div>
-          {!manualExclusionsHydrated ? (
+          {holidayLoadError ? (
+            <Alert className="border-amber-500/50 bg-amber-500/10 py-2">
+              <AlertCircle className="h-4 w-4 text-amber-700" />
+              <AlertTitle className="text-sm text-amber-800">Holiday lookup unavailable</AlertTitle>
+              <AlertDescription className="text-xs text-amber-800">
+                {holidayLoadError} Manual exclusions remain available.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {!manualExclusionsHydrated || !holidayExclusionsHydrated ? (
             <p className="text-xs text-muted-foreground">Loading manual exclusions…</p>
-          ) : manualExclusions.length ? (
+          ) : manualExclusionContext.applicable.length ? (
             <ul className="space-y-2">
-              {manualExclusions.map((exclusion) => {
+              {manualExclusionContext.applicable.map((exclusion) => {
                 const dateLabel = formatManualDateSummary(exclusion.dates);
                 const reasonLabel = formatManualReasonLabel(exclusion.reason, exclusion.note);
                 const officeNames = (exclusion.officeIds ?? []).map(
@@ -4726,6 +4903,7 @@ const applyColumnFilters = useCallback(
                 const scopeDetails = exclusion.scope === "offices" ? officeNames : employeeNames;
                 const outOfPeriod = manualOutOfPeriodMap.get(exclusion.id) ?? 0;
                 const effectiveOtEligible = (exclusion.otEligible ?? overtimePolicy.overtimeOnExcused) === true;
+                const autoHoliday = isHolidayExclusion(exclusion);
                 return (
                   <li
                     key={exclusion.id}
@@ -4759,23 +4937,29 @@ const applyColumnFilters = useCallback(
                       ) : null}
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleEditManualExclusion(exclusion)}
-                      >
-                        <Pencil className="mr-1 h-4 w-4" /> Edit
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveManualExclusion(exclusion.id)}
-                      >
-                        <Trash2 className="mr-1 h-4 w-4" /> Remove
-                      </Button>
+                      {!autoHoliday ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditManualExclusion(exclusion)}
+                          >
+                            <Pencil className="mr-1 h-4 w-4" /> Edit
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveManualExclusion(exclusion.id)}
+                          >
+                            <Trash2 className="mr-1 h-4 w-4" /> Remove
+                          </Button>
+                        </>
+                      ) : (
+                        <Badge variant="secondary">Auto holiday</Badge>
+                      )}
                     </div>
                   </li>
                 );
@@ -4791,15 +4975,9 @@ const applyColumnFilters = useCallback(
           </p>
         ) : null}
       </div>
-    </div>
-
-    <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-background/60">
-      <Accordion type="single" collapsible defaultValue="overtime-policy">
-        <AccordionItem value="overtime-policy" className="border-none">
-          <AccordionTrigger className="px-4 text-sm font-semibold">
-            ⚙️ Overtime policy
-          </AccordionTrigger>
-          <AccordionContent className="px-4">
+      </TabsContent>
+      <TabsContent value="overtime-policy" className="mt-4">
+    <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-background/60 p-4">
             {!overtimeHydrated ? (
               <p className="text-xs text-muted-foreground">Loading overtime settings…</p>
             ) : (
@@ -5079,9 +5257,9 @@ const applyColumnFilters = useCallback(
                 </div>
               </div>
             )}
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+    </div>
+      </TabsContent>
+        </Tabs>
     </div>
 
     <div
@@ -5884,9 +6062,14 @@ const applyColumnFilters = useCallback(
                       </td>
                       <td className="p-2 max-w-[16rem]">
                         <div className="flex min-w-0 items-center gap-2">
-                          <span className="truncate" title={displayEmployeeName}>
+                          <button
+                            type="button"
+                            className="truncate text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            title={displayEmployeeName}
+                            onClick={() => setDetailsEmployee(row)}
+                          >
                             {displayEmployeeName}
-                          </span>
+                          </button>
                           {isUnmatched ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -6020,33 +6203,20 @@ const applyColumnFilters = useCallback(
           </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Per-Day Details</h2>
-            {totalPages > 0 && (
-              <div className="flex items-center gap-2 text-sm">
-                <span>
-                  Page {page + 1} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
-                  disabled={page === 0}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((prev) => Math.min(prev + 1, totalPages - 1))}
-                  disabled={page >= totalPages - 1}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
-          </div>
-          <div className="max-h-[420px] overflow-x-auto rounded-xl border">
+          <Dialog
+            open={Boolean(detailsEmployee)}
+            onOpenChange={(open) => {
+              if (!open) setDetailsEmployee(null);
+            }}
+          >
+            <DialogContent className="max-h-[85vh] max-w-[min(96vw,1200px)] overflow-hidden">
+              <DialogHeader>
+                <DialogTitle>{detailsEmployee?.employeeName || "Employee Details"}</DialogTitle>
+                <DialogDescription>
+                  Per-day details for the current period and filters.
+                </DialogDescription>
+              </DialogHeader>
+          <div className="max-h-[65vh] overflow-auto rounded-xl border">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-30 bg-muted/50">
                 <tr>
@@ -6074,7 +6244,7 @@ const applyColumnFilters = useCallback(
                 </tr>
               </thead>
               <tbody>
-                {pagedPerDay.map((row, index) => {
+                {detailsRows.map((row, index) => {
                   const weeklyWindowsLabel = formatTimelineLabel(row.weeklyPatternWindows ?? []);
                   const weeklyPresenceLabel = formatTimelineLabel(row.weeklyPatternPresence ?? []);
                   const evaluationStatus = row.evaluationStatus ??
@@ -6278,6 +6448,8 @@ const applyColumnFilters = useCallback(
               </tbody>
             </table>
           </div>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
       </div>
@@ -6290,6 +6462,7 @@ const applyColumnFilters = useCallback(
         employees={manualEmployeeOptions}
         activePeriodLabel={manualActivePeriodLabel}
         activePeriod={activePeriod}
+        holidayItems={holidayCalendarItems}
       />
       <SummaryColumnSelector
         open={columnSelectorOpen}
