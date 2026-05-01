@@ -40,23 +40,26 @@ export default function AddTimelineEvent({
   const [loading, setLoading] = useState(false);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  const [form, setForm] = useState(() => ({
+  const initialForm = useMemo(() => ({
     type: initial?.type ?? "TRAINING",
     title: initial?.title ?? "",
     description: initial?.description ?? "",
     date: ((initial?.date ?? today)).slice(0, 10),
     attachment: initial?.attachment ?? "",
-  }));
+  }), [
+    initial?.attachment,
+    initial?.date,
+    initial?.description,
+    initial?.title,
+    initial?.type,
+    today,
+  ]);
+
+  const [form, setForm] = useState(() => initialForm);
 
   useEffect(() => {
-    setForm({
-      type: initial?.type ?? "TRAINING",
-      title: initial?.title ?? "",
-      description: initial?.description ?? "",
-      date: ((initial?.date ?? today)).slice(0, 10),
-      attachment: initial?.attachment ?? "",
-    });
-  }, [initial?.id])
+    setForm(initialForm);
+  }, [initialForm])
 
   const payload = useMemo(() => ({
     type: form.type as TimelineRecord["type"],

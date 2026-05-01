@@ -14,6 +14,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import Image from "next/image";
 import ReactFlow, {
   Background,
   Controls,
@@ -4190,9 +4191,13 @@ function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }
   const renderAvatar = () => {
     if (showPhotos && data.imageUrl) {
       return (
-        <img
+        <Image
           src={data.imageUrl}
           alt={data.name}
+          width={56}
+          height={56}
+          sizes="56px"
+          unoptimized
           className="h-14 w-14 rounded-full border-2 object-cover shadow-md"
           style={{ borderColor: colorWithAlpha(outlineColor, 0.35) }}
         />

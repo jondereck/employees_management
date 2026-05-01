@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { BrowserQRCodeReader } from "@zxing/browser";
 
 const CameraScanner = forwardRef((_, ref) => {
@@ -35,7 +35,7 @@ const CameraScanner = forwardRef((_, ref) => {
     startScan();
   };
 
-  const startScan = async () => {
+  const startScan = useCallback(async () => {
     setError(null);
     setQrResult(null);
     setScanning(true);
@@ -123,7 +123,7 @@ const CameraScanner = forwardRef((_, ref) => {
       setScanning(false);
       setLoadingCamera(false);
     }
-  };
+  }, [scanStartTime]);
 
 
   const stopScan = () => {
@@ -139,7 +139,7 @@ const CameraScanner = forwardRef((_, ref) => {
 
   useEffect(() => {
     startScan();
-  }, []);
+  }, [startScan]);
 
 
 

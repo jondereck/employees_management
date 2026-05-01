@@ -792,6 +792,9 @@ export default function DownloadStyledExcel() {
     return Array.from(new Set(Object.values(mappings.appointmentMapping))).sort();
   }, [mappings]);
 
+  const appointmentOptionsKey = useMemo(() => APPOINTMENT_OPTIONS.join("|"), [APPOINTMENT_OPTIONS]);
+  const appointmentOptionsLen = APPOINTMENT_OPTIONS.length;
+
   // Re-apply template appointment filters when mappings arrive
   useEffect(() => {
     if (!mappings) return;
@@ -805,7 +808,7 @@ export default function DownloadStyledExcel() {
       const allowed = new Set(APPOINTMENT_OPTIONS);
       setAppointmentFilters(tpl.appointmentFilters.filter(x => allowed.has(x)));
     }
-  }, [mappings, APPOINTMENT_OPTIONS.join("|")]);
+  }, [mappings, APPOINTMENT_OPTIONS, appointmentOptionsKey]);
 
 
   // Appointment filters state (default = all)
@@ -824,7 +827,7 @@ export default function DownloadStyledExcel() {
       } catch { }
     }
     setAppointmentFilters(APPOINTMENT_OPTIONS); // default: all
-  }, [mappings, APPOINTMENT_OPTIONS.length]);
+  }, [mappings, APPOINTMENT_OPTIONS, appointmentOptionsLen]);
 
   useEffect(() => {
     localStorage.setItem('appointmentFilters', JSON.stringify(appointmentFilters));

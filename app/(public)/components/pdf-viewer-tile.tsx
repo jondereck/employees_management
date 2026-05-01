@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { FileText, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 type SimplePdfModalTileProps = {
   title?: string;
@@ -187,12 +188,13 @@ export default function SimplePdfModalTile({
         {/* Thumbnail Squircle */}
         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-500/10 overflow-hidden border border-white/20 shadow-inner">
           {thumb ? (
-            <img
+            <Image
               src={thumb}
               alt=""
+              width={56}
+              height={56}
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-              loading="lazy"
-              decoding="async"
+              unoptimized
             />
           ) : (
             <FileText className="h-6 w-6 text-indigo-600" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import Modal from "@/components/ui/modal";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -49,7 +49,7 @@ const CopyOptionsModal = ({ isOpen, onClose, data }: CopyOptionsModalProps) => {
     );
   };
 
-  const applyFormat = (text: string) => {
+  const applyFormat = useCallback((text: string) => {
     switch (format) {
       case "uppercase":
         return text.toUpperCase();
@@ -67,13 +67,13 @@ const CopyOptionsModal = ({ isOpen, onClose, data }: CopyOptionsModalProps) => {
       default:
         return text;
     }
-  };
+  }, [format]);
 
   const previewText = useMemo(() => {
     const parts = selectedFields.map((field) => data[field]);
     const joined = parts.join(" | ");
     return applyFormat(joined);
-  }, [selectedFields, format, data]);
+  }, [selectedFields, data, applyFormat]);
 
   const handleSaveSettings = () => {
     try {

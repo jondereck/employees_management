@@ -40,7 +40,7 @@ useEffect(() => {
   }, 200); // give short delay
 
   return () => clearTimeout(timer);
-}, [currentPage, items]);
+}, [currentPage, items, setLoading]);
 
 
 

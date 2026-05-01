@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowUpRight, MoveRight, RefreshCw, Gift, FileEdit, ChevronLeft, ChevronRight, Sparkles, CheckCircle2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,11 @@ function useAutoAdvance<T extends string>(values: T[], delayMs = 6000) {
   const timerRef = useRef<number | null>(null);
   const pausedRef = useRef(false);
 
-  const clear = () => { if (timerRef.current) window.clearInterval(timerRef.current); };
-  const pause = () => { pausedRef.current = true; clear(); };
-  const resume = () => { pausedRef.current = false; start(); };
+  const clear = useCallback(() => {
+    if (timerRef.current) window.clearInterval(timerRef.current);
+  }, []);
 
-  const start = () => {
+  const start = useCallback(() => {
     clear();
     timerRef.current = window.setInterval(() => {
       if (pausedRef.current) return;
@@ -24,14 +24,28 @@ function useAutoAdvance<T extends string>(values: T[], delayMs = 6000) {
         return values[(idx + 1) % values.length];
       });
     }, delayMs);
-  };
+  }, [clear, delayMs, values]);
 
-  useEffect(() => { start(); return clear; }, [values.join("|"), delayMs]);
+  const pause = useCallback(() => {
+    pausedRef.current = true;
+    clear();
+  }, [clear]);
+
+  const resume = useCallback(() => {
+    pausedRef.current = false;
+    start();
+  }, [start]);
+
+  const valuesKey = useMemo(() => values.join("|"), [values]);
+  useEffect(() => {
+    start();
+    return clear;
+  }, [clear, delayMs, start, valuesKey]);
   return { active, setActive, pause, resume };
 }
 
 export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
-  const tabs = [
+  const tabs = useMemo(() => ([
     { key: "PROMOTED", title: "Promotion", icon: ArrowUpRight, lines: [
       "Record promotions with new position and salary grade.",
       "Tip: attach memo number in details for faster approval.",
@@ -48,10 +62,10 @@ export function SuggestionTabs({ onCreate }: { onCreate: () => void }) {
       "Add commendations, loyalty awards, or citations.",
       "Optional: upload photo of certificate later.",
     ]},
-  ] as const;
+  ] as const), []);
 
   type K = typeof tabs[number]["key"];
-  const keys = tabs.map(t => t.key) as K[];
+  const keys = useMemo(() => tabs.map((t) => t.key) as K[], [tabs]);
   const { active, setActive, pause, resume } = useAutoAdvance<K>(keys, 6000);
 
   const containerRef = useRef<HTMLDivElement | null>(null);

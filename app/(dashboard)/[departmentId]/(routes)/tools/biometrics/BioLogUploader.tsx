@@ -2575,7 +2575,7 @@ function BioLogUploaderContent() {
     let cancelled = false;
 
     if (!identityTokens.length) {
-      if (identityMap.size) setIdentityMap(new Map());
+      setIdentityMap((prev) => (prev.size ? new Map() : prev));
       setIdentityState({ status: "idle", total: 0, completed: 0, unmatched: 0 });
       return;
     }
@@ -4111,6 +4111,7 @@ const applyColumnFilters = useCallback(
       toast,
       useManualPeriod,
       overtimePolicyPayload,
+      workSchedule,
     ]
   );
 
@@ -4524,12 +4525,12 @@ const applyColumnFilters = useCallback(
       });
     }
   }, [
-    APP_VERSION,
     columnOrder,
     dedupedPerEmployee,
     exportColumnKeys,
     exportPeriodLabel,
     filteredPerDayPreview,
+    getOfficeLabel,
     manualSelectionValid,
     manualResolvedTokens,
     metricMode,

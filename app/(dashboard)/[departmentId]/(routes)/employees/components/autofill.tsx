@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 
 import { Input } from "@/components/ui/input";
@@ -463,8 +463,10 @@ function DateField({
   disableFuture,
   placeholder = "",
 }: DateProps) {
-  const selected: Date | undefined =
-    field.value ? new Date(field.value) : undefined;
+  const selected: Date | undefined = useMemo(
+    () => (field.value ? new Date(field.value) : undefined),
+    [field.value]
+  );
 
   const [input, setInput] = useState(
     selected ? fmt(selected, "MM-dd-yyyy") : ""
@@ -480,7 +482,7 @@ function DateField({
     if (selected) {
       setInput(fmt(selected, "MM-dd-yyyy"));
     }
-  }, [field.value]);
+  }, [selected]);
 
   const commitInput = () => {
     if (!input) {
@@ -512,7 +514,7 @@ function DateField({
       setMonth(selected);
       setInput(fmt(selected, "MM-dd-yyyy"));
     }
-  }, [field.value]);
+  }, [selected]);
 
   return (
   <FormItem className={cn("space-y-1.5", className)}>
@@ -797,11 +799,11 @@ function SelectField({
 }: SelectProps) {
   type SelectOption = { value: string; label: string };
 
-  const normalizeOpt = (v: any) => String(v ?? "").trim();
-  const normalizeLabel = (v: any) => String(v ?? "").trim();
+  const normalizeOpt = useCallback((v: any) => String(v ?? "").trim(), []);
+  const normalizeLabel = useCallback((v: any) => String(v ?? "").trim(), []);
 
   // Convert various payload shapes into SelectOption[]
-  function toOptions(data: any): SelectOption[] {
+  const toOptions = useCallback((data: any): SelectOption[] => {
     if (!data) return [];
     const make = (x: any): SelectOption | null => {
       // strings
@@ -846,7 +848,7 @@ function SelectField({
       out.push(opt);
     }
     return out;
-  }
+  }, [normalizeLabel, normalizeOpt]);
 
   const [opts, setOpts] = useState<SelectOption[]>(options ?? []);
   const [loading, setLoading] = useState(false);
@@ -871,7 +873,7 @@ function SelectField({
     return () => {
       alive = false;
     };
-  }, [optionsEndpoint]);
+  }, [optionsEndpoint, toOptions]);
 
   // Fetch priority suggestions (if endpoint provided)
   useEffect(() => {
@@ -893,10 +895,10 @@ function SelectField({
     return () => {
       alive = false;
     };
-  }, [priorityEndpoint]);
+  }, [priorityEndpoint, toOptions]);
 
   // Prop-based priority (strings or SelectOption)
-  const propPri: SelectOption[] = useMemo(() => toOptions(priorityOptions), [priorityOptions]);
+  const propPri: SelectOption[] = useMemo(() => toOptions(priorityOptions), [priorityOptions, toOptions]);
 
   // Load recents from localStorage
   useEffect(() => {
@@ -942,7 +944,7 @@ function SelectField({
       nn.push({ value, label });
     }
     return nn;
-  }, [opts]);
+  }, [normalizeLabel, normalizeOpt, opts, toOptions]);
 
   // 2) Index base by label (lowercased) -> value (ID)
   const valueByLabel = useMemo(() => {
@@ -952,7 +954,7 @@ function SelectField({
   }, [base]);
 
   // 3) “Snap” label-only items to base IDs
-  const fixToBaseIds = (list: any): SelectOption[] => {
+  const fixToBaseIds = useCallback((list: any): SelectOption[] => {
     const out: SelectOption[] = [];
     for (const o of toOptions(list)) {
       const label = normalizeLabel(o.label);
@@ -962,10 +964,10 @@ function SelectField({
       out.push({ value, label });
     }
     return out;
-  };
+  }, [normalizeLabel, normalizeOpt, toOptions, valueByLabel]);
 
-  const priFixed = useMemo(() => fixToBaseIds(pri), [pri, valueByLabel]);
-  const propPriFixed = useMemo(() => fixToBaseIds(propPri), [propPri, valueByLabel]);
+  const priFixed = useMemo(() => fixToBaseIds(pri), [fixToBaseIds, pri]);
+  const propPriFixed = useMemo(() => fixToBaseIds(propPri), [fixToBaseIds, propPri]);
 
   // 4) Merge (priority first), then dedupe by value (ID)
   const ordered = useMemo(() => {
@@ -981,7 +983,7 @@ function SelectField({
       out.push({ value, label });
     }
     return out;
-  }, [priFixed, propPriFixed, base]);
+  }, [base, normalizeLabel, normalizeOpt, priFixed, propPriFixed]);
 
   // Fast lookup by value
   const byValue = useMemo(() => {

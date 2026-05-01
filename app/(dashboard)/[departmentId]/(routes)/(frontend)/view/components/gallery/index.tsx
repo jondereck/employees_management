@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { Tab } from "@headlessui/react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -46,12 +46,13 @@ const Gallery = ({ images, employeeId, employeeNo, gender }: GalleryProps) => {
   const isImageLoading = (id: string) => loadingAction?.id === id;
 
   // Placeholder logic
-  const placeholderSrc = gender === "Female" ? "/female_placeholder.png" : "/male_placeholder.png";
-
-  const rawImages = images ?? [];
-  const displayImages: GalleryImage[] = rawImages.length === 0
-    ? [{ id: "placeholder", url: placeholderSrc }]
-    : rawImages;
+  const displayImages: GalleryImage[] = useMemo(() => {
+    const placeholderSrc = gender === "Female" ? "/female_placeholder.png" : "/male_placeholder.png";
+    const rawImages = images ?? [];
+    return rawImages.length === 0
+      ? [{ id: "placeholder", url: placeholderSrc }]
+      : rawImages;
+  }, [gender, images]);
 
   const isPlaceholder = (img: GalleryImage) => img.id === "placeholder";
 
@@ -59,7 +60,7 @@ const Gallery = ({ images, employeeId, employeeNo, gender }: GalleryProps) => {
     if (displayImages.length > 0 && (!activeId || !displayImages.some(i => i.id === activeId))) {
       setActiveId(displayImages[0].id);
     }
-  }, [images, gender, activeId, displayImages]);
+  }, [activeId, displayImages]);
 
   const activeIndex = Math.max(0, displayImages.findIndex((i) => i.id === activeId));
   const activeImage = displayImages[activeIndex];

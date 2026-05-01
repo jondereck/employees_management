@@ -55,7 +55,7 @@ export default function AddAward({
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  const [form, setForm] = useState(() => ({
+  const initialForm = useMemo(() => ({
     title: initial?.title ?? "",
     issuer: initial?.issuer ?? "Municipality of Lingayen",
     date: ((initial?.date ?? today)).slice(0, 10),
@@ -63,19 +63,22 @@ export default function AddAward({
     thumbnail: initial?.thumbnail ?? "",
     fileUrl: initial?.fileUrl ?? "",
     tags: (initial?.tags ?? []).join(", "),
-  }));
+  }), [
+    initial?.date,
+    initial?.description,
+    initial?.fileUrl,
+    initial?.issuer,
+    initial?.tags,
+    initial?.thumbnail,
+    initial?.title,
+    today,
+  ]);
+
+  const [form, setForm] = useState(() => initialForm);
 
   useEffect(() => {
-    setForm({
-      title: initial?.title ?? "",
-      issuer: initial?.issuer ?? "Municipality of Lingayen",
-      date: ((initial?.date ?? today)).slice(0, 10),
-      description: initial?.description ?? "",
-      thumbnail: initial?.thumbnail ?? "",
-      fileUrl: initial?.fileUrl ?? "",
-      tags: (initial?.tags ?? []).join(", "),
-    });
-  }, [initial?.id, today]);
+    setForm(initialForm);
+  }, [initialForm]);
 
   const payload = useMemo(() => ({
     title: form.title.trim(),

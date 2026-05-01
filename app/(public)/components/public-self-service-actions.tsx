@@ -17,6 +17,7 @@ import SimplePdfLinkTile from "./pdf-viewer-tile";
 import { FloatingShortcuts } from "./modals/floating-shorcuts";
 import MobileBirthdayGreeter from "./mobile-bday-greeter";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 
 type Props = {
@@ -398,8 +399,20 @@ export default function PublicSelfServiceActions({
         </DialogHeader>
 
         <div className="relative w-full overflow-hidden rounded-2xl border border-white/40 bg-slate-100 mt-2">
-          <img src="/biometrics/biometrics-guide.png" alt="Guide" className="block w-full h-auto" />
-          <img src="/logo.png" alt="" className="pointer-events-none absolute inset-0 m-auto h-40 opacity-10 select-none" />
+          <Image
+            src="/biometrics/biometrics-guide.png"
+            alt="Guide"
+            width={1400}
+            height={900}
+            className="block w-full h-auto"
+          />
+          <Image
+            src="/logo.png"
+            alt=""
+            width={320}
+            height={320}
+            className="pointer-events-none absolute inset-0 m-auto h-40 w-40 opacity-10 select-none"
+          />
         </div>
 
         <div className="flex justify-end gap-3 mt-4">

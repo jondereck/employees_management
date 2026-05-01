@@ -75,7 +75,7 @@ export default function EmployeeFilters({
       setStatus(saved.status || "all");
       onFilterChange(saved);
     }
-  }, []);
+  }, [onFilterChange]);
 
   const handleApply = () => {
     const next = { offices: selectedOffices, eligibilities: selectedEligibilities, employeeTypes: selectedEmployeeTypes, positions: selectedPositions, status };

@@ -1053,7 +1053,7 @@ export default function InsightsPanel({
         </div>
       );
     },
-    [metricMode, officeChartData]
+    [metricMode]
   );
 
   const arrivalRange = Math.max(1, arrivalDomain.max - arrivalDomain.min);

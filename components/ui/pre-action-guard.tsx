@@ -68,10 +68,10 @@ export function PreActionGuard({
 
   const LS_KEY = `${storageKey}:${policyId}`;
 
-  const changeOpen = (v: boolean) => {
+  const changeOpen = React.useCallback((v: boolean) => {
     setOpen(v);
     onOpenChange?.(v);
-  };
+  }, [onOpenChange]);
 
   const shouldSkip = React.useCallback(() => {
     try {
@@ -98,7 +98,7 @@ export function PreActionGuard({
         window.location.href = href;
       }
     }
-  }, [dontShow, LS_KEY, href, newTab, onProceed]);
+  }, [changeOpen, dontShow, LS_KEY, href, newTab, onProceed]);
 
   const triggerClick = React.useCallback(() => {
     if (shouldSkip()) {
@@ -110,7 +110,7 @@ export function PreActionGuard({
     setAgree(false);
     setDontShow(false);
     changeOpen(true);
-  }, [shouldSkip, href, newTab, onProceed]);
+  }, [changeOpen, shouldSkip, href, newTab, onProceed]);
 
   const Trigger =
     renderTrigger ??
