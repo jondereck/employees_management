@@ -1,8 +1,4 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+import { getOpenAI } from "./openai";
 
 type PhraseInput = {
   type: "count" | "list" | "distribution";
@@ -12,6 +8,9 @@ type PhraseInput = {
 export async function phraseGenioResponse(
   input: PhraseInput
 ): Promise<string> {
+  const openai = getOpenAI();
+  if (!openai) return "I can’t generate phrasing right now (AI is not configured).";
+
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0.4,

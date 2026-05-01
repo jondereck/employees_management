@@ -1,5 +1,14 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+let client: OpenAI | null = null;
+
+export function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  if (!client) {
+    client = new OpenAI({ apiKey });
+  }
+
+  return client;
+}

@@ -1,13 +1,12 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+import { getOpenAI } from "./openai";
 
 export async function explainResult(
   summary: string,
   question: string
 ) {
+  const openai = getOpenAI();
+  if (!openai) return null;
+
   const prompt = `
 You are Genio, an HR assistant.
 

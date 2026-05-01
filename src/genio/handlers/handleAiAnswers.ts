@@ -1,14 +1,19 @@
-import OpenAI from "openai";
 import { streamReply } from "../utils";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+import { getOpenAI } from "../openai";
 
 export async function handleAIAnswer(
   message: string,
   context: any
 ) {
+  const openai = getOpenAI();
+  if (!openai) {
+    return streamReply(
+      "AI is not configured (missing OPENAI_API_KEY).",
+      context,
+      null
+    );
+  }
+
   const systemPrompt = `
 You are Genio, an HR assistant.
 You answer questions based on employee data context.

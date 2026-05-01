@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "./button";
 import { ImagePlus, Trash, Crosshair, Wand2, Pencil, Grid3x3, Loader2, X } from "lucide-react";
 import Image from "next/image";
-import { CldUploadWidget, type CldUploadWidgetResults } from "next-cloudinary";
+import { CldUploadWidget, type CloudinaryUploadWidgetResults } from "next-cloudinary";
 import dynamic from "next/dynamic";
 import type { Area } from "react-easy-crop";
 import { toast } from "sonner";
@@ -206,7 +206,7 @@ export default function ImageUpload({
       {!isCropping && (
         <CldUploadWidget
           uploadPreset="evo6spz1"
-          onUpload={(res: CldUploadWidgetResults) => {
+          onUpload={(res: CloudinaryUploadWidgetResults) => {
             if (res?.event === "success" && res.info && typeof res.info === "object") {
               const raw = (res.info as any).secure_url;
               if (raw) {

@@ -1,15 +1,13 @@
-import OpenAI from "openai";
 import { GenioAction } from "../type";
 import { GENIO_ACTIONS } from "./actions";
-
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+import { getOpenAI } from "../openai";
 
 export async function classifyGenioIntent(
   message: string
 ): Promise<GenioAction> {
+  const openai = getOpenAI();
+  if (!openai) return "unknown";
+
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0,

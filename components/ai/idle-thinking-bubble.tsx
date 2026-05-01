@@ -60,7 +60,7 @@ export function IdleThinkingBubbles({
           "hover:scale-105 hover:shadow-3xl active:scale-95",
           "cursor-pointer",
           isVisible
-            ? "opacity-100 scale-100 translate-y-0 delay-[400ms] animate-bounce-subtle"
+            ? "opacity-100 scale-100 translate-y-0 [transition-delay:400ms] animate-bounce-subtle"
             : "opacity-0 scale-50 translate-y-4"
         )}
       >
@@ -74,7 +74,7 @@ export function IdleThinkingBubbles({
         className={clsx(
           "w-4 h-4 rounded-full bg-white/80 backdrop-blur-md border border-white shadow-lg transition-all duration-500",
           isVisible
-            ? "opacity-100 scale-100 translate-y-0 delay-[200ms]"
+            ? "opacity-100 scale-100 translate-y-0 [transition-delay:200ms]"
             : "opacity-0 scale-0 translate-y-2"
         )}
       />
