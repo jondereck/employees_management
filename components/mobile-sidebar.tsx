@@ -32,6 +32,7 @@ import {
   Copy,
   Cake,
   CalendarDays,
+  Database,
   Wrench,
   GitBranch,
   CheckSquare,
@@ -92,6 +93,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     label: "Holidays",
     path: "tools/holidays",
     icon: CalendarDays,
+  },
+  backups: {
+    label: "Backup & Restore",
+    path: "tools/backups",
+    icon: Database,
   },
 };
 

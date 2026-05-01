@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckSquare,
   Copy,
+  Database,
   FileSpreadsheet,
   Fingerprint,
   Image as ImageIcon,
@@ -80,6 +81,13 @@ const TOOL_CARD_CONFIG: Array<{
     description: "View PH public holidays (e.g., 2026).",
     slug: "tools/holidays",
     icon: CalendarDays,
+  },
+  {
+    key: "backups",
+    label: "Backup & Restore",
+    description: "Create local snapshots and restore this department from a ZIP backup.",
+    slug: "tools/backups",
+    icon: Database,
   },
 ];
 

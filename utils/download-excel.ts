@@ -49,6 +49,7 @@ export type Mappings = {
 type SalaryRow = { grade: number; step: number; amount: number };
 
 type DownloadExcelParams = {
+  departmentId: string;
   selectedKeys: string[];
   columnOrder: Column[];
   statusFilter: 'all' | 'active' | 'retired';
@@ -176,6 +177,7 @@ function decideSalarySource(row: any, salaryModeField?: string): 'auto' | 'manua
 
 
 export async function generateExcelFile({
+  departmentId,
   selectedKeys,
   columnOrder,
   statusFilter,
@@ -206,7 +208,7 @@ export async function generateExcelFile({
     'createdAt', 'updatedAt', 'employeeLink', 'region'
   ];
 
-  const response = await fetch('/api/backup-employee?' + new Date().getTime(), {
+  const response = await fetch(`/api/backup-employee?departmentId=${encodeURIComponent(departmentId)}&t=${Date.now()}`, {
     cache: 'no-store',
   });
 

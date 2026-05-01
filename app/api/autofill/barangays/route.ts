@@ -2,6 +2,9 @@
 import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET() {
   const barangays = await prismadb.employee.findMany({
     distinct: ["barangay"], // 👈 Prisma distinct

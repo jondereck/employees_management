@@ -7,6 +7,7 @@ const TOOL_KEYS = [
   "org-chart",
   "approvals",
   "holidays",
+  "backups",
 ] as const;
 
 export type ToolKey = (typeof TOOL_KEYS)[number];

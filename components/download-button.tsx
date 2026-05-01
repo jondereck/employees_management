@@ -643,11 +643,11 @@ export default function DownloadStyledExcel() {
 
   // Load unique positions when modal opens
   useEffect(() => {
-    if (!modalOpen) return;
+    if (!modalOpen || !departmentId) return;
     refreshTemplates();
     (async () => {
       try {
-        const res = await fetch('/api/backup-employee?' + Date.now(), { cache: 'no-store' });
+        const res = await fetch(`/api/backup-employee?departmentId=${encodeURIComponent(departmentId)}&t=${Date.now()}`, { cache: 'no-store' });
         if (!res.ok) return;
 
         // Type the response shape we actually use
@@ -679,7 +679,7 @@ export default function DownloadStyledExcel() {
         console.error('Failed to load positions', e);
       }
     })();
-  }, [modalOpen]);
+  }, [modalOpen, departmentId]);
 
 
   // filtered positions by search
@@ -1345,6 +1345,10 @@ export default function DownloadStyledExcel() {
       toast.error('Mappings not loaded yet. Please try again.');
       return;
     }
+    if (!departmentId) {
+      toast.error('Department not found. Please refresh and try again.');
+      return;
+    }
     setLoading(true);
     const toastId = toast.loading('Generating Excel file...');
     try {
@@ -1365,6 +1369,7 @@ export default function DownloadStyledExcel() {
       }
 
       const blob = await generateExcelFile({
+        departmentId,
         selectedKeys,
         columnOrder: exportColumnOrder,
         statusFilter,
