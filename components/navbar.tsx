@@ -42,10 +42,10 @@ export const Navbar = async () => {
         <div className="flex items-center gap-2 min-w-0">
           <MobileSidebar />
           <Back />
-          <DepartmentSwitcher items={department} className="hidden min-w-0 md:flex" />
+          <DepartmentSwitcher items={department} className="hidden min-w-0 lg:flex" />
         </div>
         <div className="flex min-w-0 items-center justify-start gap-6 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:overflow-visible">
-          <MainNav className="hidden min-w-0 md:flex" />
+          <MainNav className="hidden min-w-0 lg:flex" />
         </div>
         <div className="flex items-center justify-end gap-2">
           <Notifications data={employees} />

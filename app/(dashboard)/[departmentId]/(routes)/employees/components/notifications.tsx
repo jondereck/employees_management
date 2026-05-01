@@ -64,6 +64,11 @@ const Notifications = ({ data }: NotificationsProps) => {
 
   const closeModal = () => setIsModalOpen(false);
 
+  const openNotifications = () => {
+    setIsModalOpen(true);
+    markTodaySeen();
+  };
+
   const celebrantsToday = useMemo(() => {
     return data.filter((emp) => {
       if (!emp.birthday || emp.isArchived) return false;
@@ -120,7 +125,7 @@ const Notifications = ({ data }: NotificationsProps) => {
        <>
   {/* Notification Trigger Button */}
   <button 
-    onClick={() => setIsModalOpen(true)}
+    onClick={openNotifications}
     className="relative p-2 rounded-full transition-active active:scale-90"
   >
     <NotificationBell hasDot={hasDot} />
@@ -130,7 +135,7 @@ const Notifications = ({ data }: NotificationsProps) => {
     title="Notifications"
     description="Live approvals and birthdays"
     isOpen={isModalOpen}
-    onClose={() => { setIsModalOpen(false); markApprovalsSeen(); }}
+    onClose={() => setIsModalOpen(false)}
     /* Customizing the modal container to be Frosted Glass */
     className="bg-white/70 backdrop-blur-2xl border-white/40 rounded-[2.5rem] shadow-2xl"
   >
@@ -202,7 +207,7 @@ const Notifications = ({ data }: NotificationsProps) => {
   </Modal>
 </>
       ) : (
-  <Popover onOpenChange={(open) => { if (open) markApprovalsSeen(); }}>
+  <Popover onOpenChange={(open) => { if (open) markTodaySeen(); }}>
   <PopoverTrigger asChild>
     <button className="relative p-2 rounded-full transition-all hover:bg-white/20 active:scale-95">
       <NotificationBell hasDot={hasDot} />

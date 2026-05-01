@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prismadb from "@/lib/prismadb";
 
-const prisma = new PrismaClient();
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET() {
   // Fetch once each; keep payload small
   const [offices, eligibilities, employeeTypes] = await Promise.all([
-    prisma.offices.findMany({ select: { id: true, name: true } }),
-    prisma.eligibility.findMany({ select: { id: true, name: true } }),
-    prisma.employeeType.findMany({ select: { id: true, name: true } }),
+    prismadb.offices.findMany({ select: { id: true, name: true } }),
+    prismadb.eligibility.findMany({ select: { id: true, name: true } }),
+    prismadb.employeeType.findMany({ select: { id: true, name: true } }),
   ]);
 
   // Convert to { [id]: name } objects

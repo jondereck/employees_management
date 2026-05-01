@@ -133,14 +133,14 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   )}
   {...props}
 >
-  <div className="flex items-center gap-1 md:gap-2">
+  <div className="flex items-center gap-1 lg:gap-2">
     {routes.map(({ href, label, active, icon }) => (
       <button
         key={href}
         type="button"
         onClick={() => handleNavClick(href)}
         className={cn(
-          "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2 rounded-xl transition-all duration-500",
+          "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 lg:px-4 lg:py-2 rounded-xl transition-all duration-500",
           active
             ? "text-green-600 dark:text-green-400 font-bold"
             : "text-muted-foreground hover:bg-white/10 hover:text-foreground"
@@ -156,12 +156,12 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
         </span>
         
         {/* Hide text on very small screens to save space, or keep it—Liquid UI often prefers icons + thin text */}
-        <span className="relative z-10 text-sm md:text-base">{label}</span>
+        <span className="relative z-10 text-sm lg:text-base">{label}</span>
       </button>
     ))}
 
     {/* Small divider that disappears or shrinks on mobile */}
-    <div className="h-4 w-[1px] bg-white/10 mx-1 md:mx-2 flex-shrink-0" />
+    <div className="h-4 w-[1px] bg-white/10 mx-1 lg:mx-2 flex-shrink-0" />
 
     <EmployeesMenu
       manageRoute={manageRoute}
@@ -182,8 +182,8 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
         )}
       >
         {toolsSectionActive && <div className="absolute inset-0 bg-green-500/5 rounded-xl border border-green-500/20" />}
-        <Wrench className="h-4 w-4 md:h-5 md:w-5 relative z-10" />
-        <span className="text-sm md:text-base relative z-10">Tools</span>
+        <Wrench className="h-4 w-4 lg:h-5 lg:w-5 relative z-10" />
+        <span className="text-sm lg:text-base relative z-10">Tools</span>
       </button>
 
       <button
@@ -195,8 +195,8 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
         )}
       >
         {pathname === `/${departmentId}/settings` && <div className="absolute inset-0 bg-green-500/5 rounded-xl border border-green-500/20" />}
-        <Settings className="h-4 w-4 md:h-5 md:w-5 relative z-10" />
-        <span className="text-sm md:text-base relative z-10">Settings</span>
+        <Settings className="h-4 w-4 lg:h-5 lg:w-5 relative z-10" />
+        <span className="text-sm lg:text-base relative z-10">Settings</span>
       </button>
     </div>
   </div>

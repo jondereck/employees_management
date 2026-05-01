@@ -32,6 +32,7 @@ import {
   Copy,
   Cake,
   CalendarDays,
+  Database,
   Wrench,
   GitBranch,
   CheckSquare,
@@ -92,6 +93,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     label: "Holidays",
     path: "tools/holidays",
     icon: CalendarDays,
+  },
+  backups: {
+    label: "Backup & Restore",
+    path: "tools/backups",
+    icon: Database,
   },
 };
 
@@ -214,7 +220,7 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSheetOpen(true)}>
+          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSheetOpen(true)}>
             <Menu className="h-6 w-6" />
           </Button>
         </SheetTrigger>

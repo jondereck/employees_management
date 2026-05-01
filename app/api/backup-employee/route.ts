@@ -1,13 +1,27 @@
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { requireBackupAccess } from '@/lib/backups/access';
+import { backupErrorResponse } from '@/lib/backups/http';
+import prismadb from '@/lib/prismadb';
 
-const prisma = new PrismaClient();
-
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const employees = await prisma.employee.findMany({
+    const { searchParams } = new URL(req.url);
+    const departmentId = searchParams.get("departmentId");
+
+    if (!departmentId) {
+      return NextResponse.json(
+        { error: "departmentId is required" },
+        { status: 400 }
+      );
+    }
+
+    await requireBackupAccess(departmentId);
+
+    const employees = await prismadb.employee.findMany({
+      where: { departmentId },
       include: {
         offices: { select: { id: true, name: true, bioIndexCode: true } },
         employeeType: { select: { id: true, name: true, value: true } },
@@ -30,8 +44,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Backup error:", error);
-    return NextResponse.json({ error: 'Failed to generate backup' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
+    return backupErrorResponse(error);
   }
 }
