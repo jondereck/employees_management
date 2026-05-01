@@ -1,6 +1,22 @@
 import { Cake, ChevronRight } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import usePreviewModal from "../../../(frontend)/view/hooks/use-preview-modal";
 import { EmployeesColumn } from "../columns";
+
+const getBirthdayPronoun = (gender?: string | null) => {
+  const normalizedGender = gender?.trim().toLowerCase();
+
+  if (normalizedGender === "male") return "his";
+  if (normalizedGender === "female") return "her";
+
+  return "their";
+};
+
+const getEmployeeInitials = (emp: EmployeesColumn) =>
+  `${emp.firstName?.[0] ?? ""}${emp.lastName?.[0] ?? ""}`.toUpperCase() || "BD";
+
+const getEmployeeImageUrl = (emp: EmployeesColumn) =>
+  emp.images?.find((image) => image.url?.trim())?.url;
 
 export const TodaysBirthdays = ({ celebrantsToday, closeParentModal }: { celebrantsToday: EmployeesColumn[]; closeParentModal?: () => void; }) => {
   const handleOpenPreview = (emp: EmployeesColumn) => {
@@ -26,9 +42,16 @@ export const TodaysBirthdays = ({ celebrantsToday, closeParentModal }: { celebra
             {/* Avatar with Celebration Ring */}
             <div className="relative shrink-0">
               <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-pink-500 via-purple-500 to-orange-400 p-[2px] animate-gradient-xy">
-                <div className="flex h-full w-full items-center justify-center rounded-full bg-white text-[11px] font-black text-slate-800">
-                  {emp.firstName[0]}{emp.lastName[0]}
-                </div>
+                <Avatar className="h-full w-full border-2 border-white bg-white">
+                  <AvatarImage
+                    src={getEmployeeImageUrl(emp)}
+                    alt={`${emp.firstName} ${emp.lastName}`}
+                    className="object-cover"
+                  />
+                  <AvatarFallback className="bg-white text-[11px] font-black text-slate-800">
+                    {getEmployeeInitials(emp)}
+                  </AvatarFallback>
+                </Avatar>
               </div>
               {/* Miniature Birthday Icon Badge */}
               <div className="absolute -bottom-1 -right-1 rounded-full bg-white p-1 shadow-sm border border-slate-100">
@@ -42,7 +65,7 @@ export const TodaysBirthdays = ({ celebrantsToday, closeParentModal }: { celebra
                 {emp.firstName} {emp.lastName}
               </span>
               <span className="text-[10px] font-black uppercase tracking-widest text-pink-500/80">
-                {"It's their day! 🎂"}
+                {`It’s ${getBirthdayPronoun(emp.gender)} day! 🎂`}
               </span>
             </div>
           </button>

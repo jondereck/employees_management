@@ -64,6 +64,11 @@ const Notifications = ({ data }: NotificationsProps) => {
 
   const closeModal = () => setIsModalOpen(false);
 
+  const openNotifications = () => {
+    setIsModalOpen(true);
+    markTodaySeen();
+  };
+
   const celebrantsToday = useMemo(() => {
     return data.filter((emp) => {
       if (!emp.birthday || emp.isArchived) return false;
@@ -120,7 +125,7 @@ const Notifications = ({ data }: NotificationsProps) => {
        <>
   {/* Notification Trigger Button */}
   <button 
-    onClick={() => setIsModalOpen(true)}
+    onClick={openNotifications}
     className="relative p-2 rounded-full transition-active active:scale-90"
   >
     <NotificationBell hasDot={hasDot} />
@@ -130,12 +135,12 @@ const Notifications = ({ data }: NotificationsProps) => {
     title="Notifications"
     description="Live approvals and birthdays"
     isOpen={isModalOpen}
-    onClose={() => { setIsModalOpen(false); markApprovalsSeen(); }}
+    onClose={() => setIsModalOpen(false)}
     /* Customizing the modal container to be Frosted Glass */
     className="bg-white/70 backdrop-blur-2xl border-white/40 rounded-[2.5rem] shadow-2xl"
   >
     <div className="w-full">
-      <Tabs defaultValue="approvals" className="w-full" onValueChange={handleTabChange}>
+      <Tabs defaultValue="birthdays" className="w-full" onValueChange={handleTabChange}>
         
         {/* FROSTED TAB LIST */}
         <TabsList className="grid grid-cols-2 p-1 bg-slate-200/40 backdrop-blur-md rounded-2xl border border-white/20">
@@ -202,7 +207,7 @@ const Notifications = ({ data }: NotificationsProps) => {
   </Modal>
 </>
       ) : (
-  <Popover onOpenChange={(open) => { if (open) markApprovalsSeen(); }}>
+  <Popover onOpenChange={(open) => { if (open) markTodaySeen(); }}>
   <PopoverTrigger asChild>
     <button className="relative p-2 rounded-full transition-all hover:bg-white/20 active:scale-95">
       <NotificationBell hasDot={hasDot} />
@@ -213,7 +218,7 @@ const Notifications = ({ data }: NotificationsProps) => {
     className="w-[420px] p-0 border-white/40 bg-white/70 backdrop-blur-2xl rounded-[2rem] shadow-2xl overflow-hidden mr-4 mt-2" 
     align="end"
   >
-    <Tabs defaultValue="approvals" className="w-full" onValueChange={handleTabChange}>
+    <Tabs defaultValue="birthdays" className="w-full" onValueChange={handleTabChange}>
       {/* FROSTED TAB LIST */}
       <div className="p-4 pb-2">
         <TabsList className="grid grid-cols-2 p-1 bg-slate-200/40 backdrop-blur-md rounded-2xl border border-white/20">

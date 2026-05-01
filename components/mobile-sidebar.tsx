@@ -214,7 +214,7 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSheetOpen(true)}>
+          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSheetOpen(true)}>
             <Menu className="h-6 w-6" />
           </Button>
         </SheetTrigger>
