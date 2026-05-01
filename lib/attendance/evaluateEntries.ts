@@ -304,7 +304,7 @@ const toTitleCase = (value: string) =>
 const formatManualLabel = (manual: ManualExclusion): string => {
   if (manual.reason === "LOCAL_HOLIDAY") {
     const detail = manual.note && manual.note.length ? ` (${manual.note})` : "";
-    return `Local Holiday${detail}`;
+    return `Local Holiday`;
   }
   if (manual.reason === "LEAVE") {
     return manual.note && manual.note.length ? `Leave - ${manual.note}` : "Leave";

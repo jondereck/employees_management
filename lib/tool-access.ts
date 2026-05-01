@@ -6,6 +6,7 @@ const TOOL_KEYS = [
   "sg-range",
   "org-chart",
   "approvals",
+  "holidays",
 ] as const;
 
 export type ToolKey = (typeof TOOL_KEYS)[number];

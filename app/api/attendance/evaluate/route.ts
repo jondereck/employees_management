@@ -37,6 +37,7 @@ const ManualExclusionSchema = z
   .object({
     id: z.string().min(1),
     dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).nonempty(),
+    holidayNamesByDate: z.record(z.string()).optional(),
     scope: z.enum(["all", "offices", "employees"]),
     officeIds: z.array(z.string().min(1)).optional(),
     employeeIds: z.array(z.string().min(1)).optional(),

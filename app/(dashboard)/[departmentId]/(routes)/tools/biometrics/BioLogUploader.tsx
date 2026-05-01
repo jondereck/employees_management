@@ -1298,6 +1298,15 @@ const sanitizeManualExclusions = (value: unknown): ManualExclusion[] => {
     if (!isValidManualScope(scope)) continue;
     const reason = (entry as ManualExclusion).reason;
     if (!isValidManualReason(reason)) continue;
+    const holidayNamesByDateRaw = (entry as ManualExclusion).holidayNamesByDate;
+    const holidayNamesByDate =
+      holidayNamesByDateRaw && typeof holidayNamesByDateRaw === "object" && !Array.isArray(holidayNamesByDateRaw)
+        ? (Object.fromEntries(
+            Object.entries(holidayNamesByDateRaw as Record<string, unknown>).filter(
+              ([key, value]) => ISO_DATE_REGEX.test(key) && typeof value === "string" && value.trim().length > 0
+            )
+          ) as Record<string, string>)
+        : undefined;
     const rawDates = Array.isArray((entry as ManualExclusion).dates)
       ? (entry as ManualExclusion).dates
       : [];
@@ -1327,6 +1336,7 @@ const sanitizeManualExclusions = (value: unknown): ManualExclusion[] => {
       employeeIds,
       note,
       otEligible,
+      ...(holidayNamesByDate && Object.keys(holidayNamesByDate).length ? { holidayNamesByDate } : {}),
     });
   }
   return sortManualExclusions(sanitized);
@@ -1974,6 +1984,8 @@ function BioLogUploaderContent() {
   const [manualPeriodHydrated, setManualPeriodHydrated] = useState(false);
   const [manualExclusions, setManualExclusions] = useState<ManualExclusion[]>([]);
   const [manualExclusionsHydrated, setManualExclusionsHydrated] = useState(false);
+  const [holidayAutoLoading, setHolidayAutoLoading] = useState(false);
+  const [holidayAutoError, setHolidayAutoError] = useState<string | null>(null);
   const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicyState>(defaultOvertimePolicy);
   const [workSchedule, setWorkSchedule] = useState<WorkSchedule>(DEFAULT_WORK_SCHEDULE);
   const [templates, setTemplates] = useState<TimekeepingTemplate[]>([]);
@@ -2950,6 +2962,109 @@ function BioLogUploaderContent() {
       setManualExclusionsHydrated(true);
     }
   }, [manualExclusionStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!activePeriod) return;
+    if (!manualExclusionsHydrated) return;
+
+    let cancelled = false;
+    const prefix = `${activePeriod.year}-${pad2(activePeriod.month)}`;
+    const AUTO_NOTE = "Nager.Date";
+    const AUTO_ID = `auto-holidays-${prefix}`;
+
+    const run = async () => {
+      setHolidayAutoLoading(true);
+      setHolidayAutoError(null);
+      try {
+        const url = new URL("/api/tools/holidays", window.location.origin);
+        url.searchParams.set("country", "PH");
+        url.searchParams.set("year", String(activePeriod.year));
+
+        const response = await fetch(url.toString());
+        const payload = (await response.json().catch(() => ({}))) as any;
+        if (!response.ok) {
+          throw new Error(typeof payload?.error === "string" ? payload.error : "Failed to fetch holidays");
+        }
+
+        const holidays = Array.isArray(payload?.holidays) ? payload.holidays : [];
+        const monthHolidays = holidays.filter(
+          (holiday: any) => typeof holiday?.date === "string" && ISO_DATE_REGEX.test(holiday.date) && holiday.date.startsWith(prefix)
+        );
+
+        const holidayNamesByDate: Record<string, string> = {};
+        for (const holiday of monthHolidays) {
+          const date = holiday.date as string;
+          const name = typeof holiday?.name === "string" && holiday.name.trim().length
+            ? holiday.name.trim()
+            : typeof holiday?.localName === "string" && holiday.localName.trim().length
+              ? holiday.localName.trim()
+              : "Holiday";
+          holidayNamesByDate[date] = name;
+        }
+        const dates = Object.keys(holidayNamesByDate).sort((a, b) => a.localeCompare(b));
+
+        if (cancelled) return;
+
+        setManualExclusions((prev) => {
+          const withoutAuto = prev.filter((entry) => entry.id !== AUTO_ID);
+
+          if (!dates.length) {
+            return withoutAuto;
+          }
+
+          const existingIndex = withoutAuto.findIndex(
+            (entry) =>
+              entry.scope === "all" &&
+              entry.reason === "LOCAL_HOLIDAY" &&
+              (entry.note ?? "") === AUTO_NOTE
+          );
+
+          if (existingIndex >= 0) {
+            const existing = withoutAuto[existingIndex];
+            const mergedDates = Array.from(new Set([...(existing.dates ?? []), ...dates])).sort((a, b) =>
+              a.localeCompare(b)
+            );
+            const mergedNamesByDate = {
+              ...(existing.holidayNamesByDate ?? {}),
+              ...holidayNamesByDate,
+            };
+            const next = [...withoutAuto];
+            next[existingIndex] = {
+              ...existing,
+              id: AUTO_ID,
+              dates: mergedDates,
+              holidayNamesByDate: mergedNamesByDate,
+            };
+            return sortManualExclusions(next);
+          }
+
+          const nextEntry: ManualExclusion = {
+            id: AUTO_ID,
+            scope: "all",
+            reason: "LOCAL_HOLIDAY",
+            note: AUTO_NOTE,
+            dates,
+            holidayNamesByDate,
+          };
+
+          return sortManualExclusions([...withoutAuto, nextEntry]);
+        });
+      } catch (error: any) {
+        if (!cancelled) {
+          setHolidayAutoError(error?.message ?? "Failed to load holidays");
+        }
+      } finally {
+        if (!cancelled) setHolidayAutoLoading(false);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePeriod, manualExclusionsHydrated]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -4704,6 +4819,15 @@ const applyColumnFilters = useCallback(
               <Plus className="mr-2 h-4 w-4" /> Add exclusion
             </Button>
           </div>
+          {activePeriod ? (
+            <p className="text-xs text-muted-foreground">
+              {holidayAutoLoading
+                ? "Loading PH holidays for this period…"
+                : holidayAutoError
+                  ? `Holiday auto-exclusion unavailable: ${holidayAutoError}`
+                  : "PH public holidays are automatically excluded for this period."}
+            </p>
+          ) : null}
           {!manualExclusionsHydrated ? (
             <p className="text-xs text-muted-foreground">Loading manual exclusions…</p>
           ) : manualExclusions.length ? (
@@ -4711,6 +4835,7 @@ const applyColumnFilters = useCallback(
               {manualExclusions.map((exclusion) => {
                 const dateLabel = formatManualDateSummary(exclusion.dates);
                 const reasonLabel = formatManualReasonLabel(exclusion.reason, exclusion.note);
+                const isAutoHoliday = exclusion.id.startsWith("auto-holidays-");
                 const officeNames = (exclusion.officeIds ?? []).map(
                   (id) => manualOfficeNameMap.get(id) ?? id
                 );
@@ -4752,6 +4877,18 @@ const applyColumnFilters = useCallback(
                         )}
                         {outOfPeriod > 0 ? ` • ${outOfPeriod} out of period` : null}
                       </p>
+                      {exclusion.reason === "LOCAL_HOLIDAY" && exclusion.holidayNamesByDate ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {exclusion.dates
+                            .slice(0, 3)
+                            .map((date) => `${date} — ${exclusion.holidayNamesByDate?.[date] ?? "Holiday"}`)
+                            .join(" • ")}
+                          {exclusion.dates.length > 3 ? ` • +${exclusion.dates.length - 3} more` : null}
+                          {isAutoHoliday ? " • Auto" : null}
+                        </p>
+                      ) : isAutoHoliday ? (
+                        <p className="mt-1 text-xs text-muted-foreground">Auto</p>
+                      ) : null}
                       {effectiveOtEligible ? (
                         <Badge className="mt-1 border-emerald-500/70 bg-emerald-500/15 text-emerald-700" variant="outline">
                           OT eligible
@@ -4764,6 +4901,7 @@ const applyColumnFilters = useCallback(
                         size="sm"
                         variant="ghost"
                         onClick={() => handleEditManualExclusion(exclusion)}
+                        disabled={isAutoHoliday}
                       >
                         <Pencil className="mr-1 h-4 w-4" /> Edit
                       </Button>
@@ -4773,6 +4911,7 @@ const applyColumnFilters = useCallback(
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
                         onClick={() => handleRemoveManualExclusion(exclusion.id)}
+                        disabled={isAutoHoliday}
                       >
                         <Trash2 className="mr-1 h-4 w-4" /> Remove
                       </Button>

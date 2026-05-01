@@ -12,6 +12,7 @@ export type ManualExclusionReason =
 export type ManualExclusion = {
   id: string;
   dates: string[];
+  holidayNamesByDate?: Record<string, string>;
   scope: ManualExclusionScope;
   officeIds?: string[];
   employeeIds?: string[];

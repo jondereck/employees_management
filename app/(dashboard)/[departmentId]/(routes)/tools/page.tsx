@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import {
   BarChart3,
+  CalendarDays,
   CheckSquare,
   Copy,
   FileSpreadsheet,
@@ -72,6 +73,13 @@ const TOOL_CARD_CONFIG: Array<{
     description: "Edit & export per-office org charts",
     slug: "tools/org-chart",
     icon: GitBranch,
+  },
+  {
+    key: "holidays",
+    label: "Holidays",
+    description: "View PH public holidays (e.g., 2026).",
+    slug: "tools/holidays",
+    icon: CalendarDays,
   },
 ];
 

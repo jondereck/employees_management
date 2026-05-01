@@ -31,6 +31,7 @@ import {
   FileSpreadsheet,
   Copy,
   Cake,
+  CalendarDays,
   Wrench,
   GitBranch,
   CheckSquare,
@@ -86,6 +87,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     label: "Approval Center",
     path: "approvals",
     icon: CheckSquare,
+  },
+  holidays: {
+    label: "Holidays",
+    path: "tools/holidays",
+    icon: CalendarDays,
   },
 };
 
