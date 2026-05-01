@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Cake, ChevronRight } from "lucide-react";
 import usePreviewModal from "../../../(frontend)/view/hooks/use-preview-modal";
 import { EmployeesColumn } from "../columns";
@@ -6,6 +7,28 @@ export const TodaysBirthdays = ({ celebrantsToday, closeParentModal }: { celebra
   const handleOpenPreview = (emp: EmployeesColumn) => {
     if (closeParentModal) closeParentModal();
     usePreviewModal.getState().onOpen(emp);
+  };
+
+  const normalizeGender = (g: unknown) => String(g ?? "").trim().toLowerCase();
+
+  const resolveAvatar = (emp: EmployeesColumn) => {
+    const photoUrl = (emp.images?.[0]?.url ?? "").trim();
+    if (photoUrl) {
+      return { src: photoUrl, isExternal: true } as const;
+    }
+
+    const gender = normalizeGender((emp as any).gender);
+    if (gender === "female") return { src: "/female_placeholder.png", isExternal: false } as const;
+    if (gender === "male") return { src: "/male_placeholder.png", isExternal: false } as const;
+
+    return { src: null, isExternal: false } as const;
+  };
+
+  const birthdaySubtitle = (emp: EmployeesColumn) => {
+    const gender = normalizeGender((emp as any).gender);
+    if (gender === "female") return "It's her day! 🎂";
+    if (gender === "male") return "It's his day! 🎂";
+    return "It's their day! 🎂";
   };
 
   if (!celebrantsToday.length) {
@@ -26,8 +49,28 @@ export const TodaysBirthdays = ({ celebrantsToday, closeParentModal }: { celebra
             {/* Avatar with Celebration Ring */}
             <div className="relative shrink-0">
               <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-pink-500 via-purple-500 to-orange-400 p-[2px] animate-gradient-xy">
-                <div className="flex h-full w-full items-center justify-center rounded-full bg-white text-[11px] font-black text-slate-800">
-                  {emp.firstName[0]}{emp.lastName[0]}
+                <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-white text-[11px] font-black text-slate-800">
+                  {(() => {
+                    const avatar = resolveAvatar(emp);
+                    if (avatar.src) {
+                      return (
+                        <Image
+                          src={avatar.src}
+                          alt={`${emp.firstName} ${emp.lastName}`}
+                          fill
+                          unoptimized={avatar.isExternal}
+                          referrerPolicy={avatar.isExternal ? "no-referrer" : undefined}
+                          className="object-cover"
+                        />
+                      );
+                    }
+
+                    return (
+                      <span aria-hidden>
+                        {emp.firstName?.[0] ?? ""}{emp.lastName?.[0] ?? ""}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
               {/* Miniature Birthday Icon Badge */}
@@ -42,7 +85,7 @@ export const TodaysBirthdays = ({ celebrantsToday, closeParentModal }: { celebra
                 {emp.firstName} {emp.lastName}
               </span>
               <span className="text-[10px] font-black uppercase tracking-widest text-pink-500/80">
-                {"It's their day! 🎂"}
+                {birthdaySubtitle(emp)}
               </span>
             </div>
           </button>
