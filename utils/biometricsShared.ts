@@ -17,6 +17,8 @@ export const formatScheduleSource = (value?: string | null): string | null => {
       return "Work schedule";
     case "EXCEPTION":
       return "Exception";
+    case "OFFICE":
+      return "Office default";
     case "DEFAULT":
       return "Default";
     case "NOMAPPING":

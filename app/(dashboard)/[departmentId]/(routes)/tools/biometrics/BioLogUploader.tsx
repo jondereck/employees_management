@@ -78,6 +78,7 @@ import {
   useSummaryFilters,
   type HeadsFilterValue,
   type SummarySortField,
+  type SummaryFiltersState,
   type SortDirection,
 } from "@/hooks/use-summary-filters";
 import {
@@ -191,6 +192,14 @@ type TimekeepingTemplate = {
   metricMode: MetricMode;
 };
 
+type AnalyzerSettingItem = {
+  scope: "department" | "user";
+  key: string;
+  value: unknown;
+};
+
+type AnalyzerSaveState = "idle" | "saving" | "saved" | "error";
+
 const defaultTemplateState = {
   searchQuery: "",
   filters: {
@@ -209,6 +218,15 @@ const defaultTemplateState = {
 
 const OVERTIME_STORAGE_PREFIX = "hrps.biometrics.overtimePolicy";
 const TIMEKEEPING_TEMPLATES_STORAGE_KEY = "hrps-timekeeping-templates";
+const ANALYZER_SETTING_KEYS = {
+  fallbackSchedule: "fallback-work-schedule",
+  templates: "templates",
+  insights: "insights",
+  columns: "columns",
+  summaryFilters: "summary-filters",
+  overtime: (period: string) => `overtime-policy:${period}`,
+  manualExclusions: (period: string) => `manual-exclusions:${period}`,
+} as const;
 const WEEKDAY_OPTIONS = [
   { value: 1, label: "Monday" },
   { value: 2, label: "Tuesday" },
@@ -1799,6 +1817,31 @@ const readInsightsSettings = (): InsightsSettings => {
   }
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const parseAnalyzerSettings = (payload: unknown): Map<string, unknown> => {
+  const map = new Map<string, unknown>();
+  if (!isRecord(payload) || !Array.isArray(payload.items)) return map;
+  for (const item of payload.items) {
+    if (!isRecord(item)) continue;
+    const scope = item.scope === "department" || item.scope === "user" ? item.scope : null;
+    const key = typeof item.key === "string" ? item.key : null;
+    if (!scope || !key) continue;
+    map.set(`${scope}:${key}`, item.value);
+  }
+  return map;
+};
+
+const getSettingValue = <T,>(
+  map: Map<string, unknown>,
+  scope: "department" | "user",
+  key: string
+): T | null => {
+  const value = map.get(`${scope}:${key}`);
+  return value === undefined ? null : (value as T);
+};
+
 const computeIdentityWarnings = (
   rows: ParsedPerDayRow[],
   identityMap: Map<string, IdentityRecord>,
@@ -2009,6 +2052,12 @@ function BioLogUploaderContent() {
       : Array.isArray(rawDepartmentId)
       ? rawDepartmentId[0] ?? ""
       : "";
+  const [analyzerSettingsHydrated, setAnalyzerSettingsHydrated] = useState(false);
+  const [analyzerSaveState, setAnalyzerSaveState] = useState<AnalyzerSaveState>("idle");
+  const analyzerSaveTimeoutRef = useRef<number | null>(null);
+  const analyzerPendingSettingsRef = useRef<Map<string, AnalyzerSettingItem>>(new Map());
+  const analyzerSettingsRef = useRef<Map<string, unknown>>(new Map());
+  const analyzerLoadedDepartmentRef = useRef<string | null>(null);
   const settingsRef = useRef<InsightsSettings | null>(null);
   if (settingsRef.current === null && typeof window !== "undefined") {
     settingsRef.current = readInsightsSettings();
@@ -2078,7 +2127,6 @@ function BioLogUploaderContent() {
     setShowNoPunch,
     setMetricMode,
     setSort,
-    togglePrimarySort,
   } = useSummaryFilters();
   const {
     offices: selectedOffices,
@@ -2131,6 +2179,47 @@ function BioLogUploaderContent() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(TIMEKEEPING_TEMPLATES_STORAGE_KEY, JSON.stringify(nextTemplates));
   }, []);
+
+  const saveAnalyzerSettings = useCallback(
+    (items: AnalyzerSettingItem[]) => {
+      if (!departmentId || !items.length || !analyzerSettingsHydrated) return;
+      for (const item of items) {
+        analyzerPendingSettingsRef.current.set(`${item.scope}:${item.key}`, item);
+      }
+      if (analyzerSaveTimeoutRef.current) {
+        window.clearTimeout(analyzerSaveTimeoutRef.current);
+      }
+      setAnalyzerSaveState("saving");
+      analyzerSaveTimeoutRef.current = window.setTimeout(async () => {
+        const pendingItems = Array.from(analyzerPendingSettingsRef.current.values());
+        analyzerPendingSettingsRef.current.clear();
+        if (!pendingItems.length) return;
+        try {
+          const response = await fetch(`/api/${departmentId}/biometrics/analyzer-settings`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: pendingItems }),
+          });
+          if (!response.ok) {
+            const message = await response.text();
+            throw new Error(message || "Unable to save analyzer settings.");
+          }
+          setAnalyzerSaveState("saved");
+        } catch (error) {
+          console.warn("Failed to save analyzer settings", error);
+          setAnalyzerSaveState("error");
+        }
+      }, 500);
+    },
+    [analyzerSettingsHydrated, departmentId]
+  );
+
+  useEffect(() => {
+    if (!analyzerSettingsHydrated) return;
+    saveAnalyzerSettings([
+      { scope: "user", key: ANALYZER_SETTING_KEYS.templates, value: templates },
+    ]);
+  }, [analyzerSettingsHydrated, saveAnalyzerSettings, templates]);
 
   const handleApplyTemplate = useCallback(
     (value: string) => {
@@ -2482,11 +2571,129 @@ function BioLogUploaderContent() {
     false
   );
   const [expandedWarnings, setExpandedWarnings] = useState<Record<string, boolean>>({});
+  const [warningsCollapsed, setWarningsCollapsed] = useState(false);
   const [resolveTarget, setResolveTarget] = useState<{
     token: string;
     name: string | null;
   } | null>(null);
   const [resolveBusy, setResolveBusy] = useState(false);
+
+  useEffect(() => {
+    if (!departmentId) {
+      setAnalyzerSettingsHydrated(true);
+      return;
+    }
+    if (analyzerLoadedDepartmentRef.current === departmentId) {
+      return;
+    }
+    analyzerLoadedDepartmentRef.current = departmentId;
+
+    let active = true;
+    const controller = new AbortController();
+
+    const loadSettings = async () => {
+      try {
+        const response = await fetch(`/api/${departmentId}/biometrics/analyzer-settings`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error("Unable to load analyzer settings.");
+        }
+        const map = parseAnalyzerSettings(await response.json());
+        if (!active) return;
+        analyzerSettingsRef.current = map;
+
+        const dbTemplates = getSettingValue<unknown[]>(map, "user", ANALYZER_SETTING_KEYS.templates);
+        if (Array.isArray(dbTemplates)) {
+          setTemplates(parseTemplateArray(dbTemplates));
+        }
+
+        const dbColumns = getSettingValue<StoredColumnSettings>(map, "user", ANALYZER_SETTING_KEYS.columns);
+        if (dbColumns) {
+          const sanitized = sanitizeColumnSettings(dbColumns);
+          setColumnOrder(sanitized.order);
+          setSelectedColumnKeys(sanitized.selected);
+        }
+
+        const dbInsights = getSettingValue<InsightsSettings>(map, "user", ANALYZER_SETTING_KEYS.insights);
+        if (dbInsights?.visibleCharts?.length) {
+          const unique = Array.from(new Set(dbInsights.visibleCharts.filter(isChartId)));
+          if (unique.length) {
+            setVisibleChartsState(unique);
+          }
+        }
+
+        const dbFilters = getSettingValue<Partial<SummaryFiltersState>>(map, "user", ANALYZER_SETTING_KEYS.summaryFilters);
+        if (dbFilters && isRecord(dbFilters)) {
+          if (typeof dbFilters.search === "string") setSearch(dbFilters.search);
+          if (dbFilters.heads === "all" || dbFilters.heads === "heads" || dbFilters.heads === "nonHeads") {
+            setHeads(dbFilters.heads);
+          }
+          if (Array.isArray(dbFilters.offices)) setOffices(dbFilters.offices.filter((value): value is string => typeof value === "string"));
+          if (Array.isArray(dbFilters.employeeTypes)) setEmployeeTypes(dbFilters.employeeTypes.filter((value): value is string => typeof value === "string"));
+          if (Array.isArray(dbFilters.schedules)) setSchedules(dbFilters.schedules.filter((value): value is string => typeof value === "string"));
+          if (typeof dbFilters.showUnmatched === "boolean") setShowUnmatched(dbFilters.showUnmatched);
+          if (typeof dbFilters.showNoPunch === "boolean") setShowNoPunch(dbFilters.showNoPunch);
+          if (dbFilters.metricMode === "days" || dbFilters.metricMode === "minutes") setMetricMode(dbFilters.metricMode);
+          setSort({
+            sortBy: dbFilters.sortBy,
+            sortDir: dbFilters.sortDir,
+            secondarySortBy: dbFilters.secondarySortBy,
+            secondarySortDir: dbFilters.secondarySortDir,
+          });
+        }
+
+        const dbFallbackSchedule = getSettingValue<Partial<WorkSchedule>>(
+          map,
+          "department",
+          ANALYZER_SETTING_KEYS.fallbackSchedule
+        );
+        if (dbFallbackSchedule) {
+          setWorkSchedule(sanitizeWorkSchedule(dbFallbackSchedule));
+        }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          console.warn("Failed to load analyzer settings", error);
+        }
+      } finally {
+        if (active) setAnalyzerSettingsHydrated(true);
+      }
+    };
+
+    void loadSettings();
+
+    return () => {
+      active = false;
+      controller.abort();
+      if (analyzerSaveTimeoutRef.current) {
+        window.clearTimeout(analyzerSaveTimeoutRef.current);
+      }
+    };
+  }, [
+    departmentId,
+    setEmployeeTypes,
+    setHeads,
+    setMetricMode,
+    setOffices,
+    setSchedules,
+    setSearch,
+    setShowNoPunch,
+    setShowUnmatched,
+    setSort,
+  ]);
+
+  const handleRestoreAnalyzerDefaults = useCallback(() => {
+    const columnDefaults = sanitizeColumnSettings(null);
+    setWorkSchedule(DEFAULT_WORK_SCHEDULE);
+    setOvertimePolicy(defaultOvertimePolicy);
+    setManualExclusions([]);
+    setTemplates([]);
+    setVisibleChartsState([...DEFAULT_VISIBLE_CHARTS]);
+    setColumnOrder(columnDefaults.order);
+    setSelectedColumnKeys(columnDefaults.selected);
+    handleClearAllFilters();
+    toast({ title: "Analyzer defaults restored" });
+  }, [handleClearAllFilters, toast]);
 
   useEffect(() => {
     if (metricMode === "minutes") {
@@ -2513,6 +2720,14 @@ function BioLogUploaderContent() {
       }
     }
   }, [metricMode, secondarySortBy, setSort, sortBy]);
+
+  useEffect(() => {
+    if (!analyzerSettingsHydrated) return;
+    saveAnalyzerSettings([
+      { scope: "department", key: ANALYZER_SETTING_KEYS.fallbackSchedule, value: workSchedule },
+      { scope: "user", key: ANALYZER_SETTING_KEYS.summaryFilters, value: filters },
+    ]);
+  }, [analyzerSettingsHydrated, filters, saveAnalyzerSettings, workSchedule]);
 
   const updateVisibleCharts = useCallback(
     (updater: ChartId[] | ((prev: ChartId[]) => ChartId[])) => {
@@ -3000,6 +3215,11 @@ function BioLogUploaderContent() {
     return `hrps.biometrics.manualExclusions.${activePeriod.year}-${pad2(activePeriod.month)}`;
   }, [activePeriod]);
 
+  const activePeriodKey = useMemo(() => {
+    if (!activePeriod) return null;
+    return `${activePeriod.year}-${pad2(activePeriod.month)}`;
+  }, [activePeriod]);
+
   const overtimePolicyStorageKey = useMemo(() => {
     if (!activePeriod) return null;
     return `${OVERTIME_STORAGE_PREFIX}.${activePeriod.year}-${pad2(activePeriod.month)}`;
@@ -3014,8 +3234,17 @@ function BioLogUploaderContent() {
     }
     setManualExclusionsHydrated(false);
     try {
+      const dbValue = activePeriodKey
+        ? getSettingValue<unknown[]>(
+            analyzerSettingsRef.current,
+            "department",
+            ANALYZER_SETTING_KEYS.manualExclusions(activePeriodKey)
+          )
+        : null;
       const raw = window.localStorage.getItem(manualExclusionStorageKey);
-      if (!raw) {
+      if (Array.isArray(dbValue)) {
+        setManualExclusions(sanitizeManualExclusions(dbValue));
+      } else if (!raw) {
         setManualExclusions([]);
       } else {
         const parsed = JSON.parse(raw);
@@ -3028,7 +3257,7 @@ function BioLogUploaderContent() {
     } finally {
       setManualExclusionsHydrated(true);
     }
-  }, [manualExclusionStorageKey]);
+  }, [activePeriodKey, analyzerSettingsHydrated, manualExclusionStorageKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3039,10 +3268,19 @@ function BioLogUploaderContent() {
       } else {
         window.localStorage.setItem(manualExclusionStorageKey, JSON.stringify(manualExclusions));
       }
+      if (activePeriodKey) {
+        saveAnalyzerSettings([
+          {
+            scope: "department",
+            key: ANALYZER_SETTING_KEYS.manualExclusions(activePeriodKey),
+            value: manualExclusions,
+          },
+        ]);
+      }
     } catch (error) {
       console.warn("Failed to persist manual exclusions", error);
     }
-  }, [manualExclusionStorageKey, manualExclusions, manualExclusionsHydrated]);
+  }, [activePeriodKey, manualExclusionStorageKey, manualExclusions, manualExclusionsHydrated, saveAnalyzerSettings]);
 
   useEffect(() => {
     if (!activePeriod) {
@@ -3123,8 +3361,17 @@ function BioLogUploaderContent() {
     }
     setOvertimeHydrated(false);
     try {
+      const dbValue = activePeriodKey
+        ? getSettingValue<Partial<OvertimePolicyState>>(
+            analyzerSettingsRef.current,
+            "department",
+            ANALYZER_SETTING_KEYS.overtime(activePeriodKey)
+          )
+        : null;
       const raw = window.localStorage.getItem(overtimePolicyStorageKey);
-      if (!raw) {
+      if (dbValue) {
+        setOvertimePolicy(sanitizeOvertimePolicyState(dbValue));
+      } else if (!raw) {
         setOvertimePolicy(sanitizeOvertimePolicyState(defaultOvertimePolicy));
       } else {
         const parsed = JSON.parse(raw) as Partial<OvertimePolicyState>;
@@ -3136,7 +3383,7 @@ function BioLogUploaderContent() {
     } finally {
       setOvertimeHydrated(true);
     }
-  }, [overtimePolicyStorageKey]);
+  }, [activePeriodKey, analyzerSettingsHydrated, overtimePolicyStorageKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3148,10 +3395,23 @@ function BioLogUploaderContent() {
         mealTriggerMin: overtimePolicy.mealTriggerMin ?? null,
       });
       window.localStorage.setItem(overtimePolicyStorageKey, payload);
+      if (activePeriodKey) {
+        saveAnalyzerSettings([
+          {
+            scope: "department",
+            key: ANALYZER_SETTING_KEYS.overtime(activePeriodKey),
+            value: {
+              ...overtimePolicy,
+              mealDeductMin: overtimePolicy.mealDeductMin ?? null,
+              mealTriggerMin: overtimePolicy.mealTriggerMin ?? null,
+            },
+          },
+        ]);
+      }
     } catch (error) {
       console.warn("Failed to persist overtime policy", error);
     }
-  }, [overtimeHydrated, overtimePolicy, overtimePolicyStorageKey]);
+  }, [activePeriodKey, overtimeHydrated, overtimePolicy, overtimePolicyStorageKey, saveAnalyzerSettings]);
 
   const manualExclusionContext = useMemo(() => {
     const merged = [...manualExclusions, ...holidayExclusions];
@@ -3967,7 +4227,11 @@ const applyColumnFilters = useCallback(
       visibleCharts,
     };
     window.localStorage.setItem(INSIGHTS_SETTINGS_KEY, JSON.stringify(payload));
+    saveAnalyzerSettings([
+      { scope: "user", key: ANALYZER_SETTING_KEYS.insights, value: payload },
+    ]);
   }, [
+    saveAnalyzerSettings,
     visibleCharts,
   ]);
 
@@ -3978,7 +4242,10 @@ const applyColumnFilters = useCallback(
       selected: selectedColumnKeys,
     };
     window.localStorage.setItem(EXPORT_COLUMNS_STORAGE_KEY, JSON.stringify(payload));
-  }, [columnOrder, selectedColumnKeys]);
+    saveAnalyzerSettings([
+      { scope: "user", key: ANALYZER_SETTING_KEYS.columns, value: payload },
+    ]);
+  }, [columnOrder, saveAnalyzerSettings, selectedColumnKeys]);
 
   const handleToggleExportColumn = useCallback(
     (key: SummaryColumnKey, nextChecked: boolean) => {
@@ -4325,9 +4592,13 @@ const applyColumnFilters = useCallback(
 
   const handleSort = useCallback(
     (field: SummarySortField) => {
-      togglePrimarySort(field);
+      setSort({
+        sortBy: field,
+        sortDir: sortBy === field && sortDir === "desc" ? "asc" : "desc",
+        secondarySortBy: null,
+      });
     },
-    [togglePrimarySort]
+    [setSort, sortBy, sortDir]
   );
 
   
@@ -5452,11 +5723,24 @@ const applyColumnFilters = useCallback(
           variant={aggregatedWarningLevel === "warning" ? "destructive" : "default"}
         >
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>
-            {aggregatedWarningLevel === "warning"
-              ? "Warnings detected"
-              : "Heads up"}
+          <AlertTitle className="flex items-center justify-between gap-3">
+            <span>
+              {aggregatedWarningLevel === "warning"
+                ? "Warnings detected"
+                : "Heads up"}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setWarningsCollapsed((current) => !current)}
+              aria-expanded={!warningsCollapsed}
+            >
+              {warningsCollapsed ? "Show" : "Hide"}
+            </Button>
           </AlertTitle>
+          {!warningsCollapsed ? (
           <AlertDescription>
             <div className="space-y-2">
               {aggregatedWarnings.map((warning) => {
@@ -5529,6 +5813,7 @@ const applyColumnFilters = useCallback(
               })}
             </div>
           </AlertDescription>
+          ) : null}
         </Alert>
       )}
 
@@ -5599,6 +5884,26 @@ const applyColumnFilters = useCallback(
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">Per-Employee Summary</h2>
               <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={analyzerSaveState === "error" ? "destructive" : "outline"}
+                  className="h-9"
+                >
+                  {analyzerSaveState === "saving"
+                    ? "Saving settings"
+                    : analyzerSaveState === "saved"
+                    ? "Settings saved"
+                    : analyzerSaveState === "error"
+                    ? "Settings not saved"
+                    : "Settings ready"}
+                </Badge>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="inline-flex items-center gap-2"
+                  onClick={handleRestoreAnalyzerDefaults}
+                >
+                  Restore defaults
+                </Button>
                 <Button
                   type="button"
                   variant="outline"

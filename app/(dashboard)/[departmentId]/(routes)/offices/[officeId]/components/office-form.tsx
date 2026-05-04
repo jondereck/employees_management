@@ -19,6 +19,7 @@ import { useOrigin } from "@/hooks/use-origin";
 import ImageUpload from "@/components/ui/image-upload";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AutoField } from "../../../employees/components/autofill";
+import TimekeepingDefaultsSection from "./timekeeping-defaults";
 
 
 const formSchema = z.object({
@@ -246,6 +247,11 @@ export const OfficeForm = ({
         </form>
       </Form>
       <Separator />
+      {initialData ? (
+        <div className="pt-6">
+          <TimekeepingDefaultsSection />
+        </div>
+      ) : null}
     </>
   );
 }

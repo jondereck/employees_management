@@ -77,10 +77,8 @@ const SummaryFiltersBar = ({
     filters,
     setSearch,
     setHeads,
-    toggleOffice,
     setOffices,
     clearOffices,
-    toggleEmployeeType,
     setEmployeeTypes,
     clearEmployeeTypes,
     toggleSchedule,
@@ -109,8 +107,19 @@ const SummaryFiltersBar = ({
     };
   }, [filters.search, searchInput, setSearch]);
 
-  const officeSelectedSet = useMemo(() => new Set(filters.offices), [filters.offices]);
-  const employeeTypeSelectedSet = useMemo(() => new Set(filters.employeeTypes), [filters.employeeTypes]);
+  const officeSelectedSet = useMemo(
+    () => new Set(filters.offices.length ? filters.offices : officeOptions.map((option) => option.key)),
+    [filters.offices, officeOptions]
+  );
+  const employeeTypeSelectedSet = useMemo(
+    () =>
+      new Set(
+        filters.employeeTypes.length
+          ? filters.employeeTypes
+          : employeeTypeOptions.map((option) => option.value)
+      ),
+    [employeeTypeOptions, filters.employeeTypes]
+  );
   const scheduleSelectedSet = useMemo(() => new Set(filters.schedules), [filters.schedules]);
 
   const sortSummary = useMemo(() => {
@@ -181,6 +190,36 @@ const SummaryFiltersBar = ({
   const handleSecondaryDirectionChange = (value: SortDirection) => {
     if (!filters.secondarySortBy) return;
     setSort({ secondarySortDir: value });
+  };
+
+  const handleOfficeToggle = (key: string) => {
+    if (!filters.offices.length) {
+      setOffices(officeOptions.map((option) => option.key).filter((value) => value !== key));
+      return;
+    }
+    const next = filters.offices.includes(key)
+      ? filters.offices.filter((value) => value !== key)
+      : [...filters.offices, key];
+    if (next.length === officeOptions.length) {
+      clearOffices();
+    } else {
+      setOffices(next);
+    }
+  };
+
+  const handleEmployeeTypeToggle = (value: string) => {
+    if (!filters.employeeTypes.length) {
+      setEmployeeTypes(employeeTypeOptions.map((option) => option.value).filter((item) => item !== value));
+      return;
+    }
+    const next = filters.employeeTypes.includes(value)
+      ? filters.employeeTypes.filter((item) => item !== value)
+      : [...filters.employeeTypes, value];
+    if (next.length === employeeTypeOptions.length) {
+      clearEmployeeTypes();
+    } else {
+      setEmployeeTypes(next);
+    }
   };
 
   return (
@@ -277,7 +316,7 @@ const SummaryFiltersBar = ({
             <p className="text-xs text-muted-foreground">
               {filters.employeeTypes.length
                 ? `${filters.employeeTypes.length} selected`
-                : "All types"}
+                : "All types selected"}
             </p>
             <Command shouldFilter>
               <CommandInput placeholder="Search employee types…" aria-label="Search employee types" />
@@ -289,7 +328,7 @@ const SummaryFiltersBar = ({
                     return (
                       <CommandItem
                         key={option.value}
-                        onSelect={() => toggleEmployeeType(option.value)}
+                        onSelect={() => handleEmployeeTypeToggle(option.value)}
                         className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm"
                         aria-selected={checked}
                       >
@@ -345,7 +384,7 @@ const SummaryFiltersBar = ({
                     return (
                       <CommandItem
                         key={option.key}
-                        onSelect={() => toggleOffice(option.key)}
+                        onSelect={() => handleOfficeToggle(option.key)}
                         className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm"
                         aria-selected={checked}
                       >

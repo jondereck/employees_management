@@ -34,11 +34,13 @@ export default async function DashboardLayout({
 
   return (
     <>
-      <div>
+      <div className="flex min-h-screen flex-col">
         <ModalProvider />
         <Navbar />
-       <AskGenio departmentId={params.departmentId}    />
-        {children}
+        <AskGenio departmentId={params.departmentId} />
+        <main className="min-w-0 flex-1">
+          {children}
+        </main>
         <PublicFooter
           systemName="HR Profiling System"
           systemLogo={{ src: "/icon-192x192.png", alt: "HRPS Logo" }}
@@ -53,6 +55,8 @@ export default async function DashboardLayout({
             height: 18,
             href: "https://jdnifas.netlify.app/" // ← opened when tapped/clicked
           }}
+          position="static"
+          className="shrink-0"
           dense={true}                  // compact mobile (default true)
           showYearOnMobile={true}      // hide © on very small screens
           

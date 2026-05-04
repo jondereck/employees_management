@@ -506,7 +506,12 @@ export async function evaluateAttendanceEntries(
 
   for (const row of entries) {
     const internalEmployeeId = resolveInternalId(row, bioToInternal);
-    const scheduleRecord = resolveScheduleForDate(internalEmployeeId, row.dateISO, maps);
+    const resolvedEmployeeId = internalEmployeeId ?? row.resolvedEmployeeId ?? null;
+    const details = resolvedEmployeeId ? employeeMetaById.get(resolvedEmployeeId) ?? null : null;
+    const officeId = details?.officeId ?? row.officeId ?? null;
+    const officeName = details?.officeName ?? row.officeName ?? null;
+    const employeeType = details?.employeeType ?? null;
+    const scheduleRecord = resolveScheduleForDate(internalEmployeeId, officeId, row.dateISO, maps);
     const normalizedBase = normalizeSchedule(scheduleRecord);
     const scheduleSource = normalizedBase.source ?? scheduleRecord.source ?? "DEFAULT";
     const isDefaultSchedule = scheduleSource === "DEFAULT" || scheduleSource === "NOMAPPING";
@@ -544,13 +549,6 @@ export async function evaluateAttendanceEntries(
     if (evaluation.weeklyPatternApplied && internalEmployeeId) {
       weeklyPatternByEmployee.set(internalEmployeeId, true);
     }
-
-    const resolvedEmployeeId = internalEmployeeId ?? row.resolvedEmployeeId ?? null;
-
-    const details = resolvedEmployeeId ? employeeMetaById.get(resolvedEmployeeId) ?? null : null;
-    const officeId = details?.officeId ?? row.officeId ?? null;
-    const officeName = details?.officeName ?? row.officeName ?? null;
-    const employeeType = details?.employeeType ?? null;
 
     const exception = internalEmployeeId
       ? maps.exceptionsByEmployeeDate.get(`${internalEmployeeId}::${row.dateISO}`) ?? null

@@ -1129,6 +1129,10 @@ const resolveScheduleSourceForAggregate = (
     return "NOMAPPING";
   }
 
+  if (entry.scheduleSourceSet.has("OFFICE")) {
+    return "OFFICE";
+  }
+
   if (options?.schedulePresenceByEmployee && entry.resolvedEmployeeId) {
     const hasSchedule = options.schedulePresenceByEmployee.get(entry.resolvedEmployeeId) ?? false;
     if (hasSchedule || entry.weeklyPatternDays > 0) {

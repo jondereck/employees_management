@@ -1,5 +1,5 @@
 import { addDays, startOfDay } from "date-fns";
-import { ScheduleException, WorkSchedule } from "@prisma/client";
+import { OfficeWorkSchedule, ScheduleException, WorkSchedule } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import type { Schedule, ScheduleFlex, ScheduleFixed, ScheduleShift } from "@/utils/evaluateDay";
@@ -9,7 +9,7 @@ import {
   type WeeklyExclusionEvaluation,
 } from "@/lib/weeklyExclusions";
 
-export type ScheduleSource = "EXCEPTION" | "WORKSCHEDULE" | "DEFAULT" | "NOMAPPING";
+export type ScheduleSource = "EXCEPTION" | "WORKSCHEDULE" | "OFFICE" | "DEFAULT" | "NOMAPPING";
 
 export type NormalizedSchedule = Schedule & { source: ScheduleSource };
 
@@ -35,6 +35,7 @@ type DefaultSchedule = {
 type ScheduleLookupResult =
   | (ScheduleException & { source: "EXCEPTION" })
   | (WorkSchedule & { source: "WORKSCHEDULE" })
+  | (OfficeWorkSchedule & { source: "OFFICE" })
   | DefaultSchedule;
 
 const asHHMM = (value: string | null | undefined, fallback: string): string => {
@@ -103,12 +104,13 @@ export async function getScheduleMapsForMonth(
   if (!internalEmployeeIds.length) {
     return {
       schedulesByEmployee: new Map<string, WorkSchedule[]>(),
+      officeSchedulesByOffice: new Map<string, OfficeWorkSchedule[]>(),
       exceptionsByEmployeeDate: new Map<string, ScheduleException>(),
       weeklyExclusionsByEmployee: new Map<string, WeeklyExclusionEvaluation[]>(),
     };
   }
 
-  const [schedules, exceptions, weeklyExclusions] = await Promise.all([
+  const [schedules, officeSchedules, exceptions, weeklyExclusions] = await Promise.all([
     prisma.workSchedule.findMany({
       where: {
         employeeId: { in: internalEmployeeIds },
@@ -116,6 +118,20 @@ export async function getScheduleMapsForMonth(
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: window.from } }],
       },
       orderBy: [{ employeeId: "asc" }, { effectiveFrom: "desc" }],
+    }),
+    prisma.officeWorkSchedule.findMany({
+      where: {
+        effectiveFrom: { lte: window.to },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: window.from } }],
+        office: {
+          employee: {
+            some: {
+              id: { in: internalEmployeeIds },
+            },
+          },
+        },
+      },
+      orderBy: [{ officeId: "asc" }, { effectiveFrom: "desc" }],
     }),
     prisma.scheduleException.findMany({
       where: {
@@ -143,6 +159,16 @@ export async function getScheduleMapsForMonth(
     list.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
   }
 
+  const officeSchedulesByOffice = new Map<string, OfficeWorkSchedule[]>();
+  for (const schedule of officeSchedules) {
+    const list = officeSchedulesByOffice.get(schedule.officeId) ?? [];
+    list.push(schedule);
+    officeSchedulesByOffice.set(schedule.officeId, list);
+  }
+  for (const list of officeSchedulesByOffice.values()) {
+    list.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
+  }
+
   const exceptionsByEmployeeDate = new Map<string, ScheduleException>();
   for (const exception of exceptions) {
     const key = `${exception.employeeId}::${toDateKey(exception.date)}`;
@@ -159,14 +185,16 @@ export async function getScheduleMapsForMonth(
     list.sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime());
   }
 
-  return { schedulesByEmployee, exceptionsByEmployeeDate, weeklyExclusionsByEmployee };
+  return { schedulesByEmployee, officeSchedulesByOffice, exceptionsByEmployeeDate, weeklyExclusionsByEmployee };
 }
 
 export function resolveScheduleForDate(
   internalEmployeeId: string | null,
+  officeId: string | null,
   dateISO: string,
   maps: {
     schedulesByEmployee: Map<string, WorkSchedule[]>;
+    officeSchedulesByOffice?: Map<string, OfficeWorkSchedule[]>;
     exceptionsByEmployeeDate: Map<string, ScheduleException>;
     weeklyExclusionsByEmployee?: Map<string, WeeklyExclusionEvaluation[]>;
   }
@@ -191,6 +219,22 @@ export function resolveScheduleForDate(
     });
     if (match) {
       return { ...match, source: "WORKSCHEDULE" };
+    }
+  }
+
+  if (officeId) {
+    const officeList = maps.officeSchedulesByOffice?.get(officeId) ?? [];
+    if (officeList.length) {
+      const dayStart = startOfDay(new Date(`${dateISO}T00:00:00Z`));
+      const dayEnd = addDays(dayStart, 1);
+      const match = officeList.find((schedule) => {
+        const effectiveFrom = schedule.effectiveFrom;
+        const effectiveTo = schedule.effectiveTo;
+        return effectiveFrom <= dayEnd && (!effectiveTo || effectiveTo >= dayStart);
+      });
+      if (match) {
+        return { ...match, source: "OFFICE" };
+      }
     }
   }
 
