@@ -36,7 +36,7 @@ export default async function DashboardLayout({
     <>
       <div className="flex min-h-screen flex-col">
         <ModalProvider />
-        <Navbar />
+        <Navbar departmentId={params.departmentId} />
         <AskGenio departmentId={params.departmentId} />
         <main className="min-w-0 flex-1">
           {children}

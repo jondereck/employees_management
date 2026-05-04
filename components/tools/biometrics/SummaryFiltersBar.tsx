@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 import {
+  NO_SUMMARY_FILTER_SELECTION,
   type HeadsFilterValue,
   type SortDirection,
   type SummarySortField,
@@ -108,13 +109,22 @@ const SummaryFiltersBar = ({
   }, [filters.search, searchInput, setSearch]);
 
   const officeSelectedSet = useMemo(
-    () => new Set(filters.offices.length ? filters.offices : officeOptions.map((option) => option.key)),
+    () =>
+      new Set(
+        filters.offices.includes(NO_SUMMARY_FILTER_SELECTION)
+          ? []
+          : filters.offices.length
+          ? filters.offices
+          : officeOptions.map((option) => option.key)
+      ),
     [filters.offices, officeOptions]
   );
   const employeeTypeSelectedSet = useMemo(
     () =>
       new Set(
-        filters.employeeTypes.length
+        filters.employeeTypes.includes(NO_SUMMARY_FILTER_SELECTION)
+          ? []
+          : filters.employeeTypes.length
           ? filters.employeeTypes
           : employeeTypeOptions.map((option) => option.value)
       ),
@@ -193,6 +203,10 @@ const SummaryFiltersBar = ({
   };
 
   const handleOfficeToggle = (key: string) => {
+    if (filters.offices.includes(NO_SUMMARY_FILTER_SELECTION)) {
+      setOffices([key]);
+      return;
+    }
     if (!filters.offices.length) {
       setOffices(officeOptions.map((option) => option.key).filter((value) => value !== key));
       return;
@@ -208,6 +222,10 @@ const SummaryFiltersBar = ({
   };
 
   const handleEmployeeTypeToggle = (value: string) => {
+    if (filters.employeeTypes.includes(NO_SUMMARY_FILTER_SELECTION)) {
+      setEmployeeTypes([value]);
+      return;
+    }
     if (!filters.employeeTypes.length) {
       setEmployeeTypes(employeeTypeOptions.map((option) => option.value).filter((item) => item !== value));
       return;
@@ -252,7 +270,9 @@ const SummaryFiltersBar = ({
             ) : null}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[320px] space-y-4 p-4">
+        <PopoverContent align="start" className="w-[min(92vw,760px)] p-4">
+          <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="space-y-4">
           <div className="space-y-2">
             <p className="text-sm font-medium">Head status</p>
             <Select value={filters.heads} onValueChange={handleHeadsChange}>
@@ -294,19 +314,47 @@ const SummaryFiltersBar = ({
           <Separator />
 
           <div className="space-y-2">
+            <p className="text-sm font-medium">Metric mode</p>
+            <div className="inline-flex overflow-hidden rounded-md border">
+              <Button
+                type="button"
+                variant={filters.metricMode === "days" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none"
+                aria-pressed={filters.metricMode === "days"}
+                onClick={() => setMetricMode("days")}
+              >
+                Days %
+              </Button>
+              <Button
+                type="button"
+                variant={filters.metricMode === "minutes" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none"
+                aria-pressed={filters.metricMode === "minutes"}
+                onClick={() => setMetricMode("minutes")}
+              >
+                Minutes
+              </Button>
+            </div>
+          </div>
+          </div>
+
+          <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">Employee Type</p>
               <div className="flex items-center gap-1">
                 {filters.employeeTypes.length ? (
-                  <Button variant="ghost" size="sm" onClick={clearEmployeeTypes}>
+                  <Button variant="ghost" size="sm" onClick={() => setEmployeeTypes([NO_SUMMARY_FILTER_SELECTION])}>
                     Clear
                   </Button>
                 ) : null}
-                {employeeTypeOptions.length && filters.employeeTypes.length < employeeTypeOptions.length ? (
+                {(filters.employeeTypes.includes(NO_SUMMARY_FILTER_SELECTION) ||
+                  (filters.employeeTypes.length > 0 && filters.employeeTypes.length < employeeTypeOptions.length)) ? (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setEmployeeTypes(employeeTypeOptions.map((option) => option.value))}
+                    onClick={clearEmployeeTypes}
                   >
                     Select all
                   </Button>
@@ -315,7 +363,9 @@ const SummaryFiltersBar = ({
             </div>
             <p className="text-xs text-muted-foreground">
               {filters.employeeTypes.length
-                ? `${filters.employeeTypes.length} selected`
+                ? filters.employeeTypes.includes(NO_SUMMARY_FILTER_SELECTION)
+                  ? "None selected"
+                  : `${filters.employeeTypes.length} selected`
                 : "All types selected"}
             </p>
             <Command shouldFilter>
@@ -352,28 +402,34 @@ const SummaryFiltersBar = ({
             </Command>
           </div>
 
-          <Separator />
-
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">Offices</p>
               <div className="flex items-center gap-1">
                 {filters.offices.length ? (
-                  <Button variant="ghost" size="sm" onClick={clearOffices}>
+                  <Button variant="ghost" size="sm" onClick={() => setOffices([NO_SUMMARY_FILTER_SELECTION])}>
                     Clear
                   </Button>
                 ) : null}
-                {filters.offices.length < officeOptions.length ? (
+                {(filters.offices.includes(NO_SUMMARY_FILTER_SELECTION) ||
+                  (filters.offices.length > 0 && filters.offices.length < officeOptions.length)) ? (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setOffices(officeOptions.map((o) => o.key))}
+                    onClick={clearOffices}
                   >
                     Select all
                   </Button>
                 ) : null}
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {filters.offices.length
+                ? filters.offices.includes(NO_SUMMARY_FILTER_SELECTION)
+                  ? "None selected"
+                  : `${filters.offices.length} selected`
+                : "All offices selected"}
+            </p>
             <Command shouldFilter>
               <CommandInput placeholder="Search offices…" aria-label="Search offices" />
               <CommandList className="max-h-48">
@@ -409,33 +465,6 @@ const SummaryFiltersBar = ({
               </CommandList>
             </Command>
           </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Metric mode</p>
-            <div className="inline-flex overflow-hidden rounded-md border">
-              <Button
-                type="button"
-                variant={filters.metricMode === "days" ? "default" : "ghost"}
-                size="sm"
-                className="rounded-none"
-                aria-pressed={filters.metricMode === "days"}
-                onClick={() => setMetricMode("days")}
-              >
-                Days %
-              </Button>
-              <Button
-                type="button"
-                variant={filters.metricMode === "minutes" ? "default" : "ghost"}
-                size="sm"
-                className="rounded-none"
-                aria-pressed={filters.metricMode === "minutes"}
-                onClick={() => setMetricMode("minutes")}
-              >
-                Minutes
-              </Button>
-            </div>
           </div>
         </PopoverContent>
       </Popover>

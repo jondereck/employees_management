@@ -1,11 +1,11 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { MetricMode } from "@/app/(dashboard)/[departmentId]/(routes)/tools/biometrics/insights-types";
 
 const STORAGE_KEY_PREFIX = "bio-summary-filters-v1";
+export const NO_SUMMARY_FILTER_SELECTION = "__none__";
 
 const QUERY_KEYS = {
   search: "pe-search",
@@ -268,125 +268,48 @@ export type UseSummaryFilters = {
     secondarySortBy: SummarySortField | null;
     secondarySortDir: SortDirection;
   }>) => void;
+  replaceFilters: (values: Partial<SummaryFiltersState>) => void;
   togglePrimarySort: (field: SummarySortField) => void;
 };
 
 // Internal implementation used by the Provider and as a fallback when no Provider is mounted
 const useSummaryFiltersInternal = (): UseSummaryFilters => {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const searchParamsString = searchParams.toString();
-  const params = useMemo(() => new URLSearchParams(searchParamsString), [searchParamsString]);
-  const storageKey = useMemo(() => `${STORAGE_KEY_PREFIX}:${pathname}`, [pathname]);
+  const storageKeyRef = useRef(`${STORAGE_KEY_PREFIX}:summary`);
+  const [filters, setFiltersState] = useState<SummaryFiltersState>(DEFAULT_SUMMARY_FILTERS);
 
-  const [storedFilters, setStoredFilters] = useState<SummaryFiltersState | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  const persistFilters = useCallback((next: SummaryFiltersState) => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(storageKeyRef.current, JSON.stringify(next));
+    } catch (error) {
+      console.warn("Failed to persist summary filters", error);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    storageKeyRef.current = `${STORAGE_KEY_PREFIX}:${window.location.pathname}`;
     try {
-      const raw = window.localStorage.getItem(storageKey);
-      if (!raw) {
-        setStoredFilters(null);
-      } else {
+      const raw = window.localStorage.getItem(storageKeyRef.current);
+      if (raw) {
         const parsed = JSON.parse(raw) as Partial<SummaryFiltersState>;
-        setStoredFilters(normalizeFilters({ ...DEFAULT_SUMMARY_FILTERS, ...parsed }));
+        setFiltersState(normalizeFilters({ ...DEFAULT_SUMMARY_FILTERS, ...parsed }));
       }
     } catch (error) {
       console.warn("Failed to load summary filters", error);
-      setStoredFilters(null);
-    } finally {
-      setHydrated(true);
     }
-  }, [storageKey]);
-
-  const fallback = storedFilters ?? DEFAULT_SUMMARY_FILTERS;
-  const filters = useMemo(() => parseFiltersFromSearchParams(params, fallback), [fallback, params]);
-
-  const commit = useCallback(
-    (nextState: SummaryFiltersState) => {
-      const next = normalizeFilters(nextState);
-      if (filtersEqual(next, filters)) return;
-
-      setStoredFilters(next);
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch (error) {
-          console.warn("Failed to persist summary filters", error);
-        }
-      }
-
-      const nextParams = new URLSearchParams(searchParamsString);
-      for (const key of SUMMARY_QUERY_KEYS) {
-        nextParams.delete(key);
-      }
-
-      if (next.search.trim().length) {
-        nextParams.set(QUERY_KEYS.search, next.search.trim());
-      }
-      if (next.heads !== "all") {
-        nextParams.set(QUERY_KEYS.heads, HEADS_PARAM_MAP[next.heads]);
-      }
-      if (next.offices.length) {
-        next.offices.forEach((value) => {
-          nextParams.append(QUERY_KEYS.offices, value);
-        });
-      }
-      if (next.employeeTypes.length) {
-        next.employeeTypes.forEach((value) => {
-          nextParams.append(QUERY_KEYS.employeeTypes, value);
-        });
-      }
-      if (next.schedules.length) {
-        next.schedules.forEach((value) => {
-          nextParams.append(QUERY_KEYS.schedules, value);
-        });
-      }
-      if (!next.showUnmatched) {
-        nextParams.set(QUERY_KEYS.showUnmatched, "0");
-      }
-      if (next.showNoPunch) {
-        nextParams.set(QUERY_KEYS.showNoPunch, "1");
-      }
-      if (next.metricMode !== DEFAULT_SUMMARY_FILTERS.metricMode) {
-        nextParams.set(QUERY_KEYS.metric, next.metricMode);
-      }
-      if (next.sortBy !== DEFAULT_SUMMARY_FILTERS.sortBy) {
-        nextParams.set(QUERY_KEYS.sortField, next.sortBy);
-      }
-      if (next.sortDir !== DEFAULT_SUMMARY_FILTERS.sortDir) {
-        nextParams.set(QUERY_KEYS.sortDir, next.sortDir);
-      }
-      if (next.secondarySortBy) {
-        nextParams.set(QUERY_KEYS.secondaryField, next.secondarySortBy);
-        if (next.secondarySortDir !== DEFAULT_SUMMARY_FILTERS.secondarySortDir) {
-          nextParams.set(QUERY_KEYS.secondaryDir, next.secondarySortDir);
-        }
-      }
-
-      const nextQuery = nextParams.toString();
-      const target = nextQuery ? `${pathname}?${nextQuery}` : pathname;
-      router.replace(target, { scroll: false });
-    },
-    [filters, pathname, router, searchParamsString, storageKey]
-  );
-
-  useEffect(() => {
-    if (!hydrated) return;
-    if (!storedFilters) return;
-    if (hasAnyFilterInParams(params)) return;
-    if (filtersEqual(storedFilters, DEFAULT_SUMMARY_FILTERS)) return;
-    commit(storedFilters);
-  }, [commit, hydrated, params, storedFilters]);
+  }, []);
 
   const updateFilters = useCallback(
     (updater: (current: SummaryFiltersState) => SummaryFiltersState) => {
-      const next = updater(filters);
-      commit(next);
+      setFiltersState((current) => {
+        const next = normalizeFilters(updater(current));
+        if (filtersEqual(next, current)) return current;
+        persistFilters(next);
+        return next;
+      });
     },
-    [commit, filters]
+    [persistFilters]
   );
 
   const setSearch = useCallback(
@@ -539,6 +462,13 @@ const useSummaryFiltersInternal = (): UseSummaryFilters => {
     [updateFilters]
   );
 
+  const replaceFilters = useCallback(
+    (values: Partial<SummaryFiltersState>) => {
+      updateFilters((current) => ({ ...current, ...values }));
+    },
+    [updateFilters]
+  );
+
   const togglePrimarySort = useCallback(
     (field: SummarySortField) => {
       updateFilters((current) => {
@@ -573,6 +503,7 @@ const useSummaryFiltersInternal = (): UseSummaryFilters => {
     setShowNoPunch,
     setMetricMode,
     setSort,
+    replaceFilters,
     togglePrimarySort,
   };
 };

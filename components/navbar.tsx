@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import Notifications from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/notifications";
 import ApprovalsGlobalListener from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/notification/approvals-global-listerner";
-import { Employees } from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/types";
+import type { EmployeesColumn } from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/columns";
 import prismadb from "@/lib/prismadb";
 
 import Back from "./back";
@@ -14,7 +14,11 @@ import MobileSidebar from "./mobile-sidebar";
 
 
 
-export const Navbar = async () => {
+type NavbarProps = {
+  departmentId: string;
+};
+
+export const Navbar = async ({ departmentId }: NavbarProps) => {
   const { userId } = auth();
 
   if (!userId) {
@@ -27,11 +31,24 @@ export const Navbar = async () => {
     },
   })
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-
-  // Fetch employee data on the server
-  const res = await fetch(`${apiUrl}/employees`);
-  const employees: Employees[] = await res.json();
+  const employees = await prismadb.employee.findMany({
+    where: {
+      departmentId,
+    },
+    include: {
+      images: {
+        select: { id: true, url: true, createdAt: true, updatedAt: true },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      },
+      offices: true,
+      employeeType: true,
+      eligibility: true,
+      designation: { select: { id: true, name: true } },
+    },
+    orderBy: {
+      updatedAt: "desc",
+    },
+  });
 
   
 
@@ -48,7 +65,7 @@ export const Navbar = async () => {
           <MainNav className="hidden min-w-0 lg:flex" />
         </div>
         <div className="flex items-center justify-end gap-2">
-          <Notifications data={employees} />
+          <Notifications data={employees as unknown as EmployeesColumn[]} />
           <UserButton afterSignOutUrl="/" />
         </div>
       </nav>

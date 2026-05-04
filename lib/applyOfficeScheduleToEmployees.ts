@@ -23,31 +23,39 @@ export async function applyOfficeScheduleToEmployees(
     orderBy: { lastName: "asc" },
   });
 
-  let count = 0;
-  for (const employee of employees) {
-    const existing = await tx.workSchedule.findFirst({
-      where: {
-        employeeId: employee.id,
-        effectiveFrom: input.schedule.effectiveFrom,
-      },
-      select: { id: true },
-    });
-
-    if (existing) {
-      await tx.workSchedule.update({
-        where: { id: existing.id },
-        data: input.schedule,
-      });
-    } else {
-      await tx.workSchedule.create({
-        data: {
-          ...input.schedule,
-          employeeId: employee.id,
-        },
-      });
-    }
-    count += 1;
+  if (employees.length === 0) {
+    return 0;
   }
 
-  return count;
+  const employeeIds = employees.map((employee) => employee.id);
+  const existingSchedules = await tx.workSchedule.findMany({
+    where: {
+      employeeId: { in: employeeIds },
+      effectiveFrom: input.schedule.effectiveFrom,
+    },
+    select: { id: true, employeeId: true },
+  });
+
+  if (existingSchedules.length > 0) {
+    await tx.workSchedule.updateMany({
+      where: { id: { in: existingSchedules.map((schedule) => schedule.id) } },
+      data: input.schedule,
+    });
+  }
+
+  const existingEmployeeIds = new Set(
+    existingSchedules.map((schedule) => schedule.employeeId)
+  );
+  const createData = employees
+    .filter((employee) => !existingEmployeeIds.has(employee.id))
+    .map((employee) => ({
+      ...input.schedule,
+      employeeId: employee.id,
+    }));
+
+  if (createData.length > 0) {
+    await tx.workSchedule.createMany({ data: createData });
+  }
+
+  return employees.length;
 }

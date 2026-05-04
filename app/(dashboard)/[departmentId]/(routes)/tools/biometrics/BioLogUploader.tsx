@@ -74,6 +74,7 @@ import { cn } from "@/lib/utils";
 import SummaryFiltersBar from "@/components/tools/biometrics/SummaryFiltersBar";
 import {
   DEFAULT_SUMMARY_FILTERS,
+  NO_SUMMARY_FILTER_SELECTION,
   SummaryFiltersProvider,
   useSummaryFilters,
   type HeadsFilterValue,
@@ -224,6 +225,7 @@ const ANALYZER_SETTING_KEYS = {
   insights: "insights",
   columns: "columns",
   summaryFilters: "summary-filters",
+  manualPeriod: "manual-period",
   overtime: (period: string) => `overtime-policy:${period}`,
   manualExclusions: (period: string) => `manual-exclusions:${period}`,
 } as const;
@@ -2127,6 +2129,7 @@ function BioLogUploaderContent() {
     setShowNoPunch,
     setMetricMode,
     setSort,
+    replaceFilters,
   } = useSummaryFilters();
   const {
     offices: selectedOffices,
@@ -2625,22 +2628,22 @@ function BioLogUploaderContent() {
 
         const dbFilters = getSettingValue<Partial<SummaryFiltersState>>(map, "user", ANALYZER_SETTING_KEYS.summaryFilters);
         if (dbFilters && isRecord(dbFilters)) {
-          if (typeof dbFilters.search === "string") setSearch(dbFilters.search);
+          const nextFilters: Partial<SummaryFiltersState> = {};
+          if (typeof dbFilters.search === "string") nextFilters.search = dbFilters.search;
           if (dbFilters.heads === "all" || dbFilters.heads === "heads" || dbFilters.heads === "nonHeads") {
-            setHeads(dbFilters.heads);
+            nextFilters.heads = dbFilters.heads;
           }
-          if (Array.isArray(dbFilters.offices)) setOffices(dbFilters.offices.filter((value): value is string => typeof value === "string"));
-          if (Array.isArray(dbFilters.employeeTypes)) setEmployeeTypes(dbFilters.employeeTypes.filter((value): value is string => typeof value === "string"));
-          if (Array.isArray(dbFilters.schedules)) setSchedules(dbFilters.schedules.filter((value): value is string => typeof value === "string"));
-          if (typeof dbFilters.showUnmatched === "boolean") setShowUnmatched(dbFilters.showUnmatched);
-          if (typeof dbFilters.showNoPunch === "boolean") setShowNoPunch(dbFilters.showNoPunch);
-          if (dbFilters.metricMode === "days" || dbFilters.metricMode === "minutes") setMetricMode(dbFilters.metricMode);
-          setSort({
-            sortBy: dbFilters.sortBy,
-            sortDir: dbFilters.sortDir,
-            secondarySortBy: dbFilters.secondarySortBy,
-            secondarySortDir: dbFilters.secondarySortDir,
-          });
+          if (Array.isArray(dbFilters.offices)) nextFilters.offices = dbFilters.offices.filter((value): value is string => typeof value === "string");
+          if (Array.isArray(dbFilters.employeeTypes)) nextFilters.employeeTypes = dbFilters.employeeTypes.filter((value): value is string => typeof value === "string");
+          if (Array.isArray(dbFilters.schedules)) nextFilters.schedules = dbFilters.schedules.filter((value): value is string => typeof value === "string");
+          if (typeof dbFilters.showUnmatched === "boolean") nextFilters.showUnmatched = dbFilters.showUnmatched;
+          if (typeof dbFilters.showNoPunch === "boolean") nextFilters.showNoPunch = dbFilters.showNoPunch;
+          if (dbFilters.metricMode === "days" || dbFilters.metricMode === "minutes") nextFilters.metricMode = dbFilters.metricMode;
+          if (dbFilters.sortBy) nextFilters.sortBy = dbFilters.sortBy;
+          if (dbFilters.sortDir) nextFilters.sortDir = dbFilters.sortDir;
+          if (dbFilters.secondarySortBy !== undefined) nextFilters.secondarySortBy = dbFilters.secondarySortBy;
+          if (dbFilters.secondarySortDir) nextFilters.secondarySortDir = dbFilters.secondarySortDir;
+          replaceFilters(nextFilters);
         }
 
         const dbFallbackSchedule = getSettingValue<Partial<WorkSchedule>>(
@@ -2650,6 +2653,28 @@ function BioLogUploaderContent() {
         );
         if (dbFallbackSchedule) {
           setWorkSchedule(sanitizeWorkSchedule(dbFallbackSchedule));
+        }
+
+        const dbManualPeriod = getSettingValue<{
+          useManualPeriod?: boolean;
+          manualMonth?: string;
+          manualYear?: string;
+        }>(map, "user", ANALYZER_SETTING_KEYS.manualPeriod);
+        if (dbManualPeriod && isRecord(dbManualPeriod)) {
+          let nextManualMonth = typeof dbManualPeriod.manualMonth === "string" ? dbManualPeriod.manualMonth : "";
+          let nextManualYear = typeof dbManualPeriod.manualYear === "string" ? dbManualPeriod.manualYear : "";
+          const nextUseManualPeriod = typeof dbManualPeriod.useManualPeriod === "boolean"
+            ? dbManualPeriod.useManualPeriod
+            : false;
+          if (nextUseManualPeriod && (!nextManualMonth || !nextManualYear)) {
+            const current = getCurrentManualPeriod();
+            nextManualMonth = nextManualMonth || current.month;
+            nextManualYear = nextManualYear || current.year;
+          }
+          setUseManualPeriod(nextUseManualPeriod);
+          setManualMonth(nextManualMonth);
+          setManualYear(nextManualYear);
+          setManualPeriodHydrated(true);
         }
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
@@ -2671,15 +2696,7 @@ function BioLogUploaderContent() {
     };
   }, [
     departmentId,
-    setEmployeeTypes,
-    setHeads,
-    setMetricMode,
-    setOffices,
-    setSchedules,
-    setSearch,
-    setShowNoPunch,
-    setShowUnmatched,
-    setSort,
+    replaceFilters,
   ]);
 
   const handleRestoreAnalyzerDefaults = useCallback(() => {
@@ -2778,6 +2795,8 @@ function BioLogUploaderContent() {
   }, [mergeResult]);
 
   useEffect(() => {
+    if (!analyzerSettingsHydrated) return;
+    if (manualPeriodHydrated) return;
     if (typeof window === "undefined") return;
     try {
       const stored = window.localStorage.getItem(MANUAL_STORAGE_KEY);
@@ -2813,7 +2832,7 @@ function BioLogUploaderContent() {
     } finally {
       setManualPeriodHydrated(true);
     }
-  }, []);
+  }, [analyzerSettingsHydrated, manualPeriodHydrated]);
 
   useEffect(() => {
     if (!manualPeriodHydrated) return;
@@ -2825,10 +2844,21 @@ function BioLogUploaderContent() {
         manualYear,
       });
       window.localStorage.setItem(MANUAL_STORAGE_KEY, payload);
+      saveAnalyzerSettings([
+        {
+          scope: "user",
+          key: ANALYZER_SETTING_KEYS.manualPeriod,
+          value: {
+            useManualPeriod,
+            manualMonth,
+            manualYear,
+          },
+        },
+      ]);
     } catch (error) {
       console.warn("Failed to persist manual period settings", error);
     }
-  }, [manualMonth, manualPeriodHydrated, manualYear, useManualPeriod]);
+  }, [manualMonth, manualPeriodHydrated, manualYear, saveAnalyzerSettings, useManualPeriod]);
 
   useEffect(() => {
     if (!mergeResult) {
@@ -4183,6 +4213,7 @@ const applyColumnFilters = useCallback(
 
   useEffect(() => {
     if (!selectedEmployeeTypes.length) return;
+    if (selectedEmployeeTypes.includes(NO_SUMMARY_FILTER_SELECTION)) return;
     const available = new Set(employeeTypeOptions.map((option) => option.value));
     const filtered = selectedEmployeeTypes.filter((value) => available.has(value));
     if (filtered.length !== selectedEmployeeTypes.length) {
@@ -4192,6 +4223,7 @@ const applyColumnFilters = useCallback(
 
   useEffect(() => {
     if (!selectedOffices.length) return;
+    if (selectedOffices.includes(NO_SUMMARY_FILTER_SELECTION)) return;
     const available = new Set(officeOptions.map((option) => option.key));
     const filtered = selectedOffices.filter((key) => available.has(key));
     if (filtered.length !== selectedOffices.length) {
@@ -4976,8 +5008,9 @@ const applyColumnFilters = useCallback(
           <p className="text-xs font-medium text-destructive">{manualPeriodError}</p>
         ) : null}
         <Tabs defaultValue="work-schedule" className="mt-4">
-          <TabsList className="grid w-full grid-cols-2 sm:w-[360px]">
+          <TabsList className="grid w-full grid-cols-3 sm:w-[540px]">
             <TabsTrigger value="work-schedule">Work Schedule</TabsTrigger>
+            <TabsTrigger value="manual-exclusions">Manual Exclusions</TabsTrigger>
             <TabsTrigger value="overtime-policy">Overtime Policy</TabsTrigger>
           </TabsList>
           <TabsContent value="work-schedule" className="space-y-3">
@@ -5125,7 +5158,9 @@ const applyColumnFilters = useCallback(
             </div>
           </div>
         </div>
-        <div className="mt-4 space-y-3 rounded-lg border border-dashed border-muted-foreground/40 bg-background/60 p-4">
+          </TabsContent>
+          <TabsContent value="manual-exclusions" className="mt-4">
+        <div className="space-y-3 rounded-lg border border-dashed border-muted-foreground/40 bg-background/60 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold">Manual exclusions</p>
