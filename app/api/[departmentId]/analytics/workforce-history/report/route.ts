@@ -20,9 +20,9 @@ type SnapshotForReport = Awaited<ReturnType<typeof loadLatestSnapshots>>[number]
 
 function normalizeYear(value: unknown) {
   const year = Number(value);
-  const current = new Date().getFullYear();
-  if (!Number.isFinite(year)) return current;
-  return Math.min(current + 1, Math.max(1900, Math.trunc(year)));
+  const latest = Math.max(1900, new Date().getFullYear() - 1);
+  if (!Number.isFinite(year)) return latest;
+  return Math.min(latest, Math.max(1900, Math.trunc(year)));
 }
 
 function normalizePopulationMode(value: unknown): WorkforcePopulationMode {

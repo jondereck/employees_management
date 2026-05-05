@@ -28,9 +28,10 @@ export async function GET(
     const { searchParams } = new URL(req.url);
     const year = normalizeYear(searchParams.get("year"));
     const populationMode = searchParams.get("populationMode") === "all" ? "all" : "active";
+    const includeSuggestions = searchParams.get("includeSuggestions") !== "false";
     const cutoff = endOfReportYear(year);
 
-    const [offices, employeeTypes, eligibilities, employees] = await Promise.all([
+    const [offices, employeeTypes, eligibilities, employees, availableYears] = await Promise.all([
       prismadb.offices.findMany({
         where: { departmentId: params.departmentId },
         select: { id: true, name: true },
@@ -62,35 +63,15 @@ export async function GET(
         },
         orderBy: [{ isArchived: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
       }),
+      loadAvailableReportYears(params.departmentId),
     ]);
 
-    const suggestionEmployees = await loadSuggestionEmployees(params.departmentId, cutoff, populationMode);
-    const baseSuggestions = suggestionEmployees.map((employee) => ({
-      employeeId: employee.id,
-      suggestion: suggestWorkforceIndicator({
-        position: employee.position,
-        officeName: employee.officeName,
-        employeeTypeName: employee.employeeTypeName,
-      }),
-      position: employee.position,
-      officeName: employee.officeName,
-      employeeTypeName: employee.employeeTypeName,
-    }));
-
-    const baseByEmployeeId = new Map(baseSuggestions.map((entry) => [entry.employeeId, entry.suggestion]));
-
-    const aiCandidates = baseSuggestions
-      .filter((entry) => entry.suggestion.confidence === "low")
-      .map((entry) => ({
-        employeeId: entry.employeeId,
-        position: entry.position,
-        officeName: entry.officeName,
-        employeeTypeName: entry.employeeTypeName,
-      }));
-
-    const aiOverrides = await enhanceWorkforceSuggestionsWithAi(aiCandidates);
+    const suggestionEmployeeOptions = includeSuggestions
+      ? await loadSuggestionEmployeeOptions(params.departmentId, cutoff, populationMode)
+      : [];
 
     return NextResponse.json({
+      availableYears,
       offices,
       employeeTypes,
       eligibilities,
@@ -115,27 +96,7 @@ export async function GET(
           suggestionReason: suggestion.reason,
         };
       }),
-      suggestionEmployees: suggestionEmployees.map((employee) => {
-        const suggestion = aiOverrides.get(employee.id) ?? baseByEmployeeId.get(employee.id) ?? suggestWorkforceIndicator({
-          position: employee.position,
-          officeName: employee.officeName,
-          employeeTypeName: employee.employeeTypeName,
-        });
-
-        return {
-          id: employee.id,
-          name: employee.name,
-          position: employee.position,
-          isArchived: employee.isArchived,
-          officeId: employee.officeId,
-          officeName: employee.officeName,
-          employeeTypeId: employee.employeeTypeId,
-          employeeTypeName: employee.employeeTypeName,
-          suggestedIndicatorName: suggestion.indicatorName,
-          suggestionConfidence: suggestion.confidence,
-          suggestionReason: suggestion.reason,
-        };
-      }),
+      suggestionEmployees: suggestionEmployeeOptions,
     });
   } catch (error) {
     console.error("[WORKFORCE_HISTORY_OPTIONS_GET]", error);
@@ -145,9 +106,84 @@ export async function GET(
 
 function normalizeYear(value: unknown) {
   const year = Number(value);
-  const current = new Date().getFullYear();
-  if (!Number.isFinite(year)) return current;
-  return Math.min(current + 1, Math.max(1900, Math.trunc(year)));
+  const latest = getLatestCompletedReportYear();
+  if (!Number.isFinite(year)) return latest;
+  return Math.min(latest, Math.max(1900, Math.trunc(year)));
+}
+
+function getLatestCompletedReportYear() {
+  return Math.max(1900, new Date().getFullYear() - 1);
+}
+
+async function loadAvailableReportYears(departmentId: string) {
+  const latest = getLatestCompletedReportYear();
+  const historyBounds = await prismadb.employeeHistorySnapshot.aggregate({
+    where: {
+      departmentId,
+      effectiveAt: { lte: endOfReportYear(latest) },
+    },
+    _min: { effectiveAt: true },
+  });
+
+  const firstSnapshotYear = historyBounds._min.effectiveAt?.getFullYear();
+  if (!firstSnapshotYear || firstSnapshotYear > latest) return [];
+
+  const earliest = Math.max(1900, firstSnapshotYear);
+  return Array.from({ length: latest - earliest + 1 }, (_, index) => latest - index);
+}
+
+async function loadSuggestionEmployeeOptions(
+  departmentId: string,
+  cutoff: Date,
+  populationMode: "active" | "all"
+) {
+  const suggestionEmployees = await loadSuggestionEmployees(departmentId, cutoff, populationMode);
+  const baseSuggestions = suggestionEmployees.map((employee) => ({
+    employeeId: employee.id,
+    suggestion: suggestWorkforceIndicator({
+      position: employee.position,
+      officeName: employee.officeName,
+      employeeTypeName: employee.employeeTypeName,
+    }),
+    position: employee.position,
+    officeName: employee.officeName,
+    employeeTypeName: employee.employeeTypeName,
+  }));
+
+  const baseByEmployeeId = new Map(baseSuggestions.map((entry) => [entry.employeeId, entry.suggestion]));
+
+  const aiCandidates = baseSuggestions
+    .filter((entry) => entry.suggestion.confidence === "low")
+    .map((entry) => ({
+      employeeId: entry.employeeId,
+      position: entry.position,
+      officeName: entry.officeName,
+      employeeTypeName: entry.employeeTypeName,
+    }));
+
+  const aiOverrides = await enhanceWorkforceSuggestionsWithAi(aiCandidates);
+
+  return suggestionEmployees.map((employee) => {
+    const suggestion = aiOverrides.get(employee.id) ?? baseByEmployeeId.get(employee.id) ?? suggestWorkforceIndicator({
+      position: employee.position,
+      officeName: employee.officeName,
+      employeeTypeName: employee.employeeTypeName,
+    });
+
+    return {
+      id: employee.id,
+      name: employee.name,
+      position: employee.position,
+      isArchived: employee.isArchived,
+      officeId: employee.officeId,
+      officeName: employee.officeName,
+      employeeTypeId: employee.employeeTypeId,
+      employeeTypeName: employee.employeeTypeName,
+      suggestedIndicatorName: suggestion.indicatorName,
+      suggestionConfidence: suggestion.confidence,
+      suggestionReason: suggestion.reason,
+    };
+  });
 }
 
 function formatEmployeeName(lastName?: string | null, firstName?: string | null, middleName?: string | null) {

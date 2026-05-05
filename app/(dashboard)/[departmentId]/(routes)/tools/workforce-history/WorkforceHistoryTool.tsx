@@ -141,7 +141,9 @@ function toYearEndInputValue(year: number) {
 
 export default function WorkforceHistoryTool({ departmentId }: { departmentId: string }) {
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear);
+  const latestCompletedReportYear = Math.max(1900, currentYear - 1);
+  const [year, setYear] = useState(latestCompletedReportYear);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [populationMode, setPopulationMode] = useState<"active" | "all">("active");
   const [dimension, setDimension] = useState<Dimension>("employeeType");
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
@@ -164,6 +166,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
   const [suggestionSearch, setSuggestionSearch] = useState("");
   const [suggestionEffectiveAt, setSuggestionEffectiveAt] = useState(toYearEndInputValue(currentYear));
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [applyingSuggestions, setApplyingSuggestions] = useState(false);
   const [cleaningSuggestions, setCleaningSuggestions] = useState(false);
 
@@ -233,9 +236,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
     try {
       const [optionsResponse, groupsResponse] = await Promise.all([
         fetch(
-          `/api/${departmentId}/analytics/workforce-history/options?year=${encodeURIComponent(
-            String(year)
-          )}&populationMode=${encodeURIComponent(populationMode)}`
+          `/api/${departmentId}/analytics/workforce-history/options?includeSuggestions=false`
         ),
         fetch(`/api/${departmentId}/analytics/workforce-history/groups`),
       ]);
@@ -244,15 +245,22 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
 
       const options = await optionsResponse.json();
       const nextGroups = (await groupsResponse.json()) as Group[];
+      const nextAvailableYears = Array.isArray(options.availableYears)
+        ? options.availableYears.filter(
+            (value: unknown): value is number =>
+              typeof value === "number" && Number.isInteger(value) && value <= latestCompletedReportYear
+          )
+        : [];
+
+      setAvailableYears(nextAvailableYears);
+      setYear((current) => (nextAvailableYears.length && !nextAvailableYears.includes(current) ? nextAvailableYears[0] : current));
+      if (!nextAvailableYears.length) {
+        setReport(null);
+      }
       setOffices(options.offices ?? []);
       setEmployeeTypes(options.employeeTypes ?? []);
       setEligibilities(options.eligibilities ?? []);
       setEmployees(options.employees ?? []);
-      const nextSuggestionEmployees = (options.suggestionEmployees ?? []) as EmployeeOption[];
-      setSuggestionEmployees(nextSuggestionEmployees);
-      setSelectedSuggestionIds((prev) =>
-        prev.filter((id) => nextSuggestionEmployees.some((employee) => employee.id === id))
-      );
       setGroups(nextGroups);
       setSelectedGroupIds((prev) => prev.filter((id) => nextGroups.some((group) => group.id === id)));
     } catch (error) {
@@ -260,7 +268,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
     } finally {
       setLoadingSetup(false);
     }
-  }, [departmentId, populationMode, year]);
+  }, [departmentId, latestCompletedReportYear]);
 
   const runReport = useCallback(async () => {
     setLoadingReport(true);
@@ -284,6 +292,37 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
     }
   }, [departmentId, dimension, populationMode, selectedGroupIds, year]);
 
+  const loadSuggestions = useCallback(
+    async (targetYear: number, targetPopulationMode: "active" | "all", signal?: AbortSignal) => {
+      setLoadingSuggestions(true);
+      try {
+        const response = await fetch(
+          `/api/${departmentId}/analytics/workforce-history/options?year=${encodeURIComponent(
+            String(targetYear)
+          )}&populationMode=${encodeURIComponent(targetPopulationMode)}`,
+          { signal }
+        );
+        if (!response.ok) throw new Error(await response.text());
+        const options = await response.json();
+        if (signal?.aborted) return;
+
+        const nextSuggestionEmployees = (options.suggestionEmployees ?? []) as EmployeeOption[];
+        setSuggestionEmployees(nextSuggestionEmployees);
+        setSelectedSuggestionIds((prev) =>
+          prev.filter((id) => nextSuggestionEmployees.some((employee) => employee.id === id))
+        );
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        toast.error(error instanceof Error ? error.message : "Failed to load workforce history suggestions.");
+      } finally {
+        if (!signal?.aborted) {
+          setLoadingSuggestions(false);
+        }
+      }
+    },
+    [departmentId]
+  );
+
   useEffect(() => {
     void loadSetup();
   }, [loadSetup]);
@@ -293,8 +332,15 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
   }, [year]);
 
   useEffect(() => {
-    if (!loadingSetup) void runReport();
-  }, [dimension, loadingSetup, populationMode, runReport, selectedGroupIds, year]);
+    if (availableYears.includes(year)) void runReport();
+  }, [availableYears, dimension, populationMode, runReport, selectedGroupIds, year]);
+
+  useEffect(() => {
+    if (!availableYears.includes(year)) return;
+    const controller = new AbortController();
+    void loadSuggestions(year, populationMode, controller.signal);
+    return () => controller.abort();
+  }, [availableYears, loadSuggestions, populationMode, year]);
 
   const clearGroupForm = () => {
     setEditingGroupId(null);
@@ -647,14 +693,22 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="history-year">Year</Label>
-              <Input
-                id="history-year"
-                type="number"
-                min={1900}
-                max={currentYear + 1}
-                value={year}
-                onChange={(event) => setYear(Number(event.target.value) || currentYear)}
-              />
+              <Select
+                value={availableYears.includes(year) ? String(year) : ""}
+                onValueChange={(value) => setYear(Number(value))}
+                disabled={availableYears.length === 0}
+              >
+                <SelectTrigger id="history-year">
+                  <SelectValue placeholder={loadingSetup ? "Loading years" : "No years available"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableYears.map((availableYear) => (
+                    <SelectItem key={availableYear} value={String(availableYear)}>
+                      {availableYear}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -718,9 +772,6 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
               <Button type="button" onClick={runReport} disabled={loadingReport || loadingSetup}>
                 {loadingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                 Refresh
-              </Button>
-              <Button type="button" variant="outline" onClick={backfillSnapshots} disabled={loadingSetup}>
-                Baseline backfill
               </Button>
               <Button type="button" variant="outline" onClick={exportXlsx} disabled={!report}>
                 <Download className="mr-2 h-4 w-4" />
@@ -807,7 +858,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
             <CardDescription>
               {report
                 ? `${DIMENSION_LABELS[report.dimension]} breakdown, ${numberFormatter.format(report.grandTotal)} total records.`
-                : "Run a report or baseline backfill snapshots to populate results."}
+                : "Run a report to populate results. Baseline backfill is under Advanced Tools."}
             </CardDescription>
             {report?.meta?.cacheStatus ? (
               <p className="text-xs text-muted-foreground">
@@ -902,7 +953,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
                 type="button"
                 variant="outline"
                 onClick={() => setSelectedSuggestionIds(suggestedEmployees.map((employee) => employee.id))}
-                disabled={suggestedEmployees.length === 0}
+                disabled={loadingSuggestions || suggestedEmployees.length === 0}
               >
                 Select shown
               </Button>
@@ -912,7 +963,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
               <Button
                 type="button"
                 onClick={applyIndicatorSuggestions}
-                disabled={applyingSuggestions || selectedSuggestionIds.length === 0}
+                disabled={loadingSuggestions || applyingSuggestions || selectedSuggestionIds.length === 0}
               >
                 {applyingSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Apply {selectedSuggestionIds.length} suggestions
@@ -932,7 +983,13 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {suggestedEmployees.length ? (
+                    {loadingSuggestions ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                          Loading suggestions...
+                        </TableCell>
+                      </TableRow>
+                    ) : suggestedEmployees.length ? (
                       suggestedEmployees.map((employee) => (
                         <TableRow key={employee.id}>
                           <TableCell>
@@ -983,7 +1040,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
           <CardHeader>
             <CardTitle>Advanced Tools</CardTitle>
             <CardDescription>
-              Keep this collapsed unless you are fixing historical data or cleaning bad suggestion snapshots.
+              Keep this collapsed unless you are preparing baseline history, fixing historical data, or cleaning bad suggestion snapshots.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -993,9 +1050,13 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
               </summary>
               <div className="mt-3 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Use these only when historical counts look wrong. `Cleanup Applied (date)` removes suggestion snapshots for one exact date. `Cleanup Pre-hire` removes bad suggestion rows created before an employee&apos;s hire date.
+                  Use these only when setting up or repairing historical counts. Baseline backfill creates initial workforce snapshots from employee records. Cleanup tools remove bad suggestion snapshots.
                 </p>
                 <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={backfillSnapshots} disabled={loadingSetup}>
+                    {loadingSetup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Baseline backfill
+                  </Button>
                   <Button
                     type="button"
                     variant="destructive"
