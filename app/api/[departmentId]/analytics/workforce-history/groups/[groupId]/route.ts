@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import prismadb from "@/lib/prismadb";
+import { invalidateWorkforceReportCache } from "@/lib/workforce-history";
 
 async function requireDepartmentOwner(departmentId: string) {
   const { userId } = auth();
@@ -74,6 +75,8 @@ export async function PATCH(
       });
     });
 
+    await invalidateWorkforceReportCache(params.departmentId);
+
     return NextResponse.json({
       id: group.id,
       name: group.name,
@@ -102,6 +105,7 @@ export async function DELETE(
     if (!existing) return new NextResponse("Group not found", { status: 404 });
 
     await prismadb.workforceReportGroup.delete({ where: { id: params.groupId } });
+    await invalidateWorkforceReportCache(params.departmentId);
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error("[WORKFORCE_HISTORY_GROUP_DELETE]", error);

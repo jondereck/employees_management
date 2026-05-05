@@ -25,6 +25,7 @@ model Department {
   officeWorkSchedules         OfficeWorkSchedule[]
   timekeepingAnalyzerSettings TimekeepingAnalyzerSetting[]
   workforceReportGroups       WorkforceReportGroup[]
+  workforceReportCaches       WorkforceReportCache[]
 }
 
 model OrgChartVersion {
@@ -179,27 +180,29 @@ model Employee {
 }
 
 model EmployeeHistorySnapshot {
-  id             String         @id @default(cuid())
+  id             String                @id @default(cuid())
   departmentId   String
   employeeId     String
   effectiveAt    DateTime
   officeId       String?
   employeeTypeId String?
   eligibilityId  String?
-  position       String         @default("")
+  position       String                @default("")
   gender         Gender?
   maritalStatus  MaritalStatus?
-  isHead         Boolean        @default(false)
-  status         String         @default("ACTIVE")
-  source         String         @default("MANUAL")
+  isHead         Boolean               @default(false)
+  status         String                @default("ACTIVE")
+  indicatorId    String?
+  source         String                @default("MANUAL")
   note           String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  department     Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  employee       Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  office         Offices?       @relation(fields: [officeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  employeeType   EmployeeType?  @relation(fields: [employeeTypeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  eligibility    Eligibility?   @relation(fields: [eligibilityId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  department     Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  employee       Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  office         Offices?              @relation(fields: [officeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  employeeType   EmployeeType?         @relation(fields: [employeeTypeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  eligibility    Eligibility?          @relation(fields: [eligibilityId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  indicator      WorkforceReportGroup? @relation(fields: [indicatorId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([departmentId, effectiveAt])
   @@index([employeeId, effectiveAt])
@@ -207,6 +210,7 @@ model EmployeeHistorySnapshot {
   @@index([officeId])
   @@index([employeeTypeId])
   @@index([eligibilityId])
+  @@index([indicatorId])
 }
 
 model WorkforceReportGroup {
@@ -218,6 +222,7 @@ model WorkforceReportGroup {
   updatedAt    DateTime                     @updatedAt
   department   Department                   @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   offices      WorkforceReportGroupOffice[]
+  snapshots    EmployeeHistorySnapshot[]
 
   @@unique([departmentId, name])
   @@index([departmentId, sortOrder])
@@ -233,6 +238,25 @@ model WorkforceReportGroupOffice {
 
   @@unique([groupId, officeId])
   @@index([officeId])
+}
+
+model WorkforceReportCache {
+  id                String     @id @default(cuid())
+  departmentId      String
+  year              Int
+  populationMode    String
+  dimension         String
+  selectedGroupHash String
+  selectedGroupIds  Json
+  version           Int        @default(1)
+  payload           Json
+  generatedAt       DateTime   @default(now())
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  department        Department @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([departmentId, year, populationMode, dimension, selectedGroupHash, version])
+  @@index([departmentId, year])
 }
 
 model Image {

@@ -3,11 +3,17 @@ import { NextResponse } from "next/server";
 
 import prismadb from "@/lib/prismadb";
 import {
+  buildWorkforceReportGroupHash,
+  getWorkforceReportCache,
   WORKFORCE_ACTIVE_STATUS,
   WORKFORCE_DIMENSIONS,
+  WORKFORCE_OTHERS_INDICATOR,
+  WORKFORCE_REPORT_CACHE_VERSION,
   endOfReportYear,
+  ensureDefaultWorkforceIndicators,
   type WorkforceDimension,
   type WorkforcePopulationMode,
+  upsertWorkforceReportCache,
 } from "@/lib/workforce-history";
 
 type SnapshotForReport = Awaited<ReturnType<typeof loadLatestSnapshots>>[number];
@@ -60,6 +66,7 @@ async function loadLatestSnapshots(departmentId: string, cutoff: Date) {
       office: { select: { id: true, name: true } },
       employeeType: { select: { id: true, name: true } },
       eligibility: { select: { id: true, name: true } },
+      indicator: { select: { id: true, name: true } },
     },
     orderBy: [{ employeeId: "asc" }, { effectiveAt: "desc" }, { createdAt: "desc" }],
   });
@@ -111,6 +118,29 @@ export async function POST(
     const dimension = normalizeDimension(body?.dimension ?? body?.dimensions?.[0]);
     const groupIds = normalizeStringArray(body?.groupIds);
     const cutoff = endOfReportYear(year);
+    const selectedGroupHash = buildWorkforceReportGroupHash(groupIds);
+    await ensureDefaultWorkforceIndicators(params.departmentId);
+
+    const cached = await getWorkforceReportCache(
+      params.departmentId,
+      year,
+      populationMode,
+      dimension,
+      selectedGroupHash
+    );
+
+    if (cached?.payload) {
+      const payload = cached.payload as Record<string, unknown>;
+      return NextResponse.json({
+        ...payload,
+        meta: {
+          ...(payload.meta as Record<string, unknown> | undefined),
+          cacheStatus: "hit",
+          cacheGeneratedAt: cached.generatedAt?.toISOString?.() ?? null,
+          cacheVersion: WORKFORCE_REPORT_CACHE_VERSION,
+        },
+      });
+    }
 
     let groups = await prismadb.workforceReportGroup.findMany({
       where: {
@@ -133,12 +163,7 @@ export async function POST(
       a.localeCompare(b)
     );
 
-    const officeToGroup = new Map<string, string>();
-    for (const group of groups) {
-      for (const entry of group.offices) {
-        officeToGroup.set(entry.officeId, group.id);
-      }
-    }
+    const othersGroupId = groups.find((group) => group.name === WORKFORCE_OTHERS_INDICATOR)?.id;
 
     const groupRows = groups.map((group) => ({
       id: group.id,
@@ -164,14 +189,16 @@ export async function POST(
         columns.push(column);
       }
 
-      const rowId = snapshot.officeId ? officeToGroup.get(snapshot.officeId) : undefined;
+      const rowId =
+        snapshot.indicatorId ??
+        othersGroupId;
       const row = rowId ? rowsById.get(rowId) ?? ungroupedRow : ungroupedRow;
       row.counts[column] = (row.counts[column] ?? 0) + 1;
       row.total += 1;
     }
 
     const rows = [...groupRows, ungroupedRow]
-      .filter((row) => row.total > 0 || row.id !== "__UNGROUPED__")
+      .filter((row) => row.total > 0)
       .map((row) => ({
         id: row.id,
         label: row.label,
@@ -184,7 +211,7 @@ export async function POST(
     );
     const grandTotal = rows.reduce((sum, row) => sum + row.total, 0);
 
-    return NextResponse.json({
+    const responsePayload = {
       year,
       cutoff: cutoff.toISOString(),
       populationMode,
@@ -199,8 +226,23 @@ export async function POST(
         snapshotCount: snapshots.length,
         groupCount: groups.length,
         generatedAt: new Date().toISOString(),
+        cacheStatus: "recomputed",
+        cacheGeneratedAt: new Date().toISOString(),
+        cacheVersion: WORKFORCE_REPORT_CACHE_VERSION,
       },
-    });
+    };
+
+    await upsertWorkforceReportCache(
+      params.departmentId,
+      year,
+      populationMode,
+      dimension,
+      selectedGroupHash,
+      groupIds,
+      responsePayload
+    );
+
+    return NextResponse.json(responsePayload);
   } catch (error) {
     console.error("[WORKFORCE_HISTORY_REPORT_POST]", error);
     return new NextResponse("Internal error", { status: 500 });

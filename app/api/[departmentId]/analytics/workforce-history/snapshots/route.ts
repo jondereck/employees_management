@@ -3,7 +3,12 @@ import { Gender, MaritalStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import prismadb from "@/lib/prismadb";
-import { WORKFORCE_ACTIVE_STATUS, WORKFORCE_INACTIVE_STATUS } from "@/lib/workforce-history";
+import {
+  invalidateWorkforceReportCache,
+  WORKFORCE_ACTIVE_STATUS,
+  WORKFORCE_INACTIVE_STATUS,
+  resolveWorkforceIndicatorId,
+} from "@/lib/workforce-history";
 
 async function requireDepartmentOwner(departmentId: string) {
   const { userId } = auth();
@@ -63,6 +68,7 @@ export async function GET(
         office: { select: { id: true, name: true } },
         employeeType: { select: { id: true, name: true } },
         eligibility: { select: { id: true, name: true } },
+        indicator: { select: { id: true, name: true } },
       },
       orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
     });
@@ -77,6 +83,8 @@ export async function GET(
         employeeTypeName: snapshot.employeeType?.name ?? "",
         eligibilityId: snapshot.eligibilityId,
         eligibilityName: snapshot.eligibility?.name ?? "",
+        indicatorId: snapshot.indicatorId,
+        indicatorName: snapshot.indicator?.name ?? "",
         position: snapshot.position,
         gender: snapshot.gender,
         maritalStatus: snapshot.maritalStatus,
@@ -120,6 +128,11 @@ export async function POST(
     const officeId = await ensureDepartmentRecord("offices", params.departmentId, nullableString(body?.officeId));
     const employeeTypeId = await ensureDepartmentRecord("employeeType", params.departmentId, nullableString(body?.employeeTypeId));
     const eligibilityId = await ensureDepartmentRecord("eligibility", params.departmentId, nullableString(body?.eligibilityId));
+    const indicatorId = await resolveWorkforceIndicatorId(
+      params.departmentId,
+      officeId,
+      nullableString(body?.indicatorId)
+    );
 
     const snapshot = await prismadb.employeeHistorySnapshot.create({
       data: {
@@ -134,15 +147,18 @@ export async function POST(
         maritalStatus,
         isHead: Boolean(body?.isHead),
         status,
+        indicatorId,
         source: "MANUAL",
         note: nullableString(body?.note),
       },
     });
 
+    await invalidateWorkforceReportCache(params.departmentId);
+
     return NextResponse.json(snapshot);
   } catch (error) {
     console.error("[WORKFORCE_HISTORY_SNAPSHOTS_POST]", error);
     const message = error instanceof Error ? error.message : "Internal error";
-    return new NextResponse(message, { status: message.includes("department") ? 400 : 500 });
+    return new NextResponse(message, { status: message.includes("department") || message.includes("indicator") ? 400 : 500 });
   }
 }

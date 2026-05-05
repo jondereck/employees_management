@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import prismadb from "@/lib/prismadb";
+import { ensureDefaultWorkforceIndicators, invalidateWorkforceReportCache } from "@/lib/workforce-history";
 
 async function requireDepartmentOwner(departmentId: string) {
   const { userId } = auth();
@@ -40,6 +41,7 @@ export async function GET(
   try {
     const access = await requireDepartmentOwner(params.departmentId);
     if (access.error) return access.error;
+    await ensureDefaultWorkforceIndicators(params.departmentId);
 
     const groups = await prismadb.workforceReportGroup.findMany({
       where: { departmentId: params.departmentId },
@@ -99,6 +101,8 @@ export async function POST(
         offices: { include: { office: { select: { id: true, name: true } } } },
       },
     });
+
+    await invalidateWorkforceReportCache(params.departmentId);
 
     return NextResponse.json({
       id: group.id,

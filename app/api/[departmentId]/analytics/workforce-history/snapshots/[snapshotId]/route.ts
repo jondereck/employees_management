@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import prismadb from "@/lib/prismadb";
+import { invalidateWorkforceReportCache } from "@/lib/workforce-history";
 
 async function requireDepartmentOwner(departmentId: string) {
   const { userId } = auth();
@@ -31,6 +32,7 @@ export async function DELETE(
     if (!snapshot) return new NextResponse("Snapshot not found", { status: 404 });
 
     await prismadb.employeeHistorySnapshot.delete({ where: { id: params.snapshotId } });
+    await invalidateWorkforceReportCache(params.departmentId);
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error("[WORKFORCE_HISTORY_SNAPSHOT_DELETE]", error);

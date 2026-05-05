@@ -24,7 +24,19 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 type Option = { id: string; name: string };
-type EmployeeOption = { id: string; name: string; position: string; isArchived: boolean };
+type EmployeeOption = {
+  id: string;
+  name: string;
+  position: string;
+  isArchived: boolean;
+  officeId: string;
+  officeName: string;
+  employeeTypeId: string;
+  employeeTypeName: string;
+  suggestedIndicatorName: string;
+  suggestionConfidence: "high" | "medium" | "low";
+  suggestionReason: string;
+};
 type Group = { id: string; name: string; sortOrder: number; offices: Option[] };
 type Dimension =
   | "employeeType"
@@ -45,7 +57,10 @@ type ReportResult = {
   rows: Array<{ id: string; label: string; counts: Record<string, number>; total: number }>;
   totals: Record<string, number>;
   grandTotal: number;
-  meta: Record<string, unknown>;
+  meta: Record<string, unknown> & {
+    cacheStatus?: "hit" | "miss" | "recomputed";
+    cacheGeneratedAt?: string | null;
+  };
 };
 
 type Snapshot = {
@@ -54,6 +69,8 @@ type Snapshot = {
   officeName: string;
   employeeTypeName: string;
   eligibilityName: string;
+  indicatorId: string | null;
+  indicatorName: string;
   position: string;
   gender: string | null;
   maritalStatus: string | null;
@@ -75,6 +92,30 @@ const DIMENSION_LABELS: Record<Dimension, string> = {
 };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
+const INDICATOR_ALIASES: Record<string, string[]> = {
+  clerical: ["clerical", "clerical services"],
+  health: ["health", "health nutrition and population control"],
+  "it service": ["it service", "it services"],
+  janitor: ["janitor", "janitorial services"],
+  security: ["security", "security services"],
+  teacher: ["teacher", "education"],
+  technical: ["technical"],
+  trade: ["trade"],
+  others: ["others", "other"],
+};
+
+function normalizeIndicatorText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function getCanonicalIndicatorName(value: string) {
+  const normalized = normalizeIndicatorText(value);
+  return (
+    Object.entries(INDICATOR_ALIASES).find(([, aliases]) =>
+      aliases.some((alias) => normalizeIndicatorText(alias) === normalized)
+    )?.[0] ?? normalized
+  );
+}
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -115,6 +156,11 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
   const [groupSortOrder, setGroupSortOrder] = useState(0);
   const [groupOfficeIds, setGroupOfficeIds] = useState<string[]>([]);
   const [savingGroup, setSavingGroup] = useState(false);
+  const [suggestionSearch, setSuggestionSearch] = useState("");
+  const [suggestionEffectiveAt, setSuggestionEffectiveAt] = useState(toDateInputValue(new Date().toISOString()));
+  const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<string[]>([]);
+  const [applyingSuggestions, setApplyingSuggestions] = useState(false);
+  const [cleaningSuggestions, setCleaningSuggestions] = useState(false);
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
@@ -125,6 +171,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
     officeId: "",
     employeeTypeId: "",
     eligibilityId: "",
+    indicatorId: "",
     position: "",
     gender: "",
     maritalStatus: "",
@@ -135,6 +182,46 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
 
   const selectedOfficeSet = useMemo(() => new Set(groupOfficeIds), [groupOfficeIds]);
   const selectedGroupSet = useMemo(() => new Set(selectedGroupIds), [selectedGroupIds]);
+  const selectedSuggestionSet = useMemo(() => new Set(selectedSuggestionIds), [selectedSuggestionIds]);
+  const indicatorIdByName = useMemo(
+    () => new Map(groups.map((group) => [group.name.trim().toLowerCase(), group.id])),
+    [groups]
+  );
+  const indicatorByCanonicalName = useMemo(() => {
+    const map = new Map<string, Group>();
+    for (const group of groups) {
+      map.set(getCanonicalIndicatorName(group.name), group);
+    }
+    return map;
+  }, [groups]);
+  const suggestedEmployees = useMemo(() => {
+    const query = suggestionSearch.trim().toLowerCase();
+    const rows = employees
+      .map((employee) => {
+        const resolvedIndicator =
+          indicatorByCanonicalName.get(getCanonicalIndicatorName(employee.suggestedIndicatorName)) ??
+          indicatorByCanonicalName.get("others");
+
+        return {
+          ...employee,
+          suggestedIndicatorId:
+            resolvedIndicator?.id ??
+            indicatorIdByName.get(employee.suggestedIndicatorName.trim().toLowerCase()) ??
+            indicatorIdByName.get("others") ??
+            "",
+          suggestedIndicatorDisplayName: resolvedIndicator?.name ?? employee.suggestedIndicatorName,
+        };
+      })
+      .filter((employee) => employee.suggestedIndicatorId);
+
+    if (!query) return rows;
+    return rows.filter((employee) =>
+      [employee.name, employee.position, employee.officeName, employee.suggestedIndicatorName, employee.suggestedIndicatorDisplayName]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [employees, indicatorByCanonicalName, indicatorIdByName, suggestionSearch]);
 
   const loadSetup = useCallback(async () => {
     setLoadingSetup(true);
@@ -223,7 +310,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
       if (!response.ok) throw new Error(await response.text());
       clearGroupForm();
       await loadSetup();
-      toast.success("Office group saved.");
+      toast.success("Indicator saved.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save group.");
     } finally {
@@ -240,7 +327,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
       if (!response.ok) throw new Error(await response.text());
       await loadSetup();
       clearGroupForm();
-      toast.success("Office group deleted.");
+      toast.success("Indicator deleted.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete group.");
     } finally {
@@ -263,13 +350,108 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
       });
       if (!response.ok) throw new Error(await response.text());
       const result = await response.json();
-      toast.success(`Backfill complete: ${result.snapshotsCreated ?? 0} snapshots created.`);
+      toast.success(
+        `Backfill complete: ${result.snapshotsCreated ?? 0} snapshots created, ${result.snapshotsUpdated ?? 0} indicators repaired.`
+      );
       await runReport();
       if (selectedEmployeeId) await loadSnapshots(selectedEmployeeId);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Backfill failed.");
     } finally {
       setLoadingSetup(false);
+    }
+  };
+
+  const applyIndicatorSuggestions = async () => {
+    const assignments = suggestedEmployees
+      .filter((employee) => selectedSuggestionSet.has(employee.id))
+      .map((employee) => ({
+        employeeId: employee.id,
+        indicatorId: employee.suggestedIndicatorId,
+      }));
+
+    if (assignments.length === 0) {
+      toast.error("Select at least one suggested employee.");
+      return;
+    }
+
+    setApplyingSuggestions(true);
+    try {
+      const response = await fetch(`/api/${departmentId}/analytics/workforce-history/indicator-assignments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          effectiveAt: suggestionEffectiveAt,
+          assignments,
+        }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const result = await response.json();
+      setSelectedSuggestionIds([]);
+      await runReport();
+      if (selectedEmployeeId) await loadSnapshots(selectedEmployeeId);
+      toast.success(
+        `Applied suggestions: ${result.updated ?? 0} updated, ${result.created ?? 0} created, ${result.skipped ?? 0} skipped.`
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to apply suggestions.");
+    } finally {
+      setApplyingSuggestions(false);
+    }
+  };
+
+  const cleanupSuggestionSnapshots = async () => {
+    if (!suggestionEffectiveAt) {
+      toast.error("Set an effective date first.");
+      return;
+    }
+
+    setCleaningSuggestions(true);
+    try {
+      const previewResponse = await fetch(
+        `/api/${departmentId}/analytics/workforce-history/cleanup-suggestions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            effectiveDate: suggestionEffectiveAt,
+            dryRun: true,
+          }),
+        }
+      );
+      if (!previewResponse.ok) throw new Error(await previewResponse.text());
+      const preview = await previewResponse.json();
+      const matched = Number(preview?.matched ?? 0);
+
+      if (matched <= 0) {
+        toast.message("No matching suggestion snapshots found for that date.");
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `Delete ${matched} indicator suggestion snapshots dated ${suggestionEffectiveAt}? This will refresh yearly counts.`
+      );
+      if (!confirmed) return;
+
+      const response = await fetch(
+        `/api/${departmentId}/analytics/workforce-history/cleanup-suggestions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            effectiveDate: suggestionEffectiveAt,
+          }),
+        }
+      );
+      if (!response.ok) throw new Error(await response.text());
+      const result = await response.json();
+      toast.success(`Deleted ${result.deleted ?? 0} suggestion snapshots for ${suggestionEffectiveAt}.`);
+      await runReport();
+      if (selectedEmployeeId) await loadSnapshots(selectedEmployeeId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to clean suggestion snapshots.");
+    } finally {
+      setCleaningSuggestions(false);
     }
   };
 
@@ -425,7 +607,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
             </div>
 
             <div className="space-y-2">
-              <Label>Office groups shown</Label>
+              <Label>Indicators shown</Label>
               <div className="rounded-md border p-2">
                 {groups.length ? (
                   <div className="space-y-2">
@@ -447,7 +629,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
                     </Button>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No groups configured yet.</p>
+                  <p className="text-sm text-muted-foreground">No indicators configured yet.</p>
                 )}
               </div>
             </div>
@@ -470,13 +652,13 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
 
         <Card>
           <CardHeader>
-            <CardTitle>Office Groups</CardTitle>
-            <CardDescription>Create rows like Education, Health, Social Services, or Other LGU Units.</CardDescription>
+            <CardTitle>Indicators</CardTitle>
+
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-[1fr,96px] gap-2">
               <div className="space-y-2">
-                <Label htmlFor="group-name">Group name</Label>
+                <Label htmlFor="group-name">Indicator name</Label>
                 <Input id="group-name" value={groupName} onChange={(event) => setGroupName(event.target.value)} />
               </div>
               <div className="space-y-2">
@@ -491,7 +673,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
             </div>
 
             <div className="space-y-2">
-              <Label>Offices</Label>
+              <Label>Office fallback mapping</Label>
               <ScrollArea className="h-52 rounded-md border p-3">
                 <div className="space-y-2">
                   {offices.map((office) => (
@@ -514,7 +696,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
             <div className="flex flex-wrap gap-2">
               <Button type="button" onClick={saveGroup} disabled={savingGroup}>
                 {savingGroup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                {editingGroupId ? "Update group" : "Add group"}
+                {editingGroupId ? "Update indicator" : "Add indicator"}
               </Button>
               <Button type="button" variant="ghost" onClick={clearGroupForm}>
                 Clear
@@ -547,6 +729,12 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
                 ? `${DIMENSION_LABELS[report.dimension]} breakdown, ${numberFormatter.format(report.grandTotal)} total records.`
                 : "Run a report or baseline backfill snapshots to populate results."}
             </CardDescription>
+            {report?.meta?.cacheStatus ? (
+              <p className="text-xs text-muted-foreground">
+                Cache: {report.meta.cacheStatus}
+                {report.meta.cacheGeneratedAt ? ` (${new Date(report.meta.cacheGeneratedAt).toLocaleString()})` : ""}
+              </p>
+            ) : null}
           </CardHeader>
           <CardContent>
             {report && report.columns.length ? (
@@ -594,6 +782,127 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
                 No report rows yet. Use baseline backfill if this is the first time running workforce history.
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Low-cost Indicator Suggestions</CardTitle>
+            <CardDescription>
+              Uses local keyword rules from position and office text. Review before applying; no paid AI call is used.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-[1fr,180px]">
+              <div className="space-y-2">
+                <Label>Search suggestions</Label>
+                <Input
+                  value={suggestionSearch}
+                  onChange={(event) => setSuggestionSearch(event.target.value)}
+                  placeholder="Search name, position, office, indicator"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Effective date</Label>
+                <Input
+                  type="date"
+                  value={suggestionEffectiveAt}
+                  onChange={(event) => setSuggestionEffectiveAt(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  As-of correction date. Existing snapshot on/before this date is updated first to avoid headcount inflation.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSelectedSuggestionIds(suggestedEmployees.map((employee) => employee.id))}
+                disabled={suggestedEmployees.length === 0}
+              >
+                Select shown
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setSelectedSuggestionIds([])}>
+                Clear selected
+              </Button>
+              <Button
+                type="button"
+                onClick={applyIndicatorSuggestions}
+                disabled={applyingSuggestions || selectedSuggestionIds.length === 0}
+              >
+                {applyingSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Apply {selectedSuggestionIds.length} suggestions
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={cleanupSuggestionSnapshots}
+                disabled={cleaningSuggestions || applyingSuggestions}
+              >
+                {cleaningSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Cleanup Applied (date)
+              </Button>
+            </div>
+
+            <div className="rounded-md border">
+              <ScrollArea className="h-80">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10" />
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Position / Office</TableHead>
+                      <TableHead>Suggested indicator</TableHead>
+                      <TableHead>Reason</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {suggestedEmployees.length ? (
+                      suggestedEmployees.map((employee) => (
+                        <TableRow key={employee.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedSuggestionSet.has(employee.id)}
+                              onCheckedChange={(checked) => {
+                                setSelectedSuggestionIds((prev) =>
+                                  checked ? [...prev, employee.id] : prev.filter((id) => id !== employee.id)
+                                );
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">{employee.name}</div>
+                            <div className="text-xs text-muted-foreground">{employee.employeeTypeName || "No type"}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div>{employee.position || "No position"}</div>
+                            <div className="text-xs text-muted-foreground">{employee.officeName || "No office"}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">{employee.suggestedIndicatorDisplayName}</div>
+                            {employee.suggestedIndicatorDisplayName !== employee.suggestedIndicatorName ? (
+                              <div className="text-xs text-muted-foreground">
+                                Rule: {employee.suggestedIndicatorName}
+                              </div>
+                            ) : null}
+                            <div className="text-xs capitalize text-muted-foreground">{employee.suggestionConfidence} confidence</div>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{employee.suggestionReason}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                          No suggestions available.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </div>
           </CardContent>
         </Card>
 
@@ -655,7 +964,13 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
+              <SelectField
+                label="Indicator"
+                value={snapshotForm.indicatorId}
+                options={groups}
+                onChange={(value) => setSnapshotForm((prev) => ({ ...prev, indicatorId: value }))}
+              />
               <SelectField
                 label="Office"
                 value={snapshotForm.officeId}
@@ -740,6 +1055,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
                   <TableHeader>
                     <TableRow>
                       <TableHead>Effective</TableHead>
+                      <TableHead>Indicator</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Assignment</TableHead>
                       <TableHead>Source</TableHead>
@@ -750,6 +1066,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
                     {snapshots.map((snapshot) => (
                       <TableRow key={snapshot.id}>
                         <TableCell>{toDateInputValue(snapshot.effectiveAt)}</TableCell>
+                        <TableCell>{snapshot.indicatorName || "Fallback"}</TableCell>
                         <TableCell>{snapshot.status}</TableCell>
                         <TableCell>
                           <div className="text-sm">{snapshot.officeName || "Unknown office"}</div>
