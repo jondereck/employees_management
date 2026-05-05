@@ -1,6 +1,12 @@
 // app/api/[departmentId]/employees/archive/route.ts
 
 import prismadb from "@/lib/prismadb";
+import {
+  WORKFORCE_ACTIVE_STATUS,
+  WORKFORCE_INACTIVE_STATUS,
+  createEmployeeHistorySnapshot,
+  parseEmployeeTerminationDate,
+} from "@/lib/workforce-history";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
@@ -125,6 +131,41 @@ if (archived) {
         terminateDate: "", // clear when unarchiving
       },
 });
+
+    const snapshotEmployees = await prismadb.employee.findMany({
+      where: {
+        id: { in: toUpdateIds },
+        departmentId: params.departmentId,
+      },
+      select: {
+        id: true,
+        departmentId: true,
+        officeId: true,
+        employeeTypeId: true,
+        eligibilityId: true,
+        position: true,
+        gender: true,
+        maritalStatus: true,
+        isHead: true,
+        isArchived: true,
+        dateHired: true,
+        terminateDate: true,
+        updatedAt: true,
+      },
+    });
+
+    for (const employee of snapshotEmployees) {
+      await createEmployeeHistorySnapshot(prismadb, employee, {
+        effectiveAt: archived
+          ? parseEmployeeTerminationDate(employee.terminateDate) ?? new Date()
+          : new Date(),
+        status: archived ? WORKFORCE_INACTIVE_STATUS : WORKFORCE_ACTIVE_STATUS,
+        source: "ARCHIVE",
+        note: archived
+          ? "Snapshot created when employee was archived."
+          : "Snapshot created when employee was restored from archive.",
+      });
+    }
 
     return NextResponse.json({
       success: true,

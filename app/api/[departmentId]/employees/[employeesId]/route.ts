@@ -1,4 +1,10 @@
 import prismadb from "@/lib/prismadb";
+import {
+  createEmployeeHistorySnapshot,
+  parseEmployeeTerminationDate,
+  snapshotFieldsChanged,
+  toSnapshotStatus,
+} from "@/lib/workforce-history";
 import { auth } from "@clerk/nextjs";
 import { MaritalStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -191,6 +197,17 @@ const normalizedMemberPolicyNo =
     const existing = await prismadb.employee.findUnique({
       where: { id: params.employeesId },
       select: {
+        id: true,
+        departmentId: true,
+        officeId: true,
+        employeeTypeId: true,
+        eligibilityId: true,
+        position: true,
+        gender: true,
+        isHead: true,
+        isArchived: true,
+        dateHired: true,
+        terminateDate: true,
         salary: true,
         salaryMode: true,
         salaryGrade: true,
@@ -303,6 +320,17 @@ memberPolicyNo: normalizedMemberPolicyNo,
       },
     });
 
+    if (snapshotFieldsChanged(existing, employee)) {
+      await createEmployeeHistorySnapshot(prismadb, employee, {
+        effectiveAt:
+          toSnapshotStatus(employee.isArchived) === "INACTIVE"
+            ? parseEmployeeTerminationDate(employee.terminateDate) ?? new Date()
+            : new Date(),
+        status: toSnapshotStatus(employee.isArchived),
+        source: "PROFILE_UPDATE",
+        note: "Snapshot created after employee profile fields affecting workforce reports changed.",
+      });
+    }
 
     return NextResponse.json(employee);
   } catch (error) {

@@ -4,6 +4,7 @@ const TOOL_KEYS = [
   "attendance-import",
   "copy-options",
   "sg-range",
+  "workforce-history",
   "org-chart",
   "approvals",
   "holidays",

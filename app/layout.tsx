@@ -1,6 +1,6 @@
 import './globals.css'
 
-import type { Metadata, Viewport } from 'next'
+import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 
@@ -29,14 +29,6 @@ export const metadata: Metadata = {
     { rel: "apple-touch-icon", url: "icons/icon-128x128.png" },
     { rel: "icon", url: "icons/icon-128x128.png" },
   ],
-};
-
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  minimumScale: 1,
-  viewportFit: "cover",
-  themeColor: [{ media: "(prefers-color-scheme: dark)", color: "#fff" }],
 };
 
 export default function RootLayout({

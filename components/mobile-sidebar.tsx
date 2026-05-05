@@ -36,6 +36,7 @@ import {
   Wrench,
   GitBranch,
   CheckSquare,
+  History,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
@@ -83,6 +84,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     label: "SG Range Analytics",
     path: "tools/sg-range",
     icon: FileSpreadsheet,
+  },
+  "workforce-history": {
+    label: "Workforce History",
+    path: "tools/workforce-history",
+    icon: History,
   },
   approvals: {
     label: "Approval Center",

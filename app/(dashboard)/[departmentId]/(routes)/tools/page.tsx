@@ -9,6 +9,7 @@ import {
   Fingerprint,
   Image as ImageIcon,
   GitBranch,
+  History,
 } from "lucide-react";
 import { cookies } from "next/headers";
 
@@ -60,6 +61,13 @@ const TOOL_CARD_CONFIG: Array<{
     description: "Live counts and salary totals across SG levels with filters.",
     slug: "tools/sg-range",
     icon: BarChart3,
+  },
+  {
+    key: "workforce-history",
+    label: "Workforce History",
+    description: "Yearly status reports by office group and employee profile fields.",
+    slug: "tools/workforce-history",
+    icon: History,
   },
   {
     key: "approvals",

@@ -2,6 +2,7 @@
 
 import { findFirstFreeBioFlat } from "@/lib/bio-utils";
 import prismadb from "@/lib/prismadb";
+import { createEmployeeHistorySnapshot, WORKFORCE_ACTIVE_STATUS } from "@/lib/workforce-history";
 import { auth } from "@clerk/nextjs/server"; // ⬅️ server import
 import { MaritalStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -366,6 +367,13 @@ export async function POST(
           occurredAt,
           details,
         },
+      });
+
+      await createEmployeeHistorySnapshot(tx, employeeRow, {
+        effectiveAt: occurredAt,
+        status: WORKFORCE_ACTIVE_STATUS,
+        source: "HIRED",
+        note: "Initial workforce history snapshot created with employee record.",
       });
 
       return employeeRow;

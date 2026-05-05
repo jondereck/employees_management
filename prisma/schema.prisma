@@ -19,10 +19,12 @@ model Department {
   billboards                  Billboard[]                  @relation("DepartmentToBillboard")
   ChangeRequest               ChangeRequest[]
   employee                    Employee[]                   @relation("DepartmentToEmployee")
+  employeeHistorySnapshots    EmployeeHistorySnapshot[]
   offices                     Offices[]                    @relation("DepartmentToOffices")
   orgChartVersions            OrgChartVersion[]
   officeWorkSchedules         OfficeWorkSchedule[]
   timekeepingAnalyzerSettings TimekeepingAnalyzerSetting[]
+  workforceReportGroups       WorkforceReportGroup[]
 }
 
 model OrgChartVersion {
@@ -52,18 +54,20 @@ model Billboard {
 }
 
 model Offices {
-  id                  String               @id @default(uuid())
-  departmentId        String
-  billboardId         String
-  name                String
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  bioIndexCode        String?              @db.VarChar(16)
-  designatedEmployees Employee[]           @relation("OfficesToDesignation")
-  employee            Employee[]           @relation("OfficesToEmployee")
-  billboard           Billboard            @relation(fields: [billboardId], references: [id], onUpdate: NoAction, map: "offices_billboardid_fkey")
-  department          Department           @relation("DepartmentToOffices", fields: [departmentId], references: [id], onUpdate: NoAction, map: "offices_departmentid_fkey")
-  officeWorkSchedules OfficeWorkSchedule[]
+  id                          String                       @id @default(uuid())
+  departmentId                String
+  billboardId                 String
+  name                        String
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  bioIndexCode                String?                      @db.VarChar(16)
+  designatedEmployees         Employee[]                   @relation("OfficesToDesignation")
+  employee                    Employee[]                   @relation("OfficesToEmployee")
+  employeeHistorySnapshots    EmployeeHistorySnapshot[]
+  billboard                   Billboard                    @relation(fields: [billboardId], references: [id], onUpdate: NoAction, map: "offices_billboardid_fkey")
+  department                  Department                   @relation("DepartmentToOffices", fields: [departmentId], references: [id], onUpdate: NoAction, map: "offices_departmentid_fkey")
+  officeWorkSchedules         OfficeWorkSchedule[]
+  workforceReportGroupOffices WorkforceReportGroupOffice[]
 
   @@index([departmentId])
   @@index([billboardId])
@@ -71,35 +75,37 @@ model Offices {
 }
 
 model EmployeeType {
-  id           String     @id @default(uuid())
-  departmentId String
-  name         String
-  value        String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  employee     Employee[]
+  id                       String                    @id @default(uuid())
+  departmentId             String
+  name                     String
+  value                    String
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  employee                 Employee[]
+  employeeHistorySnapshots EmployeeHistorySnapshot[]
 
   @@index([departmentId])
 }
 
 model Eligibility {
-  id               String           @id @default(uuid())
-  departmentId     String
-  eligibilityTypes EligibilityTypes
-  name             String
-  value            String
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  employee         Employee[]
+  id                       String                    @id @default(uuid())
+  departmentId             String
+  eligibilityTypes         EligibilityTypes
+  name                     String
+  value                    String
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  employee                 Employee[]
+  employeeHistorySnapshots EmployeeHistorySnapshot[]
 
   @@index([departmentId])
 }
 
 model Employee {
-  id                     String                  @id @default(uuid())
+  id                     String                    @id @default(uuid())
   departmentId           String
   officeId               String
-  prefix                 String                  @default("")
+  prefix                 String                    @default("")
   lastName               String
   firstName              String
   middleName             String
@@ -109,55 +115,56 @@ model Employee {
   position               String
   education              String
   birthday               DateTime
-  age                    String                  @default("")
-  region                 String                  @default("")
-  province               String                  @default("")
-  city                   String                  @default("")
-  barangay               String                  @default("")
-  houseNo                String                  @default("")
-  street                 String                  @default("")
+  age                    String                    @default("")
+  region                 String                    @default("")
+  province               String                    @default("")
+  city                   String                    @default("")
+  barangay               String                    @default("")
+  houseNo                String                    @default("")
+  street                 String                    @default("")
   gsisNo                 String?
   tinNo                  String?
   philHealthNo           String?
   pagIbigNo              String?
   salary                 Float
   dateHired              DateTime
-  latestAppointment      String                  @default("")
-  terminateDate          String                  @default("")
+  latestAppointment      String                    @default("")
+  terminateDate          String                    @default("")
   memberPolicyNo         String?
   employeeTypeId         String
   eligibilityId          String
-  isFeatured             Boolean                 @default(false)
-  isArchived             Boolean                 @default(false)
-  isHead                 Boolean                 @default(false)
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  emergencyContactName   String                  @default("")
-  emergencyContactNumber String                  @default("")
-  isAwardee              Boolean                 @default(false)
-  nickname               String                  @default("")
-  employeeNo             String                  @default("")
-  employeeLink           String                  @default("")
+  isFeatured             Boolean                   @default(false)
+  isArchived             Boolean                   @default(false)
+  isHead                 Boolean                   @default(false)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  emergencyContactName   String                    @default("")
+  emergencyContactNumber String                    @default("")
+  isAwardee              Boolean                   @default(false)
+  nickname               String                    @default("")
+  employeeNo             String                    @default("")
+  employeeLink           String                    @default("")
   salaryStep             Int?
   salaryGrade            Int?
   designationId          String?
   note                   String?
-  publicId               String                  @unique @default(dbgenerated("gen_random_uuid()"))
-  publicEnabled          Boolean                 @default(false)
-  publicVersion          Int                     @default(1)
-  salaryMode             SalaryMode              @default(AUTO)
-  legacyQrAllowed        Boolean                 @default(true)
+  publicId               String                    @unique @default(dbgenerated("gen_random_uuid()"))
+  publicEnabled          Boolean                   @default(false)
+  publicVersion          Int                       @default(1)
+  salaryMode             SalaryMode                @default(AUTO)
+  legacyQrAllowed        Boolean                   @default(true)
   maritalStatus          MaritalStatus?
-  email                  String?                 @unique
-  philSysNumber          String?                 @unique
+  email                  String?                   @unique
+  philSysNumber          String?                   @unique
   awards                 Award[]
-  biometricsIdentityMaps BiometricsIdentityMap[] @relation("EmployeeToBiometricsIdentityMaps")
-  changeRequests         ChangeRequest[]         @relation("EmployeeToChangeRequests")
-  department             Department              @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onUpdate: NoAction, map: "employee_departmentid_fkey")
-  designation            Offices?                @relation("OfficesToDesignation", fields: [designationId], references: [id], onUpdate: NoAction, map: "employee_designationid_fkey")
-  eligibility            Eligibility             @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
-  employeeType           EmployeeType            @relation(fields: [employeeTypeId], references: [id], onUpdate: NoAction, map: "employee_employeetypeid_fkey")
-  offices                Offices                 @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
+  biometricsIdentityMaps BiometricsIdentityMap[]   @relation("EmployeeToBiometricsIdentityMaps")
+  changeRequests         ChangeRequest[]           @relation("EmployeeToChangeRequests")
+  department             Department                @relation("DepartmentToEmployee", fields: [departmentId], references: [id], onUpdate: NoAction, map: "employee_departmentid_fkey")
+  designation            Offices?                  @relation("OfficesToDesignation", fields: [designationId], references: [id], onUpdate: NoAction, map: "employee_designationid_fkey")
+  eligibility            Eligibility               @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
+  employeeType           EmployeeType              @relation(fields: [employeeTypeId], references: [id], onUpdate: NoAction, map: "employee_employeetypeid_fkey")
+  offices                Offices                   @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
+  historySnapshots       EmployeeHistorySnapshot[]
   employmentEvents       EmploymentEvent[]
   images                 Image[]
   scheduleExceptions     ScheduleException[]
@@ -169,6 +176,63 @@ model Employee {
   @@index([employeeTypeId])
   @@index([eligibilityId])
   @@index([designationId])
+}
+
+model EmployeeHistorySnapshot {
+  id             String         @id @default(cuid())
+  departmentId   String
+  employeeId     String
+  effectiveAt    DateTime
+  officeId       String?
+  employeeTypeId String?
+  eligibilityId  String?
+  position       String         @default("")
+  gender         Gender?
+  maritalStatus  MaritalStatus?
+  isHead         Boolean        @default(false)
+  status         String         @default("ACTIVE")
+  source         String         @default("MANUAL")
+  note           String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  department     Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  employee       Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  office         Offices?       @relation(fields: [officeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  employeeType   EmployeeType?  @relation(fields: [employeeTypeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  eligibility    Eligibility?   @relation(fields: [eligibilityId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([departmentId, effectiveAt])
+  @@index([employeeId, effectiveAt])
+  @@index([departmentId, employeeId, effectiveAt])
+  @@index([officeId])
+  @@index([employeeTypeId])
+  @@index([eligibilityId])
+}
+
+model WorkforceReportGroup {
+  id           String                       @id @default(cuid())
+  departmentId String
+  name         String
+  sortOrder    Int                          @default(0)
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+  department   Department                   @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  offices      WorkforceReportGroupOffice[]
+
+  @@unique([departmentId, name])
+  @@index([departmentId, sortOrder])
+}
+
+model WorkforceReportGroupOffice {
+  id        String               @id @default(cuid())
+  groupId   String
+  officeId  String
+  createdAt DateTime             @default(now())
+  group     WorkforceReportGroup @relation(fields: [groupId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  office    Offices              @relation(fields: [officeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([groupId, officeId])
+  @@index([officeId])
 }
 
 model Image {
