@@ -2167,6 +2167,20 @@ const formatDateRange = (range: MergeResult["dateRange"]) => {
   return start === end ? start : `${start} – ${end}`;
 };
 
+const detectPeriodFromMergeResult = (mergeResult: MergeResult | null): { month: string; year: string } | null => {
+  if (!mergeResult) return null;
+  if (mergeResult.dateRange?.start && /^\d{4}-\d{2}-\d{2}$/.test(mergeResult.dateRange.start)) {
+    const [year, month] = mergeResult.dateRange.start.split("-");
+    return { month, year };
+  }
+  const hint = mergeResult.months?.[0];
+  if (typeof hint === "string" && /^\d{4}-\d{2}$/.test(hint)) {
+    const [year, month] = hint.split("-");
+    return { month, year };
+  }
+  return null;
+};
+
 function BioLogUploaderContent() {
   const { toast } = useToast();
   const params = useParams<{ departmentId?: string }>();
@@ -2889,6 +2903,7 @@ function BioLogUploaderContent() {
   const skipAutoEvaluateRef = useRef(false);
   const parseInProgress = useRef(false);
   const lastEvaluatedKey = useRef<string>("");
+  const manualPeriodAutoSeedKeyRef = useRef<string>("");
   const identityCacheRef = useRef<Map<string, IdentityRecord>>(new Map());
   const identitySetCacheRef = useRef<Map<string, Map<string, IdentityRecord>>>(new Map());
 
@@ -3007,6 +3022,29 @@ function BioLogUploaderContent() {
       return { key, months, confirmed: false };
     });
   }, [mergeResult]);
+
+  useEffect(() => {
+    if (!manualPeriodHydrated || !mergeResult) return;
+    const detected = detectPeriodFromMergeResult(mergeResult);
+    if (!detected) return;
+
+    const mergeKey = `${mergeResult.dateRange?.start ?? "na"}|${mergeResult.dateRange?.end ?? "na"}|${mergeResult.months.join("|")}`;
+    if (manualPeriodAutoSeedKeyRef.current === mergeKey) return;
+
+    const currentPeriod = getCurrentManualPeriod();
+    const shouldAutoFill =
+      !manualMonth ||
+      !manualYear ||
+      !useManualPeriod ||
+      (manualMonth === currentPeriod.month && manualYear === currentPeriod.year);
+
+    if (shouldAutoFill) {
+      setManualMonth(detected.month);
+      setManualYear(detected.year);
+    }
+
+    manualPeriodAutoSeedKeyRef.current = mergeKey;
+  }, [manualMonth, manualPeriodHydrated, manualYear, mergeResult, useManualPeriod]);
 
   useEffect(() => {
     let cancelled = false;

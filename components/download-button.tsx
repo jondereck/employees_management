@@ -40,7 +40,7 @@ import { SORT_FIELDS } from '@/utils/sort-fields';
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
-import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, getAllTemplates, saveTemplateToLocalStorage, exportTemplatesToBlob, importTemplatesFromObject, isBuiltInTemplateId, overwriteUserTemplateById, renameUserTemplateById } from '@/utils/export-templates';
+import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, exportTemplatesToBlob, getAllTemplates, getLastUsedTemplateId, importTemplatesFromObject, isBuiltInTemplateId, overwriteUserTemplateById, rememberTemplateUsage, renameUserTemplateById, saveTemplateToLocalStorage } from '@/utils/export-templates';
 import TemplatePickerBar from './ui/export-template-picker';
 import { EXPORT_TABS, ExportTabKey } from "./tabs.registry";
 import { COLUMN_GROUPS, ColumnGroupKey } from "./columns.groups";
@@ -449,6 +449,7 @@ export default function DownloadStyledExcel() {
 
   function applyTemplate(tpl: ExportTemplate) {
     setSelectedTemplateId(tpl.id);
+    rememberTemplateUsage(tpl.id);
     setSelectedColumns(sanitizeSelection(tpl.selectedKeys.map((key) => String(key))));
     const normalized = normalizeTemplate(tpl);
     setSelectedOffices(normalized.officesSelection);
@@ -490,6 +491,32 @@ export default function DownloadStyledExcel() {
       setQrPrefix(tpl.paths.qrPrefix ?? qrPrefix);
     }
   }
+
+  const restoredTemplateRef = useRef(false);
+
+  useEffect(() => {
+    if (restoredTemplateRef.current) return;
+    if (!templates.length) {
+      restoredTemplateRef.current = true;
+      return;
+    }
+
+    const lastTplId = getLastUsedTemplateId();
+    if (!lastTplId) {
+      restoredTemplateRef.current = true;
+      return;
+    }
+
+    const tpl = templates.find((item) => item.id === lastTplId);
+    if (!tpl) {
+      clearLastUsedTemplate();
+      restoredTemplateRef.current = true;
+      return;
+    }
+
+    applyTemplate(tpl);
+    restoredTemplateRef.current = true;
+  }, [templates]);
 
 
   // near other useStates
@@ -798,7 +825,7 @@ export default function DownloadStyledExcel() {
   // Re-apply template appointment filters when mappings arrive
   useEffect(() => {
     if (!mappings) return;
-    const lastTplId = localStorage.getItem("hrps.export.template");
+    const lastTplId = getLastUsedTemplateId();
     const tpl = getAllTemplates().find(t => t.id === lastTplId);
     if (!tpl?.appointmentFilters) return;
 
@@ -1515,6 +1542,7 @@ export default function DownloadStyledExcel() {
     const ok = overwriteUserTemplateById(id, buildTemplatePayload(id));
 
     if (ok) {
+      rememberTemplateUsage(id);
       refreshTemplates();
       toast.success('Template updated.');
     } else {
@@ -1622,7 +1650,7 @@ export default function DownloadStyledExcel() {
                     });
 
                     refreshTemplates();
-                    setSelectedTemplateId(newTpl.id);
+                    applyTemplate(newTpl);
                     toast.success(`Saved template "${name}"`);
                   }}
                   className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"

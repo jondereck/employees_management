@@ -14,7 +14,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { X, Trash2, Save, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isBuiltInTemplateId } from "@/utils/export-templates";
+import { getRecentTemplateIds, isBuiltInTemplateId } from "@/utils/export-templates";
 import {
   Dialog,
   DialogContent,
@@ -63,23 +63,23 @@ export default function TemplatePickerBar({
   const selected = useMemo(() => templates.find((tpl) => tpl.id === value), [templates, value]);
   const sortedTemplates = useMemo(() => {
     const builtinSet = new Set(builtinIds);
-    const builtinTemplates: Template[] = [];
-    const customTemplates: Template[] = [];
+    const recentIds = getRecentTemplateIds();
+    const recentRank = new Map(recentIds.map((id, index) => [id, index]));
+    const visibleTemplates = templates.filter((tpl) => !builtinSet.has(tpl.id));
 
-    for (const tpl of templates) {
-      if (builtinSet.has(tpl.id)) {
-        builtinTemplates.push(tpl);
-      } else {
-        customTemplates.push(tpl);
+    return [...visibleTemplates].sort((a, b) => {
+      const aRank = recentRank.get(a.id);
+      const bRank = recentRank.get(b.id);
+
+      if (aRank !== undefined || bRank !== undefined) {
+        if (aRank === undefined) return 1;
+        if (bRank === undefined) return -1;
+        if (aRank !== bRank) return aRank - bRank;
       }
-    }
 
-    customTemplates.sort((a, b) =>
-      (a.name ?? "").localeCompare(b.name ?? "", undefined, { sensitivity: "base" })
-    );
-
-    return [...builtinTemplates, ...customTemplates];
-  }, [templates, builtinIds]);
+      return (a.name ?? "").localeCompare(b.name ?? "", undefined, { sensitivity: "base" });
+    });
+  }, [templates, builtinIds, value]);
   const isDeletable = selected && !builtinIds.includes(selected.id);
   const isBuiltIn = value ? isBuiltInTemplateId(value) : false;
 
@@ -119,6 +119,9 @@ export default function TemplatePickerBar({
               align="start"
               sideOffset={4}
               className="w-[280px] max-h-80 overflow-y-auto"
+              onWheelCapture={(event) => {
+                event.stopPropagation();
+              }}
             >
               <DropdownMenuLabel className="sticky top-0 z-10 bg-popover">Templates</DropdownMenuLabel>
               <DropdownMenuRadioGroup
@@ -149,6 +152,7 @@ export default function TemplatePickerBar({
                   onClick={() => {
                     clearLastUsedTemplate();
                     refreshTemplates();
+                    onChangeSelected?.(undefined);
                   }}
                   aria-label="Clear last used preset"
                 >

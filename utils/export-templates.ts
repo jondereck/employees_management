@@ -5,6 +5,7 @@ import type { Column, HeadsMode, IdColumnSource, PositionReplaceRule, SortLevel 
 
 export type UserTemplate = Omit<ExportTemplate, "id"> & { id: string };
 export type TemplateId = "hr-core" | "plantilla" | "payroll" | "gov-ids";
+const BUILT_IN_TEMPLATE_IDS = ["hr-core", "plantilla", "payroll", "gov-ids"] as const;
 
 export type ExportTemplatePaths = {
   imageBaseDir: string;
@@ -53,70 +54,12 @@ export type ExportTemplateV2 = ExportTemplate & {
   headsMode: HeadsMode;
 };
 
-export const EXPORT_TEMPLATES: ExportTemplate[] = [
-  {
-    id: "hr-core",
-    name: "HR Core",
-    description: "Basic identity + office + plantilla + position",
-    selectedKeys: [
-      "employeeNo", "lastName", "firstName", "middleName", "office", "plantilla", "position",
-      "birthday", "age", "dateHired", "yearsOfService", "status", "appointment", "eligibility",
-
-    ],
-    statusFilter: "active",
-    idColumnSource: "employeeNo",
-    sheetName: "HR Core",
-    templateVersion: 2,
-    officesSelection: [],
-    sheetMode: "perOffice",
-    sortLevels: [],
-    filterGroupMode: 'office',
-    headsMode: 'all',
-  },
-  {
-    id: "plantilla",
-    name: "Plantilla",
-    description: "Plantilla view with computed salary",
-    selectedKeys: [
-      "employeeNo", "lastName", "firstName", "middleName", "suffix", "nickname", "office", "position", "barangay", "city", "emergencyContactName", "emergencyContactNumber",
-      "gsisNo", "tinNo", "philHealthNo", "pagIbigNo", "imagePath", "qrPath",
-      "birthday", "age", "dateHired", "yearsOfService",
-    ],
-    statusFilter: "active",
-    appointmentFilters: ["Permanent", "Coterminous"],
-    idColumnSource: "employeeNo",
-    sheetName: "Plantilla",
-    templateVersion: 2,
-    officesSelection: [],
-    sheetMode: "perOffice",
-    sortLevels: [],
-    filterGroupMode: 'office',
-    headsMode: 'all',
-  },
-
-  {
-    id: "gov-ids",
-    name: "Government IDs",
-    description: "ID numbers + basic identity",
-    selectedKeys: [
-      "employeeNo", "lastName", "firstName", "middleName", "suffix", "nickname", "office", "position", "barangay", "city", "emergencyContactName", "emergencyContactNumber",
-      "gsisNo", "tinNo", "philHealthNo", "pagIbigNo", "imagePath", "qrPath"
-    ],
-    statusFilter: "active",
-    idColumnSource: "bio",
-    sheetName: "Gov IDs",
-    templateVersion: 2,
-    officesSelection: [],
-    sheetMode: "perOffice",
-    sortLevels: [],
-    filterGroupMode: 'office',
-    headsMode: 'all',
-  },
-];
+export const EXPORT_TEMPLATES: ExportTemplate[] = [];
 
 
 const USER_TPL_KEY = "hrps.userTemplates";
 const LAST_TPL_KEY = "hrps.export.template";
+const RECENT_TPL_KEY = "hrps.export.template.recent";
 
 function loadUserTemplates(): ExportTemplate[] {
   if (typeof window === "undefined") return [];
@@ -124,7 +67,15 @@ function loadUserTemplates(): ExportTemplate[] {
     const raw = localStorage.getItem(USER_TPL_KEY);
     if (!raw) return [];
     const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
+    return Array.isArray(arr)
+      ? arr.filter(
+          (item): item is ExportTemplate =>
+            Boolean(item) &&
+            typeof item === "object" &&
+            typeof item.id === "string" &&
+            !BUILT_IN_TEMPLATE_IDS.includes(item.id as TemplateId)
+        )
+      : [];
   } catch {
     return [];
   }
@@ -150,6 +101,62 @@ export function getAllTemplates(): ExportTemplate[] {
   return merged;
 }
 
+export function getLastUsedTemplateId(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(LAST_TPL_KEY);
+}
+
+export function getRecentTemplateIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(RECENT_TPL_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    const seen = new Set<string>();
+    const recent: string[] = [];
+
+    for (const item of parsed) {
+      if (typeof item !== "string") continue;
+      if (BUILT_IN_TEMPLATE_IDS.includes(item as TemplateId)) continue;
+      if (seen.has(item)) continue;
+      seen.add(item);
+      recent.push(item);
+    }
+
+    return recent;
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentTemplateIds(ids: string[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(RECENT_TPL_KEY, JSON.stringify(ids.slice(0, 10)));
+}
+
+export function rememberTemplateUsage(id: string) {
+  if (typeof window === "undefined") return;
+  if (!id || BUILT_IN_TEMPLATE_IDS.includes(id as TemplateId)) return;
+
+  localStorage.setItem(LAST_TPL_KEY, id);
+
+  const recent = getRecentTemplateIds().filter((item) => item !== id);
+  saveRecentTemplateIds([id, ...recent]);
+}
+
+function removeTemplateUsage(id: string) {
+  if (typeof window === "undefined" || !id) return;
+
+  if (localStorage.getItem(LAST_TPL_KEY) === id) {
+    localStorage.removeItem(LAST_TPL_KEY);
+  }
+
+  const recent = getRecentTemplateIds().filter((item) => item !== id);
+  saveRecentTemplateIds(recent);
+}
+
 function genTemplateId(name: string) {
   // simple unique id: slug + timestamp
   const slug = name.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
@@ -168,20 +175,20 @@ export function saveTemplateToLocalStorage(
   all.push(newTpl);
   saveUserTemplates(all);
 
-  // remember last used template id (your effects already read this)
-  if (typeof window !== "undefined") {
-    localStorage.setItem(LAST_TPL_KEY, id);
-  }
+  rememberTemplateUsage(id);
   return newTpl;
 }
 
 export function deleteUserTemplate(id: string) {
   const all = loadUserTemplates().filter(t => t.id !== id);
   saveUserTemplates(all);
+  removeTemplateUsage(id);
 }
 
 export function clearAllUserTemplates() {
+  const existingIds = loadUserTemplates().map((tpl) => tpl.id);
   saveUserTemplates([]);
+  existingIds.forEach(removeTemplateUsage);
 }
 
 export function clearLastUsedTemplate() {
@@ -299,7 +306,7 @@ export function importTemplatesFromObject(
 
 // mark built-ins so we don't overwrite them
 export function isBuiltInTemplateId(id: string) {
-  return EXPORT_TEMPLATES.some(t => t.id === id);
+  return BUILT_IN_TEMPLATE_IDS.includes(id as TemplateId);
 }
 
 // overwrite an existing *user* template by id
