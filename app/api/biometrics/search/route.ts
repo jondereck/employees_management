@@ -54,6 +54,7 @@ export async function GET(req: Request) {
     const tokens = q.split(/\s+/).filter(Boolean);
 
     const where = {
+      isArchived: false,
       OR: [
         { employeeNo: { contains: q, mode: "insensitive" as const } },
         { firstName: { contains: q, mode: "insensitive" as const } },

@@ -20,6 +20,7 @@ import {
 
 import type { DayEvaluationStatus } from "./evaluateDay";
 import type { WeeklyPatternWindow } from "./weeklyPattern";
+import type { OvertimeTrace } from "@/lib/attendance/overtime";
 
 export type WarningLevel = "info" | "warning";
 
@@ -121,6 +122,9 @@ export type PerDayRow = ParsedPerDayRow & {
   weeklyExclusionIgnoreUntil?: string | null;
   weeklyExclusionId?: string | null;
   notes?: string[];
+  overtimeTrace?: OvertimeTrace | null;
+  excludeFromSummaryCounts?: boolean;
+  spilloverFromDateISO?: string | null;
 };
 
 export type PerEmployeeRow = {
@@ -1292,6 +1296,7 @@ export function summarizePerEmployee(
       | "OT_holiday"
       | "OT_excused"
       | "ND_minutes"
+      | "excludeFromSummaryCounts"
     >
   >,
   options?: ScheduleSummaryOptions
@@ -1351,29 +1356,31 @@ export function summarizePerEmployee(
       agg.identityStatus = identityStatus;
     }
 
-    const evaluationStatus: DayEvaluationStatus = row.evaluationStatus
-      ? row.evaluationStatus
-      : row.status === "no_punch" || row.status === "excused" || row.status === "evaluated"
-      ? (row.status as DayEvaluationStatus)
-      : row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0
-      ? "evaluated"
-      : "no_punch";
+    if (!row.excludeFromSummaryCounts) {
+      const evaluationStatus: DayEvaluationStatus = row.evaluationStatus
+        ? row.evaluationStatus
+        : row.status === "no_punch" || row.status === "excused" || row.status === "evaluated"
+        ? (row.status as DayEvaluationStatus)
+        : row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0
+        ? "evaluated"
+        : "no_punch";
 
-    if (evaluationStatus === "no_punch") {
-      agg.noPunchDays += 1;
-    } else if (evaluationStatus === "excused") {
-      agg.excusedDays += 1;
-    } else {
-      agg.daysWithLogs += 1;
-      if (row.isLate) agg.lateDays += 1;
-      if (row.isUndertime) agg.undertimeDays += 1;
-      const lateMinutes = resolveLateMinutes(row);
-      if (lateMinutes != null) agg.totalLateMinutes += lateMinutes;
-      const undertimeMinutes = resolveUndertimeMinutes(row);
-      if (undertimeMinutes != null) agg.totalUndertimeMinutes += undertimeMinutes;
-      if (row.requiredMinutes != null) agg.totalRequiredMinutes += row.requiredMinutes;
-      if (row.weeklyPatternApplied) {
-        agg.weeklyPatternDays += 1;
+      if (evaluationStatus === "no_punch") {
+        agg.noPunchDays += 1;
+      } else if (evaluationStatus === "excused") {
+        agg.excusedDays += 1;
+      } else {
+        agg.daysWithLogs += 1;
+        if (row.isLate) agg.lateDays += 1;
+        if (row.isUndertime) agg.undertimeDays += 1;
+        const lateMinutes = resolveLateMinutes(row);
+        if (lateMinutes != null) agg.totalLateMinutes += lateMinutes;
+        const undertimeMinutes = resolveUndertimeMinutes(row);
+        if (undertimeMinutes != null) agg.totalUndertimeMinutes += undertimeMinutes;
+        if (row.requiredMinutes != null) agg.totalRequiredMinutes += row.requiredMinutes;
+        if (row.weeklyPatternApplied) {
+          agg.weeklyPatternDays += 1;
+        }
       }
     }
 
@@ -1391,7 +1398,7 @@ export function summarizePerEmployee(
     if (Number.isFinite(otExcused)) agg.totalOTExcusedMinutes += otExcused;
     const ndMinutes = Number(row.ND_minutes ?? 0);
     if (Number.isFinite(ndMinutes)) agg.totalNightDiffMinutes += ndMinutes;
-    if (row.absent) {
+    if (row.absent && !row.excludeFromSummaryCounts) {
       agg.absences += 1;
     }
     if (row.scheduleType) agg.scheduleTypes.add(row.scheduleType);

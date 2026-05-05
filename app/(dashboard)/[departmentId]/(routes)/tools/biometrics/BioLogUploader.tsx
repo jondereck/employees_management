@@ -160,6 +160,7 @@ type OvertimePolicyState = Omit<OvertimePolicy, "mealDeductMin" | "mealTriggerMi
 type OvertimePolicyPayload = {
   rounding: OvertimeRounding;
   graceAfterEndMin: number;
+  overnightCarryoverCutoffMin: number;
   countPreShift: boolean;
   minBlockMin: number;
   mealDeductMin: number | null;
@@ -167,6 +168,11 @@ type OvertimePolicyPayload = {
   nightDiffEnabled: boolean;
   flexMode: FlexOTMode;
   overtimeOnExcused: boolean;
+};
+
+type ManualCarryoverOverride = {
+  employeeToken: string;
+  sourceDateISO: string;
 };
 
 type TimekeepingTemplate = {
@@ -228,6 +234,7 @@ const ANALYZER_SETTING_KEYS = {
   manualPeriod: "manual-period",
   overtime: (period: string) => `overtime-policy:${period}`,
   manualExclusions: (period: string) => `manual-exclusions:${period}`,
+  manualCarryovers: (period: string) => `manual-carryovers:${period}`,
 } as const;
 const WEEKDAY_OPTIONS = [
   { value: 1, label: "Monday" },
@@ -419,12 +426,13 @@ const parseTemplateArray = (value: unknown): TimekeepingTemplate[] => {
 };
 
 const defaultOvertimePolicy: OvertimePolicyState = {
-  rounding: "nearest15",
-  graceAfterEndMin: 0,
+  rounding: "none",
+  graceAfterEndMin: 60,
+  overnightCarryoverCutoffMin: 360,
   countPreShift: false,
-  minBlockMin: 30,
+  minBlockMin: 120,
   mealDeductMin: 60,
-  mealTriggerMin: 300,
+  mealTriggerMin: 240,
   nightDiffEnabled: false,
   flexMode: "strict",
   overtimeOnExcused: true,
@@ -469,6 +477,10 @@ const sanitizeOvertimePolicyState = (
     policy?.graceAfterEndMin,
     defaultOvertimePolicy.graceAfterEndMin
   );
+  const overnightCarryoverCutoffMin = toNonNegativeInt(
+    policy?.overnightCarryoverCutoffMin,
+    defaultOvertimePolicy.overnightCarryoverCutoffMin
+  );
   const minBlockMin = toNonNegativeInt(policy?.minBlockMin, defaultOvertimePolicy.minBlockMin);
 
   let mealDeductMin: number | null;
@@ -492,6 +504,7 @@ const sanitizeOvertimePolicyState = (
   return {
     rounding,
     graceAfterEndMin,
+    overnightCarryoverCutoffMin,
     countPreShift: Boolean(policy?.countPreShift),
     minBlockMin,
     mealDeductMin,
@@ -505,6 +518,7 @@ const sanitizeOvertimePolicyState = (
 const toOvertimePolicyPayload = (policy: OvertimePolicyState): OvertimePolicyPayload => ({
   rounding: policy.rounding,
   graceAfterEndMin: policy.graceAfterEndMin,
+  overnightCarryoverCutoffMin: policy.overnightCarryoverCutoffMin,
   countPreShift: policy.countPreShift,
   minBlockMin: policy.minBlockMin,
   mealDeductMin: policy.mealDeductMin ?? null,
@@ -518,6 +532,7 @@ const serializeOvertimePolicy = (policy: OvertimePolicyPayload): string =>
   [
     policy.rounding,
     policy.graceAfterEndMin,
+    policy.overnightCarryoverCutoffMin,
     policy.countPreShift ? 1 : 0,
     policy.minBlockMin,
     policy.mealDeductMin ?? "null",
@@ -526,6 +541,30 @@ const serializeOvertimePolicy = (policy: OvertimePolicyPayload): string =>
     policy.flexMode,
     policy.overtimeOnExcused ? 1 : 0,
   ].join(":");
+
+const SettingHint = ({
+  label,
+  hint,
+}: {
+  label: string;
+  hint: React.ReactNode;
+}) => (
+  <div className="flex items-center gap-1">
+    <span>{label}</span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+          aria-label={`${label} help`}
+        >
+          <Info className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-sm leading-relaxed">{hint}</TooltipContent>
+    </Tooltip>
+  </div>
+);
 
 type ColumnFilterOperator = "=" | ">" | ">=" | "<" | "<=";
 
@@ -1465,10 +1504,17 @@ const composeManualDate = (year: number, month: number, day: number): string | n
   return `${year}-${pad2(month)}-${pad2(day)}`;
 };
 
+const getNextDateISO = (dateISO: string) => {
+  const date = new Date(`${dateISO}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+};
+
 const makeEvaluationPayloadKey = (
   manualKey: string,
   rows: ParsedPerDayRow[],
   manualExclusions: ManualExclusion[] | null | undefined,
+  manualCarryovers: ManualCarryoverOverride[] | null | undefined,
   overtimePolicy: OvertimePolicyPayload,
   workSchedule: WorkSchedule
 ) => {
@@ -1490,9 +1536,42 @@ const makeEvaluationPayloadKey = (
       return `${token}:${row.dateISO}:${row.allTimes.join("|")}:${row.employeeName}:${officeKey}`;
     })
     .join("#");
+  const carryoverFragment = manualCarryovers?.length
+    ? manualCarryovers
+        .map((override) => `${normalizeBiometricToken(override.employeeToken)}:${override.sourceDateISO}`)
+        .sort((left, right) => left.localeCompare(right))
+        .join("|")
+    : "none";
   const policyFragment = serializeOvertimePolicy(overtimePolicy);
   const scheduleFragment = `${workSchedule.startTime}-${workSchedule.endTime}-${workSchedule.workingDays.join(",")}`;
-  return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}::${policyFragment}::${scheduleFragment}`;
+  return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}::${carryoverFragment}::${policyFragment}::${scheduleFragment}`;
+};
+
+const makeManualCarryoverKey = (employeeToken: string, sourceDateISO: string) =>
+  `${normalizeBiometricToken(employeeToken)}::${sourceDateISO}`;
+
+const sanitizeManualCarryovers = (value: unknown): ManualCarryoverOverride[] => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const items: ManualCarryoverOverride[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const rawToken =
+      typeof (entry as { employeeToken?: unknown }).employeeToken === "string"
+        ? (entry as { employeeToken: string }).employeeToken
+        : "";
+    const sourceDateISO =
+      typeof (entry as { sourceDateISO?: unknown }).sourceDateISO === "string"
+        ? (entry as { sourceDateISO: string }).sourceDateISO.trim()
+        : "";
+    const employeeToken = normalizeBiometricToken(rawToken);
+    if (!employeeToken || !/^\d{4}-\d{2}-\d{2}$/.test(sourceDateISO)) continue;
+    const key = makeManualCarryoverKey(employeeToken, sourceDateISO);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ employeeToken, sourceDateISO });
+  }
+  return items;
 };
 
 const getNormalizedTokenForRow = (row: {
@@ -1692,6 +1771,50 @@ const getDayOfficeKey = (
     ? UNASSIGNED_OFFICE_LABEL
     : UNKNOWN_OFFICE_LABEL;
   return makeOfficeKey(row.officeId ?? null, label);
+};
+
+const getSearchOfficeLabel = (
+  row: Pick<PerEmployeeRow | PerDayRow, "officeName" | "resolvedEmployeeId">
+) => {
+  const label = row.officeName?.trim();
+  if (label) return label.toLowerCase();
+  return (row.resolvedEmployeeId ? UNASSIGNED_OFFICE_LABEL : UNKNOWN_OFFICE_LABEL).toLowerCase();
+};
+
+const parseOfficeSearchTerms = (query: string) =>
+  query
+    .split(",")
+    .map((term) => term.trim().toLowerCase())
+    .filter(Boolean);
+
+const matchesSharedSearch = (
+  row: Pick<
+    PerEmployeeRow | PerDayRow,
+    "employeeName" | "employeeId" | "employeeNo" | "employeeToken" | "officeName" | "resolvedEmployeeId"
+  >,
+  rawQuery: string
+) => {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) return true;
+
+  const officeLabel = getSearchOfficeLabel(row);
+  const officeTerms = parseOfficeSearchTerms(query);
+  if (query.includes(",") && officeTerms.length > 0) {
+    return officeTerms.some((term) => officeLabel.includes(term));
+  }
+
+  const name = row.employeeName?.toLowerCase() ?? "";
+  const id = row.employeeId?.toLowerCase() ?? "";
+  const employeeNo = firstEmployeeNoToken(row.employeeNo)?.toLowerCase() ?? "";
+  const token = row.employeeToken?.toLowerCase() ?? "";
+
+  return (
+    name.includes(query) ||
+    employeeNo.includes(query) ||
+    id.includes(query) ||
+    token.includes(query) ||
+    officeLabel.includes(query)
+  );
 };
 
 type StoredColumnSettings = {
@@ -2089,6 +2212,8 @@ function BioLogUploaderContent() {
   const [manualPeriodHydrated, setManualPeriodHydrated] = useState(false);
   const [manualExclusions, setManualExclusions] = useState<ManualExclusion[]>([]);
   const [manualExclusionsHydrated, setManualExclusionsHydrated] = useState(false);
+  const [manualCarryovers, setManualCarryovers] = useState<ManualCarryoverOverride[]>([]);
+  const [manualCarryoversHydrated, setManualCarryoversHydrated] = useState(false);
   const [holidayExclusions, setHolidayExclusions] = useState<ManualExclusion[]>([]);
   const [holidayExclusionsHydrated, setHolidayExclusionsHydrated] = useState(false);
   const [holidayLoadError, setHolidayLoadError] = useState<string | null>(null);
@@ -2571,7 +2696,7 @@ function BioLogUploaderContent() {
     return [...DEFAULT_VISIBLE_CHARTS];
   });
   const [insightsCollapsed, setInsightsCollapsed] = useState<boolean>(
-    false
+    true
   );
   const [expandedWarnings, setExpandedWarnings] = useState<Record<string, boolean>>({});
   const [warningsCollapsed, setWarningsCollapsed] = useState(false);
@@ -3245,6 +3370,11 @@ function BioLogUploaderContent() {
     return `hrps.biometrics.manualExclusions.${activePeriod.year}-${pad2(activePeriod.month)}`;
   }, [activePeriod]);
 
+  const manualCarryoverStorageKey = useMemo(() => {
+    if (!activePeriod) return null;
+    return `hrps.biometrics.manualCarryovers.${activePeriod.year}-${pad2(activePeriod.month)}`;
+  }, [activePeriod]);
+
   const activePeriodKey = useMemo(() => {
     if (!activePeriod) return null;
     return `${activePeriod.year}-${pad2(activePeriod.month)}`;
@@ -3291,6 +3421,38 @@ function BioLogUploaderContent() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!manualCarryoverStorageKey) {
+      setManualCarryovers([]);
+      setManualCarryoversHydrated(true);
+      return;
+    }
+    setManualCarryoversHydrated(false);
+    try {
+      const dbValue = activePeriodKey
+        ? getSettingValue<unknown[]>(
+            analyzerSettingsRef.current,
+            "department",
+            ANALYZER_SETTING_KEYS.manualCarryovers(activePeriodKey)
+          )
+        : null;
+      const raw = window.localStorage.getItem(manualCarryoverStorageKey);
+      if (Array.isArray(dbValue)) {
+        setManualCarryovers(sanitizeManualCarryovers(dbValue));
+      } else if (!raw) {
+        setManualCarryovers([]);
+      } else {
+        setManualCarryovers(sanitizeManualCarryovers(JSON.parse(raw)));
+      }
+    } catch (error) {
+      console.warn("Failed to load manual carryovers", error);
+      setManualCarryovers([]);
+    } finally {
+      setManualCarryoversHydrated(true);
+    }
+  }, [activePeriodKey, analyzerSettingsHydrated, manualCarryoverStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     if (!manualExclusionStorageKey || !manualExclusionsHydrated) return;
     try {
       if (!manualExclusions.length) {
@@ -3311,6 +3473,29 @@ function BioLogUploaderContent() {
       console.warn("Failed to persist manual exclusions", error);
     }
   }, [activePeriodKey, manualExclusionStorageKey, manualExclusions, manualExclusionsHydrated, saveAnalyzerSettings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!manualCarryoverStorageKey || !manualCarryoversHydrated) return;
+    try {
+      if (!manualCarryovers.length) {
+        window.localStorage.removeItem(manualCarryoverStorageKey);
+      } else {
+        window.localStorage.setItem(manualCarryoverStorageKey, JSON.stringify(manualCarryovers));
+      }
+      if (activePeriodKey) {
+        saveAnalyzerSettings([
+          {
+            scope: "department",
+            key: ANALYZER_SETTING_KEYS.manualCarryovers(activePeriodKey),
+            value: manualCarryovers,
+          },
+        ]);
+      }
+    } catch (error) {
+      console.warn("Failed to persist manual carryovers", error);
+    }
+  }, [activePeriodKey, manualCarryoverStorageKey, manualCarryovers, manualCarryoversHydrated, saveAnalyzerSettings]);
 
   useEffect(() => {
     if (!activePeriod) {
@@ -3632,7 +3817,7 @@ function BioLogUploaderContent() {
       return;
     }
 
-    if (!manualExclusionsHydrated || !holidayExclusionsHydrated) return;
+    if (!manualExclusionsHydrated || !manualCarryoversHydrated || !holidayExclusionsHydrated) return;
     if (!overtimeHydrated) return;
 
     const manualKey = manualPeriodSelection
@@ -3646,6 +3831,7 @@ function BioLogUploaderContent() {
       manualKey,
       filteredPerDayRows,
       manualPayload,
+      manualCarryovers,
       overtimePolicyPayload,
       workSchedule
     );
@@ -3683,6 +3869,7 @@ function BioLogUploaderContent() {
             composedFromDayOnly: row.composedFromDayOnly,
           })),
           manualExclusions: manualPayload,
+          manualCarryovers,
           evaluationOptions: { overtime: overtimePolicyPayload, workSchedule },
         };
 
@@ -3742,6 +3929,8 @@ function BioLogUploaderContent() {
     identityReady,
     manualExclusionContext,
     manualExclusionsHydrated,
+    manualCarryovers,
+    manualCarryoversHydrated,
     holidayExclusionsHydrated,
     manualPeriodSelection,
     manualSelectionValid,
@@ -4115,20 +4304,9 @@ const applyColumnFilters = useCallback(
   const searchedPerEmployee = useMemo(() => {
     if (!filteredPerEmployee.length) return filteredPerEmployee;
     const base = applyColumnFilters(filteredPerEmployee);
-    const query = employeeSearch.trim().toLowerCase();
+    const query = employeeSearch.trim();
     if (!query) return base;
-    return base.filter((row) => {
-      const name = row.employeeName?.toLowerCase() ?? "";
-      const id = row.employeeId?.toLowerCase() ?? "";
-      const employeeNo = firstEmployeeNoToken(row.employeeNo)?.toLowerCase() ?? "";
-      const token = row.employeeToken?.toLowerCase() ?? "";
-      return (
-        name.includes(query) ||
-        employeeNo.includes(query) ||
-        id.includes(query) ||
-        token.includes(query)
-      );
-    });
+    return base.filter((row) => matchesSharedSearch(row, query));
   }, [applyColumnFilters, employeeSearch, filteredPerEmployee]);
 
   const lateMetricColumnKey: SummaryColumnKey =
@@ -4143,7 +4321,7 @@ const applyColumnFilters = useCallback(
     const employeeTypeKeys = selectedEmployeeTypes.length
       ? new Set(selectedEmployeeTypes.map((value) => value.trim().toLowerCase()))
       : null;
-    const query = employeeSearch.trim().toLowerCase();
+    const query = employeeSearch.trim();
     const hasQuery = query.length > 0;
     return perDay.filter((row) => {
       if (officeKeys) {
@@ -4174,16 +4352,7 @@ const applyColumnFilters = useCallback(
         return false;
       }
       if (!hasQuery) return true;
-      const name = row.employeeName?.toLowerCase() ?? "";
-      const id = row.employeeId?.toLowerCase() ?? "";
-      const employeeNo = firstEmployeeNoToken(row.employeeNo)?.toLowerCase() ?? "";
-      const token = row.employeeToken?.toLowerCase() ?? "";
-      return (
-        name.includes(query) ||
-        employeeNo.includes(query) ||
-        id.includes(query) ||
-        token.includes(query)
-      );
+      return matchesSharedSearch(row, query);
     });
   }, [
     employeeSearch,
@@ -4201,6 +4370,49 @@ const applyColumnFilters = useCallback(
     if (!detailsKey) return [] as PerDayRow[];
     return filteredPerDayPreview.filter((row) => makeEmployeeDetailsKey(row) === detailsKey);
   }, [detailsEmployee, filteredPerDayPreview]);
+
+  const manualCarryoverKeySet = useMemo(
+    () =>
+      new Set(
+        manualCarryovers.map((override) =>
+          makeManualCarryoverKey(override.employeeToken, override.sourceDateISO)
+        )
+      ),
+    [manualCarryovers]
+  );
+
+  const handleForceCarryover = useCallback(
+    (row: Pick<PerDayRow, "employeeToken" | "dateISO">) => {
+      const employeeToken = normalizeBiometricToken(row.employeeToken ?? "");
+      if (!employeeToken) return;
+      const next = sanitizeManualCarryovers([
+        ...manualCarryovers,
+        { employeeToken, sourceDateISO: row.dateISO },
+      ]);
+      setManualCarryovers(next);
+      lastEvaluatedKey.current = "";
+      toast({
+        title: "Carryover saved",
+        description: `The first punch on ${row.dateISO} will be reassigned to the previous day on the next evaluation.`,
+      });
+    },
+    [manualCarryovers, toast]
+  );
+
+  const handleRemoveCarryover = useCallback(
+    (row: Pick<PerDayRow, "employeeToken" | "dateISO">) => {
+      const key = makeManualCarryoverKey(row.employeeToken ?? "", row.dateISO);
+      setManualCarryovers((prev) =>
+        prev.filter((entry) => makeManualCarryoverKey(entry.employeeToken, entry.sourceDateISO) !== key)
+      );
+      lastEvaluatedKey.current = "";
+      toast({
+        title: "Carryover removed",
+        description: `Manual carryover override for ${row.dateISO} was removed.`,
+      });
+    },
+    [toast]
+  );
 
   useEffect(() => {
     if (!selectedScheduleTypes.length) return;
@@ -4348,6 +4560,7 @@ const applyColumnFilters = useCallback(
           manualKey,
           filteredPerDayRows,
           manualPayload,
+          manualCarryovers,
           overtimePolicyPayload,
           workSchedule
         );
@@ -4386,7 +4599,11 @@ const applyColumnFilters = useCallback(
         fetch("/api/biometrics/re-enrich", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ entries, manualExclusions: manualPayload }),
+          body: JSON.stringify({
+            entries,
+            manualExclusions: manualPayload,
+            manualCarryovers,
+          }),
         }),
         15_000
       );
@@ -4439,6 +4656,7 @@ const applyColumnFilters = useCallback(
         manualKey,
         updatedFilteredRows,
         manualPayload,
+        manualCarryovers,
         overtimePolicyPayload,
         workSchedule
       );
@@ -4452,6 +4670,7 @@ const applyColumnFilters = useCallback(
       filteredPerDayRows,
       manualExclusionContext,
       manualExclusionsHydrated,
+      manualCarryovers,
       holidayExclusionsHydrated,
       manualPeriodSelection,
       removeManualResolved,
@@ -4985,8 +5204,9 @@ const applyColumnFilters = useCallback(
                   setManualYear(value);
                 }}
                 placeholder="YYYY"
-                className="h-9 w-[120px]"
+                className="h-9 w-[120px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 disabled={!useManualPeriod}
+                onWheel={(event) => event.currentTarget.blur()}
               />
             </div>
           </div>
@@ -5289,9 +5509,12 @@ const applyColumnFilters = useCallback(
             ) : (
               <div className="space-y-4 py-2">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor="ot-rounding" className="text-sm font-medium">
-                      Rounding
+                      <SettingHint
+                        label="Rounding"
+                        hint="Choose how OT minutes are rounded after all OT rules are applied. Use No rounding for exact minutes, or 15/30-minute rounding if your policy requires it."
+                      />
                     </Label>
                     <Select
                       value={overtimePolicy.rounding}
@@ -5316,13 +5539,14 @@ const applyColumnFilters = useCallback(
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Round each overtime bucket to the selected increment.
-                    </p>
+                    <p className="text-xs text-muted-foreground">How final OT minutes are rounded.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="ot-min-block" className="text-sm font-medium">
-                      Minimum OT block (min)
+                      <SettingHint
+                        label="Minimum OT block (min)"
+                        hint="Ignore OT shorter than this value before rounding. Example: if this is 60, a 45-minute OT extension will not be counted."
+                      />
                     </Label>
                     <Input
                       id="ot-min-block"
@@ -5340,16 +5564,17 @@ const applyColumnFilters = useCallback(
                       }}
                       disabled={!overtimeHydrated}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Discard overtime fragments shorter than this before rounding.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Minimum minutes required before OT counts.</p>
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="ot-grace-after" className="text-sm font-medium">
-                      Grace after end (min)
+                      <SettingHint
+                        label="Post-shift OT starts after (min)"
+                        hint="Minutes immediately after scheduled end that should not count as OT. Example: if shift ends at 6:00 PM and this is 60, OT starts at 7:00 PM."
+                      />
                     </Label>
                     <Input
                       id="ot-grace-after"
@@ -5367,17 +5592,43 @@ const applyColumnFilters = useCallback(
                       }}
                       disabled={!overtimeHydrated}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Allow this many minutes after shift end before post-shift overtime starts.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Delay before post-shift OT starts.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-carryover-cutoff" className="text-sm font-medium">
+                      <SettingHint
+                        label="Overnight carryover cutoff (min)"
+                        hint="Next-day punches before this time can be pulled back to the previous OT day. Example: 360 means up to 6:00 AM may still be treated as yesterday's OT close."
+                      />
+                    </Label>
+                    <Input
+                      id="ot-carryover-cutoff"
+                      type="number"
+                      min={0}
+                      value={overtimePolicy.overnightCarryoverCutoffMin}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setOvertimePolicy((prev) =>
+                          sanitizeOvertimePolicyState({
+                            ...prev,
+                            overnightCarryoverCutoffMin: value === "" ? 0 : Number(value),
+                          })
+                        );
+                      }}
+                      disabled={!overtimeHydrated}
+                    />
+                    <p className="text-xs text-muted-foreground">How late overnight OT can still belong to yesterday.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="ot-count-pre" className="text-sm font-medium">
-                      Count pre-shift minutes
+                      <SettingHint
+                        label="Count pre-shift minutes"
+                        hint="Turn this on if time worked before the scheduled start should count as OT. Leave it off if OT should only be counted after shift end."
+                      />
                     </Label>
                     <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-3 py-2">
                       <p className="text-xs text-muted-foreground">
-                        Include minutes before the scheduled start as pre-shift overtime.
+                        Count work before shift start as OT.
                       </p>
                       <Switch
                         id="ot-count-pre"
@@ -5394,24 +5645,17 @@ const applyColumnFilters = useCallback(
                       />
                     </div>
                   </div>
-                  <div className="sm:col-span-2">
+                  <div className="space-y-1.5">
                     <div className="flex items-start justify-between gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-3 py-2">
                       <div className="space-y-1 pr-3">
-                        <p className="flex items-center gap-1 text-sm font-medium text-foreground">
-                          Credit OT if worked on excused days
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex">
-                                <Info className="h-4 w-4 text-muted-foreground" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Late/UT/Absence stay 0. If punches exist, minutes are credited to OT (Excused).
-                            </TooltipContent>
-                          </Tooltip>
+                        <p className="text-sm font-medium text-foreground">
+                          <SettingHint
+                            label="Credit OT if worked on excused days"
+                            hint="Use this when employees are excused from normal attendance rules but should still receive OT if they actually worked. Late, undertime, and absence remain zero."
+                          />
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Applies to manual exclusions with punches, treating work as excused overtime.
+                          If an excused day has punches, credit OT without marking Late/UT/Absent.
                         </p>
                       </div>
                       <Switch
@@ -5434,7 +5678,10 @@ const applyColumnFilters = useCallback(
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="ot-flex-mode" className="text-sm font-medium">
-                      Flex mode rule
+                      <SettingHint
+                        label="Flex mode rule"
+                        hint="Controls OT behavior for flex schedules. Strict counts only time outside the allowed bandwidth. Soft can also count extra minutes beyond required daily work."
+                      />
                     </Label>
                     <Select
                       value={overtimePolicy.flexMode}
@@ -5469,13 +5716,16 @@ const applyColumnFilters = useCallback(
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="ot-night-diff" className="text-sm font-medium">
-                      Night differential window
+                      <SettingHint
+                        label="Night differential window"
+                        hint="Turn this on if you want OT minutes overlapping 10:00 PM to 6:00 AM to be reported separately as night differential."
+                      />
                     </Label>
                     <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 px-3 py-2">
                       <div className="space-y-1 pr-3">
                         <p className="text-sm font-medium text-foreground">Track 22:00–06:00</p>
                         <p className="text-xs text-muted-foreground">
-                          Report overtime minutes overlapping the night differential window.
+                          Track OT minutes between 10:00 PM and 6:00 AM.
                         </p>
                       </div>
                       <Switch
@@ -5498,7 +5748,10 @@ const applyColumnFilters = useCallback(
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="ot-meal-deduct" className="text-sm font-medium">
-                      Auto meal deduction (min)
+                      <SettingHint
+                        label="Auto meal deduction (min)"
+                        hint="Minutes to subtract from OT once the trigger is reached. Example: set 60 if your policy deducts a 1-hour meal break from long OT."
+                      />
                     </Label>
                     <Input
                       id="ot-meal-deduct"
@@ -5517,13 +5770,14 @@ const applyColumnFilters = useCallback(
                       placeholder="e.g. 60"
                       disabled={!overtimeHydrated}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Subtract this many minutes once total overtime meets the trigger. Set to 0 or blank to disable.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Minutes deducted from long OT blocks.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="ot-meal-trigger" className="text-sm font-medium">
-                      Meal deduction trigger (min)
+                      <SettingHint
+                        label="Meal deduction trigger (min)"
+                        hint="Total OT needed before the auto meal deduction applies. Example: if this is 180, the deduction starts only when OT reaches 3 hours."
+                      />
                     </Label>
                     <Input
                       id="ot-meal-trigger"
@@ -5542,9 +5796,7 @@ const applyColumnFilters = useCallback(
                       placeholder="e.g. 300"
                       disabled={!overtimeHydrated}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Apply the meal deduction once total overtime reaches this threshold. Matches daily totals.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Minimum OT needed before meal deduction is applied.</p>
                   </div>
                 </div>
 
@@ -6579,12 +6831,18 @@ const applyColumnFilters = useCallback(
                   <th className="p-2 text-left">Timeline</th>
                   <th className="p-2 text-left">Source files</th>
                   <th className="p-2 text-left">Punches</th>
+                  <th className="p-2 text-left">Actions</th>
                   <th className="p-2 text-center">Late</th>
                   <th className="p-2 text-center">Undertime</th>
                 </tr>
               </thead>
               <tbody>
                 {detailsRows.map((row, index) => {
+                  const previousRow = index > 0 ? detailsRows[index - 1] : null;
+                  const hasCarryoverSource =
+                    previousRow != null && getNextDateISO(previousRow.dateISO) === row.dateISO;
+                  const manualCarryoverKey = makeManualCarryoverKey(row.employeeToken ?? "", row.dateISO);
+                  const hasManualCarryover = manualCarryoverKeySet.has(manualCarryoverKey);
                   const weeklyWindowsLabel = formatTimelineLabel(row.weeklyPatternWindows ?? []);
                   const weeklyPresenceLabel = formatTimelineLabel(row.weeklyPatternPresence ?? []);
                   const evaluationStatus = row.evaluationStatus ??
@@ -6595,6 +6853,12 @@ const applyColumnFilters = useCallback(
                       : "no_punch");
                   const isNoPunch = evaluationStatus === "no_punch";
                   const isExcused = evaluationStatus === "excused";
+                  const canToggleCarryover =
+                    hasCarryoverSource &&
+                    !isNoPunch &&
+                    !isExcused &&
+                    Boolean(row.employeeToken?.trim()) &&
+                    row.allTimes.length > 0;
                   const isUnmatched = isUnmatchedIdentity(row.identityStatus, row.resolvedEmployeeId);
                   const resolvedEmployeeId = row.resolvedEmployeeId?.trim();
                   const employeeNo = firstEmployeeNoToken(row.employeeNo);
@@ -6651,20 +6915,35 @@ const applyColumnFilters = useCallback(
                       </td>
                       <td className="p-2">{dateFormatter.format(toDate(row.dateISO))}</td>
                       <td className="p-2">
-                        {isExcused ? (
-                          <Badge variant="outline" className="bg-muted/60 text-muted-foreground">
-                            {statusLabel}
-                          </Badge>
-                        ) : row.absent ? (
-                          <span className="font-semibold text-destructive">{statusLabel}</span>
-                        ) : (
-                          statusLabel
-                        )}
-                        {row.notes?.map((note, noteIndex) => (
-                          <p key={`${row.employeeId}-${row.dateISO}-note-${noteIndex}`} className="mt-1 text-[11px] text-muted-foreground">
-                            {note}
-                          </p>
-                        ))}
+                        <div className="inline-flex items-start gap-2">
+                          {isExcused ? (
+                            <Badge variant="outline" className="bg-muted/60 text-muted-foreground">
+                              {statusLabel}
+                            </Badge>
+                          ) : row.absent ? (
+                            <span className="font-semibold text-destructive">{statusLabel}</span>
+                          ) : (
+                            <span>{statusLabel}</span>
+                          )}
+                          {row.notes?.length ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                                  aria-label="Show day notes"
+                                >
+                                  <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" sideOffset={6} className="max-w-xs space-y-1 text-sm">
+                                {row.notes.map((note, noteIndex) => (
+                                  <p key={`${row.employeeId}-${row.dateISO}-note-${noteIndex}`}>{note}</p>
+                                ))}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="p-2 text-center">{row.earliest ?? ""}</td>
                       <td className="p-2 text-center">{row.latest ?? ""}</td>
@@ -6739,6 +7018,24 @@ const applyColumnFilters = useCallback(
                             </div>
                           ) : null}
                         </div>
+                      </td>
+                      <td className="p-2 align-top">
+                        {canToggleCarryover ? (
+                          <Button
+                            type="button"
+                            variant={hasManualCarryover ? "secondary" : "outline"}
+                            size="sm"
+                            onClick={() =>
+                              hasManualCarryover
+                                ? handleRemoveCarryover(row)
+                                : handleForceCarryover(row)
+                            }
+                          >
+                            {hasManualCarryover ? "Undo carryover" : "Carry to prev day"}
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="p-2 text-center">
                         {isExcused ? (

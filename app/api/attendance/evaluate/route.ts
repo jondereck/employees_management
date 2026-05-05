@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { evaluateAttendanceEntries, type EvaluationEntry } from "@/lib/attendance/evaluateEntries";
+import {
+  evaluateAttendanceEntries,
+  type EvaluationEntry,
+  type ManualCarryoverOverride,
+} from "@/lib/attendance/evaluateEntries";
 import type { EvaluationOptions } from "@/types/attendance";
 import type { ManualExclusion } from "@/types/manual-exclusion";
 
@@ -62,13 +66,19 @@ const ManualExclusionSchema = z
     }
   });
 
+const ManualCarryoverSchema = z.object({
+  employeeToken: z.string().min(1),
+  sourceDateISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 const OvertimePolicySchema = z.object({
-  rounding: z.enum(["none", "nearest15", "nearest30"]).default("nearest15"),
-  graceAfterEndMin: z.number().int().min(0).default(0),
+  rounding: z.enum(["none", "nearest15", "nearest30"]).default("none"),
+  graceAfterEndMin: z.number().int().min(0).default(60),
+  overnightCarryoverCutoffMin: z.number().int().min(0).default(360),
   countPreShift: z.boolean().default(false),
-  minBlockMin: z.number().int().min(0).default(0),
-  mealDeductMin: z.number().int().min(0).optional().nullable(),
-  mealTriggerMin: z.number().int().min(0).optional().nullable(),
+  minBlockMin: z.number().int().min(0).default(120),
+  mealDeductMin: z.number().int().min(0).optional().nullable().default(60),
+  mealTriggerMin: z.number().int().min(0).optional().nullable().default(240),
   nightDiffEnabled: z.boolean().default(false),
   flexMode: z.enum(["strict", "soft"]).default("strict"),
   overtimeOnExcused: z.boolean().default(true),
@@ -96,13 +106,14 @@ const EvaluationOptionsSchema = z
 const Payload = z.object({
   entries: z.array(Row),
   manualExclusions: z.array(ManualExclusionSchema).optional(),
+  manualCarryovers: z.array(ManualCarryoverSchema).optional(),
   evaluationOptions: EvaluationOptionsSchema,
 });
 
 export async function POST(req: Request) {
   try {
     const json = await req.json();
-    const { entries, manualExclusions = [], evaluationOptions } = Payload.parse(json);
+    const { entries, manualExclusions = [], manualCarryovers = [], evaluationOptions } = Payload.parse(json);
 
     const payloadEntries: EvaluationEntry[] = entries.map((entry) => ({
       employeeId: entry.employeeId,
@@ -151,6 +162,7 @@ export async function POST(req: Request) {
 
     const result = await evaluateAttendanceEntries(payloadEntries, {
       manualExclusions: manualExclusions as ManualExclusion[],
+      manualCarryovers: manualCarryovers as ManualCarryoverOverride[],
       evaluationOptions: normalizedOptions,
     });
     return NextResponse.json(result);

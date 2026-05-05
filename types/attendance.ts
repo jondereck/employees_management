@@ -7,6 +7,7 @@ export type FlexOTMode = "strict" | "soft";
 export interface OvertimePolicy {
   rounding: OvertimeRounding;
   graceAfterEndMin: number;
+  overnightCarryoverCutoffMin: number;
   countPreShift: boolean;
   minBlockMin: number;
   mealDeductMin?: number;

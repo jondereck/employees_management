@@ -1,17 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "./button";
 import { ImagePlus, Trash, Crosshair, Wand2, Pencil, Grid3x3, Loader2, X } from "lucide-react";
 import Image from "next/image";
-import { CldUploadWidget, type CloudinaryUploadWidgetResults } from "next-cloudinary";
 import dynamic from "next/dynamic";
 import type { Area } from "react-easy-crop";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils"; // Ensure you have this utility or replace with standard template literals
 
 // Lazy client-only cropper
 const Cropper: any = dynamic(() => import("react-easy-crop"), { ssr: false });
+const CLOUDINARY_UPLOAD_PRESET = "evo6spz1";
 
 interface ImageUploadProps {
   disabled?: boolean;
@@ -38,6 +37,7 @@ export default function ImageUpload({
   gender,
 }: ImageUploadProps) {
   const [isMounted, setIsMounted] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Crop modal state
   const [isCropping, setIsCropping] = useState(false);
@@ -48,6 +48,7 @@ export default function ImageUpload({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [editingOriginalUrl, setEditingOriginalUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => setIsMounted(true), []);
 
@@ -119,6 +120,44 @@ export default function ImageUpload({
     onChange(finalUrl);
     toast.success("Image updated");
     setIsCropping(false);
+  }
+
+  async function handleLocalUpload(file: File) {
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    if (!cloudName) {
+      toast.error("Cloudinary is not configured");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    formData.append("folder", "hrps/employees");
+
+    const toastId = toast.loading("Uploading image...");
+    try {
+      setIsUploading(true);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.secure_url) {
+        throw new Error(data?.error?.message || "Upload failed");
+      }
+
+      openCropper(data.secure_url, "add");
+      toast.success("Image uploaded", { id: toastId });
+    } catch (err: any) {
+      toast.error("Upload failed", {
+        id: toastId,
+        description: err?.message || "Please try again.",
+      });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   return (
@@ -204,31 +243,34 @@ export default function ImageUpload({
 
       {/* 2. Centered Upload Button */}
       {!isCropping && (
-        <CldUploadWidget
-          uploadPreset="evo6spz1"
-          onUpload={(res: CloudinaryUploadWidgetResults) => {
-            if (res?.event === "success" && res.info && typeof res.info === "object") {
-              const raw = (res.info as any).secure_url;
-              if (raw) {
-                value.forEach((url) => onRemove(url));
-                openCropper(raw, "add");
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void handleLocalUpload(file);
               }
-            }
-          }}
-        >
-          {({ open }) => (
-            <Button
-              type="button"
-              disabled={disabled}
-              onClick={() => open()}
-              variant="outline"
-              className="w-[180px] h-10 shadow-sm border-primary/10 hover:bg-primary/5 hover:text-primary transition-all rounded-xl font-semibold"
-            >
+            }}
+          />
+          <Button
+            type="button"
+            disabled={disabled || isUploading}
+            onClick={() => fileInputRef.current?.click()}
+            variant="outline"
+            className="w-[180px] h-10 shadow-sm border-primary/10 hover:bg-primary/5 hover:text-primary transition-all rounded-xl font-semibold"
+          >
+            {isUploading ? (
+              <Loader2 className="mr-2 h-4 w-4 text-primary animate-spin" />
+            ) : (
               <ImagePlus className="mr-2 h-4 w-4 text-primary" />
-              Upload Photo
-            </Button>
-          )}
-        </CldUploadWidget>
+            )}
+            {isUploading ? "Uploading..." : "Upload Photo"}
+          </Button>
+        </>
       )}
 
       {/* 3. Refined Crop Modal */}

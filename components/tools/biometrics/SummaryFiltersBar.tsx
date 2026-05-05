@@ -242,15 +242,20 @@ const SummaryFiltersBar = ({
 
   return (
     <div className={cn("flex flex-wrap items-center gap-3", className)}>
-      <div className="flex items-center gap-2">
-        <SearchIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <Input
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value.slice(0, 200))}
-          placeholder="Search name / employee # / token"
-          className="h-9 w-64"
-          aria-label="Search employees"
-        />
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <SearchIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Input
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value.slice(0, 200))}
+            placeholder="Search employee or office"
+            className="h-9 w-72"
+            aria-label="Search employees or offices"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Search employee fields, or use commas for multiple offices.
+        </p>
       </div>
 
       <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -270,10 +275,10 @@ const SummaryFiltersBar = ({
             ) : null}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[min(92vw,760px)] p-4">
-          <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="space-y-4">
-          <div className="space-y-2">
+        <PopoverContent align="start" className="w-[min(96vw,980px)] overflow-hidden p-4">
+          <div className="grid gap-4 xl:grid-cols-[220px_minmax(280px,1fr)_minmax(280px,1fr)]">
+          <div className="min-w-0 space-y-4">
+          <div className="min-w-0 space-y-2">
             <p className="text-sm font-medium">Head status</p>
             <Select value={filters.heads} onValueChange={handleHeadsChange}>
               <SelectTrigger className="h-9">
@@ -368,9 +373,9 @@ const SummaryFiltersBar = ({
                   : `${filters.employeeTypes.length} selected`
                 : "All types selected"}
             </p>
-            <Command shouldFilter>
+            <Command shouldFilter className="min-w-0 overflow-hidden rounded-md border">
               <CommandInput placeholder="Search employee types…" aria-label="Search employee types" />
-              <CommandList className="max-h-48">
+              <CommandList className="max-h-48 overflow-y-auto">
                 <CommandEmpty>No employee types found.</CommandEmpty>
                 <CommandGroup heading="Employee Types">
                   {employeeTypeOptions.map((option) => {
@@ -402,7 +407,7 @@ const SummaryFiltersBar = ({
             </Command>
           </div>
 
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">Offices</p>
               <div className="flex items-center gap-1">
@@ -430,9 +435,9 @@ const SummaryFiltersBar = ({
                   : `${filters.offices.length} selected`
                 : "All offices selected"}
             </p>
-            <Command shouldFilter>
+            <Command shouldFilter className="min-w-0 overflow-hidden rounded-md border">
               <CommandInput placeholder="Search offices…" aria-label="Search offices" />
-              <CommandList className="max-h-48">
+              <CommandList className="max-h-48 overflow-y-auto">
                 <CommandEmpty>No offices found.</CommandEmpty>
                 <CommandGroup heading="Offices">
                   {officeOptions.map((option) => {

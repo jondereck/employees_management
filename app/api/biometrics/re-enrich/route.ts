@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   evaluateAttendanceEntries,
   type EvaluationEntry,
+  type ManualCarryoverOverride,
 } from "@/lib/attendance/evaluateEntries";
 import type { ManualExclusion } from "@/types/manual-exclusion";
 
@@ -62,15 +63,21 @@ const ManualExclusionSchema = z
     }
   });
 
+const ManualCarryoverSchema = z.object({
+  employeeToken: z.string().min(1),
+  sourceDateISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 const Payload = z.object({
   entries: z.array(Row),
   manualExclusions: z.array(ManualExclusionSchema).optional(),
+  manualCarryovers: z.array(ManualCarryoverSchema).optional(),
 });
 
 export async function POST(req: Request) {
   try {
     const json = await req.json();
-    const { entries, manualExclusions = [] } = Payload.parse(json);
+    const { entries, manualExclusions = [], manualCarryovers = [] } = Payload.parse(json);
 
     const payloadEntries: EvaluationEntry[] = entries.map((entry) => ({
       employeeId: entry.employeeId,
@@ -91,6 +98,7 @@ export async function POST(req: Request) {
 
     const result = await evaluateAttendanceEntries(payloadEntries, {
       manualExclusions: manualExclusions as ManualExclusion[],
+      manualCarryovers: manualCarryovers as ManualCarryoverOverride[],
     });
     return NextResponse.json(result);
   } catch (error) {

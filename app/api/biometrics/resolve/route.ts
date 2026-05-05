@@ -43,8 +43,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Token cannot be empty." }, { status: 400 });
     }
 
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
+    const employee = await prisma.employee.findFirst({
+      where: {
+        id: employeeId,
+        isArchived: false,
+      },
       select: {
         id: true,
         lastName: true,
@@ -56,7 +59,7 @@ export async function POST(req: Request) {
     });
 
     if (!employee) {
-      return NextResponse.json({ error: "Employee not found." }, { status: 404 });
+      return NextResponse.json({ error: "Active employee not found." }, { status: 404 });
     }
 
     const identityMapModel = (prisma as typeof prisma & {

@@ -27,6 +27,29 @@ export type OvertimeComputation = {
   OT_excused: number;
   OT_total: number;
   ND_minutes: number;
+  spillover?: OvertimeComputation | null;
+  trace?: OvertimeTrace | null;
+};
+
+export type OvertimeTrace = {
+  scheduleType: string;
+  scheduleStart: string | null;
+  scheduleEnd: string | null;
+  postShiftStart: string | null;
+  firstSegmentStart: string | null;
+  lastSegmentEnd: string | null;
+  rawPreMinutes: number;
+  rawPostMinutes: number;
+  rawGeneralMinutes: number;
+  thresholdedPreMinutes: number;
+  thresholdedPostMinutes: number;
+  thresholdedGeneralMinutes: number;
+  roundedPreMinutes: number;
+  roundedPostMinutes: number;
+  roundedGeneralMinutes: number;
+  mealDeductedMinutes: number;
+  mealApplied: boolean;
+  nightDiffMinutes: number;
 };
 
 const clampInterval = (start: number, end: number): Interval | null => {
@@ -100,23 +123,6 @@ const subtractIntervals = (base: Interval[], toSubtract: Interval[]): Interval[]
   return mergeIntervals(result);
 };
 
-const extendForReference = (intervals: Interval[], reference: number): Interval[] => {
-  if (!intervals.length) return [];
-  const extended: Interval[] = [];
-  for (const [start, end] of intervals) {
-    const midpoint = (start + end) / 2;
-    const shiftedMidpoint = midpoint + MINUTES_PER_DAY;
-    const distOriginal = Math.abs(midpoint - reference);
-    const distShifted = Math.abs(shiftedMidpoint - reference);
-    if (distShifted < distOriginal) {
-      extended.push([start + MINUTES_PER_DAY, end + MINUTES_PER_DAY]);
-    } else {
-      extended.push([start, end]);
-    }
-  }
-  return mergeIntervals(extended);
-};
-
 const minutesOverlap = (a: Interval, b: Interval): number => {
   const start = Math.max(a[0], b[0]);
   const end = Math.min(a[1], b[1]);
@@ -160,6 +166,14 @@ const toMinutes = (value: HHMM): number => {
   return normalizedHours * 60 + normalizedMinutes;
 };
 
+const toHHMMLabel = (minutes: number): string => {
+  if (minutes === MINUTES_PER_DAY) return "24:00";
+  const normalized = ((minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+};
+
 const takeTail = (segments: Interval[], minutes: number): Interval[] => {
   if (minutes <= 0) return [];
   const result: Interval[] = [];
@@ -181,7 +195,20 @@ const sanitizePresence = (presence: MinuteInterval[]): Interval[] => {
     const interval = clampInterval(segment.start, segment.end);
     if (interval) normalized.push(interval);
   }
-  return mergeIntervals(normalized);
+  const merged = mergeIntervals(normalized);
+  if (merged.length < 2) return merged;
+  const trailingStarts = merged
+    .filter(([, end]) => end === MINUTES_PER_DAY)
+    .map(([start]) => start);
+  const hasStartOfDaySegment = merged.some(([start]) => start === 0);
+  if (!trailingStarts.length || !hasStartOfDaySegment) return merged;
+
+  const splitPoint = Math.max(...trailingStarts);
+  return mergeIntervals(
+    merged.map(([start, end]) =>
+      end <= splitPoint ? [start + MINUTES_PER_DAY, end + MINUTES_PER_DAY] : [start, end]
+    )
+  );
 };
 
 const zeroResult: OvertimeComputation = {
@@ -192,6 +219,8 @@ const zeroResult: OvertimeComputation = {
   OT_excused: 0,
   OT_total: 0,
   ND_minutes: 0,
+  spillover: null,
+  trace: null,
 };
 
 const combineSegments = (segments: Interval[][]): Interval[] =>
@@ -199,6 +228,190 @@ const combineSegments = (segments: Interval[][]): Interval[] =>
 
 const maybeClearSegments = (segments: Interval[], roundedMinutes: number): Interval[] =>
   roundedMinutes > 0 ? segments : [];
+
+const splitSegmentsByDay = (segments: Interval[]): { current: Interval[]; next: Interval[] } => {
+  const current: Interval[] = [];
+  const next: Interval[] = [];
+
+  for (const [start, end] of segments) {
+    const currentStart = Math.max(0, start);
+    const currentEnd = Math.min(MINUTES_PER_DAY, end);
+    if (currentEnd > currentStart) {
+      current.push([currentStart, currentEnd]);
+    }
+
+    const nextStart = Math.max(MINUTES_PER_DAY, start);
+    const nextEnd = Math.min(MINUTES_PER_DAY * 2, end);
+    if (nextEnd > nextStart) {
+      next.push([nextStart - MINUTES_PER_DAY, nextEnd - MINUTES_PER_DAY]);
+    }
+  }
+
+  return { current: mergeIntervals(current), next: mergeIntervals(next) };
+};
+
+type RawBucketSegments = {
+  pre?: Interval[];
+  post?: Interval[];
+  general?: Interval[];
+  restday?: Interval[];
+  holiday?: Interval[];
+};
+
+type FinalizeBucketsInput = {
+  policy: OvertimePolicy;
+  scheduleType: string;
+  scheduleStart: string | null;
+  scheduleEnd: string | null;
+  postShiftStart: string | null;
+  buckets: RawBucketSegments;
+  kind: "regular" | "restday" | "holiday";
+};
+
+const getFirstSegmentStart = (segments: Interval[]): string | null =>
+  segments.length ? toHHMMLabel(segments[0][0]) : null;
+
+const getLastSegmentEnd = (segments: Interval[]): string | null =>
+  segments.length ? toHHMMLabel(segments[segments.length - 1][1]) : null;
+
+const finalizeBuckets = ({
+  policy,
+  scheduleType,
+  scheduleStart,
+  scheduleEnd,
+  postShiftStart,
+  buckets,
+  kind,
+}: FinalizeBucketsInput): OvertimeComputation => {
+  const preSegments = mergeIntervals(buckets.pre ?? []);
+  const postSegments = mergeIntervals(buckets.post ?? []);
+  const generalSegments = mergeIntervals(buckets.general ?? []);
+  const restdaySegments = mergeIntervals(buckets.restday ?? []);
+  const holidaySegments = mergeIntervals(buckets.holiday ?? []);
+
+  const rawPreMinutes = sumIntervals(preSegments);
+  const rawPostMinutes = sumIntervals(postSegments);
+  const rawGeneralMinutes = sumIntervals(generalSegments);
+  const rawRestdayMinutes = sumIntervals(restdaySegments);
+  const rawHolidayMinutes = sumIntervals(holidaySegments);
+
+  const thresholdedPreMinutes = applyMinBlock(rawPreMinutes, policy.minBlockMin);
+  const thresholdedPostMinutes = applyMinBlock(rawPostMinutes, policy.minBlockMin);
+  const thresholdedGeneralMinutes = applyMinBlock(rawGeneralMinutes, policy.minBlockMin);
+  const thresholdedRestdayMinutes = applyMinBlock(rawRestdayMinutes, policy.minBlockMin);
+  const thresholdedHolidayMinutes = applyMinBlock(rawHolidayMinutes, policy.minBlockMin);
+
+  const roundedPreMinutes = roundMinutes(thresholdedPreMinutes, policy.rounding);
+  const roundedPostMinutes = roundMinutes(thresholdedPostMinutes, policy.rounding);
+  const roundedGeneralMinutes = roundMinutes(thresholdedGeneralMinutes, policy.rounding);
+  const roundedRestdayMinutes = roundMinutes(thresholdedRestdayMinutes, policy.rounding);
+  const roundedHolidayMinutes = roundMinutes(thresholdedHolidayMinutes, policy.rounding);
+
+  const otSegments = combineSegments([
+    maybeClearSegments(preSegments, roundedPreMinutes),
+    maybeClearSegments(postSegments, roundedPostMinutes),
+    maybeClearSegments(generalSegments, roundedGeneralMinutes),
+    maybeClearSegments(restdaySegments, roundedRestdayMinutes),
+    maybeClearSegments(holidaySegments, roundedHolidayMinutes),
+  ]);
+
+  let otPreMinutes = roundedPreMinutes;
+  let otPostMinutes = roundedPostMinutes;
+  let otGeneralMinutes = roundedGeneralMinutes;
+  let otRestdayMinutes = roundedRestdayMinutes;
+  let otHolidayMinutes = roundedHolidayMinutes;
+
+  let otTotal =
+    otPreMinutes +
+    otPostMinutes +
+    otGeneralMinutes +
+    otRestdayMinutes +
+    otHolidayMinutes;
+
+  let mealDeductedMinutes = 0;
+  let mealApplied = false;
+  if (
+    policy.mealDeductMin &&
+    policy.mealDeductMin > 0 &&
+    policy.mealTriggerMin &&
+    policy.mealTriggerMin > 0 &&
+    otTotal >= policy.mealTriggerMin
+  ) {
+    mealDeductedMinutes = Math.min(policy.mealDeductMin, otTotal);
+    otTotal = Math.max(0, otTotal - mealDeductedMinutes);
+    mealApplied = mealDeductedMinutes > 0;
+
+    if (mealApplied) {
+      if (kind === "restday") {
+        otRestdayMinutes = Math.max(0, otRestdayMinutes - mealDeductedMinutes);
+      } else if (kind === "holiday") {
+        otHolidayMinutes = Math.max(0, otHolidayMinutes - mealDeductedMinutes);
+      }
+    }
+  }
+
+  const nightDiffMinutes = policy.nightDiffEnabled ? minutesInNightWindow(otSegments) : 0;
+  const allSegments = combineSegments([
+    preSegments,
+    postSegments,
+    generalSegments,
+    restdaySegments,
+    holidaySegments,
+  ]);
+
+  return {
+    OT_pre: otPreMinutes,
+    OT_post: otPostMinutes,
+    OT_restday: otRestdayMinutes,
+    OT_holiday: otHolidayMinutes,
+    OT_excused: 0,
+    OT_total: otTotal,
+    ND_minutes: nightDiffMinutes,
+    spillover: null,
+    trace: {
+      scheduleType,
+      scheduleStart,
+      scheduleEnd,
+      postShiftStart,
+      firstSegmentStart: getFirstSegmentStart(allSegments),
+      lastSegmentEnd: getLastSegmentEnd(allSegments),
+      rawPreMinutes,
+      rawPostMinutes,
+      rawGeneralMinutes:
+        kind === "restday" ? rawRestdayMinutes : kind === "holiday" ? rawHolidayMinutes : rawGeneralMinutes,
+      thresholdedPreMinutes,
+      thresholdedPostMinutes,
+      thresholdedGeneralMinutes:
+        kind === "restday"
+          ? thresholdedRestdayMinutes
+          : kind === "holiday"
+          ? thresholdedHolidayMinutes
+          : thresholdedGeneralMinutes,
+      roundedPreMinutes,
+      roundedPostMinutes,
+      roundedGeneralMinutes:
+        kind === "restday" ? roundedRestdayMinutes : kind === "holiday" ? roundedHolidayMinutes : roundedGeneralMinutes,
+      mealDeductedMinutes,
+      mealApplied,
+      nightDiffMinutes,
+    },
+  };
+};
+
+const splitBucketSegments = (buckets: RawBucketSegments): { current: RawBucketSegments; next: RawBucketSegments } => {
+  const current: RawBucketSegments = {};
+  const next: RawBucketSegments = {};
+
+  for (const key of ["pre", "post", "general", "restday", "holiday"] as const) {
+    const segments = buckets[key];
+    if (!segments?.length) continue;
+    const split = splitSegmentsByDay(segments);
+    if (split.current.length) current[key] = split.current;
+    if (split.next.length) next[key] = split.next;
+  }
+
+  return { current, next };
+};
 
 export type ComputeOvertimeInput = {
   schedule: AnySchedule;
@@ -212,17 +425,29 @@ const computeRestOrHoliday = (
   policy: OvertimePolicy,
   bucket: "restday" | "holiday"
 ): OvertimeComputation => {
-  const totalRaw = sumIntervals(presence);
-  const thresholded = applyMinBlock(totalRaw, policy.minBlockMin);
-  const rounded = roundMinutes(thresholded, policy.rounding);
-  if (rounded <= 0) {
-    return { ...zeroResult };
-  }
-  const nd = policy.nightDiffEnabled ? minutesInNightWindow(presence) : 0;
-  if (bucket === "holiday") {
-    return { ...zeroResult, OT_holiday: rounded, OT_total: rounded, ND_minutes: nd };
-  }
-  return { ...zeroResult, OT_restday: rounded, OT_total: rounded, ND_minutes: nd };
+  const split = splitBucketSegments(bucket === "holiday" ? { holiday: presence } : { restday: presence });
+  const current = finalizeBuckets({
+    policy,
+    scheduleType: bucket === "holiday" ? "HOLIDAY" : "RESTDAY",
+    scheduleStart: null,
+    scheduleEnd: null,
+    postShiftStart: null,
+    buckets: split.current,
+    kind: bucket,
+  });
+  const spillover = finalizeBuckets({
+    policy,
+    scheduleType: bucket === "holiday" ? "HOLIDAY" : "RESTDAY",
+    scheduleStart: null,
+    scheduleEnd: null,
+    postShiftStart: null,
+    buckets: split.next,
+    kind: bucket,
+  });
+  return {
+    ...current,
+    spillover: spillover.OT_total > 0 || spillover.ND_minutes > 0 ? spillover : null,
+  };
 };
 
 const computeFlexOvertime = (
@@ -237,7 +462,7 @@ const computeFlexOvertime = (
     bandwidthEnd += MINUTES_PER_DAY;
   }
 
-  const extendedPresence = extendForReference(presence, bandwidthStart);
+  const extendedPresence = presence;
   const bandRange: Interval = [bandwidthStart, bandwidthEnd];
   const inBand = mergeIntervals(clipIntervals(extendedPresence, bandRange));
   const outBand = subtractIntervals(extendedPresence, [bandRange]);
@@ -277,14 +502,13 @@ const computeFixedOrShiftOvertime = (
   if (end <= start) {
     end += MINUTES_PER_DAY;
   }
-  const extendedPresence = extendForReference(presence, start);
   const preRange: Interval = [start - MINUTES_PER_DAY, start];
   const postRange: Interval = [end + policy.graceAfterEndMin, start + MINUTES_PER_DAY];
 
   const preSegments = policy.countPreShift
-    ? mergeIntervals(clipIntervals(extendedPresence, preRange))
+    ? mergeIntervals(clipIntervals(presence, preRange))
     : [];
-  const postSegments = mergeIntervals(clipIntervals(extendedPresence, postRange));
+  const postSegments = mergeIntervals(clipIntervals(presence, postRange));
 
   const preMinutes = sumIntervals(preSegments);
   const postMinutes = sumIntervals(postSegments);
@@ -311,63 +535,52 @@ export const computeOvertimeForDay = (input: ComputeOvertimeInput): OvertimeComp
     return computeRestOrHoliday(presence, policy, "restday");
   }
 
-  let otPreMinutes = 0;
-  let otPostMinutes = 0;
-  let otGeneralMinutes = 0;
   let preSegments: Interval[] = [];
   let postSegments: Interval[] = [];
   let generalSegments: Interval[] = [];
+  let scheduleStart: string | null = null;
+  let scheduleEnd: string | null = null;
+  let postShiftStart: string | null = null;
 
   if (input.schedule.type === "NONE") {
-    otGeneralMinutes = sumIntervals(presence);
     generalSegments = presence;
   } else if (input.schedule.type === "FLEX") {
-    const { minutes, segments } = computeFlexOvertime(input.schedule, presence, policy);
-    otGeneralMinutes = minutes;
+    scheduleStart = input.schedule.bandwidthStart;
+    scheduleEnd = input.schedule.bandwidthEnd;
+    const { segments } = computeFlexOvertime(input.schedule, presence, policy);
     generalSegments = segments;
   } else if (input.schedule.type === "FIXED" || input.schedule.type === "SHIFT") {
+    scheduleStart = input.schedule.type === "FIXED" ? input.schedule.startTime : input.schedule.shiftStart;
+    scheduleEnd = input.schedule.type === "FIXED" ? input.schedule.endTime : input.schedule.shiftEnd;
+    const rawEnd = input.schedule.type === "FIXED" ? toMinutes(input.schedule.endTime) : toMinutes(input.schedule.shiftEnd);
+    postShiftStart = toHHMMLabel(rawEnd + policy.graceAfterEndMin);
     const { pre, post } = computeFixedOrShiftOvertime(input.schedule, presence, policy);
-    otPreMinutes = pre.minutes;
-    otPostMinutes = post.minutes;
     preSegments = pre.segments;
     postSegments = post.segments;
   }
 
-  const preThresholded = applyMinBlock(otPreMinutes, policy.minBlockMin);
-  const postThresholded = applyMinBlock(otPostMinutes, policy.minBlockMin);
-  const generalThresholded = applyMinBlock(otGeneralMinutes, policy.minBlockMin);
-
-  const preRounded = roundMinutes(preThresholded, policy.rounding);
-  const postRounded = roundMinutes(postThresholded, policy.rounding);
-  const generalRounded = roundMinutes(generalThresholded, policy.rounding);
-
-  const otSegments = combineSegments([
-    maybeClearSegments(preSegments, preRounded),
-    maybeClearSegments(postSegments, postRounded),
-    maybeClearSegments(generalSegments, generalRounded),
-  ]);
-
-  let otTotal = preRounded + postRounded + generalRounded;
-
-  if (
-    policy.mealDeductMin &&
-    policy.mealDeductMin > 0 &&
-    policy.mealTriggerMin &&
-    policy.mealTriggerMin > 0 &&
-    otTotal >= policy.mealTriggerMin
-  ) {
-    otTotal = Math.max(0, otTotal - policy.mealDeductMin);
-  }
-
-  const ndMinutes = policy.nightDiffEnabled ? minutesInNightWindow(otSegments) : 0;
+  const split = splitBucketSegments({ pre: preSegments, post: postSegments, general: generalSegments });
+  const current = finalizeBuckets({
+    policy,
+    scheduleType: input.schedule.type,
+    scheduleStart,
+    scheduleEnd,
+    postShiftStart,
+    buckets: split.current,
+    kind: "regular",
+  });
+  const spillover = finalizeBuckets({
+    policy,
+    scheduleType: input.schedule.type,
+    scheduleStart,
+    scheduleEnd,
+    postShiftStart,
+    buckets: split.next,
+    kind: "regular",
+  });
 
   return {
-    OT_pre: preRounded,
-    OT_post: postRounded,
-    OT_restday: 0,
-    OT_holiday: 0,
-    OT_excused: 0,
-    OT_total: otTotal,
-    ND_minutes: ndMinutes,
+    ...current,
+    spillover: spillover.OT_total > 0 || spillover.ND_minutes > 0 ? spillover : null,
   };
 };

@@ -105,7 +105,10 @@ export async function POST(req: Request) {
       );
     } else {
       manualMappings = await identityMapModel.findMany({
-        where: { token: { in: uniqueTokens } },
+        where: {
+          token: { in: uniqueTokens },
+          employee: { isArchived: false },
+        },
         include: {
           employee: {
             select: {
@@ -164,7 +167,10 @@ export async function POST(req: Request) {
 
     if (orConditions.length) {
       const batch = await prisma.employee.findMany({
-        where: { OR: orConditions },
+        where: {
+          isArchived: false,
+          OR: orConditions,
+        },
         select: {
           id: true,
           employeeNo: true,

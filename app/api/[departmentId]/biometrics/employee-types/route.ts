@@ -15,7 +15,10 @@ export async function GET(
 
   try {
     const types = await prisma.employee.findMany({
-      where: { departmentId },
+      where: {
+        departmentId,
+        isArchived: false,
+      },
       select: { employeeType: { select: { name: true } } },
       distinct: ["employeeTypeId"],
       orderBy: { employeeType: { name: "asc" } },
