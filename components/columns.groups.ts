@@ -20,6 +20,7 @@ export const COLUMN_GROUPS = [
     items: [
       "position",
       "employeeTypeId",
+      "workforceIndicator",
       "salaryGrade",
       "salaryStep",
       "dateHired",

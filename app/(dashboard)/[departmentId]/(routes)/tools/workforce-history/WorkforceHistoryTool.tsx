@@ -141,8 +141,8 @@ function toYearEndInputValue(year: number) {
 
 export default function WorkforceHistoryTool({ departmentId }: { departmentId: string }) {
   const currentYear = new Date().getFullYear();
-  const latestCompletedReportYear = Math.max(1900, currentYear - 1);
-  const [year, setYear] = useState(latestCompletedReportYear);
+  const latestSelectableReportYear = Math.max(1900, currentYear);
+  const [year, setYear] = useState(latestSelectableReportYear);
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [populationMode, setPopulationMode] = useState<"active" | "all">("active");
   const [dimension, setDimension] = useState<Dimension>("employeeType");
@@ -248,7 +248,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
       const nextAvailableYears = Array.isArray(options.availableYears)
         ? options.availableYears.filter(
             (value: unknown): value is number =>
-              typeof value === "number" && Number.isInteger(value) && value <= latestCompletedReportYear
+              typeof value === "number" && Number.isInteger(value) && value <= latestSelectableReportYear
           )
         : [];
 
@@ -268,7 +268,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
     } finally {
       setLoadingSetup(false);
     }
-  }, [departmentId, latestCompletedReportYear]);
+  }, [departmentId, latestSelectableReportYear]);
 
   const runReport = useCallback(async () => {
     setLoadingReport(true);
@@ -688,7 +688,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
         <Card>
           <CardHeader>
             <CardTitle>Report Controls</CardTitle>
-            <CardDescription>Counts are based on the latest snapshot on or before Dec 31.</CardDescription>
+
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -704,7 +704,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
                 <SelectContent>
                   {availableYears.map((availableYear) => (
                     <SelectItem key={availableYear} value={String(availableYear)}>
-                      {availableYear}
+                      {availableYear === currentYear ? `${availableYear} (current)` : availableYear}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -919,9 +919,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
         <Card>
           <CardHeader>
             <CardTitle>Indicator Suggestions</CardTitle>
-            <CardDescription>
-              Uses local keyword rules from position and office text. Review before applying; no paid AI call is used.
-            </CardDescription>
+
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 md:grid-cols-[1fr,180px]">

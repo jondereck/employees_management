@@ -27,6 +27,16 @@ export async function GET(req: Request) {
         employeeType: { select: { id: true, name: true, value: true } },
         eligibility: { select: { id: true, name: true, value: true } },
         designation: { select: { id: true, name: true, bioIndexCode: true } },
+        historySnapshots: {
+          where: { effectiveAt: { lte: new Date() } },
+          orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+          take: 1,
+          select: {
+            indicatorId: true,
+            effectiveAt: true,
+            indicator: { select: { name: true } },
+          },
+        },
       },
     });
 

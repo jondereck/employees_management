@@ -106,17 +106,17 @@ export async function GET(
 
 function normalizeYear(value: unknown) {
   const year = Number(value);
-  const latest = getLatestCompletedReportYear();
+  const latest = getLatestSelectableReportYear();
   if (!Number.isFinite(year)) return latest;
   return Math.min(latest, Math.max(1900, Math.trunc(year)));
 }
 
-function getLatestCompletedReportYear() {
-  return Math.max(1900, new Date().getFullYear() - 1);
+function getLatestSelectableReportYear() {
+  return Math.max(1900, new Date().getFullYear());
 }
 
 async function loadAvailableReportYears(departmentId: string) {
-  const latest = getLatestCompletedReportYear();
+  const latest = getLatestSelectableReportYear();
   const historyBounds = await prismadb.employeeHistorySnapshot.aggregate({
     where: {
       departmentId,

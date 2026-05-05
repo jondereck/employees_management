@@ -20,7 +20,7 @@ type SnapshotForReport = Awaited<ReturnType<typeof loadLatestSnapshots>>[number]
 
 function normalizeYear(value: unknown) {
   const year = Number(value);
-  const latest = Math.max(1900, new Date().getFullYear() - 1);
+  const latest = Math.max(1900, new Date().getFullYear());
   if (!Number.isFinite(year)) return latest;
   return Math.min(latest, Math.max(1900, Math.trunc(year)));
 }

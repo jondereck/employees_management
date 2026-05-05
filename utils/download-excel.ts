@@ -291,6 +291,7 @@ export async function generateExcelFile({
 
     copy.appointment = copy.employeeTypeId; // label string after mapping
     copy.eligibility = copy.eligibilityId;  // label string after mapping
+    copy.workforceIndicator = copy.historySnapshots?.[0]?.indicator?.name ?? '';
     copy.status = copy.isArchived ? "Retired" : "Active";
     copy.comma = (hasText(copy.barangay) && hasText(copy.city)) ? "," : "";
 

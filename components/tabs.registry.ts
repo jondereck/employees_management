@@ -1,8 +1,9 @@
-import { SlidersHorizontal, Table, ArrowUpDown, GitBranch, SearchCheck, BadgeInfo } from "lucide-react";
+import { SlidersHorizontal, Table, ListOrdered, ArrowUpDown, GitBranch, SearchCheck, BadgeInfo } from "lucide-react";
 
 export const EXPORT_TABS = [
   { key: "filter", label: "Filter", icon: SlidersHorizontal },
   { key: "columns", label: "Columns", icon: Table },
+  { key: "order", label: "Order", icon: ListOrdered },
   { key: "sort", label: "Sort", icon: ArrowUpDown },
   { key: "paths", label: "Paths", icon: GitBranch },
   { key: "findreplace", label: "Find & Replace", icon: SearchCheck },

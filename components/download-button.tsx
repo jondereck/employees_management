@@ -30,7 +30,6 @@ import { Portal } from '@radix-ui/react-portal';
 import Modal from './ui/modal';
 import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, type HeadsMode } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useParams } from 'next/navigation';
@@ -70,6 +69,7 @@ type SheetMode = 'perOffice' | 'merged' | 'plain';
 const TAB_KEY_TO_VALUE: Record<ExportTabKey, string> = {
   filter: 'filters',
   columns: 'columns_path',
+  order: 'column_order',
   sort: 'sort',
   paths: 'paths',
   findreplace: 'position',
@@ -2122,51 +2122,60 @@ export default function DownloadStyledExcel() {
                                 })}
                               </div>
 
-                              <Separator className="my-2" />
-
-                              <div className="space-y-2">
-                                <p className="text-xs text-muted-foreground">
-                                  Drag to arrange the sequence used in the Excel file.
-                                </p>
-                                <div className="rounded-md border border-dashed bg-muted/30 p-2">
-                                  {selectedColumnItems.length ? (
-                                    <DndContext
-                                      sensors={sensors}
-                                      onDragStart={handleSelectedColumnDragStart}
-                                      onDragEnd={handleSelectedColumnDragEnd}
-                                      onDragCancel={handleSelectedColumnDragCancel}
-                                      modifiers={[restrictToVerticalAxis]}
-                                      autoScroll={{ enabled: true, threshold: { x: 0, y: 16 } }}
-                                    >
-                                      <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
-                                        <div className="max-h-[48vh] space-y-2 overflow-y-auto pr-1 pb-2">
-                                          {selectedColumnItems.map((column) => (
-                                            <SelectedColumnDraggable
-                                              key={column.key}
-                                              column={column}
-                                              onToggle={toggleColumn}
-                                            />
-                                          ))}
-                                        </div>
-                                      </SortableContext>
-                                      <Portal>
-                                        <DragOverlay
-                                          dropAnimation={defaultDropAnimation}
-                                          style={{ pointerEvents: 'none', zIndex: 80 }}
-                                        >
-                                          {activeDragColumn ? <SelectedColumnGhost column={activeDragColumn} /> : null}
-                                        </DragOverlay>
-                                      </Portal>
-                                    </DndContext>
-                                  ) : (
-                                    <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-                                      Select columns to enable ordering.
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
                             </div>
                           </div>
+                        </div>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="column_order" id="panel-order" className="mt-3 h-full min-h-0">
+                      <div className="flex h-full min-h-0 w-full min-w-0 flex-col rounded-md border bg-white p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <div>
+                            <h4 className="font-medium">Column Order</h4>
+                            <p className="text-xs text-muted-foreground">
+                              Drag to arrange the sequence used in the Excel file.
+                            </p>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {selectedColumnItems.length} selected
+                          </span>
+                        </div>
+
+                        <div className="mt-3 min-h-[240px] flex-1 rounded-md border border-dashed bg-muted/30 p-2">
+                          {selectedColumnItems.length ? (
+                            <DndContext
+                              sensors={sensors}
+                              onDragStart={handleSelectedColumnDragStart}
+                              onDragEnd={handleSelectedColumnDragEnd}
+                              onDragCancel={handleSelectedColumnDragCancel}
+                              modifiers={[restrictToVerticalAxis]}
+                              autoScroll={{ enabled: true, threshold: { x: 0, y: 16 } }}
+                            >
+                              <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
+                                <div className="max-h-[70vh] space-y-2 overflow-y-auto overscroll-contain pr-1 pb-2">
+                                  {selectedColumnItems.map((column) => (
+                                    <SelectedColumnDraggable
+                                      key={column.key}
+                                      column={column}
+                                      onToggle={toggleColumn}
+                                    />
+                                  ))}
+                                </div>
+                              </SortableContext>
+                              <Portal>
+                                <DragOverlay
+                                  dropAnimation={defaultDropAnimation}
+                                  style={{ pointerEvents: 'none', zIndex: 80 }}
+                                >
+                                  {activeDragColumn ? <SelectedColumnGhost column={activeDragColumn} /> : null}
+                                </DragOverlay>
+                              </Portal>
+                            </DndContext>
+                          ) : (
+                            <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                              Select columns to enable ordering.
+                            </div>
+                          )}
                         </div>
                       </div>
                     </TabsContent>
