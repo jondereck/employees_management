@@ -65,6 +65,7 @@ export async function POST(
         maritalStatus: true,
         isHead: true,
         isArchived: true,
+        dateHired: true,
       },
     });
     const employeeMap = new Map(employees.map((employee) => [employee.id, employee]));
@@ -98,22 +99,37 @@ export async function POST(
 
     let updated = 0;
     let created = 0;
+    let skippedBeforeHire = 0;
+    let skippedNoSnapshot = 0;
+    let skippedAlreadyCurrent = 0;
+    const skippedInvalidAssignment = assignments.length - validAssignments.length;
 
     await prismadb.$transaction(async (tx) => {
       for (const entry of validAssignments) {
+        if (effectiveAt < entry.employee.dateHired) {
+          skippedBeforeHire += 1;
+          continue;
+        }
+
         if (mode === "update_as_of") {
           const existing = await tx.employeeHistorySnapshot.findFirst({
             where: {
               departmentId: params.departmentId,
               employeeId: entry.employee.id,
-              effectiveAt: { lte: effectiveAt },
+              effectiveAt: {
+                gte: entry.employee.dateHired,
+                lte: effectiveAt,
+              },
             },
             select: { id: true, indicatorId: true },
             orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
           });
 
           if (existing) {
-            if (existing.indicatorId === entry.indicatorId) continue;
+            if (existing.indicatorId === entry.indicatorId) {
+              skippedAlreadyCurrent += 1;
+              continue;
+            }
             await tx.employeeHistorySnapshot.update({
               where: { id: existing.id },
               data: {
@@ -125,6 +141,9 @@ export async function POST(
             updated += 1;
             continue;
           }
+
+          skippedNoSnapshot += 1;
+          continue;
         }
 
         await tx.employeeHistorySnapshot.create({
@@ -155,7 +174,11 @@ export async function POST(
       mode,
       updated,
       created,
-      skipped: validAssignments.length - updated - created,
+      skipped: assignments.length - updated - created,
+      skippedBeforeHire,
+      skippedNoSnapshot,
+      skippedAlreadyCurrent,
+      skippedInvalidAssignment,
     });
   } catch (error) {
     console.error("[WORKFORCE_HISTORY_INDICATOR_ASSIGNMENTS_POST]", error);

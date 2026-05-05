@@ -16,6 +16,24 @@ function toUtcDayRange(date: Date) {
   return { start, end };
 }
 
+async function findPreHireSuggestionSnapshotIds(departmentId: string) {
+  const snapshots = await prismadb.employeeHistorySnapshot.findMany({
+    where: {
+      departmentId,
+      source: "INDICATOR_SUGGESTION",
+    },
+    select: {
+      id: true,
+      effectiveAt: true,
+      employee: { select: { dateHired: true } },
+    },
+  });
+
+  return snapshots
+    .filter((snapshot) => snapshot.effectiveAt < snapshot.employee.dateHired)
+    .map((snapshot) => snapshot.id);
+}
+
 export async function POST(
   req: Request,
   { params }: { params: { departmentId: string } }
@@ -31,8 +49,40 @@ export async function POST(
     if (!department) return new NextResponse("Unauthorized", { status: 403 });
 
     const body = await req.json().catch(() => ({}));
+    const mode = body?.mode === "pre_hire" ? "pre_hire" : "date";
     const effectiveDate = parseDate(body?.effectiveDate);
     const dryRun = body?.dryRun === true;
+
+    if (mode === "pre_hire") {
+      const ids = await findPreHireSuggestionSnapshotIds(params.departmentId);
+
+      if (dryRun) {
+        return NextResponse.json({
+          mode,
+          dryRun: true,
+          matched: ids.length,
+        });
+      }
+
+      const deleted = ids.length
+        ? await prismadb.employeeHistorySnapshot.deleteMany({
+            where: {
+              departmentId: params.departmentId,
+              id: { in: ids },
+            },
+          })
+        : { count: 0 };
+
+      await invalidateWorkforceReportCache(params.departmentId);
+
+      return NextResponse.json({
+        mode,
+        dryRun: false,
+        matched: ids.length,
+        deleted: deleted.count,
+        cacheCleared: true,
+      });
+    }
 
     if (!effectiveDate) {
       return new NextResponse("effectiveDate is required (YYYY-MM-DD)", { status: 400 });
@@ -51,6 +101,7 @@ export async function POST(
     const matchCount = await prismadb.employeeHistorySnapshot.count({ where });
     if (dryRun) {
       return NextResponse.json({
+        mode,
         dryRun: true,
         effectiveDate: effectiveDate.toISOString().slice(0, 10),
         matched: matchCount,
@@ -61,6 +112,7 @@ export async function POST(
     await invalidateWorkforceReportCache(params.departmentId);
 
     return NextResponse.json({
+      mode,
       dryRun: false,
       effectiveDate: effectiveDate.toISOString().slice(0, 10),
       matched: matchCount,

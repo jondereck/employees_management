@@ -62,7 +62,7 @@ async function loadLatestSnapshots(departmentId: string, cutoff: Date) {
       effectiveAt: { lte: cutoff },
     },
     include: {
-      employee: { select: { id: true, firstName: true, lastName: true } },
+      employee: { select: { id: true, firstName: true, lastName: true, dateHired: true } },
       office: { select: { id: true, name: true } },
       employeeType: { select: { id: true, name: true } },
       eligibility: { select: { id: true, name: true } },
@@ -73,6 +73,10 @@ async function loadLatestSnapshots(departmentId: string, cutoff: Date) {
 
   const latest = new Map<string, (typeof snapshots)[number]>();
   for (const snapshot of snapshots) {
+    if (snapshot.employee.dateHired > cutoff || snapshot.effectiveAt < snapshot.employee.dateHired) {
+      continue;
+    }
+
     if (!latest.has(snapshot.employeeId)) {
       latest.set(snapshot.employeeId, snapshot);
     }

@@ -17,7 +17,7 @@ export const WORKFORCE_DEFAULT_INDICATORS = [
   "Others",
 ] as const;
 export const WORKFORCE_OTHERS_INDICATOR = "Others";
-export const WORKFORCE_REPORT_CACHE_VERSION = 1;
+export const WORKFORCE_REPORT_CACHE_VERSION = 2;
 
 const WORKFORCE_CANONICAL_INDICATORS: Record<string, readonly string[]> = {
   Clerical: ["clerical", "clerical services"],

@@ -135,6 +135,10 @@ function toDateInputValue(value?: string | null) {
   return date.toISOString().slice(0, 10);
 }
 
+function toYearEndInputValue(year: number) {
+  return `${year}-12-31`;
+}
+
 export default function WorkforceHistoryTool({ departmentId }: { departmentId: string }) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
@@ -148,6 +152,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
   const [employeeTypes, setEmployeeTypes] = useState<Option[]>([]);
   const [eligibilities, setEligibilities] = useState<Option[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [suggestionEmployees, setSuggestionEmployees] = useState<EmployeeOption[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loadingSetup, setLoadingSetup] = useState(true);
 
@@ -157,7 +162,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
   const [groupOfficeIds, setGroupOfficeIds] = useState<string[]>([]);
   const [savingGroup, setSavingGroup] = useState(false);
   const [suggestionSearch, setSuggestionSearch] = useState("");
-  const [suggestionEffectiveAt, setSuggestionEffectiveAt] = useState(toDateInputValue(new Date().toISOString()));
+  const [suggestionEffectiveAt, setSuggestionEffectiveAt] = useState(toYearEndInputValue(currentYear));
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<string[]>([]);
   const [applyingSuggestions, setApplyingSuggestions] = useState(false);
   const [cleaningSuggestions, setCleaningSuggestions] = useState(false);
@@ -196,7 +201,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
   }, [groups]);
   const suggestedEmployees = useMemo(() => {
     const query = suggestionSearch.trim().toLowerCase();
-    const rows = employees
+    const rows = suggestionEmployees
       .map((employee) => {
         const resolvedIndicator =
           indicatorByCanonicalName.get(getCanonicalIndicatorName(employee.suggestedIndicatorName)) ??
@@ -221,13 +226,17 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
         .toLowerCase()
         .includes(query)
     );
-  }, [employees, indicatorByCanonicalName, indicatorIdByName, suggestionSearch]);
+  }, [indicatorByCanonicalName, indicatorIdByName, suggestionEmployees, suggestionSearch]);
 
   const loadSetup = useCallback(async () => {
     setLoadingSetup(true);
     try {
       const [optionsResponse, groupsResponse] = await Promise.all([
-        fetch(`/api/${departmentId}/analytics/workforce-history/options`),
+        fetch(
+          `/api/${departmentId}/analytics/workforce-history/options?year=${encodeURIComponent(
+            String(year)
+          )}&populationMode=${encodeURIComponent(populationMode)}`
+        ),
         fetch(`/api/${departmentId}/analytics/workforce-history/groups`),
       ]);
       if (!optionsResponse.ok) throw new Error(await optionsResponse.text());
@@ -239,6 +248,11 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
       setEmployeeTypes(options.employeeTypes ?? []);
       setEligibilities(options.eligibilities ?? []);
       setEmployees(options.employees ?? []);
+      const nextSuggestionEmployees = (options.suggestionEmployees ?? []) as EmployeeOption[];
+      setSuggestionEmployees(nextSuggestionEmployees);
+      setSelectedSuggestionIds((prev) =>
+        prev.filter((id) => nextSuggestionEmployees.some((employee) => employee.id === id))
+      );
       setGroups(nextGroups);
       setSelectedGroupIds((prev) => prev.filter((id) => nextGroups.some((group) => group.id === id)));
     } catch (error) {
@@ -246,7 +260,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
     } finally {
       setLoadingSetup(false);
     }
-  }, [departmentId]);
+  }, [departmentId, populationMode, year]);
 
   const runReport = useCallback(async () => {
     setLoadingReport(true);
@@ -273,6 +287,10 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
   useEffect(() => {
     void loadSetup();
   }, [loadSetup]);
+
+  useEffect(() => {
+    setSuggestionEffectiveAt(toYearEndInputValue(year));
+  }, [year]);
 
   useEffect(() => {
     if (!loadingSetup) void runReport();
@@ -390,8 +408,15 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
       setSelectedSuggestionIds([]);
       await runReport();
       if (selectedEmployeeId) await loadSnapshots(selectedEmployeeId);
+      const skipDetails = [
+        result.skippedBeforeHire ? `${result.skippedBeforeHire} before hire` : "",
+        result.skippedNoSnapshot ? `${result.skippedNoSnapshot} no snapshot` : "",
+        result.skippedAlreadyCurrent ? `${result.skippedAlreadyCurrent} already current` : "",
+      ].filter(Boolean);
       toast.success(
-        `Applied suggestions: ${result.updated ?? 0} updated, ${result.created ?? 0} created, ${result.skipped ?? 0} skipped.`
+        `Applied suggestions: ${result.updated ?? 0} updated, ${result.created ?? 0} created, ${result.skipped ?? 0} skipped${
+          skipDetails.length ? ` (${skipDetails.join(", ")})` : ""
+        }.`
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to apply suggestions.");
@@ -446,10 +471,55 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
       if (!response.ok) throw new Error(await response.text());
       const result = await response.json();
       toast.success(`Deleted ${result.deleted ?? 0} suggestion snapshots for ${suggestionEffectiveAt}.`);
+      await loadSetup();
       await runReport();
       if (selectedEmployeeId) await loadSnapshots(selectedEmployeeId);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to clean suggestion snapshots.");
+    } finally {
+      setCleaningSuggestions(false);
+    }
+  };
+
+  const cleanupPreHireSuggestionSnapshots = async () => {
+    setCleaningSuggestions(true);
+    try {
+      const previewResponse = await fetch(`/api/${departmentId}/analytics/workforce-history/cleanup-suggestions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "pre_hire",
+          dryRun: true,
+        }),
+      });
+      if (!previewResponse.ok) throw new Error(await previewResponse.text());
+      const preview = await previewResponse.json();
+      const matched = Number(preview?.matched ?? 0);
+
+      if (matched <= 0) {
+        toast.message("No pre-hire suggestion snapshots found.");
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `Delete ${matched} pre-hire indicator suggestion snapshots? This will refresh yearly counts.`
+      );
+      if (!confirmed) return;
+
+      const response = await fetch(`/api/${departmentId}/analytics/workforce-history/cleanup-suggestions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "pre_hire" }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const result = await response.json();
+
+      toast.success(`Deleted ${result.deleted ?? 0} pre-hire suggestion snapshots.`);
+      await loadSetup();
+      await runReport();
+      if (selectedEmployeeId) await loadSnapshots(selectedEmployeeId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to clean pre-hire suggestion snapshots.");
     } finally {
       setCleaningSuggestions(false);
     }
@@ -556,8 +626,18 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
     );
   };
 
+  const isFetchingReportData = loadingSetup || loadingReport;
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[360px,1fr]">
+    <div className="relative grid gap-6 xl:grid-cols-[360px,1fr]" aria-busy={isFetchingReportData}>
+      {isFetchingReportData ? (
+        <div className="absolute inset-0 z-50 flex cursor-wait items-start justify-center bg-background/50 pt-24 backdrop-blur-[1px]">
+          <div className="rounded-md border bg-background px-3 py-2 shadow-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="sr-only">Loading workforce history data</span>
+          </div>
+        </div>
+      ) : null}
       <div className="space-y-6">
         <Card>
           <CardHeader>
@@ -787,7 +867,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
 
         <Card>
           <CardHeader>
-            <CardTitle>Low-cost Indicator Suggestions</CardTitle>
+            <CardTitle>Indicator Suggestions</CardTitle>
             <CardDescription>
               Uses local keyword rules from position and office text. Review before applying; no paid AI call is used.
             </CardDescription>
@@ -809,10 +889,12 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
                   value={suggestionEffectiveAt}
                   onChange={(event) => setSuggestionEffectiveAt(event.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">
-                  As-of correction date. Existing snapshot on/before this date is updated first to avoid headcount inflation.
-                </p>
+               
               </div>
+            </div>
+
+            <div className="rounded-md border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
+              Use this section for the normal workflow: review the suggested indicator, select rows, then apply them to the selected year.
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -834,15 +916,6 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
               >
                 {applyingSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Apply {selectedSuggestionIds.length} suggestions
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={cleanupSuggestionSnapshots}
-                disabled={cleaningSuggestions || applyingSuggestions}
-              >
-                {cleaningSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                Cleanup Applied (date)
               </Button>
             </div>
 
@@ -908,186 +981,229 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
 
         <Card>
           <CardHeader>
-            <CardTitle>Manual Snapshot Editor</CardTitle>
-            <CardDescription>Use this for historical corrections that cannot be recovered from current employee records.</CardDescription>
+            <CardTitle>Advanced Tools</CardTitle>
+            <CardDescription>
+              Keep this collapsed unless you are fixing historical data or cleaning bad suggestion snapshots.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <Label>Employee</Label>
-              <Select
-                value={selectedEmployeeId}
-                onValueChange={(value) => {
-                  setSelectedEmployeeId(value);
-                  void loadSnapshots(value);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id}>
-                      {employee.name}{employee.isArchived ? " (archived)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Effective date</Label>
-                <Input
-                  type="date"
-                  value={snapshotForm.effectiveAt}
-                  onChange={(event) => setSnapshotForm((prev) => ({ ...prev, effectiveAt: event.target.value }))}
-                />
+          <CardContent className="space-y-4">
+            <details className="rounded-md border p-4">
+              <summary className="cursor-pointer list-none text-sm font-medium">
+                Maintenance
+              </summary>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Use these only when historical counts look wrong. `Cleanup Applied (date)` removes suggestion snapshots for one exact date. `Cleanup Pre-hire` removes bad suggestion rows created before an employee&apos;s hire date.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={cleanupSuggestionSnapshots}
+                    disabled={cleaningSuggestions || applyingSuggestions}
+                  >
+                    {cleaningSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    Cleanup Applied (date)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={cleanupPreHireSuggestionSnapshots}
+                    disabled={cleaningSuggestions || applyingSuggestions}
+                  >
+                    {cleaningSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    Cleanup Pre-hire
+                  </Button>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={snapshotForm.status} onValueChange={(value) => setSnapshotForm((prev) => ({ ...prev, status: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ACTIVE">Active</SelectItem>
-                    <SelectItem value="INACTIVE">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2 pt-8">
-                <Checkbox
-                  checked={snapshotForm.isHead}
-                  onCheckedChange={(checked) => setSnapshotForm((prev) => ({ ...prev, isHead: Boolean(checked) }))}
-                />
-                <Label>Office head</Label>
-              </div>
-            </div>
+            </details>
 
-            <div className="grid gap-3 md:grid-cols-4">
-              <SelectField
-                label="Indicator"
-                value={snapshotForm.indicatorId}
-                options={groups}
-                onChange={(value) => setSnapshotForm((prev) => ({ ...prev, indicatorId: value }))}
-              />
-              <SelectField
-                label="Office"
-                value={snapshotForm.officeId}
-                options={offices}
-                onChange={(value) => setSnapshotForm((prev) => ({ ...prev, officeId: value }))}
-              />
-              <SelectField
-                label="Employee type"
-                value={snapshotForm.employeeTypeId}
-                options={employeeTypes}
-                onChange={(value) => setSnapshotForm((prev) => ({ ...prev, employeeTypeId: value }))}
-              />
-              <SelectField
-                label="Eligibility"
-                value={snapshotForm.eligibilityId}
-                options={eligibilities}
-                onChange={(value) => setSnapshotForm((prev) => ({ ...prev, eligibilityId: value }))}
-              />
-            </div>
+            <details className="rounded-md border p-4">
+              <summary className="cursor-pointer list-none text-sm font-medium">
+                Manual Snapshot Editor
+              </summary>
+              <div className="mt-3 space-y-5">
+                <p className="text-xs text-muted-foreground">
+                  Use this only for historical corrections that cannot be recovered from current employee records or backfill. This writes a manual timeline snapshot for one employee.
+                </p>
+                <div className="space-y-2">
+                  <Label>Employee</Label>
+                  <Select
+                    value={selectedEmployeeId}
+                    onValueChange={(value) => {
+                      setSelectedEmployeeId(value);
+                      void loadSnapshots(value);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.map((employee) => (
+                        <SelectItem key={employee.id} value={employee.id}>
+                          {employee.name}{employee.isArchived ? " (archived)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Position</Label>
-                <Input
-                  value={snapshotForm.position}
-                  onChange={(event) => setSnapshotForm((prev) => ({ ...prev, position: event.target.value }))}
-                />
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Effective date</Label>
+                    <Input
+                      type="date"
+                      value={snapshotForm.effectiveAt}
+                      onChange={(event) => setSnapshotForm((prev) => ({ ...prev, effectiveAt: event.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={snapshotForm.status} onValueChange={(value) => setSnapshotForm((prev) => ({ ...prev, status: value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="INACTIVE">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2 pt-8">
+                    <Checkbox
+                      checked={snapshotForm.isHead}
+                      onCheckedChange={(checked) => setSnapshotForm((prev) => ({ ...prev, isHead: Boolean(checked) }))}
+                    />
+                    <Label>Office head</Label>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-4">
+                  <SelectField
+                    label="Indicator"
+                    value={snapshotForm.indicatorId}
+                    options={groups}
+                    onChange={(value) => setSnapshotForm((prev) => ({ ...prev, indicatorId: value }))}
+                  />
+                  <SelectField
+                    label="Office"
+                    value={snapshotForm.officeId}
+                    options={offices}
+                    onChange={(value) => setSnapshotForm((prev) => ({ ...prev, officeId: value }))}
+                  />
+                  <SelectField
+                    label="Employee type"
+                    value={snapshotForm.employeeTypeId}
+                    options={employeeTypes}
+                    onChange={(value) => setSnapshotForm((prev) => ({ ...prev, employeeTypeId: value }))}
+                  />
+                  <SelectField
+                    label="Eligibility"
+                    value={snapshotForm.eligibilityId}
+                    options={eligibilities}
+                    onChange={(value) => setSnapshotForm((prev) => ({ ...prev, eligibilityId: value }))}
+                  />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Position</Label>
+                    <Input
+                      value={snapshotForm.position}
+                      onChange={(event) => setSnapshotForm((prev) => ({ ...prev, position: event.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Gender</Label>
+                    <Select value={snapshotForm.gender || "none"} onValueChange={(value) => setSnapshotForm((prev) => ({ ...prev, gender: value === "none" ? "" : value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unknown</SelectItem>
+                        <SelectItem value="Male">Male</SelectItem>
+                        <SelectItem value="Female">Female</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Marital status</Label>
+                    <Select
+                      value={snapshotForm.maritalStatus || "none"}
+                      onValueChange={(value) => setSnapshotForm((prev) => ({ ...prev, maritalStatus: value === "none" ? "" : value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unknown</SelectItem>
+                        <SelectItem value="SINGLE">Single</SelectItem>
+                        <SelectItem value="MARRIED">Married</SelectItem>
+                        <SelectItem value="SEPARATED">Separated</SelectItem>
+                        <SelectItem value="WIDOWED">Widowed</SelectItem>
+                        <SelectItem value="DIVORCED">Divorced</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Note</Label>
+                  <Textarea
+                    value={snapshotForm.note}
+                    onChange={(event) => setSnapshotForm((prev) => ({ ...prev, note: event.target.value }))}
+                    placeholder="Reason or source of this correction"
+                  />
+                </div>
+
+                <Button type="button" onClick={saveSnapshot} disabled={savingSnapshot || !selectedEmployeeId}>
+                  {savingSnapshot ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                  Add manual snapshot
+                </Button>
+
+                <div className="rounded-md border">
+                  {loadingSnapshots ? (
+                    <div className="p-6 text-sm text-muted-foreground">Loading snapshots...</div>
+                  ) : snapshots.length ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Effective</TableHead>
+                          <TableHead>Indicator</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Assignment</TableHead>
+                          <TableHead>Source</TableHead>
+                          <TableHead className="w-10" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {snapshots.map((snapshot) => (
+                          <TableRow key={snapshot.id}>
+                            <TableCell>{toDateInputValue(snapshot.effectiveAt)}</TableCell>
+                            <TableCell>{snapshot.indicatorName || "Fallback"}</TableCell>
+                            <TableCell>{snapshot.status}</TableCell>
+                            <TableCell>
+                              <div className="text-sm">{snapshot.officeName || "Unknown office"}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {[snapshot.employeeTypeName, snapshot.position].filter(Boolean).join(" / ") || "No assignment details"}
+                              </div>
+                            </TableCell>
+                            <TableCell>{snapshot.source}</TableCell>
+                            <TableCell>
+                              <Button type="button" size="icon" variant="ghost" onClick={() => deleteSnapshot(snapshot.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="p-6 text-sm text-muted-foreground">No snapshots loaded.</div>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Gender</Label>
-                <Select value={snapshotForm.gender || "none"} onValueChange={(value) => setSnapshotForm((prev) => ({ ...prev, gender: value === "none" ? "" : value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unknown</SelectItem>
-                    <SelectItem value="Male">Male</SelectItem>
-                    <SelectItem value="Female">Female</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Marital status</Label>
-                <Select
-                  value={snapshotForm.maritalStatus || "none"}
-                  onValueChange={(value) => setSnapshotForm((prev) => ({ ...prev, maritalStatus: value === "none" ? "" : value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unknown</SelectItem>
-                    <SelectItem value="SINGLE">Single</SelectItem>
-                    <SelectItem value="MARRIED">Married</SelectItem>
-                    <SelectItem value="SEPARATED">Separated</SelectItem>
-                    <SelectItem value="WIDOWED">Widowed</SelectItem>
-                    <SelectItem value="DIVORCED">Divorced</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Note</Label>
-              <Textarea
-                value={snapshotForm.note}
-                onChange={(event) => setSnapshotForm((prev) => ({ ...prev, note: event.target.value }))}
-                placeholder="Reason or source of this correction"
-              />
-            </div>
-
-            <Button type="button" onClick={saveSnapshot} disabled={savingSnapshot || !selectedEmployeeId}>
-              {savingSnapshot ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-              Add manual snapshot
-            </Button>
-
-            <div className="rounded-md border">
-              {loadingSnapshots ? (
-                <div className="p-6 text-sm text-muted-foreground">Loading snapshots...</div>
-              ) : snapshots.length ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Effective</TableHead>
-                      <TableHead>Indicator</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Assignment</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead className="w-10" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {snapshots.map((snapshot) => (
-                      <TableRow key={snapshot.id}>
-                        <TableCell>{toDateInputValue(snapshot.effectiveAt)}</TableCell>
-                        <TableCell>{snapshot.indicatorName || "Fallback"}</TableCell>
-                        <TableCell>{snapshot.status}</TableCell>
-                        <TableCell>
-                          <div className="text-sm">{snapshot.officeName || "Unknown office"}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {[snapshot.employeeTypeName, snapshot.position].filter(Boolean).join(" / ") || "No assignment details"}
-                          </div>
-                        </TableCell>
-                        <TableCell>{snapshot.source}</TableCell>
-                        <TableCell>
-                          <Button type="button" size="icon" variant="ghost" onClick={() => deleteSnapshot(snapshot.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="p-6 text-sm text-muted-foreground">No snapshots loaded.</div>
-              )}
-            </div>
+            </details>
           </CardContent>
         </Card>
       </div>

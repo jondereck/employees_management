@@ -3,13 +3,15 @@ import { NextResponse } from "next/server";
 
 import prismadb from "@/lib/prismadb";
 import {
+  WORKFORCE_ACTIVE_STATUS,
   enhanceWorkforceSuggestionsWithAi,
+  endOfReportYear,
   ensureDefaultWorkforceIndicators,
   suggestWorkforceIndicator,
 } from "@/lib/workforce-history";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { departmentId: string } }
 ) {
   try {
@@ -22,6 +24,11 @@ export async function GET(
     });
     if (!department) return new NextResponse("Unauthorized", { status: 403 });
     await ensureDefaultWorkforceIndicators(params.departmentId);
+
+    const { searchParams } = new URL(req.url);
+    const year = normalizeYear(searchParams.get("year"));
+    const populationMode = searchParams.get("populationMode") === "all" ? "all" : "active";
+    const cutoff = endOfReportYear(year);
 
     const [offices, employeeTypes, eligibilities, employees] = await Promise.all([
       prismadb.offices.findMany({
@@ -57,16 +64,17 @@ export async function GET(
       }),
     ]);
 
-    const baseSuggestions = employees.map((employee) => ({
+    const suggestionEmployees = await loadSuggestionEmployees(params.departmentId, cutoff, populationMode);
+    const baseSuggestions = suggestionEmployees.map((employee) => ({
       employeeId: employee.id,
       suggestion: suggestWorkforceIndicator({
         position: employee.position,
-        officeName: employee.offices?.name,
-        employeeTypeName: employee.employeeType?.name,
+        officeName: employee.officeName,
+        employeeTypeName: employee.employeeTypeName,
       }),
       position: employee.position,
-      officeName: employee.offices?.name,
-      employeeTypeName: employee.employeeType?.name,
+      officeName: employee.officeName,
+      employeeTypeName: employee.employeeTypeName,
     }));
 
     const baseByEmployeeId = new Map(baseSuggestions.map((entry) => [entry.employeeId, entry.suggestion]));
@@ -87,7 +95,7 @@ export async function GET(
       employeeTypes,
       eligibilities,
       employees: employees.map((employee) => {
-        const suggestion = aiOverrides.get(employee.id) ?? baseByEmployeeId.get(employee.id) ?? suggestWorkforceIndicator({
+        const suggestion = suggestWorkforceIndicator({
           position: employee.position,
           officeName: employee.offices?.name,
           employeeTypeName: employee.employeeType?.name,
@@ -95,9 +103,7 @@ export async function GET(
 
         return {
           id: employee.id,
-          name: [employee.lastName, employee.firstName, employee.middleName ? `${employee.middleName[0]}.` : ""]
-            .filter(Boolean)
-            .join(", "),
+          name: formatEmployeeName(employee.lastName, employee.firstName, employee.middleName),
           position: employee.position,
           isArchived: employee.isArchived,
           officeId: employee.officeId,
@@ -109,9 +115,93 @@ export async function GET(
           suggestionReason: suggestion.reason,
         };
       }),
+      suggestionEmployees: suggestionEmployees.map((employee) => {
+        const suggestion = aiOverrides.get(employee.id) ?? baseByEmployeeId.get(employee.id) ?? suggestWorkforceIndicator({
+          position: employee.position,
+          officeName: employee.officeName,
+          employeeTypeName: employee.employeeTypeName,
+        });
+
+        return {
+          id: employee.id,
+          name: employee.name,
+          position: employee.position,
+          isArchived: employee.isArchived,
+          officeId: employee.officeId,
+          officeName: employee.officeName,
+          employeeTypeId: employee.employeeTypeId,
+          employeeTypeName: employee.employeeTypeName,
+          suggestedIndicatorName: suggestion.indicatorName,
+          suggestionConfidence: suggestion.confidence,
+          suggestionReason: suggestion.reason,
+        };
+      }),
     });
   } catch (error) {
     console.error("[WORKFORCE_HISTORY_OPTIONS_GET]", error);
     return new NextResponse("Internal error", { status: 500 });
   }
+}
+
+function normalizeYear(value: unknown) {
+  const year = Number(value);
+  const current = new Date().getFullYear();
+  if (!Number.isFinite(year)) return current;
+  return Math.min(current + 1, Math.max(1900, Math.trunc(year)));
+}
+
+function formatEmployeeName(lastName?: string | null, firstName?: string | null, middleName?: string | null) {
+  return [lastName, firstName, middleName ? `${middleName[0]}.` : ""].filter(Boolean).join(", ");
+}
+
+async function loadSuggestionEmployees(
+  departmentId: string,
+  cutoff: Date,
+  populationMode: "active" | "all"
+) {
+  const snapshots = await prismadb.employeeHistorySnapshot.findMany({
+    where: {
+      departmentId,
+      effectiveAt: { lte: cutoff },
+    },
+    include: {
+      employee: {
+        select: {
+          id: true,
+          lastName: true,
+          firstName: true,
+          middleName: true,
+          dateHired: true,
+        },
+      },
+      office: { select: { id: true, name: true } },
+      employeeType: { select: { id: true, name: true } },
+    },
+    orderBy: [{ employeeId: "asc" }, { effectiveAt: "desc" }, { createdAt: "desc" }],
+  });
+
+  const latest = new Map<string, (typeof snapshots)[number]>();
+  for (const snapshot of snapshots) {
+    if (snapshot.employee.dateHired > cutoff || snapshot.effectiveAt < snapshot.employee.dateHired) {
+      continue;
+    }
+
+    if (!latest.has(snapshot.employeeId)) {
+      latest.set(snapshot.employeeId, snapshot);
+    }
+  }
+
+  return Array.from(latest.values())
+    .filter((snapshot) => (populationMode === "active" ? snapshot.status === WORKFORCE_ACTIVE_STATUS : true))
+    .map((snapshot) => ({
+      id: snapshot.employeeId,
+      name: formatEmployeeName(snapshot.employee.lastName, snapshot.employee.firstName, snapshot.employee.middleName),
+      position: snapshot.position,
+      isArchived: snapshot.status !== WORKFORCE_ACTIVE_STATUS,
+      officeId: snapshot.officeId ?? "",
+      officeName: snapshot.office?.name ?? "",
+      employeeTypeId: snapshot.employeeTypeId ?? "",
+      employeeTypeName: snapshot.employeeType?.name ?? "",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
