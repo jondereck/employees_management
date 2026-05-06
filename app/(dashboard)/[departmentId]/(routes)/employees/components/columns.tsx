@@ -20,16 +20,12 @@ import YearsOfService from "./years_of_service_cell"
 import { cn } from "@/lib/utils"
 import { salarySchedule } from "@/utils/salarySchedule"
 import { computeStep } from "@/utils/compute-step"
-import { 
-  formatContactNumber, 
-  formatDate, 
-  formatFullName, 
-  formatGsisNumber, 
-  formatPagIbigNumber, 
-  formatPhilHealthNumber, 
-  formatSalary, 
-  getBirthday 
+import {
+  formatContactNumber,
+  formatDate,
+  formatSalary,
 } from "@/utils/utils"
+import { buildPreview, loadCopyOptions } from "@/utils/copy-utils"
 
 // --- Types ---
 export interface Offices { id: string; name: string; }
@@ -90,9 +86,37 @@ export type EmployeesColumn = {
   legacyQrAllowed: boolean;
 }
 
-const onCopy = (text: string) => {
-  navigator.clipboard.writeText(text);
-  toast.success("Copied to clipboard");
+const onCopy = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  } catch {
+    toast.error("Unable to copy to clipboard");
+  }
+}
+
+const buildEmployeeCopyText = (employee: EmployeesColumn) => {
+  const fullName = [
+    employee.prefix,
+    employee.firstName,
+    employee.middleName,
+    employee.lastName,
+    employee.suffix,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const options = loadCopyOptions();
+  const text = buildPreview(
+    {
+      fullName: employee.employeeType?.name === "Job Order" ? `${fullName} (JO)` : fullName,
+      position: employee.position,
+      office: employee.offices?.name ?? "",
+    },
+    options
+  );
+
+  return text || fullName;
 }
 
 export const columns: ColumnDef<EmployeesColumn>[] = [
@@ -133,14 +157,13 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     accessorKey: "firstName",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Employee" />,
     cell: ({ row }) => {
-      const { firstName, middleName, lastName, suffix, gender, prefix, position, employeeType } = row.original;
-      const fullName = formatFullName(firstName, middleName, lastName, suffix, gender, prefix, position);
+      const { firstName, middleName, lastName, suffix } = row.original;
       
       return (
-        <ActionTooltip label="Click to copy full name" side="right">
+        <ActionTooltip label="Click to copy employee info" side="right">
           <div
             className="flex flex-col cursor-pointer group max-w-[200px]"
-            onClick={() => onCopy(employeeType?.name === 'Job Order' ? `${fullName} (JO)` : fullName)}
+            onClick={() => onCopy(buildEmployeeCopyText(row.original))}
           >
             <span className="font-bold text-slate-900 truncate group-hover:text-primary transition-colors">
               {lastName}, {firstName} {suffix}

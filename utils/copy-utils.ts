@@ -8,6 +8,7 @@ export interface CopyOptions {
 }
 
 const STORAGE_KEY = "copyOptions:v2";
+const LEGACY_STORAGE_KEY = "copyOptions";
 
 export const DEFAULT_COPY_OPTIONS: CopyOptions = {
   fields: ["fullName"],
@@ -18,11 +19,11 @@ export const DEFAULT_COPY_OPTIONS: CopyOptions = {
 export function loadCopyOptions(): CopyOptions {
   if (typeof window === "undefined") return DEFAULT_COPY_OPTIONS;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return DEFAULT_COPY_OPTIONS;
     const parsed = JSON.parse(raw);
-    if (!parsed?.fields || !parsed?.format) return DEFAULT_COPY_OPTIONS;
-    return parsed as CopyOptions;
+    if (!isCopyOptions(parsed)) return DEFAULT_COPY_OPTIONS;
+    return parsed;
   } catch {
     return DEFAULT_COPY_OPTIONS;
   }
@@ -31,6 +32,21 @@ export function loadCopyOptions(): CopyOptions {
 export function saveCopyOptions(opts: CopyOptions) {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(opts));
+}
+
+function isCopyOptions(value: unknown): value is CopyOptions {
+  if (!value || typeof value !== "object") return false;
+
+  const fields = (value as CopyOptions).fields;
+  const format = (value as CopyOptions).format;
+  const validFields: Field[] = ["fullName", "position", "office"];
+  const validFormats: Format[] = ["uppercase", "lowercase", "capitalize", "toggle"];
+
+  return (
+    Array.isArray(fields) &&
+    fields.every((field) => validFields.includes(field)) &&
+    validFormats.includes(format)
+  );
 }
 
 /**
@@ -62,8 +78,8 @@ export function smartTitleCase(input: string): string {
 }
 
 function basicTitleCase(text: string, minor: Set<string>): string {
+  const romanNumeralPattern = /^(?=[MDCLXVI])M{0,4}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/i;
   const words = text
-    .toLowerCase()
     .replace(/\s+/g, " ")
     .trim()
     .split(" ");
@@ -71,14 +87,17 @@ function basicTitleCase(text: string, minor: Set<string>): string {
   return words
     .map((w, i) => {
       if (!w) return w;
+      if (romanNumeralPattern.test(w)) return w.toUpperCase();
+
+      const lower = w.toLowerCase();
       const isFirst = i === 0;
       const isLast = i === words.length - 1;
 
       // Keep tokens like O’Neil / O'Reilly / McDonald nicer
-      const normalized = w.replace(/^([a-z])/, (_, c) => c.toUpperCase())
+      const normalized = lower.replace(/^([a-z])/, (_, c) => c.toUpperCase())
                           .replace(/([-\u2019'][a-z])/g, (m) => m.toUpperCase());
 
-      if (!isFirst && !isLast && minor.has(w)) return w; // keep minor lowercase
+      if (!isFirst && !isLast && minor.has(lower)) return lower; // keep minor lowercase
       // For things like LGU, HRMO, DOH -> keep as-is if already uppercase >= 2 chars
       if (w.length > 1 && w === w.toUpperCase()) return w;
       return normalized;
@@ -93,9 +112,9 @@ function basicTitleCase(text: string, minor: Set<string>): string {
  */
 export function sanitizeOfficeName(name: string): string {
   const s = smartTitleCase(name);
-  // ensure there's a space before "(" and no extra spaces inside the parens
+  // Keep abbreviations tight to the office name, e.g. Election(COMELEC).
   return s
-    .replace(/(\S)\(/g, "$1 (") // ...Election(COMELEC) -> Election (COMELEC)
+    .replace(/\s+\(/g, "(")
     .replace(/\(\s+/g, "(")     // trim space right after "("
     .replace(/\s+\)/g, ")");    // trim space before ")"
 }
