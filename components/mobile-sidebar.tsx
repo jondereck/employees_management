@@ -42,6 +42,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import Loading from "@/app/loading";
 import { extractToolAccess, type ToolKey } from "@/lib/tool-access";
+import { getCurrentMonthIndexInTimeZone } from "@/lib/birthday";
 
 type NavItem = {
   label: string;
@@ -114,6 +115,7 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const router = useRouter();
   const { user } = useUser();
+  const currentBirthdayMonth = getCurrentMonthIndexInTimeZone();
 
   const metadata = (user?.publicMetadata ?? {}) as Record<string, unknown>;
   const role = typeof (metadata as any).role === "string" ? String((metadata as any).role) : undefined;
@@ -177,7 +179,7 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
         },
         {
           label: "Birthdays",
-          path: `birthdays`,
+          path: `birthdays?month=${currentBirthdayMonth}`,
           icon: Cake,
         },
         {

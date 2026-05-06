@@ -7,6 +7,7 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import Loading from "@/app/loading";
 import { cn } from "@/lib/utils";
 import { EmployeesMenu, EmployeesMenuLink } from "./employees-menu";
+import { getCurrentMonthIndexInTimeZone } from "@/lib/birthday";
 
 type Route = {
   href: string;
@@ -24,6 +25,12 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   const departmentId = Array.isArray(departmentParam)
     ? departmentParam[0]
     : departmentParam ?? "";
+  const currentBirthdayMonth = getCurrentMonthIndexInTimeZone();
+
+  const getBirthdayHref = React.useCallback(
+    () => `/${departmentId}/birthdays?month=${currentBirthdayMonth}`,
+    [departmentId, currentBirthdayMonth]
+  );
 
   const handleNavClick = React.useCallback(
     (href: string) => {
@@ -72,7 +79,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       active: pathname === `/${departmentId}/approvals`,
     },
     {
-      href: `/${departmentId}/birthdays`,
+      href: getBirthdayHref(),
       label: "Birthdays",
       description: "See upcoming celebrants and special milestones.",
       active: pathname === `/${departmentId}/birthdays`,

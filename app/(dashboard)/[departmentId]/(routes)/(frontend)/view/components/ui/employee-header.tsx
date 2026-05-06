@@ -11,6 +11,7 @@ import { format } from "date-fns";
 // Cleaned up imports
 import TogglePublicBadge from "../../../../settings/components/toggle-public-button";
 import { cn } from "@/lib/utils";
+import { suggestWorkforceIndicator } from "@/lib/workforce-indicators";
 
 interface Props {
   employee: Employees;
@@ -19,6 +20,11 @@ interface Props {
 const EmployeeHeader = ({ employee }: Props) => {
   const fullName = buildNameWithInitial(employee);
   const lastUpdated = employee.updatedAt ? format(new Date(employee.updatedAt), "MMMM do, yyyy") : "N/A";
+  const workforceIndicator = suggestWorkforceIndicator({
+    position: employee.position,
+    officeName: employee.offices?.name,
+    employeeTypeName: employee.employeeType?.name,
+  });
 
   return (
     <div className="relative flex flex-col lg:flex-row items-stretch justify-between gap-6 border-b border-slate-200 pb-8 pt-4">
@@ -81,6 +87,18 @@ const EmployeeHeader = ({ employee }: Props) => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-base font-semibold text-slate-800">
                     {employee.position}
+                  </span>
+
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
+                      workforceIndicator.indicatorName === "Others"
+                        ? "bg-slate-100 text-slate-500 border-slate-200"
+                        : "bg-indigo-50 text-indigo-700 border-indigo-200"
+                    )}
+                    title={workforceIndicator.reason}
+                  >
+                    {workforceIndicator.indicatorName}
                   </span>
 
                   {employee.salaryGrade && (
