@@ -7,6 +7,10 @@ import {
   createEmployeeHistorySnapshot,
   parseEmployeeTerminationDate,
 } from "@/lib/workforce-history";
+import {
+  createEmploymentTimelineEventOnce,
+  parseTimelineDate,
+} from "@/lib/employment-timeline";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
@@ -151,6 +155,8 @@ if (archived) {
         dateHired: true,
         terminateDate: true,
         updatedAt: true,
+        offices: { select: { name: true } },
+        employeeType: { select: { name: true } },
       },
     });
 
@@ -165,6 +171,15 @@ if (archived) {
           ? "Snapshot created when employee was archived."
           : "Snapshot created when employee was restored from archive.",
       });
+
+      if (archived) {
+        await createEmploymentTimelineEventOnce(prismadb, {
+          employeeId: employee.id,
+          type: "TERMINATED",
+          occurredAt: parseTimelineDate(employee.terminateDate) ?? new Date(),
+          title: "Terminated",
+        });
+      }
     }
 
     return NextResponse.json({

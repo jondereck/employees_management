@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import axios from "axios";
 import { toast } from "sonner";
@@ -27,6 +27,7 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
 
   const [fetching, setFetching] = useState(false);
   const [salarySteps, setSalarySteps] = useState<Record<number, number>>({});
+  const [maxGrade, setMaxGrade] = useState<number | null>(null);
 
   const [fetchError, setFetchError] = useState<string | null>(null); // track 
   // fetch errors
@@ -43,13 +44,41 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
   }, [form]);
 
   useEffect(() => {
+    let cancelled = false;
+    const fetchSalaryMeta = async () => {
+      try {
+        const res = await axios.get("/api/departments/salary/");
+        if (!cancelled) setMaxGrade(Number(res.data.maxGrade) || 33);
+      } catch {
+        if (!cancelled) setMaxGrade(33);
+      }
+    };
+    fetchSalaryMeta();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const current = form.getValues("salaryStep");
     if (current !== currentStep) {
       form.setValue("salaryStep", currentStep);
     }
   }, [currentStep, form]);
 
-  // fetch salary table by SG
+  useEffect(() => {
+    if (!maxGrade) return;
+    const sgNum = Number(sg);
+    if (!sgNum || Number.isNaN(sgNum)) return;
+    if (sgNum > maxGrade) {
+      form.setValue("salaryGrade", String(maxGrade), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [form, maxGrade, sg]);
+
+ // fetch salary table by SG
  useEffect(() => {
   const fetchSalarySteps = async () => {
     const sgNum = Number(sg);
@@ -60,11 +89,14 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
       return;
     }
 
+    if (maxGrade && sgNum > maxGrade) return;
+
     setFetching(true);
     setFetchError(null);
     try {
       const res = await axios.get("/api/departments/salary/", { params: { sg: sgNum } });
       setSalarySteps(res.data.steps ?? {});
+      if (res.data.maxGrade) setMaxGrade(Number(res.data.maxGrade));
     } catch (e) {
       setSalarySteps({});
       setFetchError("Failed to fetch salary data.");
@@ -75,8 +107,9 @@ export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
     }
   };
 
-  fetchSalarySteps();
-}, [sg]);
+  const timeout = window.setTimeout(fetchSalarySteps, 350);
+  return () => window.clearTimeout(timeout);
+}, [maxGrade, sg]);
 
 
   // computed from fetched steps
@@ -140,6 +173,17 @@ useEffect(() => {
     form.setValue("salary", n, { shouldValidate: true, shouldDirty: true });
   };
 
+  const handleGradeChange = (rawValue: string, onChange: (value: string) => void) => {
+    const digits = rawValue.replace(/\D/g, "");
+    if (!digits) {
+      onChange("");
+      return;
+    }
+    const numeric = Number(digits);
+    const capped = maxGrade ? Math.min(numeric, maxGrade) : numeric;
+    onChange(String(capped));
+  };
+
   return (
  <div className="grid lg:grid-cols-3 grid-cols-1 gap-6 items-start">
   {/* 1. Salary Grade */}
@@ -168,11 +212,14 @@ useEffect(() => {
     inputMode="numeric"
     placeholder="e.g. 15"
     value={field.value ?? ""}
-    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, ""))}
+    onChange={(e) => handleGradeChange(e.target.value, field.onChange)}
   />
 </div>
 
         </FormControl>
+        <FormDescription className="text-[11px]">
+          Highest available: {maxGrade ? `SG ${maxGrade}` : "Loading..."}
+        </FormDescription>
         <FormMessage className="text-[11px]" />
       </FormItem>
     )}

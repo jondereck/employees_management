@@ -5,11 +5,18 @@ import {
   snapshotFieldsChanged,
   toSnapshotStatus,
 } from "@/lib/workforce-history";
+import {
+  buildEmploymentTitle,
+  createEmploymentTimelineEventOnce,
+  parseTimelineDate,
+} from "@/lib/employment-timeline";
 import { auth } from "@clerk/nextjs";
 import { MaritalStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
-
+function hasText(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
 
 export async function PATCH(
   req: Request,
@@ -101,6 +108,7 @@ const normalizedMemberPolicyNo =
 
     const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
     const normalizedEmployeeNo = normalizeBio(employeeNo);
+    const normalizedMiddleName = typeof middleName === "string" ? middleName.trim() : "";
     const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
     const normalizedPhilSysNumber = typeof philSysNumber === "string" && philSysNumber.trim() ? philSysNumber.trim() : null;
     const normalizedMaritalStatus =
@@ -207,6 +215,7 @@ const normalizedMemberPolicyNo =
         isHead: true,
         isArchived: true,
         dateHired: true,
+        latestAppointment: true,
         terminateDate: true,
         salary: true,
         salaryMode: true,
@@ -222,17 +231,43 @@ const normalizedMemberPolicyNo =
       return new NextResponse("Employee not found", { status: 404 });
     }
 
+    const hadTerminationDate = hasText(existing.terminateDate);
+    const wasInactive = existing.isArchived || hadTerminationDate;
+    const willBeArchived = Boolean(isArchived);
+    const willBeActive = !willBeArchived;
+    const isRehire = wasInactive && willBeActive;
+    const nextLatestAppointmentDate = parseTimelineDate(latestAppointment);
+    const previousTerminationDate = parseTimelineDate(existing.terminateDate);
+
+    if (isRehire && !nextLatestAppointmentDate) {
+      return new NextResponse(
+        JSON.stringify({
+          error: "Latest appointment date is required when rehiring or restoring a terminated employee.",
+        }),
+        { status: 400 }
+      );
+    }
+
+    if (
+      isRehire &&
+      previousTerminationDate &&
+      nextLatestAppointmentDate &&
+      nextLatestAppointmentDate.getTime() <= previousTerminationDate.getTime()
+    ) {
+      return new NextResponse(
+        JSON.stringify({
+          error: "Latest appointment date must be after the previous termination date.",
+        }),
+        { status: 400 }
+      );
+    }
+
     const finalSalaryMode = salaryMode ?? existing.salaryMode;
 
 
 
     let finalSalary = existing.salary;
 
-    if (finalSalaryMode === "MANUAL") {
-      finalSalary = Number(salary ?? existing.salary);
-    }
-
- if (finalSalaryMode === "AUTO") {
   const grade = Number(salaryGrade ?? existing.salaryGrade);
   const step = normalizeStep(salaryStep ?? existing.salaryStep);
 
@@ -250,10 +285,15 @@ const normalizedMemberPolicyNo =
     );
   }
 
-  finalSalary = record.amount;
-}
+    if (finalSalaryMode === "MANUAL") {
+      finalSalary = Number(salary ?? existing.salary);
+    }
 
+    if (finalSalaryMode === "AUTO") {
+      finalSalary = record.amount;
+    }
 
+    const normalizedTerminateDate = willBeActive ? "" : (terminateDate ?? "");
 
     // Update employee with merged images
     const employee = await prismadb.employee.update({
@@ -263,7 +303,7 @@ const normalizedMemberPolicyNo =
         employeeNo,
         lastName,
         firstName,
-        middleName,
+        middleName: normalizedMiddleName,
         suffix,
         gender,
         contactNumber,
@@ -293,9 +333,9 @@ memberPolicyNo: normalizedMemberPolicyNo,
 
         dateHired,
         latestAppointment,
-        terminateDate,
+        terminateDate: normalizedTerminateDate,
         isFeatured,
-        isArchived,
+        isArchived: willBeArchived,
         isHead,
         employeeTypeId,
         officeId,
@@ -318,9 +358,57 @@ memberPolicyNo: normalizedMemberPolicyNo,
         note: note ?? null,
         designationId: designationId ?? null,
       },
+      include: {
+        offices: { select: { name: true } },
+        employeeType: { select: { name: true } },
+      },
     });
 
-    if (snapshotFieldsChanged(existing, employee)) {
+    const beforeLatestAppointment = existing.latestAppointment ? new Date(existing.latestAppointment).getTime() : 0;
+    const afterLatestAppointment = employee.latestAppointment ? new Date(employee.latestAppointment).getTime() : 0;
+    if (isRehire) {
+      await createEmploymentTimelineEventOnce(prismadb, {
+        employeeId: employee.id,
+        type: "HIRED",
+        occurredAt: parseTimelineDate(employee.latestAppointment) ?? new Date(),
+        title: `Rehired. ${buildEmploymentTitle("Hired", {
+          position: employee.position,
+          employeeTypeName: employee.employeeType?.name,
+          officeName: employee.offices?.name,
+        })}`,
+      });
+    } else if (beforeLatestAppointment !== afterLatestAppointment && employee.latestAppointment) {
+      await createEmploymentTimelineEventOnce(prismadb, {
+        employeeId: employee.id,
+        type: "PROMOTED",
+        occurredAt: parseTimelineDate(employee.latestAppointment) ?? new Date(),
+        title: buildEmploymentTitle("Promoted", {
+          position: employee.position,
+          employeeTypeName: employee.employeeType?.name,
+          officeName: employee.offices?.name,
+        }),
+      });
+    }
+
+    const becameArchived = !wasInactive && employee.isArchived;
+    const gotTerminationDate = !hadTerminationDate && hasText(employee.terminateDate);
+    if (becameArchived || gotTerminationDate) {
+      await createEmploymentTimelineEventOnce(prismadb, {
+        employeeId: employee.id,
+        type: "TERMINATED",
+        occurredAt: parseTimelineDate(employee.terminateDate) ?? new Date(),
+        title: "Terminated",
+      });
+    }
+
+    if (isRehire) {
+      await createEmployeeHistorySnapshot(prismadb, employee, {
+        effectiveAt: parseTimelineDate(employee.latestAppointment) ?? new Date(),
+        status: toSnapshotStatus(employee.isArchived),
+        source: "REHIRE",
+        note: "Active snapshot created when employee returned after termination/archive.",
+      });
+    } else if (snapshotFieldsChanged(existing, employee)) {
       await createEmployeeHistorySnapshot(prismadb, employee, {
         effectiveAt:
           toSnapshotStatus(employee.isArchived) === "INACTIVE"

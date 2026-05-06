@@ -2,34 +2,25 @@ import type { Gender, MaritalStatus, PrismaClient } from "@prisma/client";
 import { createHash } from "crypto";
 
 import prismadb from "@/lib/prismadb";
+import {
+  WORKFORCE_DEFAULT_INDICATORS,
+  WORKFORCE_OTHERS_INDICATOR,
+  getCanonicalIndicatorLabel,
+  getIndicatorCanonicalKey,
+  normalizeIndicatorName,
+  suggestWorkforceIndicator,
+  type WorkforceIndicatorSuggestion,
+} from "@/lib/workforce-indicators";
+
+export {
+  WORKFORCE_DEFAULT_INDICATORS,
+  WORKFORCE_OTHERS_INDICATOR,
+  suggestWorkforceIndicator,
+} from "@/lib/workforce-indicators";
 
 export const WORKFORCE_ACTIVE_STATUS = "ACTIVE";
 export const WORKFORCE_INACTIVE_STATUS = "INACTIVE";
-export const WORKFORCE_DEFAULT_INDICATORS = [
-  "Clerical",
-  "Health",
-  "IT Service",
-  "Janitor",
-  "Security",
-  "Teacher",
-  "Technical",
-  "Trade",
-  "Others",
-] as const;
-export const WORKFORCE_OTHERS_INDICATOR = "Others";
 export const WORKFORCE_REPORT_CACHE_VERSION = 2;
-
-const WORKFORCE_CANONICAL_INDICATORS: Record<string, readonly string[]> = {
-  Clerical: ["clerical", "clerical services"],
-  Health: ["health", "health nutrition and population control"],
-  "IT Service": ["it service", "it services"],
-  Janitor: ["janitor", "janitorial services"],
-  Security: ["security", "security services"],
-  Teacher: ["teacher", "education"],
-  Technical: ["technical"],
-  Trade: ["trade", "trade and crafts/laborer", "trade and crafts laborer", "crafts/laborer", "crafts laborer"],
-  Others: ["others", "other"],
-};
 
 export const WORKFORCE_DIMENSIONS = [
   "employeeType",
@@ -44,11 +35,6 @@ export const WORKFORCE_DIMENSIONS = [
 
 export type WorkforceDimension = (typeof WORKFORCE_DIMENSIONS)[number];
 export type WorkforcePopulationMode = "active" | "all";
-export type WorkforceIndicatorSuggestion = {
-  indicatorName: string;
-  confidence: "high" | "medium" | "low";
-  reason: string;
-};
 
 export type WorkforceAiSuggestionInput = {
   employeeId: string;
@@ -74,140 +60,6 @@ export type WorkforceSnapshotEmployee = {
 };
 
 type PrismaLike = PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
-
-const INDICATOR_RULES: Array<{
-  indicatorName: (typeof WORKFORCE_DEFAULT_INDICATORS)[number];
-  keywords: string[];
-  positionKeywords?: string[];
-  fallbackKeywords?: string[];
-  confidence: WorkforceIndicatorSuggestion["confidence"];
-}> = [
-  {
-    indicatorName: "Health",
-    confidence: "high",
-    // Position matching should use role words, not generic office markers like "RHU".
-    positionKeywords: ["nurse", "midwife", "midwifery", "medical", "doctor", "dentist", "sanitary", "vaccinator"],
-    fallbackKeywords: ["health", "rhu", "nutrition"],
-    keywords: ["nurse", "midwife", "midwifery", "medical", "doctor", "dentist", "sanitary", "vaccinator", "health", "rhu", "nutrition"],
-  },
-  {
-    indicatorName: "IT Service",
-    confidence: "high",
-    keywords: ["it ", "information technology", "programmer", "computer", "system", "network", "database", "technician"],
-  },
-  {
-    indicatorName: "Security",
-    confidence: "high",
-    keywords: ["security", "guard", "traffic enforcer", "poso", "watchman"],
-  },
-  {
-    indicatorName: "Teacher",
-    confidence: "high",
-    keywords: ["teacher", "day care", "daycare", "instructor", "educator", "teaching", "child development"],
-  },
-  {
-    indicatorName: "Janitor",
-    confidence: "high",
-    keywords: ["janitor", "utility", "cleaner", "maintenance worker", "street sweeper"],
-  },
-  {
-    indicatorName: "Trade",
-    confidence: "medium",
-    keywords: ["driver", "operator", "mechanic", "electrician", "plumber", "carpenter", "mason", "welder", "laborer", "equipment"],
-  },
-  {
-    indicatorName: "Technical",
-    confidence: "medium",
-    keywords: ["engineer", "architect", "planning", "draftsman", "surveyor", "technical", "inspector", "agriculturist", "environment"],
-  },
-  {
-    indicatorName: "Clerical",
-    confidence: "medium",
-    keywords: ["encoder", "clerk", "clerical", "administrative aide", "administrative assistant", "admin", "secretary", "bookkeeper", "records", "processor"],
-  },
-];
-
-const POSITION_OVERRIDE_RULES: Array<{
-  indicatorName: (typeof WORKFORCE_DEFAULT_INDICATORS)[number];
-  keywords: string[];
-}> = [
-  {
-    indicatorName: "Clerical",
-    keywords: ["encoder"],
-  },
-];
-
-function normalizeClassifierText(value: string) {
-  return ` ${value.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
-}
-
-function normalizeIndicatorName(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-}
-
-function getIndicatorCanonicalKey(value: string) {
-  const normalized = normalizeIndicatorName(value);
-  return (
-    Object.entries(WORKFORCE_CANONICAL_INDICATORS).find(([, aliases]) =>
-      aliases.some((alias) => normalizeIndicatorName(alias) === normalized)
-    )?.[0] ?? null
-  );
-}
-
-export function suggestWorkforceIndicator(input: {
-  position?: string | null;
-  officeName?: string | null;
-  employeeTypeName?: string | null;
-}): WorkforceIndicatorSuggestion {
-  const positionText = normalizeClassifierText(input.position ?? "");
-  const officeAndTypeText = normalizeClassifierText(
-    [input.officeName, input.employeeTypeName].filter(Boolean).join(" ")
-  );
-
-  // Hard overrides for ambiguous terms that are commonly misclassified.
-  for (const rule of POSITION_OVERRIDE_RULES) {
-    const matched = rule.keywords.find((keyword) => positionText.includes(normalizeClassifierText(keyword)));
-    if (matched) {
-      return {
-        indicatorName: rule.indicatorName,
-        confidence: "high",
-        reason: `RULE: Matched "${matched}" from position override rule.`,
-      };
-    }
-  }
-
-  // Priority 1: position-based match (more accurate than office context)
-  for (const rule of INDICATOR_RULES) {
-    const searchKeywords = rule.positionKeywords ?? rule.keywords;
-    const matched = searchKeywords.find((keyword) => positionText.includes(normalizeClassifierText(keyword)));
-    if (matched) {
-      return {
-        indicatorName: rule.indicatorName,
-        confidence: rule.confidence,
-        reason: `RULE: Matched "${matched}" from position text.`,
-      };
-    }
-  }
-
-  // Priority 2: office/type fallback
-  for (const rule of INDICATOR_RULES) {
-    const searchKeywords = rule.fallbackKeywords ?? rule.keywords;
-    const matched = searchKeywords.find((keyword) => officeAndTypeText.includes(normalizeClassifierText(keyword)));
-    if (matched) {
-      return {
-        indicatorName: rule.indicatorName,
-        confidence: rule.confidence === "high" ? "medium" : rule.confidence,
-        reason: `RULE: Matched "${matched}" from office/type text.`,
-      };
-    }
-  }
-
-  return {
-    indicatorName: WORKFORCE_OTHERS_INDICATOR,
-    confidence: "low",
-    reason: "RULE: No strong keyword match; needs admin review.",
-  };
-}
 
 function normalizeAiIndicatorName(value: unknown) {
   if (typeof value !== "string") return null;
@@ -244,7 +96,7 @@ export async function suggestWorkforceIndicatorWithAiFallback(
           {
             role: "system",
             content:
-              "Classify government employee roles into exactly one indicator: Clerical, Health, IT Service, Janitor, Security, Teacher, Technical, Trade, Others. Return strict JSON.",
+              "Classify government employee roles into exactly one indicator: Clerical Services, Health, Nutrition and Population Control, IT Services, Janitorial Services, Security Services, Social Services and Social Welfare, Technical, Trade and Crafts/Laborer, Others. Return strict JSON.",
           },
           {
             role: "user",
@@ -341,6 +193,26 @@ export async function ensureDefaultWorkforceIndicators(departmentId: string) {
     });
   }
 
+  const renamedIndicators = existing
+    .map((indicator) => {
+      const canonicalName = getIndicatorCanonicalKey(indicator.name);
+      if (!canonicalName || canonicalName === indicator.name) return null;
+      if (existingNames.has(normalizeIndicatorName(canonicalName))) return null;
+      return {
+        id: indicator.id,
+        name: indicator.name,
+        canonicalName,
+      };
+    })
+    .filter(Boolean) as Array<{ id: string; name: string; canonicalName: string }>;
+
+  for (const indicator of renamedIndicators) {
+    await prismadb.workforceReportGroup.update({
+      where: { id: indicator.id },
+      data: { name: indicator.canonicalName },
+    });
+  }
+
   await cleanupDuplicateDefaultIndicators(departmentId);
 }
 
@@ -400,7 +272,85 @@ export async function cleanupDuplicateDefaultIndicators(departmentId: string) {
     }
   }
 
+  const others = await prismadb.workforceReportGroup.findFirst({
+    where: {
+      departmentId,
+      name: WORKFORCE_OTHERS_INDICATOR,
+    },
+    include: {
+      offices: { select: { id: true, officeId: true } },
+    },
+  });
+  if (others) {
+    const obsolete = indicators.filter((indicator) => !getIndicatorCanonicalKey(indicator.name));
+    for (const indicator of obsolete) {
+      await prismadb.employeeHistorySnapshot.updateMany({
+        where: { indicatorId: indicator.id },
+        data: { indicatorId: others.id },
+      });
+
+      for (const office of indicator.offices) {
+        await prismadb.workforceReportGroupOffice.upsert({
+          where: {
+            groupId_officeId: {
+              groupId: others.id,
+              officeId: office.officeId,
+            },
+          },
+          create: {
+            groupId: others.id,
+            officeId: office.officeId,
+          },
+          update: {},
+        });
+      }
+
+      await prismadb.workforceReportGroup.delete({
+        where: { id: indicator.id },
+      });
+    }
+  }
+
   await invalidateWorkforceReportCache(departmentId);
+}
+
+async function resolveSuggestedWorkforceIndicatorId(
+  db: PrismaLike,
+  employee: Pick<WorkforceSnapshotEmployee, "departmentId" | "officeId" | "employeeTypeId" | "position">
+) {
+  await ensureDefaultWorkforceIndicators(employee.departmentId);
+
+  const [office, employeeType] = await Promise.all([
+    employee.officeId
+      ? (db as any).offices.findUnique({
+          where: { id: employee.officeId },
+          select: { name: true },
+        })
+      : null,
+    employee.employeeTypeId
+      ? (db as any).employeeType.findUnique({
+          where: { id: employee.employeeTypeId },
+          select: { name: true },
+        })
+      : null,
+  ]);
+
+  const suggestion = suggestWorkforceIndicator({
+    position: employee.position,
+    officeName: office?.name ?? null,
+    employeeTypeName: employeeType?.name ?? null,
+  });
+
+  const indicator = await (db as any).workforceReportGroup.findFirst({
+    where: {
+      departmentId: employee.departmentId,
+      name: getCanonicalIndicatorLabel(suggestion.indicatorName),
+    },
+    select: { id: true },
+  });
+
+  if (indicator?.id) return indicator.id;
+  return resolveWorkforceIndicatorId(employee.departmentId, null);
 }
 
 export async function resolveWorkforceIndicatorId(
@@ -610,8 +560,9 @@ export async function createEmployeeHistorySnapshot(
       : null;
   const indicatorId =
     options.indicatorId ??
+    (await resolveSuggestedWorkforceIndicatorId(db, employee)) ??
     previousIndicator?.indicatorId ??
-    (await resolveWorkforceIndicatorId(employee.departmentId, employee.officeId));
+    (await resolveWorkforceIndicatorId(employee.departmentId, null));
 
   const snapshot = await db.employeeHistorySnapshot.create({
     data: {
@@ -642,8 +593,7 @@ export async function backfillWorkforceHistorySnapshots(departmentId: string) {
     where: { departmentId },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
-  const othersIndicatorId =
-    indicators.find((indicator) => indicator.name === WORKFORCE_OTHERS_INDICATOR)?.id ?? null;
+  const indicatorIdByName = new Map(indicators.map((indicator) => [indicator.name, indicator.id]));
 
   const employees = await prismadb.employee.findMany({
     where: { departmentId },
@@ -661,6 +611,12 @@ export async function backfillWorkforceHistorySnapshots(departmentId: string) {
       dateHired: true,
       terminateDate: true,
       updatedAt: true,
+      offices: {
+        select: { name: true },
+      },
+      employeeType: {
+        select: { name: true },
+      },
       historySnapshots: {
         where: { source: "BACKFILL" },
         select: {
@@ -671,6 +627,11 @@ export async function backfillWorkforceHistorySnapshots(departmentId: string) {
   });
 
   const snapshots = employees.flatMap((employee) => {
+    const suggestion = suggestWorkforceIndicator({
+      position: employee.position,
+      officeName: employee.offices?.name ?? null,
+      employeeTypeName: employee.employeeType?.name ?? null,
+    });
     const baseSnapshot = {
       departmentId: employee.departmentId,
       employeeId: employee.id,
@@ -683,7 +644,7 @@ export async function backfillWorkforceHistorySnapshots(departmentId: string) {
       maritalStatus: employee.maritalStatus ?? null,
       isHead: Boolean(employee.isHead),
       status: WORKFORCE_ACTIVE_STATUS,
-      indicatorId: othersIndicatorId,
+      indicatorId: indicatorIdByName.get(getCanonicalIndicatorLabel(suggestion.indicatorName)) ?? indicatorIdByName.get(WORKFORCE_OTHERS_INDICATOR) ?? null,
       source: "BACKFILL",
       note: "Baseline snapshot generated from current employee record and date hired.",
     };
@@ -722,6 +683,7 @@ export async function backfillWorkforceHistorySnapshots(departmentId: string) {
   }
 
   let updatedMissingIndicators = 0;
+  const othersIndicatorId = indicatorIdByName.get(WORKFORCE_OTHERS_INDICATOR) ?? null;
   if (othersIndicatorId) {
     const result = await prismadb.employeeHistorySnapshot.updateMany({
       where: {

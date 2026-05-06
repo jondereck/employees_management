@@ -92,15 +92,33 @@ const DIMENSION_LABELS: Record<Dimension, string> = {
 };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
+const FIXED_INDICATOR_LABELS = [
+  "Clerical Services",
+  "Health, Nutrition and Population Control",
+  "IT Services",
+  "Janitorial Services",
+  "Security Services",
+  "Social Services and Social Welfare",
+  "Technical",
+  "Trade and Crafts/Laborer",
+  "Others",
+] as const;
 const INDICATOR_ALIASES: Record<string, string[]> = {
   clerical: ["clerical", "clerical services"],
-  health: ["health", "health nutrition and population control"],
-  "it service": ["it service", "it services"],
-  janitor: ["janitor", "janitorial services"],
-  security: ["security", "security services"],
-  teacher: ["teacher", "education"],
+  health: ["health", "health nutrition and population control", "health, nutrition and population control"],
+  "it services": ["it service", "it services"],
+  "janitorial services": ["janitor", "janitorial services"],
+  "security services": ["security", "security services"],
+  "social services and social welfare": [
+    "social services and social welfare",
+    "social services",
+    "social welfare",
+    "social welfare and development",
+    "teacher",
+    "education",
+  ],
   technical: ["technical"],
-  trade: ["trade", "trade and crafts/laborer", "trade and crafts laborer", "crafts/laborer", "crafts laborer"],
+  "trade and crafts/laborer": ["trade", "trade and crafts/laborer", "trade and crafts laborer", "crafts/laborer", "crafts laborer"],
   others: ["others", "other"],
 };
 
@@ -158,11 +176,6 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
   const [groups, setGroups] = useState<Group[]>([]);
   const [loadingSetup, setLoadingSetup] = useState(true);
 
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
-  const [groupName, setGroupName] = useState("");
-  const [groupSortOrder, setGroupSortOrder] = useState(0);
-  const [groupOfficeIds, setGroupOfficeIds] = useState<string[]>([]);
-  const [savingGroup, setSavingGroup] = useState(false);
   const [suggestionSearch, setSuggestionSearch] = useState("");
   const [suggestionEffectiveAt, setSuggestionEffectiveAt] = useState(toYearEndInputValue(currentYear));
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<string[]>([]);
@@ -188,7 +201,6 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
     note: "",
   });
 
-  const selectedOfficeSet = useMemo(() => new Set(groupOfficeIds), [groupOfficeIds]);
   const selectedGroupSet = useMemo(() => new Set(selectedGroupIds), [selectedGroupIds]);
   const selectedSuggestionSet = useMemo(() => new Set(selectedSuggestionIds), [selectedSuggestionIds]);
   const indicatorIdByName = useMemo(
@@ -341,70 +353,6 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
     void loadSuggestions(year, populationMode, controller.signal);
     return () => controller.abort();
   }, [availableYears, loadSuggestions, populationMode, year]);
-
-  const clearGroupForm = () => {
-    setEditingGroupId(null);
-    setGroupName("");
-    setGroupSortOrder(0);
-    setGroupOfficeIds([]);
-  };
-
-  const saveGroup = async () => {
-    if (!groupName.trim()) {
-      toast.error("Group name is required.");
-      return;
-    }
-
-    setSavingGroup(true);
-    try {
-      const response = await fetch(
-        editingGroupId
-          ? `/api/${departmentId}/analytics/workforce-history/groups/${editingGroupId}`
-          : `/api/${departmentId}/analytics/workforce-history/groups`,
-        {
-          method: editingGroupId ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: groupName,
-            sortOrder: groupSortOrder,
-            officeIds: groupOfficeIds,
-          }),
-        }
-      );
-      if (!response.ok) throw new Error(await response.text());
-      clearGroupForm();
-      await loadSetup();
-      toast.success("Indicator saved.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save group.");
-    } finally {
-      setSavingGroup(false);
-    }
-  };
-
-  const deleteGroup = async (groupId: string) => {
-    setSavingGroup(true);
-    try {
-      const response = await fetch(`/api/${departmentId}/analytics/workforce-history/groups/${groupId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) throw new Error(await response.text());
-      await loadSetup();
-      clearGroupForm();
-      toast.success("Indicator deleted.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete group.");
-    } finally {
-      setSavingGroup(false);
-    }
-  };
-
-  const editGroup = (group: Group) => {
-    setEditingGroupId(group.id);
-    setGroupName(group.name);
-    setGroupSortOrder(group.sortOrder);
-    setGroupOfficeIds(group.offices.map((office) => office.id));
-  };
 
   const backfillSnapshots = async () => {
     setLoadingSetup(true);
@@ -784,68 +732,21 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
         <Card>
           <CardHeader>
             <CardTitle>Indicators</CardTitle>
-
+            <CardDescription>System-managed fixed indicator set used everywhere in workforce history.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-[1fr,96px] gap-2">
-              <div className="space-y-2">
-                <Label htmlFor="group-name">Indicator name</Label>
-                <Input id="group-name" value={groupName} onChange={(event) => setGroupName(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="group-order">Order</Label>
-                <Input
-                  id="group-order"
-                  type="number"
-                  value={groupSortOrder}
-                  onChange={(event) => setGroupSortOrder(Number(event.target.value) || 0)}
-                />
-              </div>
-            </div>
-
             <div className="space-y-2">
-              <Label>Office fallback mapping</Label>
-              <ScrollArea className="h-52 rounded-md border p-3">
-                <div className="space-y-2">
-                  {offices.map((office) => (
-                    <label key={office.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={selectedOfficeSet.has(office.id)}
-                        onCheckedChange={(checked) => {
-                          setGroupOfficeIds((prev) =>
-                            checked ? [...prev, office.id] : prev.filter((id) => id !== office.id)
-                          );
-                        }}
-                      />
-                      <span>{office.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={saveGroup} disabled={savingGroup}>
-                {savingGroup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                {editingGroupId ? "Update indicator" : "Add indicator"}
-              </Button>
-              <Button type="button" variant="ghost" onClick={clearGroupForm}>
-                Clear
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              {groups.map((group) => (
-                <div key={group.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                  <button type="button" className="text-left" onClick={() => editGroup(group)}>
-                    <p className="text-sm font-medium">{group.name}</p>
-                    <p className="text-xs text-muted-foreground">{group.offices.length} offices</p>
-                  </button>
-                  <Button type="button" size="icon" variant="ghost" onClick={() => deleteGroup(group.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+              {FIXED_INDICATOR_LABELS.map((label) => {
+                const match = groups.find((group) => group.name === label);
+                return (
+                  <div key={label} className="rounded-md border px-3 py-2">
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {match ? `${match.offices.length} office fallback mappings` : "Waiting for system sync"}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

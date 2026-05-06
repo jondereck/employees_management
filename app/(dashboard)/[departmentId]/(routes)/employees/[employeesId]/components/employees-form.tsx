@@ -2,14 +2,14 @@
 import * as z from "zod";
 import { mutate as globalMutate } from "swr";
 import { Eligibility, Employee, EmployeeType, Gender, Image, MaritalStatus, Offices } from "@prisma/client";
-import { Archive, CalendarIcon, CalendarX, Check, ChevronDown, FileText, HelpCircle, LinkIcon, Loader2, ShieldCheck, Star, Trash } from "lucide-react";
+import { Archive, CalendarIcon, CalendarX, Check, ChevronDown, FileText, HelpCircle, LinkIcon, ShieldCheck, Star, Trash } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Button } from "@/components/ui/button";
 import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -42,6 +42,7 @@ import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
 import type { WeeklyExclusionDTO } from "@/lib/weeklyExclusions";
 import { EmployeeScheduleManager } from "./employee-schedule-manager";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
+import { suggestWorkforceIndicator } from "@/lib/workforce-indicators";
 
 
 
@@ -69,7 +70,7 @@ const formSchema = z.object({
   firstName: z.string().min(1, {
     message: "First Name is required"
   }),
-  middleName: z.string(),
+  middleName: z.string().trim().default(""),
   gender: z.string().min(1, {
     message: "Gender is required"
   }),
@@ -124,7 +125,7 @@ const formSchema = z.object({
     .union([z.string(), z.number()])
     .transform((v) => String(v).trim())
     .refine((v) => /^\d+$/.test(v), "Salary Grade must be numeric")
-    .refine((v) => Number(v) >= 1 && Number(v) <= 33, "Salary Grade must be between 1 and 33")
+    .refine((v) => Number(v) >= 1, "Salary Grade must be at least 1")
     .default("1"),
   salaryStep: z.number().optional().default(1),
   salary: z.number().min(0),
@@ -237,7 +238,7 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   firstName: "",
   middleName: "",
   gender: "",
-  maritalStatus: null,
+  maritalStatus: MaritalStatus.SINGLE,
   email: "",
   philSysNumber: "",
   employeeTypeId: "",
@@ -305,7 +306,7 @@ function mapToDefaults(src: any): EmployeesFormValues {
     // others
     employeeNo: src.employeeNo ?? "",
     gender: src.gender ?? "",
-    maritalStatus: src.maritalStatus ?? null,
+    maritalStatus: src.maritalStatus ?? MaritalStatus.SINGLE,
     email: src.email ?? "",
     philSysNumber: src.philSysNumber ?? "",
     contactNumber: src.contactNumber ?? "",
@@ -376,6 +377,9 @@ export const EmployeesForm = ({
   const [awardsVersion, setAwardsVersion] = useState(0);
   const [bioOptions, setBioOptions] = useState<BioSuggestion[]>([]);
   const [suggesting, setSuggesting] = useState(false);
+  const [lastAutoBio, setLastAutoBio] = useState("");
+  const [lastAutoBioOfficeId, setLastAutoBioOfficeId] = useState("");
+  const previousArchivedRef = useRef<boolean | null>(null);
 
 
   const [value, setValue] = useState("")
@@ -469,6 +473,27 @@ export const EmployeesForm = ({
     return e ? `${b}, ${e}` : b;
   }
   const officeId = form.watch("officeId"); // keep
+  const isArchivedValue = form.watch("isArchived");
+  const terminateDateValue = form.watch("terminateDate");
+  const selectedPosition = form.watch("position");
+  const selectedEmployeeTypeId = form.watch("employeeTypeId");
+  const selectedOffice = useMemo(
+    () => offices.find((office) => office.id === officeId),
+    [officeId, offices]
+  );
+  const selectedEmployeeType = useMemo(
+    () => employeeType.find((type) => type.id === selectedEmployeeTypeId),
+    [employeeType, selectedEmployeeTypeId]
+  );
+  const workforceIndicator = useMemo(
+    () =>
+      suggestWorkforceIndicator({
+        position: selectedPosition,
+        officeName: selectedOffice?.name,
+        employeeTypeName: selectedEmployeeType?.name,
+      }),
+    [selectedEmployeeType?.name, selectedOffice?.name, selectedPosition]
+  );
 
   const suggestBio = useCallback(async () => {
     if (suggesting) return;              // prevent double taps
@@ -499,7 +524,10 @@ export const EmployeesForm = ({
       if (suggestions.length === 1) {
         const suggested = suggestions[0].candidate.toUpperCase();
         const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
-        form.setValue("employeeNo", joinEmployeeNo(suggested, emp), { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+        const nextEmployeeNo = joinEmployeeNo(suggested, emp);
+        form.setValue("employeeNo", nextEmployeeNo, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+        setLastAutoBio(nextEmployeeNo);
+        setLastAutoBioOfficeId(officeId);
         toast.success(`Suggested BIO: ${suggested}`, {
           id: toastId,
           duration: 3000,
@@ -517,13 +545,53 @@ export const EmployeesForm = ({
   }, [officeId, params.departmentId, form, suggesting]);
 
 
-  useEffect(() => { setBioOptions([]); }, [officeId]);
+  useEffect(() => {
+    setBioOptions([]);
+    if (!officeId) return;
+    if (lastAutoBioOfficeId === officeId) return;
+    const current = form.getValues("employeeNo").trim();
+    if (current && current !== lastAutoBio) return;
+    void suggestBio();
+  }, [form, lastAutoBio, lastAutoBioOfficeId, officeId, suggestBio]);
+
+  useEffect(() => {
+    if (previousArchivedRef.current === null) {
+      previousArchivedRef.current = isArchivedValue;
+      return;
+    }
+
+    if (previousArchivedRef.current && !isArchivedValue) {
+      form.setValue("terminateDate", "", {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
+    }
+
+    previousArchivedRef.current = isArchivedValue;
+  }, [form, isArchivedValue]);
+
   const onInvalid = () => {
     toast.error("Please fill the required fields.", {
       description: "Check the highlighted inputs and try again.",
     });
   };
   const onSubmit = async (values: EmployeesFormValues) => {
+    const currentRecord = employee ?? initialData;
+    const wasInactive =
+      Boolean(currentRecord?.isArchived) ||
+      Boolean(String(currentRecord?.terminateDate ?? "").trim());
+    const hasLatestAppointment =
+      values.latestAppointment instanceof Date
+        ? !Number.isNaN(values.latestAppointment.getTime())
+        : Boolean(String(values.latestAppointment ?? "").trim());
+
+    if (initialData && wasInactive && !values.isArchived && !hasLatestAppointment) {
+      toast.error("Latest appointment date is required for rehire.", {
+        description: "Enter the employee's return or reappointment date before restoring them to active status.",
+      });
+      return;
+    }
 
     const contact = (values.contactNumber ?? "").trim();
     setLoading(true);
@@ -540,6 +608,7 @@ export const EmployeesForm = ({
         email: values.email?.trim() || null,
         philSysNumber: values.philSysNumber?.trim() || null,
         maritalStatus: values.maritalStatus || null,
+        terminateDate: values.isArchived ? values.terminateDate : "",
       };
       if (contact) payload.contactNumber = contact;
       // Call the API
@@ -804,19 +873,13 @@ export const EmployeesForm = ({
                                     onChange: (v: string) => field.onChange(v.toUpperCase()),
                                   }}
                                   placeholder="e.g. 8540005"
-                                  className="pr-20 h-10 bg-secondary/20 border-transparent focus:bg-background transition-all"
+                                  className="h-10 bg-secondary/20 border-transparent focus:bg-background transition-all"
                                 />
                               </div>
-                              {/* Modern Integrated Suggest Button */}
-                              <button
-                                type="button"
-                                onClick={suggestBio}
-                                disabled={loading || suggesting || !officeId}
-                                className="absolute right-1.5 top-1.5 bottom-1.5 px-3 rounded-md bg-background border shadow-sm text-[10px] font-bold uppercase tracking-tight hover:bg-secondary transition-colors disabled:opacity-50"
-                              >
-                                {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Suggest"}
-                              </button>
                             </div>
+                            <FormDescription className="text-[11px]">
+                              {suggesting ? "Finding next available BIO number..." : "Auto-suggests after selecting Department / Assignment."}
+                            </FormDescription>
                             <FormMessage className="text-[11px]" />
                           </FormItem>
                         )}
@@ -1084,21 +1147,28 @@ export const EmployeesForm = ({
                   <Separator className="flex-1" />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <FormField control={form.control} name="position" render={({ field }) => <AutoField
-                    kind="datalist"
-                    label="Position Title"
-                    required
-                    field={field}
-                    endpoint="/api/autofill/positions" // full list (string[])
-                    priorityEndpoint={`/api/autofill/popular?field=position&limit=2`}
-                    pinSuggestions
-                    pinnedLabel="Frequently used"
-                    placeholder="Search or enter Position..."
-                    showFormatSwitch
-                    formatMode="none"
-                    formatModes={["none", "upper", "title", "sentence"]}
-                    disabled={loading}
-                  />} />
+                  <FormField control={form.control} name="position" render={({ field }) => (
+                    <div className="space-y-1.5">
+                      <AutoField
+                        kind="datalist"
+                        label="Position Title"
+                        required
+                        field={field}
+                        endpoint="/api/autofill/positions" // full list (string[])
+                        priorityEndpoint={`/api/autofill/popular?field=position&limit=2`}
+                        pinSuggestions
+                        pinnedLabel="Frequently used"
+                        placeholder="Search or enter Position..."
+                        showFormatSwitch
+                        formatMode="none"
+                        formatModes={["none", "upper", "title", "sentence"]}
+                        disabled={loading}
+                      />
+                      <p className="text-[11px] font-medium text-muted-foreground">
+                        Indicator: <span className="text-foreground">{workforceIndicator.indicatorName}</span>
+                      </p>
+                    </div>
+                  )} />
                   <FormField control={form.control} name="employeeTypeId" render={({ field }) => <AutoField
                     kind="select"
                     label="Appointment Status"
@@ -1175,6 +1245,10 @@ export const EmployeesForm = ({
                       />
                     )} />
 
+                    <p className="sm:col-span-2 text-xs text-muted-foreground">
+                      Use the latest appointment date as the employee&apos;s rehire date when they return after termination.
+                    </p>
+
 
                   </div>
 
@@ -1206,7 +1280,7 @@ export const EmployeesForm = ({
                           />
                         </FormControl>
                         <FormDescription>
-                          This field is optional for employee is terminated/retired.
+                          Keep this only while the employee is inactive. It will be cleared automatically once the employee is rehired or restored.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

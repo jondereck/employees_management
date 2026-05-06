@@ -113,22 +113,22 @@ export async function POST(
     const mode = body.salaryMode ?? "AUTO";
     const normalizeBio = (v?: string | null) => (v ?? "").replace(/[^\d]/g, "");
     const normalizedEmployeeNo = normalizeBio(employeeNo);
+    const normalizedMiddleName = typeof middleName === "string" ? middleName.trim() : "";
     const normalizedEmail = typeof email === "string" && email.trim() ? email.trim() : null;
     const normalizedPhilSysNumber = typeof philSysNumber === "string" && philSysNumber.trim() ? philSysNumber.trim() : null;
     const normalizedMaritalStatus =
       typeof maritalStatus === "string" && maritalStatus in MaritalStatus
         ? (maritalStatus as MaritalStatus)
-        : null;
+        : MaritalStatus.SINGLE;
 
-    let finalSalary = Number(body.salary ?? 0);
-
-    if (mode === "AUTO") {
-      const record = await prismadb.salary.findUnique({
-        where: { grade_step: { grade: safeGrade, step: safeStep } },
-        select: { amount: true },
-      });
-      finalSalary = record?.amount ?? finalSalary;
+    const salaryRecord = await prismadb.salary.findUnique({
+      where: { grade_step: { grade: safeGrade, step: safeStep } },
+      select: { amount: true },
+    });
+    if (!salaryRecord) {
+      return new NextResponse(`Salary table missing for SG ${safeGrade}, Step ${safeStep}`, { status: 400 });
     }
+    let finalSalary = mode === "AUTO" ? salaryRecord.amount : Number(body.salary ?? 0);
 
     // --- your existing validations (kept as-is, tiny touch-ups) ---
     const urlRegex = /^https:\/\/drive\.google\.com\/.*$/;
@@ -287,7 +287,7 @@ export async function POST(
               employeeNo: employeeNoFinal || undefined, // pure digits, no suffix
               lastName,
               firstName,
-              middleName,
+              middleName: normalizedMiddleName,
               suffix,
               images: {
                 createMany: { data: (images ?? []).map((img: { url: string }) => ({ url: img.url })) },

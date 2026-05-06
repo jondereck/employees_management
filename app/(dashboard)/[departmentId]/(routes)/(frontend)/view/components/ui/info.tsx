@@ -16,6 +16,7 @@ import {
 import { computeStep } from "@/utils/compute-step";
 import { salarySchedule } from "@/utils/salarySchedule";
 import { formatUpdatedAt } from "@/utils/date";
+import { suggestWorkforceIndicator } from "@/lib/workforce-indicators";
 
 interface InfoProps {
   data: Employees;
@@ -44,6 +45,11 @@ const Info = ({ data }: InfoProps) => {
 
   const formattedENumber = formatContactNumber(data.emergencyContactNumber)
   const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment)
+  const workforceIndicator = suggestWorkforceIndicator({
+    position: data.position,
+    officeName: data.offices?.name,
+    employeeTypeName: data.employeeType?.name,
+  });
 
 
   const savedSalary = Number(data?.salary ?? 0);
@@ -135,6 +141,7 @@ const Info = ({ data }: InfoProps) => {
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             {renderItem("Plantilla Designation", data.designation?.name || "Not Assigned")}
             {renderItem("Position", data.position)}
+            {renderItem("Workforce Indicator", workforceIndicator.indicatorName)}
             {renderItem("Office", data.offices?.name)}
             {renderItem("Appointment", data.employeeType?.name)}
 
