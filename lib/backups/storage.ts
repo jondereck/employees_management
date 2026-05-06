@@ -1,12 +1,44 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "fs/promises";
 import path from "path";
 
+import prismadb from "@/lib/prismadb";
+
+import type { DepartmentBackupManifest } from "./config";
+
 export type StoredBackupSummary = {
   id: string;
   filename: string;
   size: number;
   modifiedAt: string;
+  manifest?: DepartmentBackupManifest;
 };
+
+export type BackupStorageInfo =
+  | {
+      type: "database";
+      label: string;
+      directory: null;
+    }
+  | {
+      type: "local";
+      label: string;
+      directory: string;
+    };
+
+export interface BackupStorage {
+  info(): BackupStorageInfo;
+  save(
+    id: string,
+    buffer: Buffer,
+    options: {
+      departmentId: string;
+      manifest: DepartmentBackupManifest;
+      createdBy: string;
+    }
+  ): Promise<StoredBackupSummary>;
+  read(id: string): Promise<Buffer>;
+  list(departmentId: string): Promise<StoredBackupSummary[]>;
+}
 
 function resolveBackupDirectory() {
   const configured = process.env.BACKUP_DIR?.trim();
@@ -28,7 +60,7 @@ function normalizeBackupId(id: string) {
   return trimmed.endsWith(".zip") ? trimmed.slice(0, -4) : trimmed;
 }
 
-export class LocalBackupStorage {
+export class LocalBackupStorage implements BackupStorage {
   readonly root: string;
 
   constructor(root = resolveBackupDirectory()) {
@@ -37,6 +69,14 @@ export class LocalBackupStorage {
 
   async ensureRoot() {
     await mkdir(this.root, { recursive: true });
+  }
+
+  info(): BackupStorageInfo {
+    return {
+      type: "local",
+      label: "Local filesystem",
+      directory: this.root,
+    };
   }
 
   filenameFor(id: string) {
@@ -102,6 +142,117 @@ export class LocalBackupStorage {
   }
 }
 
-export function getLocalBackupDirectory() {
-  return resolveBackupDirectory();
+function normalizeDatabaseManifest(value: unknown): DepartmentBackupManifest | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  return value as DepartmentBackupManifest;
+}
+
+export class DatabaseBackupStorage implements BackupStorage {
+  info(): BackupStorageInfo {
+    return {
+      type: "database",
+      label: "Database snapshots",
+      directory: null,
+    };
+  }
+
+  filenameFor(id: string) {
+    return `${normalizeBackupId(id)}.zip`;
+  }
+
+  async save(
+    id: string,
+    buffer: Buffer,
+    options: {
+      departmentId: string;
+      manifest: DepartmentBackupManifest;
+      createdBy: string;
+    }
+  ) {
+    const normalizedId = normalizeBackupId(id);
+    const filename = this.filenameFor(normalizedId);
+    const row = await (prismadb as any).departmentBackup.create({
+      data: {
+        id: normalizedId,
+        departmentId: options.departmentId,
+        filename,
+        size: buffer.byteLength,
+        data: buffer,
+        manifest: options.manifest,
+        reason: options.manifest.reason,
+        createdBy: options.createdBy,
+      },
+      select: {
+        id: true,
+        filename: true,
+        size: true,
+        updatedAt: true,
+        manifest: true,
+      },
+    });
+
+    return {
+      id: row.id,
+      filename: row.filename,
+      size: row.size,
+      modifiedAt: row.updatedAt.toISOString(),
+      manifest: normalizeDatabaseManifest(row.manifest),
+    } satisfies StoredBackupSummary;
+  }
+
+  async read(id: string) {
+    const normalizedId = normalizeBackupId(id);
+    const row = await (prismadb as any).departmentBackup.findUnique({
+      where: { id: normalizedId },
+      select: { data: true },
+    });
+
+    if (!row) {
+      const error = new Error("Backup not found.") as Error & { code?: string };
+      error.code = "ENOENT";
+      throw error;
+    }
+
+    return Buffer.from(row.data);
+  }
+
+  async list(departmentId: string) {
+    const rows = await (prismadb as any).departmentBackup.findMany({
+      where: { departmentId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        filename: true,
+        size: true,
+        updatedAt: true,
+        manifest: true,
+      },
+    });
+
+    return rows.map((row: any) => ({
+      id: row.id,
+      filename: row.filename,
+      size: row.size,
+      modifiedAt: row.updatedAt.toISOString(),
+      manifest: normalizeDatabaseManifest(row.manifest),
+    })) satisfies StoredBackupSummary[];
+  }
+}
+
+export function getBackupStorage(): BackupStorage {
+  const configured = process.env.BACKUP_STORAGE?.trim().toLowerCase();
+
+  if (configured === "local") {
+    return new LocalBackupStorage();
+  }
+
+  if (configured === "database" || process.env.VERCEL || process.env.NODE_ENV === "production") {
+    return new DatabaseBackupStorage();
+  }
+
+  return new LocalBackupStorage();
+}
+
+export function getBackupStorageInfo() {
+  return getBackupStorage().info();
 }

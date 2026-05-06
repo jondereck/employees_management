@@ -39,6 +39,9 @@ const exceptionSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Shift start and end are required", path: ["shiftStart"] });
     }
   }
+  if (data.type === ScheduleType.ROTATING) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Rotating schedules are not supported for one-day exceptions", path: ["type"] });
+  }
 });
 
 type ExceptionUpdateInput = z.infer<typeof exceptionSchema>;

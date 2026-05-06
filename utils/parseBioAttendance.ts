@@ -1359,7 +1359,10 @@ export function summarizePerEmployee(
     if (!row.excludeFromSummaryCounts) {
       const evaluationStatus: DayEvaluationStatus = row.evaluationStatus
         ? row.evaluationStatus
-        : row.status === "no_punch" || row.status === "excused" || row.status === "evaluated"
+        : row.status === "no_punch" ||
+          row.status === "excused" ||
+          row.status === "evaluated" ||
+          row.status === "off"
         ? (row.status as DayEvaluationStatus)
         : row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0
         ? "evaluated"
@@ -1369,6 +1372,8 @@ export function summarizePerEmployee(
         agg.noPunchDays += 1;
       } else if (evaluationStatus === "excused") {
         agg.excusedDays += 1;
+      } else if (evaluationStatus === "off") {
+        // Scheduled rest days do not contribute to summary counts.
       } else {
         agg.daysWithLogs += 1;
         if (row.isLate) agg.lateDays += 1;
@@ -2092,7 +2097,10 @@ const buildPerDaySheet = (
   const dataRows = rows.map((row) => {
     const evaluationStatus: DayEvaluationStatus = row.evaluationStatus
       ? row.evaluationStatus
-      : row.status === "no_punch" || row.status === "excused" || row.status === "evaluated"
+      : row.status === "no_punch" ||
+        row.status === "excused" ||
+        row.status === "evaluated" ||
+        row.status === "off"
       ? (row.status as DayEvaluationStatus)
       : row.earliest || row.latest || (row.allTimes?.length ?? 0) > 0
       ? "evaluated"
@@ -2128,6 +2136,7 @@ const buildPerDaySheet = (
             return row.status;
           }
           if (evaluationStatus === "excused") return "Excused";
+          if (evaluationStatus === "off") return "Off";
           return row.absent ? "Absent" : "Present";
         }
         case "earliest":
@@ -2153,6 +2162,7 @@ const buildPerDaySheet = (
         case "lateFlag": {
           if (evaluationStatus === "no_punch") return "No punches";
           if (evaluationStatus === "excused") return "Excused";
+          if (evaluationStatus === "off") return "Off";
           return row.isLate ? "Yes" : "No";
         }
         case "lateMinutes":
@@ -2160,6 +2170,7 @@ const buildPerDaySheet = (
         case "undertimeFlag": {
           if (evaluationStatus === "no_punch") return "No punches";
           if (evaluationStatus === "excused") return "Excused";
+          if (evaluationStatus === "off") return "Off";
           return row.isUndertime ? "Yes" : "No";
         }
         case "undertimeMinutes":
@@ -2173,6 +2184,8 @@ const buildPerDaySheet = (
             ? row.allTimes.join(", ")
             : evaluationStatus === "no_punch"
             ? "No punches"
+            : evaluationStatus === "off"
+            ? "Off"
             : "";
         case "sourceFiles":
           return row.sourceFiles?.length ? row.sourceFiles.join(", ") : "";

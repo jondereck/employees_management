@@ -7,6 +7,10 @@ import {
   type WeeklyPatternDay,
   type WeeklyPatternWindow,
 } from "@/utils/weeklyPattern";
+import {
+  resolveRotationDay,
+  type RotationPattern,
+} from "@/utils/rotatingSchedule";
 import type { HHMM } from "@/types/time";
 
 export type { HHMM };
@@ -38,10 +42,17 @@ export type ScheduleShift = {
   breakMinutes?: number;
   graceMinutes?: number;
 };
+export type ScheduleRotating = {
+  type: "ROTATING";
+  rotationAnchorDate: string;
+  rotationPattern: RotationPattern;
+  breakMinutes?: number;
+  graceMinutes?: number;
+};
 
-export type Schedule = ScheduleFixed | ScheduleFlex | ScheduleShift;
+export type Schedule = ScheduleFixed | ScheduleFlex | ScheduleShift | ScheduleRotating;
 
-export type DayEvaluationStatus = "evaluated" | "no_punch" | "excused";
+export type DayEvaluationStatus = "evaluated" | "no_punch" | "excused" | "off";
 
 export type DayEvalInput = {
   dateISO: string;
@@ -153,6 +164,34 @@ export function evaluateDay(input: DayEvalInput) {
       ? input.schedule.breakMinutes
       : 60;
 
+  if (input.schedule.type === "ROTATING") {
+    const { day } = resolveRotationDay(
+      input.schedule.rotationPattern,
+      input.schedule.rotationAnchorDate,
+      input.dateISO
+    );
+    if (day.kind === "OFF") {
+      return {
+        status: "off" as DayEvaluationStatus,
+        workedMinutes: 0,
+        workedHHMM: minToHHMM(0),
+        isLate: false,
+        isUndertime: false,
+        lateMinutes: 0,
+        undertimeMinutes: 0,
+        requiredMinutes: null,
+        scheduleStart: null,
+        scheduleEnd: null,
+        scheduleGraceMinutes: null,
+        weeklyPatternApplied: false,
+        weeklyPatternWindows: null,
+        weeklyPatternPresence: [],
+        weeklyExclusionApplied: null,
+        presenceSegments,
+      };
+    }
+  }
+
   const weeklyExclusion = input.weeklyExclusion ?? null;
   let weeklyExclusionApplied: { mode: WeeklyExclusionMode; ignoreUntil: string | null } | null = null;
 
@@ -203,6 +242,74 @@ export function evaluateDay(input: DayEvalInput) {
   if (noPunchInput) {
     status = "no_punch";
   }
+
+  if (input.schedule.type === "ROTATING") {
+    const { day } = resolveRotationDay(
+      input.schedule.rotationPattern,
+      input.schedule.rotationAnchorDate,
+      input.dateISO
+    );
+
+    if (day.kind === "OFF") {
+      return {
+        status: "off" as DayEvaluationStatus,
+        workedMinutes: 0,
+        workedHHMM: minToHHMM(0),
+        isLate: false,
+        isUndertime: false,
+        lateMinutes: 0,
+        undertimeMinutes: 0,
+        requiredMinutes: null,
+        scheduleStart: null,
+        scheduleEnd: null,
+        scheduleGraceMinutes: null,
+        weeklyPatternApplied: false,
+        weeklyPatternWindows: null,
+        weeklyPatternPresence: [],
+        weeklyExclusionApplied: null,
+        presenceSegments,
+      };
+    }
+
+    const start = toMin(day.start);
+    const rawEnd = toMin(day.end);
+    const end = rawEnd <= start ? rawEnd + MINUTES_IN_DAY : rawEnd;
+    const breakForDay = day.breakMinutes ?? input.schedule.breakMinutes ?? 60;
+    const grace = day.graceMinutes ?? input.schedule.graceMinutes ?? 0;
+    const lateStart =
+      weeklyExclusion?.mode === "IGNORE_LATE_UNTIL" && weeklyExclusion.ignoreUntilMinutes != null
+        ? Math.max(start, weeklyExclusion.ignoreUntilMinutes)
+        : start;
+    scheduleStart = minToHHMM(lateStart);
+    scheduleEnd = day.end;
+    scheduleGraceMinutes = grace;
+
+    worked = Math.max(0, sumIntervals(presenceSegments) - breakForDay);
+    const required = Math.max(0, end - start - breakForDay);
+    requiredMinutes = required;
+    isUndertime = worked < required;
+    undertimeMinutes = Math.max(0, required - worked);
+
+    const rawCandidates: number[] = [];
+    if (normalizedTimes.length) {
+      for (const time of normalizedTimes) {
+        rawCandidates.push(toMin(time));
+      }
+    }
+    if (e != null) rawCandidates.push(e);
+    const firstPunchRaw = rawCandidates.length ? Math.min(...rawCandidates) : null;
+    if (firstPunchRaw != null) {
+      let adjustedFirstPunch = firstPunchRaw;
+      if (rawEnd <= start && adjustedFirstPunch <= rawEnd) {
+        adjustedFirstPunch += MINUTES_IN_DAY;
+      }
+      isLate = adjustedFirstPunch > lateStart + grace;
+      lateMinutes = Math.max(0, adjustedFirstPunch - (lateStart + grace));
+    } else {
+      isLate = false;
+      lateMinutes = 0;
+    }
+  } else {
 
   switch (input.schedule.type) {
     case "FIXED": {
@@ -401,6 +508,7 @@ export function evaluateDay(input: DayEvalInput) {
       undertimeMinutes = Math.max(0, planned - worked);
       break;
     }
+  }
   }
 
   if (status === "no_punch") {

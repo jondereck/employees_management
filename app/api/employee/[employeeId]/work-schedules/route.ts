@@ -5,6 +5,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
 import {
+  normalizeRotationPatternInput,
+  rotationPatternInputSchema,
+} from "@/lib/rotatingScheduleInput";
+import {
   normalizeWeeklyPatternInput,
   weeklyPatternInputSchema,
 } from "@/lib/weeklyPatternInput";
@@ -26,6 +30,8 @@ const scheduleSchema = z.object({
   effectiveFrom: z.string().min(1, "Effective from date is required"),
   effectiveTo: z.string().optional().nullable(),
   weeklyPattern: weeklyPatternInputSchema,
+  rotationAnchorDate: z.string().optional().nullable(),
+  rotationPattern: rotationPatternInputSchema,
 }).superRefine((data, ctx) => {
   if (data.type === ScheduleType.FIXED) {
     if (!data.startTime || !data.endTime) {
@@ -45,6 +51,14 @@ const scheduleSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Shift start and end are required", path: ["shiftStart"] });
     }
   }
+  if (data.type === ScheduleType.ROTATING) {
+    if (!data.rotationAnchorDate) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Rotation anchor date is required", path: ["rotationAnchorDate"] });
+    }
+    if (!data.rotationPattern) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Rotation pattern is required", path: ["rotationPattern"] });
+    }
+  }
 });
 
 type ScheduleInput = z.infer<typeof scheduleSchema>;
@@ -54,6 +68,10 @@ export async function POST(request: Request, { params }: { params: { employeeId:
     const json = await request.json();
     const payload = scheduleSchema.parse(json) as ScheduleInput;
     const normalizedWeeklyPattern = normalizeWeeklyPatternInput(payload.weeklyPattern);
+    const normalizedRotationPattern = normalizeRotationPatternInput(payload.rotationPattern);
+    if (payload.type === ScheduleType.ROTATING && (!payload.rotationAnchorDate || !normalizedRotationPattern)) {
+      return NextResponse.json({ error: "Invalid rotating schedule." }, { status: 400 });
+    }
 
     const data: Prisma.WorkScheduleUncheckedCreateInput = {
       employeeId: params.employeeId,
@@ -76,6 +94,14 @@ export async function POST(request: Request, { params }: { params: { employeeId:
         normalizedWeeklyPattern === null
           ? Prisma.DbNull
           : (normalizedWeeklyPattern as Prisma.InputJsonValue),
+      rotationAnchorDate:
+        payload.type === ScheduleType.ROTATING && payload.rotationAnchorDate
+          ? new Date(payload.rotationAnchorDate)
+          : null,
+      rotationPattern:
+        payload.type === ScheduleType.ROTATING && normalizedRotationPattern
+          ? (normalizedRotationPattern as Prisma.InputJsonValue)
+          : Prisma.DbNull,
     };
     const schedule = await prisma.workSchedule.create({ data });
 

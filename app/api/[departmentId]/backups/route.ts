@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { requireBackupAccess } from "@/lib/backups/access";
 import { backupErrorResponse, noStoreJson } from "@/lib/backups/http";
 import { createDepartmentBackup, listDepartmentBackups } from "@/lib/backups/service";
-import { getLocalBackupDirectory } from "@/lib/backups/storage";
+import { getBackupStorageInfo } from "@/lib/backups/storage";
 
 export async function GET(
   _req: Request,
@@ -16,10 +16,7 @@ export async function GET(
 
     return noStoreJson({
       backups,
-      storage: {
-        type: "local",
-        directory: getLocalBackupDirectory(),
-      },
+      storage: getBackupStorageInfo(),
     });
   } catch (error) {
     return backupErrorResponse(error);

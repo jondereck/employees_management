@@ -60,6 +60,13 @@ const validateScheduleFields = (
         path: ["shiftStart"],
       });
     }
+    if (data.type === ScheduleType.ROTATING) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Rotating schedules are only supported for individual employees.",
+        path: ["type"],
+      });
+    }
   };
 
 export const timekeepingScheduleSchema = timekeepingScheduleBaseSchema.superRefine(validateScheduleFields);

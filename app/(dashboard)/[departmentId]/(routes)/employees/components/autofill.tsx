@@ -463,8 +463,14 @@ function DateField({
   disableFuture,
   placeholder = "",
 }: DateProps) {
+  const toValidDate = (value: unknown): Date | undefined => {
+    if (!value) return undefined;
+    const candidate = value instanceof Date ? value : new Date(value as string);
+    return isValid(candidate) ? candidate : undefined;
+  };
+
   const selected: Date | undefined = useMemo(
-    () => (field.value ? new Date(field.value) : undefined),
+    () => toValidDate(field.value),
     [field.value]
   );
 
@@ -479,9 +485,7 @@ function DateField({
   );
   // keep input synced if value changes externally
   useEffect(() => {
-    if (selected) {
-      setInput(fmt(selected, "MM-dd-yyyy"));
-    }
+    setInput(selected ? fmt(selected, "MM-dd-yyyy") : "");
   }, [selected]);
 
   const commitInput = () => {
@@ -510,10 +514,8 @@ function DateField({
 
 
   useEffect(() => {
-    if (selected) {
-      setMonth(selected);
-      setInput(fmt(selected, "MM-dd-yyyy"));
-    }
+    setMonth(selected ?? new Date());
+    setInput(selected ? fmt(selected, "MM-dd-yyyy") : "");
   }, [selected]);
 
   return (

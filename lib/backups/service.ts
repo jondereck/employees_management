@@ -15,7 +15,7 @@ import {
   createEmptyCounts,
   createEmptyModelMap,
 } from "./config";
-import { LocalBackupStorage, type StoredBackupSummary } from "./storage";
+import { getBackupStorage, type StoredBackupSummary } from "./storage";
 import { BackupValidationError, buildBackupZip, parseBackupZip } from "./zip";
 
 export type BackupSummary = StoredBackupSummary & {
@@ -228,8 +228,12 @@ export async function createDepartmentBackup({
   };
 
   const buffer = await buildBackupZip(manifest, models);
-  const storage = new LocalBackupStorage();
-  const stored = await storage.save(backupIdFor(departmentId, reason), buffer);
+  const storage = getBackupStorage();
+  const stored = await storage.save(backupIdFor(departmentId, reason), buffer, {
+    departmentId,
+    manifest,
+    createdBy,
+  });
 
   return {
     backup: {
@@ -240,15 +244,19 @@ export async function createDepartmentBackup({
 }
 
 export async function listDepartmentBackups(departmentId: string) {
-  const storage = new LocalBackupStorage();
-  const storedBackups = await storage.list();
+  const storage = getBackupStorage();
+  const storedBackups = await storage.list(departmentId);
   const backups: BackupSummary[] = [];
 
   for (const stored of storedBackups) {
     try {
-      const buffer = await storage.read(stored.id);
-      const parsed = await parseBackupZip(buffer, { expectedDepartmentId: departmentId });
-      backups.push({ ...stored, manifest: parsed.manifest });
+      if (stored.manifest?.departmentId === departmentId) {
+        backups.push({ ...stored, manifest: stored.manifest });
+      } else {
+        const buffer = await storage.read(stored.id);
+        const parsed = await parseBackupZip(buffer, { expectedDepartmentId: departmentId });
+        backups.push({ ...stored, manifest: parsed.manifest });
+      }
     } catch {
       // Invalid backups and backups for another department are intentionally hidden.
     }
@@ -258,7 +266,7 @@ export async function listDepartmentBackups(departmentId: string) {
 }
 
 export async function readLocalBackup(backupId: string) {
-  const storage = new LocalBackupStorage();
+  const storage = getBackupStorage();
   try {
     return await storage.read(backupId);
   } catch (error: any) {

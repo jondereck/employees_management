@@ -20,6 +20,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RotateCw,
   Trash2,
   UploadCloud,
   X,
@@ -2214,6 +2215,9 @@ function BioLogUploaderContent() {
   const [perDay, setPerDay] = useState<PerDayRow[] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
+  const [refreshingBiometrics, setRefreshingBiometrics] = useState(false);
+  const [evaluationRefreshKey, setEvaluationRefreshKey] = useState(0);
+  const [employeeTypesRefreshKey, setEmployeeTypesRefreshKey] = useState(0);
   const [showMixedMonthsPrompt, setShowMixedMonthsPrompt] = useState(false);
   const [mixedMonthsContext, setMixedMonthsContext] = useState<{
     key: string;
@@ -3172,6 +3176,101 @@ function BioLogUploaderContent() {
     };
   }, [identityTokens, toast]);
 
+  const handleRefreshBiometricsData = useCallback(async () => {
+    if (!mergeResult) {
+      toast({
+        title: "No biometrics data",
+        description: "Upload or parse a biometrics workbook before refreshing.",
+      });
+      return;
+    }
+
+    setRefreshingBiometrics(true);
+    lastEvaluatedKey.current = "";
+    identitySetCacheRef.current.clear();
+
+    try {
+      const working = new Map<string, IdentityRecord>();
+      let completed = 0;
+
+      if (identityTokens.length) {
+        setIdentityState({
+          status: "resolving",
+          total: identityTokens.length,
+          completed: 0,
+          unmatched: 0,
+        });
+
+        for (let i = 0; i < identityTokens.length; i += IDENTITY_REQUEST_LIMIT) {
+          const slice = identityTokens.slice(i, i + IDENTITY_REQUEST_LIMIT);
+          const response = await timeout(
+            fetch("/api/biometrics/resolve-identities", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tokens: slice }),
+            })
+          );
+
+          if (!response.ok) {
+            const message = await response.text();
+            throw new Error(message || "Unable to refresh employee identities.");
+          }
+
+          const payload = (await response.json()) as {
+            results?: Record<string, IdentityRecord>;
+          };
+
+          for (const token of slice) {
+            const normalized = normalizeIdentityRecord(payload.results?.[token]);
+            working.set(token, normalized);
+            identityCacheRef.current.set(token, normalized);
+          }
+
+          completed += slice.length;
+          setIdentityState({
+            status: "resolving",
+            total: identityTokens.length,
+            completed,
+            unmatched: countUnmatchedIdentities(working),
+          });
+        }
+
+        const finalMap = new Map(working);
+        identitySetCacheRef.current.set(identityTokens.join("|"), finalMap);
+        setIdentityMap(finalMap);
+        setIdentityState({
+          status: "resolved",
+          total: identityTokens.length,
+          completed: identityTokens.length,
+          unmatched: countUnmatchedIdentities(finalMap),
+        });
+      }
+
+      setEvaluationRefreshKey((value) => value + 1);
+      setEmployeeTypesRefreshKey((value) => value + 1);
+      toast({
+        title: "Biometrics refreshed",
+        description: "Latest employee and office data will be applied with your filters unchanged.",
+      });
+    } catch (error) {
+      console.error("Failed to refresh biometrics data", error);
+      const message =
+        error instanceof Error ? error.message : "Unable to refresh biometrics data.";
+      setIdentityState((prev) => ({
+        ...prev,
+        status: "error",
+        message,
+      }));
+      toast({
+        title: "Refresh failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshingBiometrics(false);
+    }
+  }, [identityTokens, mergeResult, toast]);
+
   useEffect(() => {
     if (parseInProgress.current) return;
     const next = files.find((file) => file.status === "queued");
@@ -3962,6 +4061,7 @@ function BioLogUploaderContent() {
       controller.abort();
     };
   }, [
+    evaluationRefreshKey,
     filteredPerDayRows,
     hasPendingParses,
     identityReady,
@@ -4063,7 +4163,7 @@ function BioLogUploaderContent() {
       active = false;
       controller.abort();
     };
-  }, [departmentId]);
+  }, [departmentId, employeeTypesRefreshKey]);
 
   const employeeTypeOptions = useMemo(() => {
     const labelByKey = new Map<string, string>();
@@ -6221,6 +6321,20 @@ const applyColumnFilters = useCallback(
                     ? "Settings not saved"
                     : "Settings ready"}
                 </Badge>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="inline-flex items-center gap-2"
+                  onClick={handleRefreshBiometricsData}
+                  disabled={!mergeResult || hasPendingParses || evaluating || refreshingBiometrics}
+                >
+                  {refreshingBiometrics ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RotateCw className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  Refresh
+                </Button>
                 <Button
                   type="button"
                   variant="outline"

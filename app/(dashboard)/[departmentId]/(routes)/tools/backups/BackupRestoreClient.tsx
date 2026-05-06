@@ -126,7 +126,11 @@ async function apiJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise
 
 export default function BackupRestoreClient({ departmentId }: BackupRestoreClientProps) {
   const [backups, setBackups] = React.useState<BackupSummary[]>([]);
-  const [storageDirectory, setStorageDirectory] = React.useState("");
+  const [storageInfo, setStorageInfo] = React.useState<{
+    type: "database" | "local";
+    label: string;
+    directory: string | null;
+  } | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [creating, setCreating] = React.useState(false);
   const [validating, setValidating] = React.useState(false);
@@ -144,10 +148,14 @@ export default function BackupRestoreClient({ departmentId }: BackupRestoreClien
     try {
       const data = await apiJson<{
         backups: BackupSummary[];
-        storage: { directory: string };
+        storage: {
+          type: "database" | "local";
+          label: string;
+          directory: string | null;
+        };
       }>(backupsUrl);
       setBackups(data.backups);
-      setStorageDirectory(data.storage.directory);
+      setStorageInfo(data.storage);
     } catch (error) {
       toast.error("Failed to load backups", {
         description: error instanceof Error ? error.message : undefined,
@@ -330,10 +338,12 @@ export default function BackupRestoreClient({ departmentId }: BackupRestoreClien
             <div>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <Database className="h-5 w-5" />
-                Local Snapshots
+                {storageInfo?.type === "local" ? "Local Snapshots" : "Backup Snapshots"}
               </CardTitle>
               <CardDescription>
-                Stored on this app machine at {storageDirectory || "backups/local"}.
+                {storageInfo?.type === "local"
+                  ? `Stored on this app machine at ${storageInfo.directory || "backups/local"}.`
+                  : "Stored in the application database for serverless production deployments."}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">

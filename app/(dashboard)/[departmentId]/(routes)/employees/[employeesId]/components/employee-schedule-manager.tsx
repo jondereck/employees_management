@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ScheduleExceptionDTO, WorkScheduleDTO } from "@/lib/schedules";
+import type { HHMM } from "@/types/time";
 import {
   WEEKLY_EXCLUSION_MODES,
   weekdayNumberToLabel,
@@ -50,6 +51,7 @@ import {
   validateWeeklyPatternDay,
 } from "@/utils/weeklyPattern";
 import type { WeekdayKey, WeeklyPattern, WeeklyPatternDay } from "@/utils/weeklyPattern";
+import type { RotationDay, RotationPattern } from "@/utils/rotatingSchedule";
 import { CalendarIcon, CalendarX, CheckCircle2, Clock, EditIcon, HelpCircle, Info, Loader2, Pencil, Settings2, ShieldCheck, Trash2, TrashIcon, XIcon } from "lucide-react";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { TimeButtonField } from "./time-button-field";
@@ -58,6 +60,7 @@ const ScheduleType = {
   FIXED: "FIXED",
   FLEX: "FLEX",
   SHIFT: "SHIFT",
+  ROTATING: "ROTATING",
 } as const;
 
 type ScheduleTypeEnum = (typeof ScheduleType)[keyof typeof ScheduleType];
@@ -66,8 +69,52 @@ type WeeklyPatternWindowForm = { id: string; start: string; end: string };
 type WeeklyPatternDayForm = { windows: WeeklyPatternWindowForm[]; requiredMinutes: number };
 type WeeklyPatternFormState = Record<WeekdayKey, WeeklyPatternDayForm>;
 type WeeklyPatternErrorState = Record<WeekdayKey, string | null>;
+type RotationWorkDayForm = {
+  id: string;
+  kind: "WORK";
+  start: string;
+  end: string;
+  breakMinutes: number;
+  graceMinutes: number;
+};
+type RotationOffDayForm = { id: string; kind: "OFF" };
+type RotationDayForm = RotationWorkDayForm | RotationOffDayForm;
 
 const randomId = () => Math.random().toString(36).slice(2, 10);
+
+const createDefaultRotationDays = (): RotationDayForm[] => [
+  { id: randomId(), kind: "WORK", start: "06:00", end: "18:00", breakMinutes: 60, graceMinutes: 0 },
+  { id: randomId(), kind: "OFF" },
+  { id: randomId(), kind: "WORK", start: "07:00", end: "19:00", breakMinutes: 60, graceMinutes: 0 },
+  { id: randomId(), kind: "OFF" },
+];
+
+const toRotationFormDays = (pattern: RotationPattern | null | undefined): RotationDayForm[] => {
+  if (!pattern?.days?.length) return createDefaultRotationDays();
+  return pattern.days.map((day) =>
+    day.kind === "OFF"
+      ? { id: randomId(), kind: "OFF" }
+      : {
+          id: randomId(),
+          kind: "WORK",
+          start: day.start,
+          end: day.end,
+          breakMinutes: day.breakMinutes ?? 60,
+          graceMinutes: day.graceMinutes ?? 0,
+        }
+  );
+};
+
+const describeRotationPattern = (pattern: RotationPattern | null | undefined): string => {
+  if (!pattern?.days?.length) return "No cycle";
+  return pattern.days
+    .map((day, index) =>
+      day.kind === "OFF"
+        ? `D${index + 1}: Off`
+        : `D${index + 1}: ${day.start}-${day.end}`
+    )
+    .join(", ");
+};
 
 const createEmptyWeeklyPatternState = (): WeeklyPatternFormState => {
   const state = {} as WeeklyPatternFormState;
@@ -126,6 +173,7 @@ const scheduleFormSchema = z
     shiftStart: z.string().optional(),
     shiftEnd: z.string().optional(),
     breakMinutes: z.coerce.number().int().min(0).max(720).default(60),
+    rotationAnchorDate: z.string().optional(),
     effectiveFrom: z.string().min(1, "Effective from date is required"),
     effectiveTo: z.string().optional(),
   })
@@ -171,6 +219,13 @@ const scheduleFormSchema = z
           message: "Shift start and end are required",
         });
       }
+    }
+    if (data.type === ScheduleType.ROTATING && !data.rotationAnchorDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["rotationAnchorDate"],
+        message: "Rotation anchor date is required",
+      });
     }
   });
 
@@ -235,6 +290,13 @@ const exceptionFormSchema = z
         });
       }
     }
+    if (data.type === ScheduleType.ROTATING) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["type"],
+        message: "Rotating schedules are not supported for one-day exceptions",
+      });
+    }
   });
 
 type ExceptionFormValues = z.infer<typeof exceptionFormSchema>;
@@ -288,6 +350,7 @@ const scheduleDefaults: ScheduleFormValues = {
   shiftStart: "22:00",
   shiftEnd: "06:00",
   breakMinutes: 60,
+  rotationAnchorDate: "",
   effectiveFrom: "",
   effectiveTo: "",
 };
@@ -317,6 +380,7 @@ const weeklyExclusionDefaults: WeeklyExclusionFormValues = {
 };
 
 const scheduleTypes = Object.values(ScheduleType) as ScheduleTypeEnum[];
+const exceptionScheduleTypes = scheduleTypes.filter((type) => type !== ScheduleType.ROTATING);
 
 const formatTypeLabel = (type: ScheduleTypeEnum) =>
   type.charAt(0) + type.slice(1).toLowerCase();
@@ -335,6 +399,8 @@ const describeSchedule = (schedule: WorkScheduleDTO) => {
       }
     case ScheduleType.SHIFT:
       return `Shift ${schedule.shiftStart ?? "—"}–${schedule.shiftEnd ?? "—"} (grace ${schedule.graceMinutes ?? 0}m)`;
+    case ScheduleType.ROTATING:
+      return `Rotating from ${toDateInput(schedule.rotationAnchorDate)} â€¢ ${describeRotationPattern(schedule.rotationPattern)}`;
     case ScheduleType.FIXED:
     default:
       return `${schedule.startTime ?? "—"}–${schedule.endTime ?? "—"} (grace ${schedule.graceMinutes ?? 0}m)`;
@@ -473,6 +539,7 @@ export function EmployeeScheduleManager({
   );
   const [weeklyPatternOpen, setWeeklyPatternOpen] = useState(false);
   const [weeklyPatternAutoOpenDisabled, setWeeklyPatternAutoOpenDisabled] = useState(false);
+  const [rotationDays, setRotationDays] = useState<RotationDayForm[]>(() => createDefaultRotationDays());
 
   const handleAddWeeklyWindow = useCallback((day: WeekdayKey) => {
     setWeeklyPattern((prev) => {
@@ -590,6 +657,85 @@ export function EmployeeScheduleManager({
     return { pattern: Object.keys(pattern).length ? pattern : null, errors, hasError };
   }, [weeklyPattern]);
 
+  const updateRotationDay = useCallback((id: string, patch: Partial<RotationWorkDayForm>) => {
+    setRotationDays((prev) =>
+      prev.map((day) =>
+        day.id === id && day.kind === "WORK"
+          ? { ...day, ...patch, kind: "WORK" }
+          : day
+      )
+    );
+  }, []);
+
+  const setRotationDayKind = useCallback((id: string, kind: RotationDay["kind"]) => {
+    setRotationDays((prev) =>
+      prev.map((day) => {
+        if (day.id !== id) return day;
+        return kind === "OFF"
+          ? { id, kind: "OFF" }
+          : {
+              id,
+              kind: "WORK",
+              start: day.kind === "WORK" ? day.start : "08:00",
+              end: day.kind === "WORK" ? day.end : "17:00",
+              breakMinutes: day.kind === "WORK" ? day.breakMinutes : 60,
+              graceMinutes: day.kind === "WORK" ? day.graceMinutes : 0,
+            };
+      })
+    );
+  }, []);
+
+  const addRotationDay = useCallback(() => {
+    setRotationDays((prev) =>
+      prev.length >= 31
+        ? prev
+        : [...prev, { id: randomId(), kind: "OFF" }]
+    );
+  }, []);
+
+  const removeRotationDay = useCallback((id: string) => {
+    setRotationDays((prev) => (prev.length <= 2 ? prev : prev.filter((day) => day.id !== id)));
+  }, []);
+
+  const moveRotationDay = useCallback((id: string, direction: -1 | 1) => {
+    setRotationDays((prev) => {
+      const index = prev.findIndex((day) => day.id === id);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next;
+    });
+  }, []);
+
+  const buildRotationPatternSubmission = useCallback(() => {
+    const days: RotationPattern["days"] = [];
+    for (const day of rotationDays) {
+      if (day.kind === "OFF") {
+        days.push({ kind: "OFF" });
+        continue;
+      }
+      if (!HHMM_REGEX.test(day.start) || !HHMM_REGEX.test(day.end) || day.start === day.end) {
+        return { pattern: null, error: "Work days need valid, different start and end times." };
+      }
+      days.push({
+        kind: "WORK",
+        start: day.start as HHMM,
+        end: day.end as HHMM,
+        breakMinutes: Math.min(720, Math.max(0, Math.round(day.breakMinutes || 0))),
+        graceMinutes: Math.min(180, Math.max(0, Math.round(day.graceMinutes || 0))),
+      });
+    }
+    if (days.length < 2 || days.length > 31) {
+      return { pattern: null, error: "Rotation cycle must have 2 to 31 days." };
+    }
+    if (!days.some((day) => day.kind === "WORK")) {
+      return { pattern: null, error: "Rotation cycle needs at least one work day." };
+    }
+    return { pattern: { days }, error: null };
+  }, [rotationDays]);
+
   const scheduleForm = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleFormSchema),
     defaultValues: scheduleDefaults,
@@ -638,6 +784,15 @@ export function EmployeeScheduleManager({
     weeklyPatternAutoOpenDisabled,
   ]);
 
+  useEffect(() => {
+    if (scheduleType !== ScheduleType.ROTATING) return;
+    const anchor = scheduleForm.getValues("rotationAnchorDate");
+    const effectiveFrom = scheduleForm.getValues("effectiveFrom");
+    if (!anchor && effectiveFrom) {
+      scheduleForm.setValue("rotationAnchorDate", effectiveFrom);
+    }
+  }, [scheduleType, scheduleForm]);
+
   const resetScheduleForm = useCallback(() => {
     setEditingSchedule(null);
     scheduleForm.reset(scheduleDefaults);
@@ -645,6 +800,7 @@ export function EmployeeScheduleManager({
     setWeeklyPatternErrors(createEmptyWeeklyPatternErrors());
     setWeeklyPatternOpen(false);
     setWeeklyPatternAutoOpenDisabled(false);
+    setRotationDays(createDefaultRotationDays());
   }, [scheduleForm]);
 
   const resetExceptionForm = useCallback(() => {
@@ -659,14 +815,22 @@ export function EmployeeScheduleManager({
 
   const onSubmitSchedule = scheduleForm.handleSubmit(async (values) => {
     const usingWeeklyPattern = values.type === ScheduleType.FLEX;
+    const usingRotation = values.type === ScheduleType.ROTATING;
     const submission = usingWeeklyPattern
       ? buildWeeklyPatternSubmission()
       : { pattern: null, errors: createEmptyWeeklyPatternErrors(), hasError: false };
+    const rotationSubmission = usingRotation
+      ? buildRotationPatternSubmission()
+      : { pattern: null, error: null };
 
     setWeeklyPatternErrors(submission.errors);
     if (usingWeeklyPattern && submission.hasError) {
       setWeeklyPatternOpen(true);
       toast.error("Resolve weekly pattern errors before saving.");
+      return;
+    }
+    if (usingRotation && rotationSubmission.error) {
+      toast.error(rotationSubmission.error);
       return;
     }
 
@@ -676,6 +840,10 @@ export function EmployeeScheduleManager({
         ...values,
         effectiveTo: values.effectiveTo ? values.effectiveTo : null,
         weeklyPattern: usingWeeklyPattern ? submission.pattern : null,
+        rotationAnchorDate: usingRotation
+          ? values.rotationAnchorDate || values.effectiveFrom
+          : null,
+        rotationPattern: usingRotation ? rotationSubmission.pattern : null,
       };
       const endpoint = editingSchedule
         ? `/api/employee/${employeeId}/work-schedules/${editingSchedule.id}`
@@ -854,6 +1022,7 @@ export function EmployeeScheduleManager({
         shiftStart: schedule.shiftStart ?? "",
         shiftEnd: schedule.shiftEnd ?? "",
         breakMinutes: schedule.breakMinutes ?? 60,
+        rotationAnchorDate: toDateInput(schedule.rotationAnchorDate),
         effectiveFrom: toDateInput(schedule.effectiveFrom),
         effectiveTo: toDateInput(schedule.effectiveTo),
       });
@@ -861,6 +1030,7 @@ export function EmployeeScheduleManager({
       setWeeklyPatternErrors(createEmptyWeeklyPatternErrors());
       setWeeklyPatternOpen(hasWeeklyPattern(schedule.weeklyPattern));
       setWeeklyPatternAutoOpenDisabled(hasWeeklyPattern(schedule.weeklyPattern));
+      setRotationDays(toRotationFormDays(schedule.rotationPattern));
     },
     [scheduleForm]
   );
@@ -1102,16 +1272,18 @@ export function EmployeeScheduleManager({
         {/* Dynamic Fields Container - SEE PART 2 BELOW */}
         {/* ... */}
 
-     {(scheduleType === ScheduleType.FIXED || scheduleType === ScheduleType.SHIFT || scheduleType === ScheduleType.FLEX) && (
-          <div className="p-6 rounded-xl bg-slate-50/50 border border-slate-200 space-y-6">
+        {(scheduleType === ScheduleType.FIXED ||
+          scheduleType === ScheduleType.SHIFT ||
+          scheduleType === ScheduleType.FLEX ||
+          scheduleType === ScheduleType.ROTATING) && (
+          <div className="space-y-6 rounded-xl border border-slate-200 bg-slate-50/50 p-6">
             <div className="flex items-center gap-2 border-b border-slate-200 pb-4">
-              <div className="h-4 w-1 bg-indigo-500 rounded-full" />
-              <h4 className="text-xs font-bold uppercase text-slate-600 tracking-wider">
+              <div className="h-4 w-1 rounded-full bg-indigo-500" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
                 Timing Configuration
               </h4>
             </div>
 
-            {/* FIXED & SHIFT Start/End */}
             {(scheduleType === ScheduleType.FIXED || scheduleType === ScheduleType.SHIFT) && (
               <div className="grid gap-6 md:grid-cols-3">
                 <FormField
@@ -1122,11 +1294,7 @@ export function EmployeeScheduleManager({
                       <FormLabel className="text-[10px] font-bold uppercase text-slate-500">
                         {scheduleType === ScheduleType.FIXED ? "Standard Start" : "Shift Start"}
                       </FormLabel>
-                      <Input
-                        type="time"
-                        className="bg-white shadow-sm font-mono tabular-nums focus-visible:ring-indigo-500"
-                        {...field}
-                      />
+                      <Input type="time" className="bg-white font-mono" {...field} />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1139,11 +1307,7 @@ export function EmployeeScheduleManager({
                       <FormLabel className="text-[10px] font-bold uppercase text-slate-500">
                         {scheduleType === ScheduleType.FIXED ? "Standard End" : "Shift End"}
                       </FormLabel>
-                      <Input
-                        type="time"
-                        className="bg-white shadow-sm font-mono tabular-nums focus-visible:ring-indigo-500"
-                        {...field}
-                      />
+                      <Input type="time" className="bg-white font-mono" {...field} />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1151,18 +1315,16 @@ export function EmployeeScheduleManager({
               </div>
             )}
 
-            {/* FLEX Rules */}
             {scheduleType === ScheduleType.FLEX && (
               <div className="space-y-6">
-                <div className="grid gap-6 p-5 rounded-xl border border-indigo-100 bg-indigo-50/30 shadow-sm md:grid-cols-3">
-                  {/* Required Mins, Bandwidth Start/End with type="time" */}
+                <div className="grid gap-6 rounded-xl border border-indigo-100 bg-indigo-50/30 p-5 md:grid-cols-3">
                   <FormField
                     control={scheduleForm.control}
                     name="bandwidthStart"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Earliest Start</FormLabel>
-                        <Input type="time" className="bg-white border-indigo-200 font-mono" {...field} />
+                        <Input type="time" className="bg-white font-mono" {...field} />
                       </FormItem>
                     )}
                   />
@@ -1172,128 +1334,128 @@ export function EmployeeScheduleManager({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Latest End</FormLabel>
-                        <Input type="time" className="bg-white border-indigo-200 font-mono" {...field} />
+                        <Input type="time" className="bg-white font-mono" {...field} />
                       </FormItem>
                     )}
                   />
                 </div>
 
-        {/* 2. Weekly Pattern Interface */}
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-          <div className="flex items-center justify-between p-4 border-b bg-slate-50/80">
-            <div className="space-y-0.5">
-              <h4 className="text-sm font-bold text-slate-800 tracking-tight">Weekly Breakdown</h4>
-              <p className="text-[11px] text-slate-500 font-medium">Define specific core windows or targets per day</p>
-            </div>
-            <Button
-              type="button"
-              variant={weeklyPatternOpen ? "ghost" : "outline"}
-              size="sm"
-              onClick={handleToggleWeeklyPattern}
-              className={`h-8 text-xs font-bold transition-all ${weeklyPatternOpen ? 'text-rose-500 hover:text-rose-600 hover:bg-rose-50' : 'text-indigo-600 border-indigo-200'}`}
-            >
-              {weeklyPatternOpen ? "Close Editor" : "Configure Days"}
-            </Button>
-          </div>
-
-          <div className="p-4">
-            {/* Day Picker Summaries */}
-            <div className="flex items-center gap-2 mb-4">
-              {WEEKDAY_KEYS.map((key) => {
-                const isActive = weeklyPattern[key].windows.length > 0 || (weeklyPattern[key].requiredMinutes > 0);
-                return (
-                  <div
-                    key={key}
-                    className={`flex flex-col h-12 w-12 items-center justify-center rounded-lg border text-[11px] font-bold transition-all
-                      ${isActive 
-                        ? 'bg-indigo-600 border-indigo-700 text-white shadow-md shadow-indigo-100' 
-                        : 'bg-slate-50 border-slate-200 text-slate-400'}`}
-                  >
-                    <span>{WEEKDAY_LABELS[key].substring(0, 3)}</span>
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b bg-slate-50/80 p-4">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800">Weekly Breakdown</h4>
+                      <p className="text-[11px] font-medium text-slate-500">Define specific core windows or targets per day</p>
+                    </div>
+                    <Button type="button" variant={weeklyPatternOpen ? "ghost" : "outline"} size="sm" onClick={handleToggleWeeklyPattern}>
+                      {weeklyPatternOpen ? "Close Editor" : "Configure Days"}
+                    </Button>
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Expanded Day-by-Day Editor */}
-            {weeklyPatternOpen && (
-              <div className="space-y-2 mt-4 animate-in slide-in-from-top-2 duration-300">
-                {WEEKDAY_KEYS.map((key) => (
-                  <div key={key} className="group flex flex-col md:flex-row md:items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/40 p-3 hover:bg-white hover:border-indigo-200 hover:shadow-md transition-all">
-                    <div className="w-16 shrink-0">
-                      <span className="text-xs font-black text-slate-600 uppercase tracking-tighter">
-                        {WEEKDAY_LABELS[key]}
-                      </span>
-                    </div>
-                    
-                    <div className="flex flex-1 flex-wrap gap-3 items-center">
-                      {weeklyPattern[key].windows.map((window) => (
-                        <div key={window.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 border border-slate-200 shadow-sm ring-offset-background focus-within:ring-2 focus-within:ring-indigo-500">
-                          <div className="flex flex-col">
-                            <span className="text-[8px] font-black uppercase text-indigo-500 leading-none mb-1">In</span>
-                            <input
-                              type="time"
-                              className="bg-transparent text-xs font-bold focus:outline-none"
-                              value={window.start || ""}
-                              onChange={(e) => handleWeeklyWindowChange(key, window.id, "start", e.target.value)}
-                            />
+                  <div className="p-4">
+                    <div className="mb-4 flex items-center gap-2">
+                      {WEEKDAY_KEYS.map((key) => {
+                        const isActive = weeklyPattern[key].windows.length > 0 || weeklyPattern[key].requiredMinutes > 0;
+                        return (
+                          <div key={key} className={`flex h-12 w-12 flex-col items-center justify-center rounded-lg border text-[11px] font-bold ${isActive ? "border-indigo-700 bg-indigo-600 text-white" : "border-slate-200 bg-slate-50 text-slate-400"}`}>
+                            <span>{WEEKDAY_LABELS[key].substring(0, 3)}</span>
                           </div>
-                          <div className="h-6 w-[1px] bg-slate-200 mx-1" />
-                          <div className="flex flex-col">
-                            <span className="text-[8px] font-black uppercase text-rose-500 leading-none mb-1">Out</span>
-                            <input
-                              type="time"
-                              className="bg-transparent text-xs font-bold focus:outline-none"
-                              value={window.end || ""}
-                              onChange={(e) => handleWeeklyWindowChange(key, window.id, "end", e.target.value)}
-                            />
-                          </div>
-                          <button 
-                            type="button" 
-                            onClick={() => handleRemoveWeeklyWindow(key, window.id)} 
-                            className="ml-2 p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-rose-500 transition-colors"
-                          >
-                            <XIcon className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-
-                      {weeklyPattern[key].windows.length < 2 && (
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-9 border border-dashed border-slate-300 px-3 text-[10px] font-bold text-slate-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50" 
-                          onClick={() => handleAddWeeklyWindow(key)}
-                        >
-                          + Core Window
-                        </Button>
-                      )}
+                        );
+                      })}
                     </div>
 
-                    <div className="flex items-center gap-3 border-t md:border-t-0 md:border-l border-slate-200 pt-3 md:pt-0 md:pl-4">
-                      <div className="flex flex-col">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase mb-1">Target Min</span>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            className="w-20 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                            value={weeklyPattern[key].requiredMinutes ?? ""}
-                            onChange={(e) => handleWeeklyRequiredChange(key, e.target.value)}
-                          />
+                    {weeklyPatternOpen && (
+                      <div className="mt-4 space-y-2">
+                        {WEEKDAY_KEYS.map((key) => (
+                          <div key={key} className="flex flex-col gap-4 rounded-xl border border-slate-100 bg-slate-50/40 p-3 md:flex-row md:items-center">
+                            <div className="w-16 shrink-0 text-xs font-black uppercase tracking-tighter text-slate-600">
+                              {WEEKDAY_LABELS[key]}
+                            </div>
+                            <div className="flex flex-1 flex-wrap items-center gap-3">
+                              {weeklyPattern[key].windows.map((window) => (
+                                <div key={window.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+                                  <Input type="time" className="h-8 w-28 border-0 bg-transparent p-0 text-xs font-bold" value={window.start || ""} onChange={(event) => handleWeeklyWindowChange(key, window.id, "start", event.target.value)} />
+                                  <Input type="time" className="h-8 w-28 border-0 bg-transparent p-0 text-xs font-bold" value={window.end || ""} onChange={(event) => handleWeeklyWindowChange(key, window.id, "end", event.target.value)} />
+                                  <button type="button" onClick={() => handleRemoveWeeklyWindow(key, window.id)} className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-rose-500">
+                                    <XIcon className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
+                              {weeklyPattern[key].windows.length < 2 && (
+                                <Button type="button" variant="ghost" size="sm" className="h-9 border border-dashed border-slate-300 text-[10px] font-bold" onClick={() => handleAddWeeklyWindow(key)}>
+                                  + Core Window
+                                </Button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] font-bold uppercase text-slate-400">Target Min</span>
+                              <Input type="number" className="h-9 w-24 bg-white text-xs font-bold" value={weeklyPattern[key].requiredMinutes ?? ""} onChange={(event) => handleWeeklyRequiredChange(key, event.target.value)} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {scheduleType === ScheduleType.ROTATING && (
+              <div className="space-y-5">
+                <FormField
+                  control={scheduleForm.control}
+                  name="rotationAnchorDate"
+                  render={({ field }) => (
+                    <FormItem className="max-w-sm">
+                      <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Cycle Day 1 Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" className="bg-white" {...field} />
+                      </FormControl>
+                      <FormDescription>The first row applies to this date, then repeats daily.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b bg-slate-50/80 px-4 py-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800">Rotation Cycle</h4>
+                      <p className="text-[11px] text-slate-500">Work/off rows repeat from the anchor date.</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={addRotationDay} disabled={rotationDays.length >= 31}>Add Day</Button>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {rotationDays.map((day, index) => (
+                      <div key={day.id} className="grid gap-3 p-4 md:grid-cols-[72px_130px_1fr_auto] md:items-end">
+                        <div className="text-xs font-black uppercase text-slate-500">Day {index + 1}</div>
+                        <Select value={day.kind} onValueChange={(value) => setRotationDayKind(day.id, value as RotationDay["kind"])}>
+                          <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="WORK">Work</SelectItem>
+                            <SelectItem value="OFF">Off</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {day.kind === "WORK" ? (
+                          <div className="grid gap-3 sm:grid-cols-4">
+                            <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">Start</FormLabel><Input type="time" value={day.start} onChange={(event) => updateRotationDay(day.id, { start: event.target.value })} className="bg-white" /></div>
+                            <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">End</FormLabel><Input type="time" value={day.end} onChange={(event) => updateRotationDay(day.id, { end: event.target.value })} className="bg-white" /></div>
+                            <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">Break</FormLabel><Input type="number" min={0} max={720} value={day.breakMinutes} onChange={(event) => updateRotationDay(day.id, { breakMinutes: event.target.valueAsNumber || 0 })} className="bg-white" /></div>
+                            <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">Grace</FormLabel><Input type="number" min={0} max={180} value={day.graceMinutes} onChange={(event) => updateRotationDay(day.id, { graceMinutes: event.target.valueAsNumber || 0 })} className="bg-white" /></div>
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500">Rest day</div>
+                        )}
+                        <div className="flex justify-end gap-1">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => moveRotationDay(day.id, -1)} disabled={index === 0}>Up</Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => moveRotationDay(day.id, 1)} disabled={index === rotationDays.length - 1}>Down</Button>
+                          <Button type="button" variant="ghost" size="sm" className="text-rose-500 hover:text-rose-600" onClick={() => removeRotationDay(day.id)} disabled={rotationDays.length <= 2}>Remove</Button>
                         </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
             )}
           </div>
-        </div>
-      </div>
-    )}
-  </div>
-)}
+        )}
 
               {/* Date Range Section */}
     
@@ -1784,7 +1946,7 @@ export function EmployeeScheduleManager({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {scheduleTypes.map((type) => (
+                  {exceptionScheduleTypes.map((type) => (
                     <SelectItem key={type} value={type}>
                       {formatTypeLabel(type)}
                     </SelectItem>

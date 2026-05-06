@@ -312,7 +312,7 @@ const weeklyExclusionDefaults: WeeklyExclusionFormValues = {
 
 const scheduleTypes = Object.values(ScheduleType) as ScheduleTypeEnum[];
 
-const formatTypeLabel = (type: ScheduleTypeEnum) =>
+const formatTypeLabel = (type: string) =>
   type.charAt(0) + type.slice(1).toLowerCase();
 
 const toDateInput = (value: string | null | undefined) =>
@@ -836,7 +836,7 @@ export function EmployeeScheduleManager({
     (schedule: WorkScheduleDTO) => {
       setEditingSchedule(schedule);
       scheduleForm.reset({
-        type: schedule.type,
+        type: schedule.type === "ROTATING" ? ScheduleType.FIXED : schedule.type,
         startTime: schedule.startTime ?? "",
         endTime: schedule.endTime ?? "",
         graceMinutes: schedule.graceMinutes ?? 0,
@@ -863,7 +863,7 @@ export function EmployeeScheduleManager({
     (exception: ScheduleExceptionDTO) => {
       setEditingException(exception);
       exceptionForm.reset({
-        type: exception.type,
+        type: exception.type === "ROTATING" ? ScheduleType.FIXED : exception.type,
         date: toDateInput(exception.date),
         startTime: exception.startTime ?? "",
         endTime: exception.endTime ?? "",

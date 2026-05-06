@@ -5,6 +5,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
 import {
+  normalizeRotationPatternInput,
+  rotationPatternInputSchema,
+} from "@/lib/rotatingScheduleInput";
+import {
   normalizeWeeklyPatternInput,
   weeklyPatternInputSchema,
 } from "@/lib/weeklyPatternInput";
@@ -26,6 +30,8 @@ const scheduleSchema = z.object({
   effectiveFrom: z.string().optional(),
   effectiveTo: z.string().optional().nullable(),
   weeklyPattern: weeklyPatternInputSchema,
+  rotationAnchorDate: z.string().optional().nullable(),
+  rotationPattern: rotationPatternInputSchema,
 }).superRefine((data, ctx) => {
   if (data.type === ScheduleType.FIXED) {
     if (!data.startTime || !data.endTime) {
@@ -43,6 +49,14 @@ const scheduleSchema = z.object({
   if (data.type === ScheduleType.SHIFT) {
   if (!data.shiftStart || !data.shiftEnd) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Shift start and end are required", path: ["shiftStart"] });
+    }
+  }
+  if (data.type === ScheduleType.ROTATING) {
+    if (!data.rotationAnchorDate) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Rotation anchor date is required", path: ["rotationAnchorDate"] });
+    }
+    if (!data.rotationPattern) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Rotation pattern is required", path: ["rotationPattern"] });
     }
   }
 });
@@ -83,6 +97,18 @@ export async function PATCH(request: Request, { params }: { params: { employeeId
         normalizedWeeklyPattern === null
           ? Prisma.DbNull
           : (normalizedWeeklyPattern as Prisma.InputJsonValue);
+    }
+    if (payload.rotationAnchorDate !== undefined) {
+      data.rotationAnchorDate = payload.rotationAnchorDate
+        ? new Date(payload.rotationAnchorDate)
+        : null;
+    }
+    if (payload.rotationPattern !== undefined) {
+      const normalizedRotationPattern = normalizeRotationPatternInput(payload.rotationPattern);
+      data.rotationPattern =
+        normalizedRotationPattern === null
+          ? Prisma.DbNull
+          : (normalizedRotationPattern as Prisma.InputJsonValue);
     }
 
     const schedule = await prisma.workSchedule.update({

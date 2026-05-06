@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { ScheduleType } from "@prisma/client";
+import { Prisma, ScheduleType } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { toWorkScheduleDto } from "@/lib/schedules";
+import {
+  normalizeRotationPatternInput,
+  rotationPatternInputSchema,
+} from "@/lib/rotatingScheduleInput";
 import {
   normalizeWeeklyPatternInput,
   weeklyPatternInputSchema,
@@ -14,7 +18,7 @@ const createScheduleSchema = z.object({
   type: z.nativeEnum(ScheduleType),
   startTime: z.string().optional().nullable(),
   endTime: z.string().optional().nullable(),
-  graceMinutes: z.coerce.number().int().min(0).max(180).optional(),
+  graceMinutes: z.coerce.number().int().min(0).max(180).optional().nullable(),
   coreStart: z.string().optional().nullable(),
   coreEnd: z.string().optional().nullable(),
   bandwidthStart: z.string().optional().nullable(),
@@ -26,6 +30,25 @@ const createScheduleSchema = z.object({
   effectiveFrom: z.string().min(1),
   effectiveTo: z.string().optional().nullable(),
   weeklyPattern: weeklyPatternInputSchema,
+  rotationAnchorDate: z.string().optional().nullable(),
+  rotationPattern: rotationPatternInputSchema,
+}).superRefine((data, ctx) => {
+  if (data.type === ScheduleType.ROTATING) {
+    if (!data.rotationAnchorDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["rotationAnchorDate"],
+        message: "Rotation anchor date is required",
+      });
+    }
+    if (!data.rotationPattern) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["rotationPattern"],
+        message: "Rotation pattern is required",
+      });
+    }
+  }
 });
 
 export async function POST(request: Request) {
@@ -33,6 +56,10 @@ export async function POST(request: Request) {
     const payload = createScheduleSchema.parse(await request.json());
 
     const weeklyPattern = normalizeWeeklyPatternInput(payload.weeklyPattern);
+    const rotationPattern = normalizeRotationPatternInput(payload.rotationPattern);
+    if (payload.type === ScheduleType.ROTATING && (!payload.rotationAnchorDate || !rotationPattern)) {
+      return NextResponse.json({ error: "Invalid rotating schedule." }, { status: 400 });
+    }
 
     const schedule = await prisma.workSchedule.create({
       data: {
@@ -52,6 +79,14 @@ export async function POST(request: Request) {
         effectiveFrom: new Date(payload.effectiveFrom),
         effectiveTo: payload.effectiveTo ? new Date(payload.effectiveTo) : null,
         ...(weeklyPattern !== null ? { weeklyPattern } : {}),
+        rotationAnchorDate:
+          payload.type === ScheduleType.ROTATING && payload.rotationAnchorDate
+            ? new Date(payload.rotationAnchorDate)
+            : null,
+        rotationPattern:
+          payload.type === ScheduleType.ROTATING && rotationPattern
+            ? (rotationPattern as Prisma.InputJsonValue)
+            : Prisma.DbNull,
       },
     });
 

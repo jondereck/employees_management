@@ -2,7 +2,14 @@ import { addDays, startOfDay } from "date-fns";
 import { OfficeWorkSchedule, ScheduleException, WorkSchedule } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import type { Schedule, ScheduleFlex, ScheduleFixed, ScheduleShift } from "@/utils/evaluateDay";
+import type {
+  Schedule,
+  ScheduleFlex,
+  ScheduleFixed,
+  ScheduleRotating,
+  ScheduleShift,
+} from "@/utils/evaluateDay";
+import { sanitizeRotationPattern } from "@/utils/rotatingSchedule";
 import { sanitizeWeeklyPattern } from "@/utils/weeklyPattern";
 import {
   toWeeklyExclusionEvaluation,
@@ -13,10 +20,10 @@ export type ScheduleSource = "EXCEPTION" | "WORKSCHEDULE" | "OFFICE" | "DEFAULT"
 
 export type NormalizedSchedule = Schedule & { source: ScheduleSource };
 
-export type ScheduleTypeValue = "FIXED" | "FLEX" | "SHIFT";
+export type ScheduleTypeValue = "FIXED" | "FLEX" | "SHIFT" | "ROTATING";
 
 type DefaultSchedule = {
-  type: ScheduleTypeValue;
+  type: "FIXED";
   startTime: string;
   endTime: string;
   breakMinutes: number;
@@ -264,6 +271,38 @@ export function normalizeSchedule(record: ScheduleLookupResult): NormalizedSched
       }
       return schedule;
     }
+    case "ROTATING": {
+      const rotationPattern = sanitizeRotationPattern(raw.rotationPattern);
+      const rotationAnchorRaw = raw.rotationAnchorDate as Date | string | null | undefined;
+      const rotationAnchorDate =
+        rotationAnchorRaw instanceof Date
+          ? rotationAnchorRaw.toISOString().slice(0, 10)
+          : typeof rotationAnchorRaw === "string" && rotationAnchorRaw.length >= 10
+          ? rotationAnchorRaw.slice(0, 10)
+          : null;
+
+      if (!rotationPattern || !rotationAnchorDate) {
+        const fallback = defaultFixed();
+        return {
+          type: "FIXED",
+          startTime: fallback.startTime as ScheduleFixed["startTime"],
+          endTime: fallback.endTime as ScheduleFixed["endTime"],
+          breakMinutes: fallback.breakMinutes,
+          graceMinutes: fallback.graceMinutes,
+          source: (record.source ?? "DEFAULT") as ScheduleSource,
+        };
+      }
+
+      const schedule: ScheduleRotating & { source: ScheduleSource } = {
+        type: "ROTATING",
+        rotationAnchorDate,
+        rotationPattern,
+        breakMinutes,
+        graceMinutes: record.graceMinutes ?? 0,
+        source: (record.source ?? "DEFAULT") as ScheduleSource,
+      };
+      return schedule;
+    }
     case "SHIFT": {
       const schedule: ScheduleShift & { source: ScheduleSource } = {
         type: "SHIFT",
@@ -303,6 +342,8 @@ export const toWorkScheduleDto = (schedule: WorkSchedule) => ({
   bandwidthEnd: schedule.bandwidthEnd,
   requiredDailyMinutes: schedule.requiredDailyMinutes,
   weeklyPattern: sanitizeWeeklyPattern(schedule.weeklyPattern),
+  rotationAnchorDate: schedule.rotationAnchorDate ? schedule.rotationAnchorDate.toISOString() : null,
+  rotationPattern: sanitizeRotationPattern(schedule.rotationPattern),
   shiftStart: schedule.shiftStart,
   shiftEnd: schedule.shiftEnd,
   breakMinutes: schedule.breakMinutes,

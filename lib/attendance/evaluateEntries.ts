@@ -25,6 +25,7 @@ import {
   type PerEmployeeRow,
 } from "@/utils/parseBioAttendance";
 import { normalizeBiometricToken } from "@/utils/biometricsShared";
+import { resolveRotationDay } from "@/utils/rotatingSchedule";
 import type { EvaluationOptions, OvertimePolicy, WorkSchedule } from "@/types/attendance";
 import type { ManualExclusion } from "@/types/manual-exclusion";
 
@@ -133,7 +134,8 @@ const resolveCarryoverSchedule = (
 };
 
 const getScheduleEndMinutes = (
-  schedule: ReturnType<typeof resolveCarryoverSchedule>
+  schedule: ReturnType<typeof resolveCarryoverSchedule>,
+  dateISO?: string
 ): number | null => {
   if (schedule.type === "FIXED") {
     const start = parseHHMM(schedule.startTime);
@@ -150,6 +152,19 @@ const getScheduleEndMinutes = (
   if (schedule.type === "FLEX") {
     const start = parseHHMM(schedule.bandwidthStart);
     const end = parseHHMM(schedule.bandwidthEnd);
+    if (start == null || end == null || end <= start) return null;
+    return end;
+  }
+  if (schedule.type === "ROTATING") {
+    if (!dateISO) return null;
+    const { day } = resolveRotationDay(
+      schedule.rotationPattern,
+      schedule.rotationAnchorDate,
+      dateISO
+    );
+    if (day.kind === "OFF") return null;
+    const start = parseHHMM(day.start);
+    const end = parseHHMM(day.end);
     if (start == null || end == null || end <= start) return null;
     return end;
   }
@@ -826,7 +841,7 @@ export async function evaluateAttendanceEntries(
         maps
       );
       const schedule = resolveCarryoverSchedule(scheduleRecord, defaultWorkSchedule);
-      return getScheduleEndMinutes(schedule);
+      return getScheduleEndMinutes(schedule, entry.row.dateISO);
     },
   });
 
@@ -942,11 +957,12 @@ export async function evaluateAttendanceEntries(
       undertimeMinutesValue = 0;
     }
 
-    const isScheduled = requiredMinutes > 0;
+    const isRotationOff = evaluation.status === "off";
+    const isScheduled = !isRotationOff && requiredMinutes > 0;
     const hasAnyPunches = row.punches.length > 0;
     const hasCompletePunchPair = row.punches.length >= 2;
     const hasIncompletePunch = hasAnyPunches && !hasCompletePunchPair;
-    const isRequiredWorkingDay = isScheduled || (normalized.type === "FIXED" && isWorkingDay);
+    const isRequiredWorkingDay = !isRotationOff && (isScheduled || (normalized.type === "FIXED" && isWorkingDay));
     const absent = excused ? false : isRequiredWorkingDay && !hasAnyPunches;
 
     let statusLabel: string;
@@ -959,6 +975,8 @@ export async function evaluateAttendanceEntries(
       } else {
         statusLabel = "Holiday";
       }
+    } else if (isRotationOff) {
+      statusLabel = "Off";
     } else if (isWeekend) {
       statusLabel = "Weekend";
     } else if (normalized.type === "FIXED" && !isWorkingDay) {
@@ -976,6 +994,18 @@ export async function evaluateAttendanceEntries(
     const evaluationStatus: DayEvaluationStatus = excused ? "excused" : (evaluation.status as DayEvaluationStatus);
 
     const presenceSegments = evaluation.presenceSegments ?? [];
+    const overtimeSchedule =
+      normalized.type === "ROTATING"
+        ? evaluation.scheduleStart && evaluation.scheduleEnd
+          ? {
+              type: "FIXED" as const,
+              startTime: evaluation.scheduleStart,
+              endTime: evaluation.scheduleEnd,
+              breakMinutes: normalized.breakMinutes,
+              graceMinutes: evaluation.scheduleGraceMinutes ?? normalized.graceMinutes ?? 0,
+            }
+          : { type: "NONE" as const }
+        : normalized;
     // Determine OT bucket from actual day classification, not raw required minutes.
     // Fixed schedules can still produce requiredMinutes on weekends, but those days
     // should be treated as rest day OT when work is rendered.
@@ -1001,14 +1031,14 @@ export async function evaluateAttendanceEntries(
     if (manualExcused) {
       if (isHoliday) {
         overtime = computeOvertimeForDay({
-          schedule: normalized,
+          schedule: overtimeSchedule,
           presence: presenceSegments,
           policy: overtimePolicy,
           holiday: "holiday",
         });
       } else if (holidayKind === "restday") {
         overtime = computeOvertimeForDay({
-          schedule: normalized,
+          schedule: overtimeSchedule,
           presence: presenceSegments,
           policy: overtimePolicy,
           holiday: "restday",
@@ -1044,7 +1074,7 @@ export async function evaluateAttendanceEntries(
       }
     } else {
       overtime = computeOvertimeForDay({
-        schedule: normalized,
+        schedule: overtimeSchedule,
         presence: presenceSegments,
         policy: overtimePolicy,
         holiday: holidayKind,
