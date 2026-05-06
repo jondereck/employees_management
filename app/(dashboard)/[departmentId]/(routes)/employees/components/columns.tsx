@@ -96,10 +96,13 @@ const onCopy = async (text: string) => {
 }
 
 const buildEmployeeCopyText = (employee: EmployeesColumn) => {
+  const middleInitial = employee.middleName?.trim()
+    ? `${employee.middleName.trim().charAt(0)}.`
+    : "";
   const fullName = [
     employee.prefix,
     employee.firstName,
-    employee.middleName,
+    middleInitial,
     employee.lastName,
     employee.suffix,
   ]
@@ -109,7 +112,7 @@ const buildEmployeeCopyText = (employee: EmployeesColumn) => {
   const options = loadCopyOptions();
   const text = buildPreview(
     {
-      fullName: employee.employeeType?.name === "Job Order" ? `${fullName} (JO)` : fullName,
+      fullName,
       position: employee.position,
       office: employee.offices?.name ?? "",
     },

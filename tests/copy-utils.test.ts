@@ -22,4 +22,23 @@ describe("copy-utils", () => {
       "Juan Dela Cruz, Position(Detailed Title III), Commission on Election(COMELEC)"
     );
   });
+
+  it("title-cases all-caps names while keeping acronym-shaped words", () => {
+    const preview = buildPreview(
+      {
+        fullName: "JENNIFER NAVARRO GARCIA",
+        position: "GIS Operator",
+        office: "Local Disaster Risk Reduction and Management Office (LDRRMO)",
+      },
+      {
+        fields: ["fullName", "position", "office"],
+        format: "capitalize",
+      }
+    );
+
+    assert.equal(
+      preview,
+      "Jennifer Navarro Garcia, GIS Operator, Local Disaster Risk Reduction and Management Office(LDRRMO)"
+    );
+  });
 });

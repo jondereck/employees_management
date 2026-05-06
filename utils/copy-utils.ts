@@ -79,6 +79,9 @@ export function smartTitleCase(input: string): string {
 
 function basicTitleCase(text: string, minor: Set<string>): string {
   const romanNumeralPattern = /^(?=[MDCLXVI])M{0,4}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/i;
+  const acronymPattern = /^[A-Z]{2,3}$/;
+  const consonantHeavyAcronymPattern = /^[A-Z]{4,12}$/;
+  const vowels = /[AEIOU]/;
   const words = text
     .replace(/\s+/g, " ")
     .trim()
@@ -98,8 +101,13 @@ function basicTitleCase(text: string, minor: Set<string>): string {
                           .replace(/([-\u2019'][a-z])/g, (m) => m.toUpperCase());
 
       if (!isFirst && !isLast && minor.has(lower)) return lower; // keep minor lowercase
-      // For things like LGU, HRMO, DOH -> keep as-is if already uppercase >= 2 chars
-      if (w.length > 1 && w === w.toUpperCase()) return w;
+      // Preserve acronym-shaped tokens like GIS, LGU, HRMO, DOH, LDRRMO.
+      if (
+        w === w.toUpperCase() &&
+        (acronymPattern.test(w) || (consonantHeavyAcronymPattern.test(w) && !vowels.test(w)))
+      ) {
+        return w;
+      }
       return normalized;
     })
     .join(" ");

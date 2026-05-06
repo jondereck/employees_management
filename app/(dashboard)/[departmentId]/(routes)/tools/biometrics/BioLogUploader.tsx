@@ -249,10 +249,16 @@ const WEEKDAY_OPTIONS = [
 const STANDARD_WORKING_DAYS = [1, 2, 3, 4, 5] as const;
 const FOUR_DAY_WORKING_DAYS = [1, 2, 3, 4] as const;
 
-const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
+const LEGACY_DEFAULT_WORK_SCHEDULE: WorkSchedule = {
   startTime: "08:00",
   endTime: "17:00",
   workingDays: [...STANDARD_WORKING_DAYS],
+};
+
+const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
+  startTime: "07:00",
+  endTime: "18:00",
+  workingDays: [...FOUR_DAY_WORKING_DAYS],
 };
 
 const HOLIDAY_EXCLUSION_ID_PREFIX = "holiday:";
@@ -275,14 +281,14 @@ const isHolidayExclusion = (exclusion: Pick<ManualExclusion, "id">): boolean =>
   exclusion.id.startsWith(HOLIDAY_EXCLUSION_ID_PREFIX);
 
 const sanitizeWorkingDays = (value: unknown): number[] => {
-  if (!Array.isArray(value)) return [...STANDARD_WORKING_DAYS];
+  if (!Array.isArray(value)) return [...DEFAULT_WORK_SCHEDULE.workingDays];
   const allowed = new Set<number>(WEEKDAY_OPTIONS.map((option) => option.value));
   const unique: number[] = [];
   for (const day of value) {
     if (typeof day !== "number" || !Number.isInteger(day) || !allowed.has(day) || unique.includes(day)) continue;
     unique.push(day);
   }
-  return unique.length ? unique.sort((a, b) => a - b) : [...STANDARD_WORKING_DAYS];
+  return unique.length ? unique.sort((a, b) => a - b) : [...DEFAULT_WORK_SCHEDULE.workingDays];
 };
 
 const sanitizeWorkSchedule = (
@@ -300,6 +306,11 @@ const sanitizeWorkSchedule = (
 
 const areSameWorkingDays = (left: number[], right: number[]): boolean =>
   left.length === right.length && left.every((day, index) => day === right[index]);
+
+const isSameWorkSchedule = (left: WorkSchedule, right: WorkSchedule): boolean =>
+  left.startTime === right.startTime &&
+  left.endTime === right.endTime &&
+  areSameWorkingDays(left.workingDays, right.workingDays);
 
 type SchedulePreset = "standard" | "fourDay" | "custom";
 
@@ -2795,7 +2806,12 @@ function BioLogUploaderContent() {
           ANALYZER_SETTING_KEYS.fallbackSchedule
         );
         if (dbFallbackSchedule) {
-          setWorkSchedule(sanitizeWorkSchedule(dbFallbackSchedule));
+          const nextSchedule = sanitizeWorkSchedule(dbFallbackSchedule);
+          setWorkSchedule(
+            isSameWorkSchedule(nextSchedule, LEGACY_DEFAULT_WORK_SCHEDULE)
+              ? DEFAULT_WORK_SCHEDULE
+              : nextSchedule
+          );
         }
 
         const dbManualPeriod = getSettingValue<{
