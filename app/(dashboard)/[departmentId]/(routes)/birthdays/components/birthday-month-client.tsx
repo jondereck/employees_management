@@ -14,8 +14,9 @@ import { cn } from "@/lib/utils";
 import { getMonthDayInTimeZone } from "@/lib/birthday";
 import { toast } from "sonner";
 import { toastProgress } from "@/lib/linear-progress";
-import { Download, Calendar, Settings2, Share2, EyeOff, ImageIcon, FileImage } from "lucide-react";
+import { Bold, Copy, Download, Calendar, Settings2, Share2, EyeOff, ImageIcon, FileImage, ExternalLink, Italic, Wand2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 import BirthdayGreetingCard from "./birthday-greetting-card";
 import {
@@ -45,12 +46,19 @@ type Person = {
   prefix?: string | null;
   middleName?: string | null;
   suffix?: string | null;
+  officeName?: string | null;
   isHead: boolean;
 };
 
 const SHOW_DATES_STORAGE_KEY = "birthdays.showDates";
 const THEME_MODE_STORAGE_KEY = "birthdays.themeMode";
 const EXPORT_SAFE_STORAGE_KEY = "birthdays.exportSafe";
+const FACEBOOK_BUSINESS_POSTS_URL = "https://business.facebook.com/latest/posts/";
+const BOLD_UPPER_START = 0x1d400;
+const BOLD_LOWER_START = 0x1d41a;
+const BOLD_DIGIT_START = 0x1d7ce;
+const ITALIC_UPPER_START = 0x1d434;
+const ITALIC_LOWER_START = 0x1d44e;
 
 type HeadsFilter = "all" | "heads-only";
 
@@ -162,6 +170,77 @@ function fmtMonthDay(d: Date) {
 
 function titleCaseMonth(m: number) {
   return new Date(2000, m).toLocaleDateString(undefined, { month: "long" });
+}
+
+function clampMonthIndex(value: string | null, fallback: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(11, Math.max(0, Math.trunc(parsed)));
+}
+
+function isHrmoOfficeName(value?: string | null) {
+  const normalized = (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return [
+    "human resource management office",
+    "human resources management office",
+    "hrmo",
+    "human resource office",
+  ].some((key) => normalized.includes(key));
+}
+
+function isSpecialCelebrant(person: Person) {
+  return person.isHead || isHrmoOfficeName(person.officeName);
+}
+
+async function copyText(value: string) {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = value;
+  textArea.style.position = "fixed";
+  textArea.style.opacity = "0";
+  document.body.appendChild(textArea);
+  textArea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textArea);
+}
+
+function downloadDataUrl(dataUrl: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = filename;
+  link.rel = "noopener";
+  link.style.position = "fixed";
+  link.style.top = "-9999px";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function styleChar(char: string, style: "bold" | "italic") {
+  const code = char.codePointAt(0);
+  if (code == null) return char;
+
+  if (code >= 65 && code <= 90) {
+    return String.fromCodePoint((style === "bold" ? BOLD_UPPER_START : ITALIC_UPPER_START) + code - 65);
+  }
+
+  if (code >= 97 && code <= 122) {
+    return String.fromCodePoint((style === "bold" ? BOLD_LOWER_START : ITALIC_LOWER_START) + code - 97);
+  }
+
+  if (style === "bold" && code >= 48 && code <= 57) {
+    return String.fromCodePoint(BOLD_DIGIT_START + code - 48);
+  }
+
+  return char;
+}
+
+function styleText(value: string, style: "bold" | "italic") {
+  return Array.from(value).map((char) => styleChar(char, style)).join("");
 }
 
 async function waitForImg(img: HTMLImageElement, timeout = 8000) {
@@ -315,10 +394,12 @@ async function waitTwoFrames() {
 export default function BirthdayMonthClient({
   departmentId,
   initialMonth,
+  currentYear,
   people,
 }: {
   departmentId: string;
   initialMonth: number;
+  currentYear: number;
   people: Person[];
 }) {
   const router = useRouter();
@@ -363,14 +444,16 @@ export default function BirthdayMonthClient({
   const [density, setDensity] = useState<number>(3); // 1..5 -> bigger..smaller cards
   const [exporting, setExporting] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [monthlyPostOpen, setMonthlyPostOpen] = useState(false);
+  const [monthlyCaption, setMonthlyCaption] = useState("");
+  const [monthlyPreparedImageUrl, setMonthlyPreparedImageUrl] = useState<string | null>(null);
 
   const boardRef = useRef<HTMLDivElement>(null);
+  const monthlyCaptionRef = useRef<HTMLTextAreaElement>(null);
   const monthParam = searchParams.get("month");
-  const month = Number.isFinite(Number(monthParam)) ? Number(monthParam) : initialMonth;
+  const month = clampMonthIndex(monthParam, initialMonth);
   const headsParam = searchParams.get("heads");
   const headsFilter: HeadsFilter = headsParam === "heads-only" ? "heads-only" : "all";
-  const facebookBusinessPageUrl =
-    process.env.NEXT_PUBLIC_FACEBOOK_BUSINESS_PAGE_URL ?? "https://www.facebook.com/share/1Auh25cDg4/";
 
   const updateSearchParam = useCallback(
     (key: string, value: string | null) => {
@@ -486,22 +569,6 @@ export default function BirthdayMonthClient({
     } as CSSProperties;
   }, [resolvedTheme]);
   const headerFontFamily = resolvedTheme?.fontFamily;
-  const shareableBoardUrl = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    const params = new URLSearchParams();
-    params.set("month", String(month));
-    if (themeMode !== "auto") params.set("theme", themeMode);
-    if (exportSafe) params.set("exportSafe", "1");
-    if (headsFilter === "heads-only") params.set("heads", "heads-only");
-    const shareUrl = new URL(window.location.origin + pathname);
-    shareUrl.search = params.toString();
-    return shareUrl.toString();
-  }, [exportSafe, headsFilter, month, pathname, themeMode]);
-  const shareCaption = useMemo(() => {
-    const friendlyMonth = titleCaseMonth(month);
-    const themeLabel = resolvedTheme?.label ?? "Birthday Board";
-    return `Join us in celebrating our ${friendlyMonth} birthday celebrators with the ${themeLabel} theme!`;
-  }, [month, resolvedTheme]);
   const themeOptions = useMemo(() => {
     return birthdayThemeOrder.map((id) => {
       if (id === "auto") {
@@ -552,6 +619,33 @@ export default function BirthdayMonthClient({
     }
   }, []);
 
+  const celebrants = useMemo(() => {
+    const targetMonth = month + 1;
+
+    return people
+      .filter((p) => {
+        const monthDay = getMonthDayInTimeZone(p.birthday);
+        return monthDay?.month === targetMonth;
+      })
+      .filter((p) => (headsFilter === "all" ? true : isSpecialCelebrant(p)))
+      .sort((a, b) => {
+        const aMonthDay = getMonthDayInTimeZone(a.birthday);
+        const bMonthDay = getMonthDayInTimeZone(b.birthday);
+        if (!aMonthDay || !bMonthDay) return 0;
+        return aMonthDay.day - bMonthDay.day;
+      });
+  }, [people, month, headsFilter]);
+
+  const visibleCelebrants = useMemo(
+    () => celebrants.filter((person) => !excluded.has(person.id)),
+    [celebrants, excluded]
+  );
+
+  useEffect(() => {
+    setMonthlyCaption("");
+    setMonthlyPreparedImageUrl(null);
+  }, [currentYear, headsFilter, month]);
+
   const onHeadsFilterChange = useCallback((value: HeadsFilter) => {
     const params = new URLSearchParams(searchParams.toString());
     if (value === "all") {
@@ -561,24 +655,17 @@ export default function BirthdayMonthClient({
     }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [router, pathname, searchParams]);
-  const handleShareToFacebook = useCallback(async () => {
-    if (typeof window === "undefined") return;
-    if (!shareableBoardUrl) {
-      toast.error("Unable to prepare the share link. Please try again.");
-      return;
-    }
+
+  const captureBoardShareImage = useCallback(async () => {
     if (!boardRef.current) {
       toast.error("Unable to locate the birthday board.");
-      return;
+      return null;
     }
-
-    setSharing(true);
 
     const node = boardRef.current;
     const hidden: HTMLElement[] = [];
     let restoreSwaps: (() => void) | null = null;
     const previousExportSafe = exportSafe;
-    let shareDataUrl: string | null = null;
 
     try {
       if (!previousExportSafe) {
@@ -612,14 +699,15 @@ export default function BirthdayMonthClient({
         });
 
       try {
-        shareDataUrl = await capture();
+        return await capture();
       } catch (error) {
         restoreSwaps = swapUninlineableImages(node);
-        shareDataUrl = await capture();
+        return await capture();
       }
     } catch (error) {
       console.error("Failed to prepare share preview", error);
       toast.error("Unable to prepare the birthday board image for sharing.");
+      return null;
     } finally {
       hidden.forEach((el) => {
         el.style.visibility = "";
@@ -630,90 +718,128 @@ export default function BirthdayMonthClient({
       if (!previousExportSafe) {
         setExportSafe(previousExportSafe, { persist: false });
       }
-      setSharing(false);
     }
+  }, [boardRef, exportSafe, setExportSafe]);
 
-    if (!shareDataUrl) {
+  const handleShareToFacebook = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    if (visibleCelebrants.length === 0) {
+      toast.error("No visible celebrants are available for posting.");
       return;
     }
 
-    let attachedImageBlob: Blob | null = null;
-    try {
-      const response = await fetch(shareDataUrl);
-      attachedImageBlob = await response.blob();
-    } catch (error) {
-      console.warn("Unable to convert shared image", error);
-    }
+    setMonthlyPostOpen(true);
+  }, [visibleCelebrants.length]);
 
-    const attachmentFileName = `${monthName(month)}_Birthday_Celebrants_Share.jpg`;
-    if (attachedImageBlob) {
-      const file = new File([attachedImageBlob], attachmentFileName, {
-        type: attachedImageBlob.type || "image/jpeg",
+  const generateMonthlyCaption = useCallback(async () => {
+    if (visibleCelebrants.length === 0 || sharing) return;
+
+    try {
+      setSharing(true);
+      const response = await fetch(`/api/${departmentId}/birthdays/facebook-post`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "monthly",
+          month,
+          year: currentYear,
+          theme: resolvedThemeId,
+          exportSafe,
+          headsFilter,
+          excludedIds: Array.from(excluded),
+          prepareOnly: true,
+        }),
       });
 
-      if (navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: shareCaption,
-            text: shareCaption,
-          });
-        } catch (error) {
-          if ((error as DOMException)?.name !== "AbortError") {
-            console.warn("navigator.share failed", error);
-          }
-        }
-      } else {
-        const downloadLink = document.createElement("a");
-        downloadLink.href = shareDataUrl;
-        downloadLink.download = attachmentFileName;
-        downloadLink.rel = "noopener";
-        downloadLink.style.position = "fixed";
-        downloadLink.style.top = "-9999px";
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-        toast.info("A copy of the board image was downloaded so you can attach it on Facebook.");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error(payload?.error || "Unable to prepare the monthly Facebook post.");
+        return;
       }
-    }
 
-    const shareDialogUrl = new URL("https://www.facebook.com/sharer/sharer.php");
-    shareDialogUrl.searchParams.set("u", shareableBoardUrl);
-    const captionSections = [shareCaption];
-    if (facebookBusinessPageUrl) {
-      captionSections.push(`See more updates on our Facebook page: ${facebookBusinessPageUrl}`);
-    }
-    shareDialogUrl.searchParams.set("quote", captionSections.join("\n\n"));
-    shareDialogUrl.searchParams.set("display", "popup");
-
-    if (shareDataUrl.length < 1900) {
-      shareDialogUrl.searchParams.set("picture", shareDataUrl);
-    }
-
-    const width = 900;
-    const height = 700;
-    const left = window.screenX + Math.max((window.outerWidth - width) / 2, 0);
-    const top = window.screenY + Math.max((window.outerHeight - height) / 2, 0);
-    const popup = window.open(
-      shareDialogUrl.toString(),
-      "fbShareDialog",
-      `width=${width},height=${height},left=${left},top=${top},status=no,toolbar=no,menubar=no,location=no`
-    );
-    if (!popup) {
-      window.location.href = shareDialogUrl.toString();
+      if (typeof payload?.caption === "string" && payload.caption.trim()) {
+        setMonthlyCaption(payload.caption.trim());
+        toast.success("Monthly caption generated.");
+      } else {
+        toast.error("Unable to generate the monthly caption.");
+      }
+    } catch (error) {
+      console.error("Failed to prepare monthly Facebook post", error);
+      toast.error("Unable to prepare the monthly Facebook post.");
+    } finally {
+      setSharing(false);
     }
   }, [
-    boardRef,
+    currentYear,
+    departmentId,
+    excluded,
     exportSafe,
-    facebookBusinessPageUrl,
+    headsFilter,
     month,
-    setExportSafe,
-    shareCaption,
-    shareableBoardUrl,
+    resolvedThemeId,
+    sharing,
+    visibleCelebrants.length,
   ]);
 
+  const copyMonthlyCaption = useCallback(async () => {
+    if (!monthlyCaption.trim()) {
+      toast.error("Generate or type a monthly caption first.");
+      return;
+    }
 
+    await copyText(monthlyCaption);
+    toast.success("Monthly caption copied.");
+  }, [monthlyCaption]);
 
+  const openMonthlyFacebookPost = useCallback(async () => {
+    if (!monthlyCaption.trim()) {
+      toast.error("Generate or type a monthly caption first.");
+      return;
+    }
+
+    await copyText(monthlyCaption);
+    window.open(FACEBOOK_BUSINESS_POSTS_URL, "_blank", "noopener,noreferrer");
+    toast.success("Monthly caption copied. Attach the board image in Business Manager when ready.");
+  }, [monthlyCaption]);
+
+  const downloadMonthlyPostImage = useCallback(async () => {
+    if (monthlyPreparedImageUrl) {
+      downloadDataUrl(monthlyPreparedImageUrl, `${monthName(month)}_${currentYear}_Birthday_Celebrators_Facebook.jpg`);
+      return;
+    }
+
+    setSharing(true);
+    try {
+      const shareDataUrl = await captureBoardShareImage();
+      if (!shareDataUrl) return;
+      setMonthlyPreparedImageUrl(shareDataUrl);
+      downloadDataUrl(shareDataUrl, `${monthName(month)}_${currentYear}_Birthday_Celebrators_Facebook.jpg`);
+    } finally {
+      setSharing(false);
+    }
+  }, [captureBoardShareImage, currentYear, month, monthlyPreparedImageUrl]);
+
+  const applyMonthlyCaptionStyle = useCallback(
+    (style: "bold" | "italic") => {
+      const textarea = monthlyCaptionRef.current;
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      if (start === end) return;
+
+      const selected = monthlyCaption.slice(start, end);
+      const replacement = styleText(selected, style);
+      const nextCaption = `${monthlyCaption.slice(0, start)}${replacement}${monthlyCaption.slice(end)}`;
+      setMonthlyCaption(nextCaption);
+
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start, start + replacement.length);
+      });
+    },
+    [monthlyCaption]
+  );
 
 
   // Responsive grid based on density
@@ -729,24 +855,6 @@ export default function BirthdayMonthClient({
     return `grid ${map[Math.min(4, Math.max(0, density - 1))]} gap-2.5 sm:gap-3`;
   }, [density]);
 
-  // Filter + sort
-  const celebrants = useMemo(() => {
-    const targetMonth = month + 1;
-
-    return people
-      .filter((p) => {
-        const monthDay = getMonthDayInTimeZone(p.birthday);
-        return monthDay?.month === targetMonth;
-      })
-      .filter((p) => (headsFilter === "all" ? true : p.isHead))
-      .sort((a, b) => {
-        const aMonthDay = getMonthDayInTimeZone(a.birthday);
-        const bMonthDay = getMonthDayInTimeZone(b.birthday);
-        if (!aMonthDay || !bMonthDay) return 0;
-        return aMonthDay.day - bMonthDay.day;
-      });
-  }, [people, month, headsFilter]);
-
   const onChangeMonth = useCallback((m: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("month", m);
@@ -761,7 +869,7 @@ export default function BirthdayMonthClient({
 
       // preset config
       const isPng = preset === "high-png";
-      const filename = `${monthName(month)}_Birthday_Celebrants.${isPng ? "png" : "jpg"}`;
+      const filename = `${monthName(month)}_${currentYear}_Birthday_Celebrants.${isPng ? "png" : "jpg"}`;
       let pixelRatio = isPng ? 2 : 1.25; // faster & lighter for JPEG
       const jpegQuality = 0.85;
 
@@ -892,7 +1000,7 @@ export default function BirthdayMonthClient({
         setExporting(false);
       }
     },
-    [exportSafe, exporting, month, setExportSafe]
+    [currentYear, exportSafe, exporting, month, setExportSafe]
   );
 
   // --------------------------------------------------------------------------
@@ -963,7 +1071,7 @@ export default function BirthdayMonthClient({
         className="h-7 px-3 text-xs"
         onClick={() => onHeadsFilterChange('heads-only')}
       >
-        Heads Only
+        Special
       </Button>
     </div>
 
@@ -1063,8 +1171,8 @@ export default function BirthdayMonthClient({
           <FileImage className="mr-2 h-4 w-4" /> High-Res PNG
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleShareToFacebook} disabled={!shareableBoardUrl || sharing}>
-          <Share2 className="mr-2 h-4 w-4" /> Share to Facebook
+        <DropdownMenuItem onClick={handleShareToFacebook} disabled={visibleCelebrants.length === 0}>
+          <Share2 className="mr-2 h-4 w-4" /> Monthly Facebook Caption
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1111,15 +1219,22 @@ export default function BirthdayMonthClient({
               >
                 Birthday CELEBRATORS
               </div>
+              <div
+                className="text-sm sm:text-base font-semibold uppercase tracking-[0.35em]"
+                style={{
+                  color: resolvedTheme?.cssVars["--bday-accent-2"] ?? "currentColor",
+                  fontFamily: headerFontFamily,
+                }}
+              >
+                {currentYear}
+              </div>
             </div>
           )}
 
           {/* Grid */}
           {celebrants.length > 0 ? (
             <div className={gridClass}>
-            {celebrants
-              .filter(p => !excluded.has(p.id))   // <- hides excluded from the list
-              .map((p) => {
+            {visibleCelebrants.map((p) => {
                 const d = safeDate(p.birthday)!;
                 const name = displayName(p);
 
@@ -1256,7 +1371,7 @@ export default function BirthdayMonthClient({
 
           {showWatermark && (
             <div className="mt-3 text-[10px] text-muted-foreground text-center print:hidden">
-              Auto-generated from HRPS • {new Date().getFullYear()}
+              Auto-generated from HRPS • {currentYear}
             </div>
           )}
         </div>
@@ -1315,11 +1430,94 @@ export default function BirthdayMonthClient({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={monthlyPostOpen} onOpenChange={setMonthlyPostOpen}>
+        <DialogContent className="max-w-[860px]">
+          <DialogHeader>
+            <DialogTitle>{titleCaseMonth(month)} birthday celebrators post</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+              <div className="text-sm text-muted-foreground">
+                {visibleCelebrants.length} visible celebrant{visibleCelebrants.length === 1 ? "" : "s"} for {titleCaseMonth(month)} {currentYear}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={generateMonthlyCaption} disabled={sharing}>
+                <Wand2 className="mr-2 h-4 w-4" />
+                {sharing ? "Generating..." : monthlyCaption ? "Generate Again" : "Generate Caption"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => applyMonthlyCaptionStyle("bold")}
+                title="Bold (Ctrl+B)"
+                aria-label="Bold selected text"
+              >
+                <Bold className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => applyMonthlyCaptionStyle("italic")}
+                title="Italic (Ctrl+I)"
+                aria-label="Italic selected text"
+              >
+                <Italic className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <Textarea
+              ref={monthlyCaptionRef}
+              value={monthlyCaption}
+              onChange={(event) => setMonthlyCaption(event.target.value)}
+              onKeyDown={(event) => {
+                if (!(event.ctrlKey || event.metaKey)) return;
+                const key = event.key.toLowerCase();
+                if (key === "b") {
+                  event.preventDefault();
+                  applyMonthlyCaptionStyle("bold");
+                }
+                if (key === "i") {
+                  event.preventDefault();
+                  applyMonthlyCaptionStyle("italic");
+                }
+              }}
+              placeholder="Click Generate Caption or type the monthly Facebook caption here..."
+              className="min-h-[360px] resize-none whitespace-pre-wrap text-sm leading-6"
+            />
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <Button type="button" variant="outline" onClick={copyMonthlyCaption}>
+                <Copy className="mr-2 h-4 w-4" />
+                Copy
+              </Button>
+              <Button type="button" variant="outline" onClick={openMonthlyFacebookPost}>
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open
+              </Button>
+              <Button type="button" onClick={downloadMonthlyPostImage} disabled={sharing}>
+                <Download className="mr-2 h-4 w-4" />
+                Image
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!cardPerson} onOpenChange={(o) => !o && closeCard()}>
-        <DialogContent className="max-w-[720px]">
+        <DialogContent className="max-w-[1120px]">
           {cardPerson && (
             <div className="w-full flex justify-center">
               <BirthdayGreetingCard
+                departmentId={departmentId}
+                month={month}
+                year={currentYear}
                 person={{
                   id: cardPerson.id,
                   firstName: cardPerson.firstName,
@@ -1329,8 +1527,9 @@ export default function BirthdayMonthClient({
                   middleName: cardPerson.middleName,
                   suffix: cardPerson.suffix,
                   prefix: cardPerson.prefix,
+                  officeName: cardPerson.officeName,
+                  birthday: cardPerson.birthday,
                 }}
-
               />
             </div>
           )}

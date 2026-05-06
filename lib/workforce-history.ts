@@ -27,7 +27,7 @@ const WORKFORCE_CANONICAL_INDICATORS: Record<string, readonly string[]> = {
   Security: ["security", "security services"],
   Teacher: ["teacher", "education"],
   Technical: ["technical"],
-  Trade: ["trade"],
+  Trade: ["trade", "trade and crafts/laborer", "trade and crafts laborer", "crafts/laborer", "crafts laborer"],
   Others: ["others", "other"],
 };
 

@@ -1,7 +1,7 @@
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { getCurrentMonthIndexInTimeZone, getCurrentYearInTimeZone, getMonthDayInTimeZone } from "@/lib/birthday";
 import prismadb from "@/lib/prismadb";
 import BirthdayMonthClient from "./components/birthday-month-client";
-import { getMonthDayInTimeZone } from "@/lib/birthday";
 
 function clampMonth(m: string | null | undefined, fallback: number) {
   if (m == null) return fallback;
@@ -20,8 +20,8 @@ export default async function BirthdaysPage({
   searchParams?: { month?: string };
 }) {
   const { departmentId } = params;
-  const now = new Date();
-  const month = clampMonth(searchParams?.month, now.getMonth()); // 0..11
+  const month = clampMonth(searchParams?.month, getCurrentMonthIndexInTimeZone()); // 0..11
+  const currentYear = getCurrentYearInTimeZone();
   const pgMonth = month + 1; // Postgres EXTRACT(MONTH) is 1..12
 
   // Single round-trip: filter by month and take latest image per employee
@@ -46,6 +46,9 @@ export default async function BirthdaysPage({
       suffix: true,
       prefix: true,
       isHead: true,
+      offices: {
+        select: { name: true },
+      },
       images: {
         select: { url: true, createdAt: true },
         orderBy: { createdAt: "desc" },
@@ -80,6 +83,7 @@ export default async function BirthdaysPage({
       suffix:e.suffix,
       prefix:e.prefix,
       nickname: e.nickname ?? null,
+      officeName: e.offices?.name ?? null,
       birthday: new Date(e.birthday).toISOString(),
       imageUrl: e.images?.[0]?.url ?? null,
       isHead: e.isHead,
@@ -96,6 +100,7 @@ export default async function BirthdaysPage({
       <BirthdayMonthClient
         departmentId={departmentId}
         initialMonth={month}
+        currentYear={currentYear}
         people={people}
       />
     </div>

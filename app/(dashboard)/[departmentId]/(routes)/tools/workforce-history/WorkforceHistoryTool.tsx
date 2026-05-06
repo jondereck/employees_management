@@ -100,7 +100,7 @@ const INDICATOR_ALIASES: Record<string, string[]> = {
   security: ["security", "security services"],
   teacher: ["teacher", "education"],
   technical: ["technical"],
-  trade: ["trade"],
+  trade: ["trade", "trade and crafts/laborer", "trade and crafts laborer", "crafts/laborer", "crafts laborer"],
   others: ["others", "other"],
 };
 
@@ -942,9 +942,7 @@ export default function WorkforceHistoryTool({ departmentId }: { departmentId: s
               </div>
             </div>
 
-            <div className="rounded-md border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
-              Use this section for the normal workflow: review the suggested indicator, select rows, then apply them to the selected year.
-            </div>
+
 
             <div className="flex flex-wrap gap-2">
               <Button
