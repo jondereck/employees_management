@@ -17,6 +17,7 @@ interface ModalProps {
   headerClassName?: string;
   bodyClassName?: string;
   hideDefaultHeader?: boolean;
+  onContentScroll?: (event: React.UIEvent<HTMLDivElement>) => void;
 }
 
 const Modal = ({
@@ -30,6 +31,7 @@ const Modal = ({
   headerClassName,
   bodyClassName,
   hideDefaultHeader,
+  onContentScroll,
 }: ModalProps) => {
 
   const [isMounted, setIsMounted] = useState(false);
@@ -57,6 +59,7 @@ const Modal = ({
   )}
         // iOS smooth scrolling
         style={{ WebkitOverflowScrolling: "touch" }}
+        onScroll={onContentScroll}
       >
         {!hideDefaultHeader ? (
           <DialogHeader className={headerClassName}>

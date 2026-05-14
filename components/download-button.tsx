@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import {
   MouseSensor,
   TouchSensor,
   defaultDropAnimation,
+  type DragMoveEvent,
   type DragEndEvent,
   type DragStartEvent,
   useSensor,
@@ -25,7 +26,7 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { Portal } from '@radix-ui/react-portal';
 import Modal from './ui/modal';
 import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, type HeadsMode } from '@/utils/download-excel';
@@ -119,15 +120,20 @@ const SelectedColumnDraggable = ({ column, onToggle }: SelectedColumnDraggablePr
       style={style}
       className={cn(
         SELECTED_COLUMN_ROW_BASE_CLASS,
-        isDragging ? 'ring-2 ring-ring ring-offset-1' : ''
+        isDragging ? 'scale-[1.01] ring-2 ring-ring ring-offset-1 shadow-md' : '',
+        'select-none'
       )}
     >
       <div className="flex flex-1 items-center gap-3">
-        <ActionTooltip label="Drag to reorder (↑/↓)." side="top">
+        <ActionTooltip label="Drag to reorder (â†‘/â†“)." side="top">
           <button
             type="button"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-dashed bg-background text-muted-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className={cn(
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-dashed bg-background text-muted-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              isDragging ? 'cursor-grabbing touch-none' : 'cursor-grab touch-none'
+            )}
             aria-label={`Drag ${column.name} to reorder`}
+            data-drag-handle="true"
             {...listeners}
             {...attributes}
           >
@@ -477,12 +483,12 @@ export default function DownloadStyledExcel() {
       }
     }
 
-    // ✅ Find & Replace rules
+    // âœ… Find & Replace rules
     if (tpl.positionReplaceRules) {
       setPositionReplaceRules(tpl.positionReplaceRules);
     }
 
-    // ✅ Paths
+    // âœ… Paths
     if (tpl.paths) {
       setImageBaseDir(tpl.paths.imageBaseDir ?? imageBaseDir);
       setImageExt(tpl.paths.imageExt ?? imageExt);
@@ -1192,6 +1198,7 @@ export default function DownloadStyledExcel() {
   );
 
   const [activeDragColumnId, setActiveDragColumnId] = useState<string | null>(null);
+  const orderListScrollRef = useRef<HTMLDivElement | null>(null);
 
   const activeDragColumn = useMemo(
     () => selectedColumnItems.find((column) => column.key === activeDragColumnId) ?? null,
@@ -1226,6 +1233,51 @@ export default function DownloadStyledExcel() {
   const handleSelectedColumnDragCancel = useCallback(() => {
     setActiveDragColumnId(null);
   }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !activeDragColumnId) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscroll;
+    };
+  }, [activeDragColumnId]);
+
+  const handleSelectedColumnDragMove = useCallback(
+    ({ activatorEvent }: DragMoveEvent) => {
+      const container = orderListScrollRef.current;
+      if (!container || !activeDragColumnId) return;
+      if (!activatorEvent) return;
+
+      let cursorY: number | null = null;
+      if ('clientY' in activatorEvent && typeof activatorEvent.clientY === 'number') {
+        cursorY = activatorEvent.clientY;
+      } else if ('touches' in activatorEvent) {
+        const touchEvent = activatorEvent as { touches?: ArrayLike<{ clientY?: number }> };
+        if (touchEvent.touches && touchEvent.touches.length > 0) {
+          cursorY = touchEvent.touches[0]?.clientY ?? null;
+        }
+      }
+      if (cursorY === null) return;
+
+      const rect = container.getBoundingClientRect();
+      const edgeThreshold = 48;
+
+      if (cursorY < rect.top + edgeThreshold) {
+        const proximity = Math.max(0, rect.top + edgeThreshold - cursorY);
+        container.scrollTop -= Math.min(14, 4 + proximity * 0.18);
+      } else if (cursorY > rect.bottom - edgeThreshold) {
+        const proximity = Math.max(0, cursorY - (rect.bottom - edgeThreshold));
+        container.scrollTop += Math.min(14, 4 + proximity * 0.18);
+      }
+    },
+    [activeDragColumnId]
+  );
 
   const exportColumnOrder = useMemo(() => {
     const map = new Map(columnOrder.map((col) => [col.key, col]));
@@ -1735,7 +1787,7 @@ export default function DownloadStyledExcel() {
               {/* ADVANCED (single box; sticky header + conditional mount for content) */}
               <div className="mb-4 rounded-lg border bg-white shadow-sm">
             {/* Sticky header so the toggle stays visible */}
-            <div className="sticky top-0 z-30 border-b bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="border-b bg-background px-3 py-2">
               <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
@@ -1744,18 +1796,16 @@ export default function DownloadStyledExcel() {
               >
                 <span className="text-sm font-semibold">Advanced settings</span>
 
-                <span className="text-xs text-gray-600 px-3 py-2 flex justify-end">{showAdvanced ? '' : 'Show'}</span>
+                <span className="text-xs text-gray-600 px-3 py-2 flex justify-end">{showAdvanced ? 'Hide' : 'Show'}</span>
               </button>
             </div>
 
-            <div
-              className={`overflow-hidden transition-all duration-500 ease-in-out ${showAdvanced ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'
-                }`}
-            >
+            <div className={showAdvanced ? 'block' : 'hidden'}>
               <div className="px-3 pb-3 space-y-4">
                 <div className="px-3 pb-3">
                     <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full min-w-0">
-                      <div className="sticky top-[48px] z-30 bg-background border-b flex flex-wrap items-center gap-2 px-2 py-2">
+                      <div className="border-b bg-background">
+                        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-contain px-2 py-2">
                         {EXPORT_TABS.map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTabKey === tab.key;
@@ -1770,13 +1820,14 @@ export default function DownloadStyledExcel() {
                               aria-selected={isActive}
                               aria-current={isActive ? 'page' : undefined}
                               aria-controls={`panel-${tab.key}`}
-                              className="h-8 px-2 gap-2"
+                              className="h-8 shrink-0 px-2 gap-2"
                             >
                               <Icon className="size-4" />
                               <span className="whitespace-nowrap">{tab.label}</span>
                             </Button>
                           );
                         })}
+                        </div>
                       </div>
 
                     {/* TAB: Paths */}
@@ -2606,3 +2657,5 @@ export default function DownloadStyledExcel() {
     </div>
   );
 }
+
+
