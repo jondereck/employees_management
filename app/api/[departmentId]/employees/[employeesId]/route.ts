@@ -441,29 +441,50 @@ memberPolicyNo: normalizedMemberPolicyNo,
 
 export async function GET(
   req: Request,
-  { params }: { params: { employeesId: string } }
+  { params }: { params: { departmentId: string; employeesId: string } }
 ) {
   try {
+    const { userId } = auth();
+    if (!userId) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
 
 
     if (!params.employeesId) {
       return new NextResponse("Employee id is required", { status: 400 });
     }
 
+    if (!params.departmentId) {
+      return new NextResponse("Department id is required", { status: 400 });
+    }
 
-const employee = await prismadb.employee.findUnique({
-  where: { id: params.employeesId },
-  include: {
-    images: true,
-    offices: true,
-    employeeType: true,
-    eligibility: true,
-    designation: true,
-     workSchedules: true,
-  awards: true,
-  employmentEvents: true,
-  },
-});
+    const department = await prismadb.department.findFirst({
+      where: { id: params.departmentId, userId },
+      select: { id: true },
+    });
+
+    if (!department) {
+      return new NextResponse("Unauthorized", { status: 403 });
+    }
+
+
+    const employee = await prismadb.employee.findFirst({
+      where: { id: params.employeesId, departmentId: params.departmentId },
+      include: {
+        images: true,
+        offices: true,
+        employeeType: true,
+        eligibility: true,
+        designation: true,
+        workSchedules: true,
+        awards: true,
+        employmentEvents: true,
+      },
+    });
+
+    if (!employee) {
+      return new NextResponse("Employee not found", { status: 404 });
+    }
 
 
 

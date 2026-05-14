@@ -10,7 +10,7 @@ export function loadGenioCache() {
   }
 }
 
-export function saveGenioCache(data: any) {
+export function saveGenioCache(data: unknown) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(GENIO_CACHE_KEY, JSON.stringify(data));

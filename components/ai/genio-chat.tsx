@@ -35,10 +35,26 @@ type GenioMessage = {
 };
 
 type GenioContext = {
-  employeeTypeId?: string;
-  employeeTypeName?: string;
-  year?: number;
+  lastResult?: {
+    type: string;
+    filters?: Record<string, unknown>;
+    employeeIds?: string[];
+    officeIds?: string[];
+    label?: string;
+  };
+  lastEmployeeId?: string;
+  lastOfficeId?: string;
+  lastOfficeName?: string;
+  signature?: string;
 };
+
+function getLatestGenioContext(messages: GenioMessage[]) {
+  return (
+    [...messages].reverse().find((message) => message.role === "ai" && message.context)
+      ?.context ?? null
+  );
+}
+
 export const GENIO_COMMANDS = [
   /* ================= EMPLOYEE LOOKUP ================= */
 
@@ -408,13 +424,6 @@ export const GenioChat = ({
   const [visibleChips, setVisibleChips] = useState<typeof GENIO_COMMANDS>([]);
   const [showCommandSheet, setShowCommandSheet] = useState(false);
 
-
-
-
-
-  const isExportRequest = (text: string) =>
-    /\b(export|download|export this|export to excel)\b/i.test(text);
-
   useEffect(() => {
     const handleSelection = () => {
       const selection = window.getSelection();
@@ -486,6 +495,8 @@ export const GenioChat = ({
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
+  const latestContextRef = useRef<GenioContext | null>(null);
+  const cacheDepartmentRef = useRef<string | null>(null);
 
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const longPressTriggered = useRef(false);
@@ -546,7 +557,7 @@ export const GenioChat = ({
 
     setMessages((prev) => [...prev, userMsg]);
 
-    const shouldShowAI = !isExportRequest(text);
+    const shouldShowAI = true;
 
     if (shouldShowAI) {
       setMessages((prev) => [
@@ -561,12 +572,9 @@ export const GenioChat = ({
     }
 
 
-    const lastAIContext =
-      [...messages]
-        .reverse()
-        .find((m) => m.role === "ai" && m.context)?.context ?? null;
+    const lastAIContext = latestContextRef.current;
     try {
-      const res = await fetch("/api/genio", {
+      const res = await fetch(`/api/${departmentId}/genio`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -581,7 +589,8 @@ export const GenioChat = ({
 
       if (ctx) {
         try {
-          const parsed = JSON.parse(ctx);
+          const parsed = JSON.parse(ctx) as GenioContext;
+          latestContextRef.current = parsed;
 
           setMessages((prev) =>
             prev.map((m) =>
@@ -670,8 +679,6 @@ export const GenioChat = ({
           )
         );
       }
-      console.log("CTX HEADER:", res.headers.get("x-genio-context"));
-
     } catch (err) {
       setMessages((prev) =>
         prev.map((m) =>
@@ -692,13 +699,32 @@ export const GenioChat = ({
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    const previousDepartmentId = cacheDepartmentRef.current;
+    const departmentChanged =
+      previousDepartmentId !== null && previousDepartmentId !== departmentId;
+    cacheDepartmentRef.current = departmentId;
+
+    latestContextRef.current = null;
+    setMessages([]);
+    if (departmentChanged) {
+      setInput("");
+    }
+
     const cached = loadGenioCache();
     if (!cached) return;
+    if (cached.departmentId && cached.departmentId !== departmentId) return;
 
-    setMessages(cached.messages ?? []);
+    const cachedMessages = Array.isArray(cached.messages)
+      ? (cached.messages as GenioMessage[])
+      : [];
+    const cachedContext =
+      (cached.context as GenioContext | null | undefined) ??
+      getLatestGenioContext(cachedMessages);
 
+    latestContextRef.current = cachedContext ?? null;
+    setMessages(cachedMessages);
     setInput(cached.input ?? "");
-  }, []);
+  }, [departmentId]);
 
   const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -711,10 +737,11 @@ export const GenioChat = ({
     }
 
     saveTimeout.current = setTimeout(() => {
-      console.log("CACHE SAVE CONFIRMED", messages.length);
       saveGenioCache({
+        departmentId,
         messages,
         input,
+        context: latestContextRef.current,
       });
     }, 300);
 
@@ -723,7 +750,7 @@ export const GenioChat = ({
         clearTimeout(saveTimeout.current);
       }
     };
-  }, [messages, input]);
+  }, [departmentId, messages, input]);
 
 
   const MAX_VISIBLE_LINES = 8;
@@ -833,13 +860,6 @@ export const GenioChat = ({
     });
   };
 
-  const latestAIContext =
-    [...messages]
-      .reverse()
-      .find((m) => m.role === "ai" && m.context)?.context;
-
-
-
   return (
     <div
       className={`
@@ -894,6 +914,7 @@ export const GenioChat = ({
             className="text-muted-foreground hover:text-foreground"
             onClick={() => {
               clearGenioCache();
+              latestContextRef.current = null;
               setMessages([]);
 
               setInput("");
@@ -935,7 +956,7 @@ export const GenioChat = ({
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4 text-sm">
         {messages.length === 0 && (
           <p className="text-center text-muted-foreground">
-            Ask Genio anything about your employees.
+            Ask Genio in natural language about employees, offices, counts, and analytics.
           </p>
         )}
 
@@ -1297,7 +1318,7 @@ export const GenioChat = ({
       overflow-y-auto
     ">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">What can Genio do?</h3>
+              <h3 className="text-sm font-semibold">Example questions</h3>
               <button
                 onClick={() => setShowCommandSheet(false)}
                 className="text-xs text-muted-foreground hover:text-foreground"
