@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type ClipboardEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -507,6 +507,46 @@ const WEEKLY_EXCLUSION_HELP_TEXT =
 
 const HHMM_REGEX = /^\d{1,2}:\d{2}$/;
 
+const normalizeTimeClipboardValue = (value: string): string | null => {
+  const raw = value.trim().replace(/\uFF1A/g, ":");
+  if (!raw) return null;
+
+  const compact = raw.replace(/\s+/g, "");
+
+  const meridiemMatch = compact.match(/^(\d{1,2})(?::?(\d{2}))?([aApP][mM])$/);
+  if (meridiemMatch) {
+    const hour = Number(meridiemMatch[1]);
+    const minute = Number(meridiemMatch[2] ?? "00");
+    const meridiem = meridiemMatch[3].toLowerCase();
+    if (!Number.isInteger(hour) || hour < 1 || hour > 12) return null;
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+    let h24 = hour % 12;
+    if (meridiem === "pm") h24 += 12;
+    return `${String(h24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  const hhmmMatch = compact.match(/^(\d{1,2}):(\d{2})$/);
+  if (hhmmMatch) {
+    const hour = Number(hhmmMatch[1]);
+    const minute = Number(hhmmMatch[2]);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  const digitMatch = compact.match(/^(\d{3,4})$/);
+  if (digitMatch) {
+    const digits = digitMatch[1].padStart(4, "0");
+    const hour = Number(digits.slice(0, 2));
+    const minute = Number(digits.slice(2, 4));
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  return null;
+};
+
 type Props = {
   employeeId: string;
   schedules: WorkScheduleDTO[];
@@ -540,6 +580,15 @@ export function EmployeeScheduleManager({
   const [weeklyPatternOpen, setWeeklyPatternOpen] = useState(false);
   const [weeklyPatternAutoOpenDisabled, setWeeklyPatternAutoOpenDisabled] = useState(false);
   const [rotationDays, setRotationDays] = useState<RotationDayForm[]>(() => createDefaultRotationDays());
+  const handleTimePaste = useCallback(
+    (event: ClipboardEvent<HTMLInputElement>, apply: (next: string) => void) => {
+      const parsed = normalizeTimeClipboardValue(event.clipboardData.getData("text"));
+      if (!parsed) return;
+      event.preventDefault();
+      apply(parsed);
+    },
+    []
+  );
 
   const handleAddWeeklyWindow = useCallback((day: WeekdayKey) => {
     setWeeklyPattern((prev) => {
@@ -1294,7 +1343,7 @@ export function EmployeeScheduleManager({
                       <FormLabel className="text-[10px] font-bold uppercase text-slate-500">
                         {scheduleType === ScheduleType.FIXED ? "Standard Start" : "Shift Start"}
                       </FormLabel>
-                      <Input type="time" className="bg-white font-mono" {...field} />
+                      <Input type="time" className="bg-white font-mono" {...field} onPaste={(event) => handleTimePaste(event, field.onChange)} />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1307,7 +1356,7 @@ export function EmployeeScheduleManager({
                       <FormLabel className="text-[10px] font-bold uppercase text-slate-500">
                         {scheduleType === ScheduleType.FIXED ? "Standard End" : "Shift End"}
                       </FormLabel>
-                      <Input type="time" className="bg-white font-mono" {...field} />
+                      <Input type="time" className="bg-white font-mono" {...field} onPaste={(event) => handleTimePaste(event, field.onChange)} />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1324,7 +1373,7 @@ export function EmployeeScheduleManager({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Earliest Start</FormLabel>
-                        <Input type="time" className="bg-white font-mono" {...field} />
+                        <Input type="time" className="bg-white font-mono" {...field} onPaste={(event) => handleTimePaste(event, field.onChange)} />
                       </FormItem>
                     )}
                   />
@@ -1334,7 +1383,7 @@ export function EmployeeScheduleManager({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Latest End</FormLabel>
-                        <Input type="time" className="bg-white font-mono" {...field} />
+                        <Input type="time" className="bg-white font-mono" {...field} onPaste={(event) => handleTimePaste(event, field.onChange)} />
                       </FormItem>
                     )}
                   />
@@ -1372,8 +1421,8 @@ export function EmployeeScheduleManager({
                             <div className="flex flex-1 flex-wrap items-center gap-3">
                               {weeklyPattern[key].windows.map((window) => (
                                 <div key={window.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
-                                  <Input type="time" className="h-8 w-28 border-0 bg-transparent p-0 text-xs font-bold" value={window.start || ""} onChange={(event) => handleWeeklyWindowChange(key, window.id, "start", event.target.value)} />
-                                  <Input type="time" className="h-8 w-28 border-0 bg-transparent p-0 text-xs font-bold" value={window.end || ""} onChange={(event) => handleWeeklyWindowChange(key, window.id, "end", event.target.value)} />
+                                  <Input type="time" className="h-8 w-28 border-0 bg-transparent p-0 text-xs font-bold" value={window.start || ""} onChange={(event) => handleWeeklyWindowChange(key, window.id, "start", event.target.value)} onPaste={(event) => handleTimePaste(event, (next) => handleWeeklyWindowChange(key, window.id, "start", next))} />
+                                  <Input type="time" className="h-8 w-28 border-0 bg-transparent p-0 text-xs font-bold" value={window.end || ""} onChange={(event) => handleWeeklyWindowChange(key, window.id, "end", event.target.value)} onPaste={(event) => handleTimePaste(event, (next) => handleWeeklyWindowChange(key, window.id, "end", next))} />
                                   <button type="button" onClick={() => handleRemoveWeeklyWindow(key, window.id)} className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-rose-500">
                                     <XIcon className="h-3 w-3" />
                                   </button>
@@ -1435,8 +1484,8 @@ export function EmployeeScheduleManager({
                         </Select>
                         {day.kind === "WORK" ? (
                           <div className="grid gap-3 sm:grid-cols-4">
-                            <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">Start</FormLabel><Input type="time" value={day.start} onChange={(event) => updateRotationDay(day.id, { start: event.target.value })} className="bg-white" /></div>
-                            <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">End</FormLabel><Input type="time" value={day.end} onChange={(event) => updateRotationDay(day.id, { end: event.target.value })} className="bg-white" /></div>
+                            <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">Start</FormLabel><Input type="time" value={day.start} onChange={(event) => updateRotationDay(day.id, { start: event.target.value })} onPaste={(event) => handleTimePaste(event, (next) => updateRotationDay(day.id, { start: next }))} className="bg-white" /></div>
+                            <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">End</FormLabel><Input type="time" value={day.end} onChange={(event) => updateRotationDay(day.id, { end: event.target.value })} onPaste={(event) => handleTimePaste(event, (next) => updateRotationDay(day.id, { end: next }))} className="bg-white" /></div>
                             <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">Break</FormLabel><Input type="number" min={0} max={720} value={day.breakMinutes} onChange={(event) => updateRotationDay(day.id, { breakMinutes: event.target.valueAsNumber || 0 })} className="bg-white" /></div>
                             <div><FormLabel className="text-[10px] font-bold uppercase text-slate-500">Grace</FormLabel><Input type="number" min={0} max={180} value={day.graceMinutes} onChange={(event) => updateRotationDay(day.id, { graceMinutes: event.target.valueAsNumber || 0 })} className="bg-white" /></div>
                           </div>
