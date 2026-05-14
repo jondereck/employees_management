@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { Gender, Prisma } from "@prisma/client";
+import { EmploymentEventType, Gender, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { resolveEmployeeType } from "./resolve-employee-type";
@@ -14,6 +14,9 @@ import {
   genioTenureFilterSchema,
 } from "./context";
 import { z } from "zod";
+import { GenioToolMeta } from "./formatter";
+import { genioToolArgumentSchemas } from "./validators";
+import { notAnswerableMessage } from "./errors";
 
 type GenioToolName =
   | "lookup_employees"
@@ -37,12 +40,14 @@ type GenioToolName =
   | "current_employees_by_year"
   | "list_last_result"
   | "show_profile"
-  | "export_last_result";
+  | "export_last_result"
+  | "history_snapshot"
+  | "award_analytics"
+  | "employment_event_lookup"
+  | "schedule_metadata"
+  | "not_answerable";
 
-type ToolMeta = {
-  canExport?: boolean;
-  viewProfileEmployeeId?: string;
-};
+type ToolMeta = GenioToolMeta;
 
 export type GenioTextResult = {
   kind: "text";
@@ -58,7 +63,7 @@ export type GenioFileResult = {
 
 export type GenioToolResult = GenioTextResult | GenioFileResult;
 
-type ToolEnvironment = {
+export type ToolEnvironment = {
   departmentId: string;
   message: string;
   context: GenioContext;
@@ -1812,6 +1817,227 @@ async function exportLastResult(env: ToolEnvironment): Promise<GenioToolResult> 
   };
 }
 
+function employeeNameSearchWhere(query?: string): Prisma.EmployeeWhereInput | undefined {
+  if (!query?.trim()) return undefined;
+  const parts = query.trim().split(/\s+/).filter(Boolean).slice(0, 5);
+  if (!parts.length) return undefined;
+
+  return {
+    AND: parts.map((part) => ({
+      OR: [
+        { firstName: { contains: part, mode: "insensitive" } },
+        { middleName: { contains: part, mode: "insensitive" } },
+        { lastName: { contains: part, mode: "insensitive" } },
+        { nickname: { contains: part, mode: "insensitive" } },
+        { employeeNo: { contains: part, mode: "insensitive" } },
+      ],
+    })),
+  };
+}
+
+async function historySnapshot(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.history_snapshot.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 25;
+  const where: Prisma.EmployeeHistorySnapshotWhereInput = {
+    departmentId: env.departmentId,
+    ...(parsed.status ? { status: { contains: parsed.status, mode: "insensitive" } } : {}),
+    ...(parsed.year ? { effectiveAt: { gte: startOfYear(parsed.year), lte: endOfYear(parsed.year) } } : {}),
+  };
+
+  if (parsed.office) {
+    const { office, result } = await resolveOfficeOrReply(env.departmentId, parsed.office, env.message, env.context);
+    if (result) return result;
+    if (office) where.officeId = office.id;
+  }
+
+  const snapshots = await prisma.employeeHistorySnapshot.findMany({
+    where,
+    include: {
+      employee: { select: { employeeNo: true, firstName: true, middleName: true, lastName: true } },
+      office: { select: { name: true } },
+      employeeType: { select: { name: true } },
+      eligibility: { select: { name: true } },
+    },
+    orderBy: { effectiveAt: "desc" },
+    take: limit,
+  });
+
+  if (!snapshots.length) {
+    return textResult("No matching workforce history snapshots were found in the HRPS database.", env.context);
+  }
+
+  const rows = snapshots.map((snapshot, index) => {
+    const employee = employeeName(snapshot.employee);
+    const office = snapshot.office?.name ?? "No office";
+    const type = snapshot.employeeType?.name ?? "No employee type";
+    return `${index + 1}. ${employee} - ${office}, ${type}, ${snapshot.status} (${snapshot.effectiveAt.toLocaleDateString()})`;
+  });
+
+  return textResult(`Workforce history snapshots found:\n\n${rows.join("\n")}`, env.context);
+}
+
+async function awardAnalytics(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.award_analytics.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 25;
+  const employeeFilter = employeeNameSearchWhere(parsed.employeeName);
+  const awards = await prisma.award.findMany({
+    where: {
+      deletedAt: null,
+      ...(parsed.year ? { givenAt: { gte: startOfYear(parsed.year), lte: endOfYear(parsed.year) } } : {}),
+      employee: {
+        departmentId: env.departmentId,
+        isArchived: false,
+        ...(employeeFilter ?? {}),
+      },
+    },
+    include: {
+      employee: {
+        select: {
+          employeeNo: true,
+          firstName: true,
+          middleName: true,
+          lastName: true,
+          offices: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { givenAt: "desc" },
+    take: limit,
+  });
+
+  if (!awards.length) {
+    return textResult("No matching awards were found in the HRPS database.", env.context);
+  }
+
+  const rows = awards.map((award, index) => {
+    const employee = employeeName(award.employee);
+    const office = award.employee.offices?.name ?? "No office";
+    return `${index + 1}. ${award.title} - ${employee} (${office}), ${award.givenAt.toLocaleDateString()}`;
+  });
+
+  return textResult(`Awards from the HRPS database:\n\n${rows.join("\n")}`, env.context);
+}
+
+async function employmentEventLookup(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.employment_event_lookup.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 25;
+  const employeeFilter = employeeNameSearchWhere(parsed.employeeName);
+  const requestedEventType = parsed.eventType?.toUpperCase().replace(/\s+/g, "_");
+  const eventType = requestedEventType && Object.values(EmploymentEventType).includes(requestedEventType as EmploymentEventType)
+    ? requestedEventType as EmploymentEventType
+    : undefined;
+
+  const events = await prisma.employmentEvent.findMany({
+    where: {
+      deletedAt: null,
+      ...(parsed.year ? { occurredAt: { gte: startOfYear(parsed.year), lte: endOfYear(parsed.year) } } : {}),
+      ...(eventType ? { type: eventType } : {}),
+      employee: {
+        departmentId: env.departmentId,
+        isArchived: false,
+        ...(employeeFilter ?? {}),
+      },
+    },
+    include: {
+      employee: {
+        select: {
+          employeeNo: true,
+          firstName: true,
+          middleName: true,
+          lastName: true,
+          offices: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { occurredAt: "desc" },
+    take: limit,
+  });
+
+  if (!events.length) {
+    return textResult("No matching employment events were found in the HRPS database.", env.context);
+  }
+
+  const rows = events.map((event, index) => {
+    const employee = employeeName(event.employee);
+    const office = event.employee.offices?.name ?? "No office";
+    return `${index + 1}. ${event.type} - ${employee} (${office}), ${event.occurredAt.toLocaleDateString()}`;
+  });
+
+  return textResult(`Employment events from the HRPS database:\n\n${rows.join("\n")}`, env.context);
+}
+
+async function scheduleMetadata(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.schedule_metadata.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 25;
+  const employeeFilter = employeeNameSearchWhere(parsed.employeeName);
+
+  if (parsed.office && !parsed.employeeName) {
+    const { office, result } = await resolveOfficeOrReply(env.departmentId, parsed.office, env.message, env.context);
+    if (result) return result;
+
+    const officeSchedules = await prisma.officeWorkSchedule.findMany({
+      where: {
+        departmentId: env.departmentId,
+        officeId: office.id,
+      },
+      include: { office: { select: { name: true } } },
+      orderBy: { effectiveFrom: "desc" },
+      take: limit,
+    });
+
+    if (!officeSchedules.length) {
+      return textResult(`No office schedule metadata found for ${office.name}.`, env.context);
+    }
+
+    const rows = officeSchedules.map((schedule, index) => {
+      const time = [schedule.startTime, schedule.endTime].filter(Boolean).join("-");
+      return `${index + 1}. ${schedule.office.name}: ${schedule.type}${time ? ` ${time}` : ""}, effective ${schedule.effectiveFrom.toLocaleDateString()}`;
+    });
+
+    return textResult(`Office schedule metadata:\n\n${rows.join("\n")}`, env.context);
+  }
+
+  const schedules = await prisma.workSchedule.findMany({
+    where: {
+      employee: {
+        departmentId: env.departmentId,
+        isArchived: false,
+        ...(employeeFilter ?? {}),
+      },
+    },
+    include: {
+      employee: {
+        select: {
+          firstName: true,
+          middleName: true,
+          lastName: true,
+          offices: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: { effectiveFrom: "desc" },
+    take: limit,
+  });
+
+  if (!schedules.length) {
+    return textResult("No matching employee schedule metadata was found in the HRPS database.", env.context);
+  }
+
+  const rows = schedules.map((schedule, index) => {
+    const name = employeeName(schedule.employee);
+    const office = schedule.employee.offices?.name ?? "No office";
+    const time = [schedule.startTime, schedule.endTime].filter(Boolean).join("-");
+    return `${index + 1}. ${name} (${office}): ${schedule.type}${time ? ` ${time}` : ""}, effective ${schedule.effectiveFrom.toLocaleDateString()}`;
+  });
+
+  return textResult(`Schedule metadata only:\n\n${rows.join("\n")}`, env.context);
+}
+
+async function notAnswerable(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.not_answerable.parse(parseJsonObject(args));
+  return textResult(notAnswerableMessage(parsed), env.context);
+}
+
 export async function executeGenioTool(
   name: string,
   args: unknown,
@@ -1871,6 +2097,16 @@ export async function executeGenioTool(
     case "export_last_result":
       emptySchema.parse(parseJsonObject(args));
       return exportLastResult(env);
+    case "history_snapshot":
+      return historySnapshot(env, args);
+    case "award_analytics":
+      return awardAnalytics(env, args);
+    case "employment_event_lookup":
+      return employmentEventLookup(env, args);
+    case "schedule_metadata":
+      return scheduleMetadata(env, args);
+    case "not_answerable":
+      return notAnswerable(env, args);
     default:
       return null;
   }

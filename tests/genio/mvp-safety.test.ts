@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { GENIO_CAPABILITIES } from "@/src/genio/capabilities";
+import { GENIO_FIELD_ALLOWLIST, GENIO_SENSITIVE_FIELDS } from "@/src/genio/privacy";
+import { runGenio } from "@/src/genio/service";
+import { GENIO_OPENAI_TOOLS, isGenioToolName } from "@/src/genio/toolRegistry";
+import { validateGenioToolArgs } from "@/src/genio/validators";
+
+test("Genio exposes the MVP semantic tools", () => {
+  const toolNames = GENIO_OPENAI_TOOLS.map((tool) => tool.function.name);
+
+  assert.ok(toolNames.includes("not_answerable"));
+  assert.ok(toolNames.includes("history_snapshot"));
+  assert.ok(toolNames.includes("award_analytics"));
+  assert.ok(toolNames.includes("employment_event_lookup"));
+  assert.ok(toolNames.includes("schedule_metadata"));
+});
+
+test("Genio rejects write actions before any DB-backed handler runs", async () => {
+  const result = await runGenio({
+    departmentId: "department-1",
+    message: "delete employee 123",
+    context: {},
+  });
+
+  assert.equal(result.kind, "text");
+  assert.match(result.reply, /Read-only/i);
+  assert.equal(result.meta?.metadata?.tool, "not_answerable");
+  assert.equal(result.meta?.metadata?.exact, false);
+  assert.equal(result.meta?.metadata?.scopedByDepartment, true);
+});
+
+test("Genio rejects attendance analytics when only schedule metadata exists", async () => {
+  const result = await runGenio({
+    departmentId: "department-1",
+    message: "sino laging late this month?",
+    context: {},
+  });
+
+  assert.equal(result.kind, "text");
+  assert.match(result.reply, /attendance log fields/i);
+  assert.equal(result.meta?.metadata?.tool, "not_answerable");
+});
+
+test("sensitive fields are not part of the normal employee allowlist", () => {
+  const employeeFields = new Set<string>(GENIO_FIELD_ALLOWLIST.employee);
+
+  for (const field of GENIO_SENSITIVE_FIELDS) {
+    assert.equal(employeeFields.has(field), false);
+  }
+});
+
+test("tool registry recognizes only allowlisted tools", () => {
+  assert.equal(isGenioToolName("count_employees"), true);
+  assert.equal(isGenioToolName("not_answerable"), true);
+  assert.equal(isGenioToolName("delete_employee"), false);
+  assert.equal(isGenioToolName("raw_sql"), false);
+});
+
+test("tool validators reject invalid unsafe arguments", () => {
+  assert.throws(() => validateGenioToolArgs("age_analysis", { age: { min: -1 } }));
+  assert.throws(() => validateGenioToolArgs("schedule_metadata", { limit: 5000 }));
+  assert.doesNotThrow(() => validateGenioToolArgs("count_employees", { gender: "Female" }));
+});
+
+test("capability map marks attendance analytics as unavailable", () => {
+  assert.equal(GENIO_CAPABILITIES.attendanceAnalytics.answerable, false);
+  assert.match(GENIO_CAPABILITIES.attendanceAnalytics.reason, /No attendance log/i);
+});

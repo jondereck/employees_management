@@ -27,6 +27,7 @@ model Department {
   timekeepingAnalyzerSettings TimekeepingAnalyzerSetting[]
   workforceReportGroups       WorkforceReportGroup[]
   workforceReportCaches       WorkforceReportCache[]
+  genioResultContexts         GenioResultContext[]
 }
 
 model DepartmentBackup {
@@ -274,6 +275,24 @@ model WorkforceReportCache {
 
   @@unique([departmentId, year, populationMode, dimension, selectedGroupHash, version])
   @@index([departmentId, year])
+}
+
+model GenioResultContext {
+  id            String     @id @default(cuid())
+  departmentId  String
+  userId        String
+  question      String
+  toolName      String
+  toolArgsJson  Json
+  resultKind    String
+  rowIdsJson    Json?
+  aggregateJson Json?
+  createdAt     DateTime   @default(now())
+  expiresAt     DateTime
+  department    Department @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([departmentId, userId, createdAt])
+  @@index([expiresAt])
 }
 
 model Image {

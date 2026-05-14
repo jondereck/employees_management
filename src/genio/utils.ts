@@ -72,6 +72,7 @@ export function streamReply(
   viewProfileEmployeeId?: string | null,
   meta?: {
     canExport?: boolean;
+    metadata?: unknown;
   }
 ) {
   const encoder = new TextEncoder();
@@ -91,8 +92,9 @@ export function streamReply(
       "Content-Type": "text/plain",
       "x-genio-context": JSON.stringify(context),
       "x-genio-meta": JSON.stringify({
-        ...(viewProfileEmployeeId && { viewProfileEmployeeId }),
-        ...(meta?.canExport && { canExport: true }),
+        ...(viewProfileEmployeeId ? { viewProfileEmployeeId } : {}),
+        ...(meta?.canExport ? { canExport: true } : {}),
+        ...(meta?.metadata ? { metadata: meta.metadata } : {}),
       }),
     },
   });

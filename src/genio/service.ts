@@ -4,15 +4,18 @@ import { getOpenAI } from "./openai";
 import { parseGenioIntent } from "./parse-intent";
 import { GenioContext } from "./context";
 import {
-  executeGenioTool,
   GENIO_OPENAI_TOOLS,
   GenioToolResult,
-} from "./tools";
+  executeRegisteredGenioTool,
+} from "./toolRegistry";
 
 const exportPattern = /\b(export|download|export to excel|export this|export results|save to excel|i-export)\b/i;
 const listLastPattern =
   /\b(list them|show list|show them|show who|who are they|who are those|who are these|who is it|tell who are they|tell me who they are|can you tell who|sino sila|sino mga yan|sino mga iyon|sino siya|ipakita ang listahan)\b/i;
 const showProfilePattern = /\b(show profile|open profile|view employee|ipakita ang profile)\b/i;
+const writeActionPattern = /\b(delete|remove|update|edit|change|archive|restore|approve|reject|promote|demote|set salary|change salary|burahin|tanggalin|palitan|i-update|i-delete|i-archive|i-approve|i-reject)\b/i;
+const sensitiveDataPattern = /\b(tin|gsis|philhealth|pag-?ibig|philsys|national id|contact number|phone|address|emergency contact)\b/i;
+const attendanceUnavailablePattern = /\b(late|lates|lateness|absent|absence|undertime|overtime|attendance log|biometric logs?|laging late|palaging late|huli|absent)\b/i;
 
 type RunGenioInput = {
   departmentId: string;
@@ -86,7 +89,7 @@ async function selectToolWithAI(message: string): Promise<ToolSelection | null> 
       {
         role: "system",
         content:
-          "You are Genio, an HR assistant router. Select exactly one tool for employee, office, count, comparison, age, tenure, export, and current-year questions. Use tools only; do not answer from memory. The user may use English, Tagalog, or Taglish.",
+          "You are Genio, a read-only HRPS assistant router. Select exactly one tool. Do not answer from memory or general knowledge. All factual answers must come from HRPS database tools. If the database does not contain the required data, call not_answerable. Never request or expose sensitive government IDs, emergency contact details, private contact data, or address fields. Never perform create, update, delete, archive, restore, approve, reject, promote, or salary-change actions. For Filipino, Taglish, or English questions, infer the closest DB-backed HRPS tool.",
       },
       { role: "user", content: message },
     ],
@@ -109,6 +112,24 @@ function deterministicSelection(
 ): ToolSelection | null {
   const text = normalizeMessage(message);
 
+  if (writeActionPattern.test(text)) {
+    return { name: "not_answerable", args: { reason: "write_action_not_allowed" } };
+  }
+
+  if (sensitiveDataPattern.test(text)) {
+    return { name: "not_answerable", args: { reason: "sensitive_data_restricted" } };
+  }
+
+  if (attendanceUnavailablePattern.test(text)) {
+    return {
+      name: "not_answerable",
+      args: {
+        reason: "missing_database_field",
+        missingData: "attendance log fields",
+      },
+    };
+  }
+
   if (exportPattern.test(text)) {
     return { name: "export_last_result", args: {} };
   }
@@ -123,6 +144,23 @@ function deterministicSelection(
 
   if (/\b(age distribution|age breakdown|age percentile|age demographics)\b/i.test(text)) {
     return { name: "age_distribution", args: {} };
+  }
+
+  if (/\b(award|awards|recognition|awardee|awardees|parangal)\b/i.test(text)) {
+    return { name: "award_analytics", args: {} };
+  }
+
+  if (/\b(employment event|timeline|promoted|promotion|transferred|reassigned|terminated|contract renewal|hired)\b/i.test(text)) {
+    return { name: "employment_event_lookup", args: {} };
+  }
+
+  if (/\b(schedule|work schedule|custom schedule|office schedule|weekly exclusion|exception|rotating)\b/i.test(text)) {
+    return { name: "schedule_metadata", args: {} };
+  }
+
+  if (/\b(history snapshot|workforce history|as of|active in \d{4}|current in \d{4})\b/i.test(text)) {
+    const year = text.match(/\b(19|20|21)\d{2}\b/)?.[0];
+    return { name: "history_snapshot", args: { year: year ? Number(year) : undefined } };
   }
 
   if (/\b(by office|per office|office breakdown|distribution by office|office distribution)\b/i.test(text)) {
@@ -250,7 +288,7 @@ export async function runGenio({
   const deterministic = deterministicSelection(message, context);
 
   if (deterministic) {
-    const result = await executeGenioTool(deterministic.name, deterministic.args, env);
+    const result = await executeRegisteredGenioTool(deterministic.name, deterministic.args, env);
     if (result) return result;
   }
 
@@ -262,22 +300,21 @@ export async function runGenio({
   }
 
   if (aiSelection) {
-    const result = await executeGenioTool(aiSelection.name, aiSelection.args, env);
+    const result = await executeRegisteredGenioTool(aiSelection.name, aiSelection.args, env);
     if (result) return result;
   }
 
   const fallback = deterministicSelection(message, context);
   if (fallback) {
-    const result = await executeGenioTool(fallback.name, fallback.args, env);
+    const result = await executeRegisteredGenioTool(fallback.name, fallback.args, env);
     if (result) return result;
   }
 
-  return {
-    kind: "text",
-    reply:
-      "I can help with employee lookup, offices, counts, gender distribution, age, tenure, current employees by year, comparisons, and Excel export. Please ask one HR data question.",
-    context,
-  };
+  return executeRegisteredGenioTool(
+    "not_answerable",
+    { reason: "ambiguous_question" },
+    env
+  ) as Promise<GenioToolResult>;
 }
 
 export const genioRequestSchema = z

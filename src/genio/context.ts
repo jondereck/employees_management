@@ -67,6 +67,7 @@ export const genioLastResultSchema = z
 export const genioContextSchema = z
   .object({
     lastResult: genioLastResultSchema.optional(),
+    resultContextId: z.string().trim().min(1).max(100).optional(),
     lastEmployeeId: z.string().trim().min(1).max(100).optional(),
     lastOfficeId: z.string().trim().min(1).max(100).optional(),
     lastOfficeName: boundedString(200).optional(),
@@ -155,4 +156,3 @@ export function openGenioContext(
 
   return context;
 }
-

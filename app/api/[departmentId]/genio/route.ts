@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 
 import prismadb from "@/lib/prismadb";
 import { openGenioContext, sealGenioContext } from "@/src/genio/context";
+import {
+  buildContextFromStoredGenioResult,
+  loadGenioResultContext,
+  saveGenioResultContext,
+} from "@/src/genio/resultContext";
 import { genioRequestSchema, runGenio } from "@/src/genio/service";
 import { streamReply } from "@/src/genio/utils";
 
@@ -38,7 +43,23 @@ export async function POST(
     }
 
     const scope = { departmentId: department.id, userId };
-    const context = openGenioContext(parsed.data.context, scope);
+    const openedContext = openGenioContext(parsed.data.context, scope);
+    const storedResultContext = await loadGenioResultContext({
+      id: openedContext.resultContextId,
+      departmentId: department.id,
+      userId,
+    }).catch((error) => {
+      console.warn("[GENIO_CONTEXT_LOAD]", error);
+      return null;
+    });
+    const restoredContext = buildContextFromStoredGenioResult(storedResultContext);
+    const context = restoredContext
+      ? {
+          ...openedContext,
+          ...restoredContext,
+          lastResult: restoredContext.lastResult ?? openedContext.lastResult,
+        }
+      : openedContext;
 
     const result = await runGenio({
       departmentId: department.id,
@@ -50,16 +71,24 @@ export async function POST(
       return result.response;
     }
 
-    const sealedContext = sealGenioContext(result.context, scope);
+    const nextStoredContext = await saveGenioResultContext({
+      departmentId: department.id,
+      userId,
+      question: parsed.data.message,
+      result,
+    }).catch((error) => {
+      console.warn("[GENIO_CONTEXT_SAVE]", error);
+      return null;
+    });
+    const sealedContext = sealGenioContext(nextStoredContext ?? result.context, scope);
     return streamReply(
       result.reply,
       sealedContext,
       result.meta?.viewProfileEmployeeId ?? null,
-      { canExport: result.meta?.canExport }
+      { canExport: result.meta?.canExport, metadata: result.meta?.metadata }
     );
   } catch (error) {
     console.error("[GENIO_POST]", error);
     return new NextResponse("Internal error", { status: 500 });
   }
 }
-
