@@ -13,12 +13,9 @@ import {
   calculateAnnualSalary,
   formatContactNumber,
   formatSalary,
-  calculateYearService,
-  calculateYearServiceLatestAppointment,
   formatLatestAppointment,
   formatTerminateDate, calculateAge,
   addressFormat,
-  formatDate,
   formatPagIbigNumber,
   formatPhilHealthNumber,
   formatGsisNumber,
@@ -39,6 +36,7 @@ import { formatUpdatedAt } from "@/utils/date";
 
 import { buildPreview, loadCopyOptions } from "@/utils/copy-utils";
 import { useRouter } from "next/navigation";
+import { computeTenure } from "@/utils/tenure";
 
 export function CardSection({
   title,
@@ -133,8 +131,13 @@ const Info = ({
 
   const formattedAddress = addressFormat(data);
 
-  const yearService = calculateYearService(data.dateHired, data.terminateDate);
-  const latestAppointmentService = calculateYearServiceLatestAppointment(data.latestAppointment);
+  const tenure = computeTenure({
+    dateHired: data.dateHired,
+    latestAppointment: data.latestAppointment,
+    terminateDate: data.terminateDate,
+    isArchived: data.isArchived,
+    employmentEvents: data.employmentEvents,
+  });
 
   const formattedDateHired = getBirthday(data.dateHired);
   const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment);
@@ -344,8 +347,8 @@ const Info = ({
         <DetailItem label="Eligibility" value={data?.eligibility?.name || "—"} />
         <DetailItem label="Date Hired" value={formattedDateHired || "—"} />
         <DetailItem
-          label="Service Rendered"
-          value={`${yearService.years} Y/s, ${yearService.months} Mon/s, ${yearService.days} Day/s`}
+          label="Total Service Length"
+          value={`${tenure.totalService.years} Y/s, ${tenure.totalService.months} Mon/s, ${tenure.totalService.days} Day/s`}
         />
         <DetailItem
           label="Monthly Salary"
@@ -361,14 +364,8 @@ const Info = ({
         <DetailItem label="Annual Salary" value={annualSalary || "—"} />
         <DetailItem label="Latest Appointment" value={formattedLatestAppointment || "—"} />
         <DetailItem
-          label="Years of Service (Latest Appointment)"
-          value={
-            latestAppointmentService?.years ||
-              latestAppointmentService?.months ||
-              latestAppointmentService?.days
-              ? `${latestAppointmentService.years} Y/s, ${latestAppointmentService.months} Mon/s, ${latestAppointmentService.days} Day/s`
-              : "—"
-          }
+          label="Current Appointment Service Length"
+          value={`${tenure.currentAppointment.years} Y/s, ${tenure.currentAppointment.months} Mon/s, ${tenure.currentAppointment.days} Day/s`}
         />
         <DetailItem label="Termination Date" value={formattedTerminateDate || "—"} />
       </CardSection>
@@ -386,3 +383,4 @@ const Info = ({
 }
 
 export default Info;
+

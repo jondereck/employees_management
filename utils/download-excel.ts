@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx-js-style';
 import type { SortDir, SortLevel as ExportSortLevel } from '@/types/export';
 import { SORT_FIELDS } from '@/utils/sort-fields';
 import { COLUMN_DEFS } from '@/utils/columns.registry';
+import { computeTenure } from '@/utils/tenure';
 
 
 const __DEBUG_EXPORT = true; // set false after validating
@@ -359,7 +360,15 @@ export async function generateExcelFile({
     // Or keep it separate (and add 'salaryExport' column in your modal):
     copy.salaryExport = salaryExport;
     copy.salarySourceExport = source;
-    if (copy.yearsOfService === undefined) copy.yearsOfService = "";
+    const tenure = computeTenure({
+      dateHired: copy.dateHired,
+      latestAppointment: copy.latestAppointment,
+      terminateDate: copy.terminateDate,
+      isArchived: copy.isArchived,
+      employmentEvents: copy.employmentEvents,
+    });
+    copy.yearsOfService = tenure.totalService.years;
+    copy.currentAppointmentYearsOfService = tenure.currentAppointment.years;
     // --- Normalize text for NFC (ñ fix) ---
     return normalizeRowStringsNFC(copy);
   });
@@ -532,8 +541,6 @@ export async function generateExcelFile({
 
   const idxBirthday = headers.indexOf('Birthday');
   const idxAge = headers.indexOf('Age');
-  const idxDateHired = headers.indexOf('Date Hired');
-  const idxYearsOfService = headers.indexOf('Year(s) of Service');
   const idxTerminateDate = headers.indexOf('Terminate Date');
 
   const applyDateFormulas = (
@@ -551,8 +558,6 @@ export async function generateExcelFile({
 
       const birthdateCell = idxBirthday >= 0 ? addr(rowNumber, idxBirthday) : undefined;
       const ageCell = idxAge >= 0 ? addr(rowNumber, idxAge) : undefined;
-      const hiredDateCell = idxDateHired >= 0 ? addr(rowNumber, idxDateHired) : undefined;
-      const serviceCell = idxYearsOfService >= 0 ? addr(rowNumber, idxYearsOfService) : undefined;
       const terminateDateCell = idxTerminateDate >= 0 ? addr(rowNumber, idxTerminateDate) : undefined;
 
       if (ageCell && birthdateCell) {
@@ -568,18 +573,6 @@ export async function generateExcelFile({
         };
       }
 
-      if (serviceCell && hiredDateCell) {
-        const startRef = `IF(${hiredDateCell}="","",DATEVALUE(${hiredDateCell}))`;
-        const endRef = terminateDateCell
-          ? `IF(${terminateDateCell}="",TODAY(),DATEVALUE(${terminateDateCell}))`
-          : `TODAY()`;
-
-        worksheet[serviceCell] = {
-          t: 'n',
-          f: `IF(${hiredDateCell}="","",DATEDIF(${startRef},${endRef},"Y"))`,
-          s: worksheet[serviceCell]?.s || {},
-        };
-      }
     }
   };
 

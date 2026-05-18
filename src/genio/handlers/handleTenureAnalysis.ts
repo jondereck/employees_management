@@ -1,11 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { streamReply } from "../utils";
-
-function getHireDateFromYears(years: number) {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() - years);
-  return date;
-}
+import { computeTenure } from "@/utils/tenure";
 
 export async function handleTenureAnalysis(
   intent: any,
@@ -21,33 +16,45 @@ export async function handleTenureAnalysis(
     where.officeId = context.focus.id;
   }
 
- const hasMin = typeof intent.filters.tenure?.min === "number";
-const hasMax = typeof intent.filters.tenure?.max === "number";
+  const hasMin = typeof intent.filters.tenure?.min === "number";
+  const hasMax = typeof intent.filters.tenure?.max === "number";
 
-if (!hasMin && !hasMax) {
-  return streamReply(
-    "Please specify years of service (e.g. **more than 10 years**).",
-    context,
-    null
-  );
-}
+  if (!hasMin && !hasMax) {
+    return streamReply(
+      "Please specify years of service (e.g. **more than 10 years**).",
+      context,
+      null
+    );
+  }
 
-if (hasMin) {
-  where.dateHired = {
-    ...(where.dateHired || {}),
-    lte: getHireDateFromYears(intent.filters.tenure.min),
-  };
-}
+  const employees = await prisma.employee.findMany({
+    where,
+    select: {
+      id: true,
+      dateHired: true,
+      latestAppointment: true,
+      terminateDate: true,
+      isArchived: true,
+      employmentEvents: {
+        where: { deletedAt: null },
+        select: { type: true, occurredAt: true, deletedAt: true },
+      },
+    },
+  });
 
-if (hasMax) {
-  where.dateHired = {
-    ...(where.dateHired || {}),
-    gte: getHireDateFromYears(intent.filters.tenure.max + 1),
-  };
-}
+  const count = employees.filter((employee) => {
+    const tenure = computeTenure({
+      dateHired: employee.dateHired,
+      latestAppointment: employee.latestAppointment,
+      terminateDate: employee.terminateDate,
+      isArchived: employee.isArchived,
+      employmentEvents: employee.employmentEvents,
+    });
 
-
-  const count = await prisma.employee.count({ where });
+    if (hasMin && tenure.totalServiceYears < intent.filters.tenure.min) return false;
+    if (hasMax && tenure.totalServiceYears > intent.filters.tenure.max) return false;
+    return true;
+  }).length;
 
   context = {
     ...context,

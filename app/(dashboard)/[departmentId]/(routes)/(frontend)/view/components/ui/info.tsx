@@ -4,7 +4,6 @@ import { buildFullName } from "@/utils/formatters";
 import { Employees } from "../../types";
 import {
   calculateAge,
-  calculateYearService,
   addressFormat,
   formatSalary,
   getBirthday,
@@ -17,6 +16,7 @@ import { computeStep } from "@/utils/compute-step";
 import { salarySchedule } from "@/utils/salarySchedule";
 import { formatUpdatedAt } from "@/utils/date";
 import { suggestWorkforceIndicator } from "@/lib/workforce-indicators";
+import { computeTenure } from "@/utils/tenure";
 
 interface InfoProps {
   data: Employees;
@@ -24,7 +24,13 @@ interface InfoProps {
 
 const Info = ({ data }: InfoProps) => {
   const age = calculateAge(data.birthday);
-  const yearsOfService = calculateYearService(data.dateHired, data.terminateDate);
+  const tenure = computeTenure({
+    dateHired: data.dateHired,
+    latestAppointment: data.latestAppointment,
+    terminateDate: data.terminateDate,
+    isArchived: data.isArchived,
+    employmentEvents: data.employmentEvents,
+  });
 
   const renderItem = (label: string, value: string | number | undefined | null) => (
     <div className="flex flex-col gap-1">
@@ -170,7 +176,8 @@ const Info = ({ data }: InfoProps) => {
             {renderItem("Date Hired", formattedDateHired)}
             {renderItem("Latest Appointment", formattedLatestAppointment || "—")}
             {renderItem("Termination", formattedTerminateDate)}
-            {renderItem("Service Length", `${yearsOfService.years}y ${yearsOfService.months}m`)}
+            {renderItem("Total Service Length", `${tenure.totalService.years}y ${tenure.totalService.months}m ${tenure.totalService.days}d`)}
+            {renderItem("Current Appointment Service Length", `${tenure.currentAppointment.years}y ${tenure.currentAppointment.months}m ${tenure.currentAppointment.days}d`)}
 
 
           </div>

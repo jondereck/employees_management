@@ -37,6 +37,10 @@ export async function GET(req: Request) {
             indicator: { select: { name: true } },
           },
         },
+        employmentEvents: {
+          where: { deletedAt: null },
+          select: { type: true, occurredAt: true, deletedAt: true },
+        },
       },
     });
 

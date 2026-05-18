@@ -69,6 +69,10 @@ const EmployeesPage = async ({
         select: { id: true, url: true, createdAt: true, updatedAt: true }, // optional trim
       },
       designation: { select: { id: true, name: true } },
+      employmentEvents: {
+        where: { deletedAt: null },
+        select: { type: true, occurredAt: true, deletedAt: true },
+      },
     },
     orderBy: {
       updatedAt: 'desc'
@@ -145,6 +149,11 @@ const EmployeesPage = async ({
     createdAt: item.createdAt?.toISOString() ?? null,
     updatedAt: item.updatedAt?.toISOString() ?? null,
     legacyQrAllowed: Boolean(item.legacyQrAllowed),
+    employmentEvents: item.employmentEvents.map((event) => ({
+      type: event.type,
+      occurredAt: event.occurredAt,
+      deletedAt: event.deletedAt,
+    })),
 
   }));
 

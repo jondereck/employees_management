@@ -15,14 +15,13 @@ import { DataTableColumnHeader } from "@/components/ui/column-header"
 import { CellAction } from "./cell-actions"
 import { Eye } from "./eye"
 import AgeCell from "./age-cell"
-import YearsOfService from "./years_of_service_cell"
+import { computeTenure } from "@/utils/tenure"
 
 import { cn } from "@/lib/utils"
 import { salarySchedule } from "@/utils/salarySchedule"
 import { computeStep } from "@/utils/compute-step"
 import {
   formatContactNumber,
-  formatDate,
   formatSalary,
 } from "@/utils/utils"
 import { buildPreview, loadCopyOptions } from "@/utils/copy-utils"
@@ -84,6 +83,11 @@ export type EmployeesColumn = {
   createdAt: string | Date | null;
   updatedAt: string | Date | null;
   legacyQrAllowed: boolean;
+  employmentEvents?: Array<{
+    type?: string | null;
+    occurredAt?: string | Date | null;
+    deletedAt?: string | Date | null;
+  }>;
 }
 
 const onCopy = async (text: string) => {
@@ -292,12 +296,24 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     id: "yearsOfService",
     header: "Tenure",
-    cell: ({ row }) => (
-      <div className="flex flex-col text-[11px]">
-        <YearsOfService year_service={row.original.dateHired} />
-        <span className="text-muted-foreground mt-0.5">since {formatDate(row.original.dateHired)}</span>
-      </div>
-    ),
+    cell: ({ row }) => {
+      const tenure = computeTenure({
+        dateHired: row.original.dateHired,
+        latestAppointment: row.original.latestAppointment,
+        terminateDate: row.original.terminateDate,
+        isArchived: row.original.isArchived,
+        employmentEvents: row.original.employmentEvents,
+      });
+
+      return (
+        <div className="flex flex-col text-[11px]">
+          <span className="font-medium text-slate-800">{tenure.totalService.years} yrs</span>
+          <span className="text-muted-foreground mt-0.5">
+            current appt: {tenure.currentAppointment.years} yrs
+          </span>
+        </div>
+      );
+    },
   },
   {
     id: "actions",

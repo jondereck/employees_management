@@ -17,6 +17,7 @@ import { z } from "zod";
 import { GenioToolMeta } from "./formatter";
 import { genioToolArgumentSchemas } from "./validators";
 import { notAnswerableMessage } from "./errors";
+import { computeTenure } from "@/utils/tenure";
 
 type GenioToolName =
   | "lookup_employees"
@@ -612,21 +613,6 @@ async function buildEmployeeWhere(
 
     if (Object.keys(birthday).length > 0) {
       where.birthday = birthday;
-    }
-  }
-
-  if (filters.tenure) {
-    const dateHired: Prisma.DateTimeFilter = {};
-
-    if (typeof filters.tenure.min === "number") {
-      dateHired.lte = dateYearsAgo(filters.tenure.min);
-    }
-    if (typeof filters.tenure.max === "number") {
-      dateHired.gte = dateYearsAgo(filters.tenure.max + 1);
-    }
-
-    if (Object.keys(dateHired).length > 0) {
-      where.dateHired = dateHired;
     }
   }
 
@@ -1630,8 +1616,42 @@ async function tenureAnalysis(env: ToolEnvironment, args: unknown): Promise<Geni
   });
   filters = await resolveEmployeeFilter(env.departmentId, filters, env.message);
 
-  const where = await buildEmployeeWhere(env.departmentId, filters);
-  const count = await prisma.employee.count({ where });
+  const where = await buildEmployeeWhere(env.departmentId, { ...filters, tenure: undefined });
+  const employees = await prisma.employee.findMany({
+    where,
+    select: {
+      id: true,
+      dateHired: true,
+      latestAppointment: true,
+      terminateDate: true,
+      isArchived: true,
+      employmentEvents: {
+        where: { deletedAt: null },
+        select: { type: true, occurredAt: true, deletedAt: true },
+      },
+    },
+  });
+
+  const minTenure = filters.tenure?.min;
+  const maxTenure = filters.tenure?.max;
+  const matchedEmployees = employees.filter((employee) => {
+    const tenure = computeTenure({
+      dateHired: employee.dateHired,
+      latestAppointment: employee.latestAppointment,
+      terminateDate: employee.terminateDate,
+      isArchived: employee.isArchived,
+      employmentEvents: employee.employmentEvents,
+    });
+
+    if (typeof minTenure === "number" && tenure.totalServiceYears < minTenure) {
+      return false;
+    }
+    if (typeof maxTenure === "number" && tenure.totalServiceYears > maxTenure) {
+      return false;
+    }
+    return true;
+  });
+  const count = matchedEmployees.length;
 
   return textResult(
     `There are ${count} active employees matching that length of service${filters.officeName ? ` in ${filters.officeName}` : ""}.`,
@@ -1640,6 +1660,7 @@ async function tenureAnalysis(env: ToolEnvironment, args: unknown): Promise<Geni
       lastResult: {
         type: "tenure_analysis",
         filters,
+        employeeIds: matchedEmployees.slice(0, 500).map((employee) => employee.id),
       },
     },
     { canExport: true }

@@ -47,6 +47,7 @@ export const COLUMN_SEQUENCE = [
   'birthday',
   'age',
   'latestAppointment',
+  'currentAppointmentYearsOfService',
   'dateHired',
   'yearsOfService',
 ] as const;
@@ -106,6 +107,10 @@ middleName: { key: 'middleName', label: 'Middle Name' },
   latestAppointment: {
     key: 'latestAppointment',
     label: 'Latest Appointment',
+  },
+  currentAppointmentYearsOfService: {
+    key: 'currentAppointmentYearsOfService',
+    label: 'Current Appointment Year(s) of Service',
   },
   dateHired: { key: 'dateHired', label: 'Date Hired' },
   yearsOfService: {

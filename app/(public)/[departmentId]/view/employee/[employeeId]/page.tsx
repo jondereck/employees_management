@@ -33,6 +33,7 @@ import AwardPreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/v
 import EmploymentEventPreview from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/components/ui/employment-event-preview";
 import { cn } from "@/lib/utils";
 import { Building2, CalendarCheck, Fingerprint, History, Hourglass, ShieldCheck, Trophy } from "lucide-react";
+import { computeTenure } from "@/utils/tenure";
 
 
 export const dynamic = "force-dynamic";
@@ -290,8 +291,14 @@ if (!isAdmin) {
       education: true,
       isArchived: true, // 👈 status source (true = inactive)
       dateHired: true,       // 👈 add
+      latestAppointment: true,
+      terminateDate: true,
       createdAt: true,
       updatedAt: true,
+      employmentEvents: {
+        where: { deletedAt: null },
+        select: { type: true, occurredAt: true, deletedAt: true },
+      },
       offices: { select: { name: true } },
       images: {
         select: { id: true, url: true, createdAt: true, updatedAt: true },
@@ -454,40 +461,17 @@ if (!isAdmin) {
   const workingLine = isInactive
     ? `Previously associated with ${orgName} as`
     : `Currently working at ${orgName} as`;
-  function diffInMonths(from: Date, to = new Date()) {
-    // counts whole months between dates
-    let months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
-    if (to.getDate() < from.getDate()) months -= 1; // only full months
-    return Math.max(0, months);
-  }
-
-  function yearsBetween(from: Date, to = new Date()) {
-    const y = to.getFullYear() - from.getFullYear();
-    const hasHadAnniversary =
-      to.getMonth() > from.getMonth() ||
-      (to.getMonth() === from.getMonth() && to.getDate() >= from.getDate());
-    return hasHadAnniversary ? y : y - 1;
-  }
-
-  // ⟵ NEW: one function that returns a human label
-  function getTenureLabel(from?: Date | string | null): string {
-    if (!from) return "—";
-    const start = new Date(from);
-    if (Number.isNaN(start.getTime())) return "—";
-
-    const years = Math.max(0, yearsBetween(start));
-    if (years >= 2) return `${years} years`;
-    if (years === 1) return `1 year`; // singular
-
-    // Under 1 year → show months (e.g., “8 months”); 0 months → “< 1 month”
-    const months = diffInMonths(start);
-    if (months >= 1) return `${months} month${months > 1 ? "s" : ""}`;
-    return "< 1 month";
-  }
+  const tenure = computeTenure({
+    dateHired: publicData.dateHired,
+    latestAppointment: publicData.latestAppointment,
+    terminateDate: publicData.terminateDate,
+    isArchived: publicData.isArchived,
+    employmentEvents: publicData.employmentEvents,
+  });
 
   const startDate = publicData.dateHired ?? publicData.createdAt;
-  const tenureLabel = getTenureLabel(startDate);
-
+  const totalTenureLabel = `${tenure.totalService.years}y ${tenure.totalService.months}m`;
+  const currentAppointmentTenureLabel = `${tenure.currentAppointment.years}y ${tenure.currentAppointment.months}m`;
   const employmentType = publicData.employeeType?.name ?? null;
   const typeHex = publicData.employeeType?.value ?? null; // 👈 your DB HEX
   const isJobOrder = employmentType
@@ -646,12 +630,13 @@ if (!isAdmin) {
         </div>
 
         {/* Tiles Grid: Frosted Separation */}
-        <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {[
             { label: "Employee ID", value: publicData.employeeNo, icon: Fingerprint },
             { label: "Department", value: publicData.offices?.name, icon: Building2 },
             { label: "Date Hired", value: startDate ? formatUpdatedAt(startDate) : null, icon: CalendarCheck },
-            { label: "Service Tenure", value: tenureLabel, icon: Hourglass }
+            { label: "Service Tenure", value: totalTenureLabel, icon: Hourglass },
+            { label: "Current Appointment", value: currentAppointmentTenureLabel, icon: CalendarCheck }
           ].map((item, idx) => (
             <div key={idx} className="relative group overflow-hidden rounded-3xl border border-white/40 dark:border-white/5 bg-white/40 dark:bg-white/[0.03] p-5 transition-all hover:-translate-y-1 hover:shadow-xl">
               <div className="absolute top-0 right-0 p-3 opacity-[0.05] group-hover:opacity-10 transition-opacity">

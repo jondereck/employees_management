@@ -18,6 +18,28 @@ function hasText(value: unknown) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function normalizedText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizedNullableText(value: unknown) {
+  const trimmed = normalizedText(value);
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function comparableDateValue(value: Date | string | null | undefined) {
+  const parsed = parseTimelineDate(value ?? null);
+  return parsed ? parsed.getTime() : null;
+}
+
+function comparablePrimitive(value: unknown) {
+  if (value instanceof Date) return comparableDateValue(value);
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (value === null || value === undefined) return null;
+  return String(value);
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: { departmentId: string; employeesId: string } }
@@ -207,12 +229,31 @@ const normalizedMemberPolicyNo =
       select: {
         id: true,
         departmentId: true,
+        prefix: true,
+        employeeNo: true,
+        lastName: true,
+        firstName: true,
+        middleName: true,
+        suffix: true,
         officeId: true,
         employeeTypeId: true,
         eligibilityId: true,
         position: true,
+        birthday: true,
+        education: true,
+        houseNo: true,
+        street: true,
+        barangay: true,
+        city: true,
+        province: true,
+        gsisNo: true,
+        tinNo: true,
+        pagIbigNo: true,
+        philHealthNo: true,
         gender: true,
+        contactNumber: true,
         isHead: true,
+        isFeatured: true,
         isArchived: true,
         dateHired: true,
         latestAppointment: true,
@@ -221,9 +262,18 @@ const normalizedMemberPolicyNo =
         salaryMode: true,
         salaryGrade: true,
         salaryStep: true,
+        memberPolicyNo: true,
+        age: true,
+        nickname: true,
+        emergencyContactName: true,
+        emergencyContactNumber: true,
+        employeeLink: true,
+        note: true,
+        designationId: true,
         maritalStatus: true,
         email: true,
         philSysNumber: true,
+        offices: { select: { name: true } },
       },
     });
 
@@ -294,6 +344,113 @@ const normalizedMemberPolicyNo =
     }
 
     const normalizedTerminateDate = willBeActive ? "" : (terminateDate ?? "");
+    const normalizedSalaryGrade =
+      salaryGrade != null ? Number(salaryGrade) : existing.salaryGrade;
+    const normalizedSalaryStep =
+      finalSalaryMode === "AUTO"
+        ? normalizeStep(salaryStep ?? existing.salaryStep)
+        : salaryStep ?? existing.salaryStep;
+
+    const proposedState = {
+      prefix: normalizedText(prefix),
+      employeeNo: normalizedText(employeeNo),
+      lastName: normalizedText(lastName),
+      firstName: normalizedText(firstName),
+      middleName: normalizedMiddleName,
+      suffix: normalizedText(suffix),
+      gender,
+      contactNumber: normalizedText(contactNumber),
+      position: normalizedText(position),
+      birthday: comparableDateValue(birthday) ?? comparableDateValue(existing.birthday),
+      education: normalizedText(education),
+      houseNo: normalizedText(houseNo),
+      street: normalizedText(street),
+      barangay: normalizedText(barangay),
+      city: normalizedText(city),
+      province: normalizedText(province),
+      gsisNo: normalizedNullableText(normalizedGsisNo),
+      tinNo: normalizedNullableText(normalizedTinNo),
+      pagIbigNo: normalizedNullableText(normalizedPagIbigNo),
+      philHealthNo: normalizedNullableText(normalizedPhilHealthNo),
+      salary: finalSalary,
+      salaryMode: finalSalaryMode,
+      salaryGrade: normalizedSalaryGrade,
+      salaryStep: normalizedSalaryStep,
+      dateHired: comparableDateValue(dateHired) ?? comparableDateValue(existing.dateHired),
+      latestAppointment: normalizedText(latestAppointment),
+      terminateDate: normalizedText(normalizedTerminateDate),
+      isFeatured: Boolean(isFeatured),
+      isArchived: willBeArchived,
+      isHead: Boolean(isHead),
+      employeeTypeId: normalizedText(employeeTypeId),
+      officeId: normalizedText(officeId),
+      eligibilityId: normalizedText(eligibilityId),
+      memberPolicyNo: normalizedNullableText(normalizedMemberPolicyNo),
+      age: normalizedText(age),
+      nickname: normalizedText(nickname),
+      emergencyContactName: normalizedText(emergencyContactName),
+      emergencyContactNumber: normalizedText(emergencyContactNumber),
+      employeeLink: normalizedText(employeeLink),
+      note: normalizedNullableText(note),
+      designationId: normalizedNullableText(designationId),
+      maritalStatus: maritalStatus === undefined ? existing.maritalStatus : normalizedMaritalStatus,
+      email: email === undefined ? existing.email : normalizedEmail,
+      philSysNumber: philSysNumber === undefined ? existing.philSysNumber : normalizedPhilSysNumber,
+    };
+
+    const existingState = {
+      prefix: normalizedText(existing.prefix),
+      employeeNo: normalizedText(existing.employeeNo),
+      lastName: normalizedText(existing.lastName),
+      firstName: normalizedText(existing.firstName),
+      middleName: normalizedText(existing.middleName),
+      suffix: normalizedText(existing.suffix),
+      gender: existing.gender,
+      contactNumber: normalizedText(existing.contactNumber),
+      position: normalizedText(existing.position),
+      birthday: comparableDateValue(existing.birthday),
+      education: normalizedText(existing.education),
+      houseNo: normalizedText(existing.houseNo),
+      street: normalizedText(existing.street),
+      barangay: normalizedText(existing.barangay),
+      city: normalizedText(existing.city),
+      province: normalizedText(existing.province),
+      gsisNo: normalizedNullableText(existing.gsisNo),
+      tinNo: normalizedNullableText(existing.tinNo),
+      pagIbigNo: normalizedNullableText(existing.pagIbigNo),
+      philHealthNo: normalizedNullableText(existing.philHealthNo),
+      salary: existing.salary,
+      salaryMode: existing.salaryMode,
+      salaryGrade: existing.salaryGrade,
+      salaryStep: existing.salaryStep,
+      dateHired: comparableDateValue(existing.dateHired),
+      latestAppointment: normalizedText(existing.latestAppointment),
+      terminateDate: normalizedText(existing.terminateDate),
+      isFeatured: Boolean(existing.isFeatured),
+      isArchived: Boolean(existing.isArchived),
+      isHead: Boolean(existing.isHead),
+      employeeTypeId: normalizedText(existing.employeeTypeId),
+      officeId: normalizedText(existing.officeId),
+      eligibilityId: normalizedText(existing.eligibilityId),
+      memberPolicyNo: normalizedNullableText(existing.memberPolicyNo),
+      age: normalizedText(existing.age),
+      nickname: normalizedText(existing.nickname),
+      emergencyContactName: normalizedText(existing.emergencyContactName),
+      emergencyContactNumber: normalizedText(existing.emergencyContactNumber),
+      employeeLink: normalizedText(existing.employeeLink),
+      note: normalizedNullableText(existing.note),
+      designationId: normalizedNullableText(existing.designationId),
+      maritalStatus: existing.maritalStatus,
+      email: existing.email,
+      philSysNumber: existing.philSysNumber,
+    };
+
+    const changedFields = new Set<string>();
+    for (const key of Object.keys(existingState) as Array<keyof typeof existingState>) {
+      if (comparablePrimitive(existingState[key]) !== comparablePrimitive(proposedState[key])) {
+        changedFields.add(key);
+      }
+    }
 
     // Update employee with merged images
     const employee = await prismadb.employee.update({
@@ -325,10 +482,8 @@ memberPolicyNo: normalizedMemberPolicyNo,
         // ✅ FIXED SALARY HANDLING
         salary: finalSalary,
         salaryMode: finalSalaryMode,
-        salaryGrade: salaryGrade != null ? Number(salaryGrade) : existing.salaryGrade,
-       salaryStep: finalSalaryMode === "AUTO"
-  ? normalizeStep(salaryStep ?? existing.salaryStep)
-  : salaryStep ?? existing.salaryStep,
+        salaryGrade: normalizedSalaryGrade,
+        salaryStep: normalizedSalaryStep,
 
 
         dateHired,
@@ -366,6 +521,16 @@ memberPolicyNo: normalizedMemberPolicyNo,
 
     const beforeLatestAppointment = existing.latestAppointment ? new Date(existing.latestAppointment).getTime() : 0;
     const afterLatestAppointment = employee.latestAppointment ? new Date(employee.latestAppointment).getTime() : 0;
+    const hasLatestAppointmentChange =
+      beforeLatestAppointment !== afterLatestAppointment && Boolean(employee.latestAppointment);
+    const previousSalaryGrade = Number(existing.salaryGrade ?? 0);
+    const nextSalaryGrade = Number(employee.salaryGrade ?? 0);
+    const isSalaryGradePromotion =
+      Number.isFinite(previousSalaryGrade) &&
+      Number.isFinite(nextSalaryGrade) &&
+      nextSalaryGrade > previousSalaryGrade;
+    const hasTransferSignal = changedFields.has("officeId") || changedFields.has("position");
+
     if (isRehire) {
       await createEmploymentTimelineEventOnce(prismadb, {
         employeeId: employee.id,
@@ -377,7 +542,7 @@ memberPolicyNo: normalizedMemberPolicyNo,
           officeName: employee.offices?.name,
         })}`,
       });
-    } else if (beforeLatestAppointment !== afterLatestAppointment && employee.latestAppointment) {
+    } else if (isSalaryGradePromotion) {
       await createEmploymentTimelineEventOnce(prismadb, {
         employeeId: employee.id,
         type: "PROMOTED",
@@ -387,6 +552,22 @@ memberPolicyNo: normalizedMemberPolicyNo,
           employeeTypeName: employee.employeeType?.name,
           officeName: employee.offices?.name,
         }),
+        description: `Promoted from SG ${previousSalaryGrade || 0} to SG ${nextSalaryGrade || 0}.`,
+      });
+    } else if (hasLatestAppointmentChange && !isSalaryGradePromotion && hasTransferSignal) {
+      const fromOfficeName = existing.offices?.name?.trim() || "previous office";
+      const toOfficeName = employee.offices?.name?.trim() || "new office";
+      const fromPosition = existing.position?.trim() || "previous position";
+      const toPosition = employee.position?.trim() || "new position";
+      const positionChanged = fromPosition.toLowerCase() !== toPosition.toLowerCase();
+      await createEmploymentTimelineEventOnce(prismadb, {
+        employeeId: employee.id,
+        type: "TRANSFERRED",
+        occurredAt: parseTimelineDate(employee.latestAppointment) ?? new Date(),
+        title: positionChanged
+          ? `Transferred from ${fromOfficeName} to ${toOfficeName} as ${toPosition}.`
+          : `Transferred from ${fromOfficeName} to ${toOfficeName}.`,
+        description: `Transferred from ${fromPosition} (${fromOfficeName}) to ${toPosition} (${toOfficeName})${employee.employeeType?.name ? ` as ${employee.employeeType.name}` : ""}.`,
       });
     }
 

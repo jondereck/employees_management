@@ -13,7 +13,9 @@ interface Props {
 const EVENT_THEMES: Record<string, { color: string; bg: string }> = {
   HIRED: { color: "text-emerald-600", bg: "bg-emerald-500" },
   PROMOTION: { color: "text-indigo-600", bg: "bg-indigo-500" },
+  PROMOTED: { color: "text-indigo-600", bg: "bg-indigo-500" },
   TRANSFER: { color: "text-amber-600", bg: "bg-amber-500" },
+  TRANSFERRED: { color: "text-amber-600", bg: "bg-amber-500" },
   REGULARIZATION: { color: "text-blue-600", bg: "bg-blue-500" },
   DEFAULT: { color: "text-slate-600", bg: "bg-slate-400" },
 };
