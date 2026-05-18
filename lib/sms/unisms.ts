@@ -1,19 +1,8 @@
 import axios from "axios";
 
-type SendUniSmsInput = {
-  recipient: string;
-  content: string;
-  senderId?: string | null;
-  metadata?: Record<string, unknown>;
-};
+import type { SmsProviderResult, SmsSendInput } from "@/lib/sms/types";
 
-export type UniSmsResult = {
-  ok: boolean;
-  status: number | null;
-  providerMessageId: string | null;
-  responseBody: unknown;
-  errorMessage: string | null;
-};
+export type UniSmsResult = SmsProviderResult;
 
 function getUniSmsConfig() {
   const apiUrl = process.env.UNISMS_API_URL?.trim() || "https://unismsapi.com/api";
@@ -94,7 +83,7 @@ function readErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "UniSMS request failed.";
 }
 
-export async function sendUniSms(input: SendUniSmsInput): Promise<UniSmsResult> {
+export async function sendUniSms(input: SmsSendInput): Promise<UniSmsResult> {
   try {
     const config = getUniSmsConfig();
     const senderId = input.senderId?.trim() || config.senderId;
@@ -115,18 +104,22 @@ export async function sendUniSms(input: SendUniSmsInput): Promise<UniSmsResult> 
 
     return {
       ok: response.status >= 200 && response.status < 300,
+      provider: "unisms",
       status: response.status,
       providerMessageId: readProviderMessageId(response.data),
       responseBody: response.data,
       errorMessage: null,
+      queued: response.status >= 200 && response.status < 300,
     };
   } catch (error) {
     return {
       ok: false,
+      provider: "unisms",
       status: axios.isAxiosError(error) ? error.response?.status ?? null : null,
       providerMessageId: null,
       responseBody: axios.isAxiosError(error) ? error.response?.data ?? null : null,
       errorMessage: readErrorMessage(error),
+      queued: false,
     };
   }
 }

@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Loader2, MessageSquare, RefreshCw, Search, Send, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Inbox,
+  Loader2,
+  MessageSquare,
+  RefreshCw,
+  Search,
+  Send,
+  XCircle,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +18,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -21,9 +31,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
-const MAX_SMS_LENGTH = 160;
+const MAX_SMS_LENGTH = 1600;
 
 type RecipientMode = "direct" | "employees";
+type SmsStatus = "QUEUED" | "SENT" | "DELIVERED" | "FAILED" | "UNDELIVERED" | "RECEIVED";
 
 type SmsTarget = {
   id: string;
@@ -39,7 +50,8 @@ type SmsLogRow = {
   phoneNumber: string;
   message: string;
   senderId: string | null;
-  status: "SENT" | "FAILED";
+  provider: string;
+  status: SmsStatus;
   errorMessage: string | null;
   providerMessageId: string | null;
   createdAt: string;
@@ -50,7 +62,8 @@ type SendResult = {
   employeeName: string | null;
   phoneNumber: string | null;
   normalizedPhoneNumber: string | null;
-  status: "SENT" | "FAILED";
+  status: "QUEUED" | "SENT" | "FAILED";
+  provider: string | null;
   errorMessage: string | null;
   providerMessageId: string | null;
 };
@@ -60,6 +73,26 @@ type SendSummary = {
   sent: number;
   failed: number;
   results: SendResult[];
+};
+
+type InboxMessage = {
+  id: string;
+  direction: "inbound" | "outbound";
+  phoneNumber: string;
+  employeeName: string | null;
+  message: string;
+  status: string;
+  provider: string;
+  createdAt: string;
+};
+
+type InboxThread = {
+  phoneNumber: string;
+  employeeName: string | null;
+  latestMessage: string;
+  latestAt: string;
+  latestDirection: "inbound" | "outbound";
+  messages: InboxMessage[];
 };
 
 type SmsToolProps = {
@@ -72,6 +105,16 @@ function formatDateTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function estimateSegments(text: string) {
+  const length = text.trim().length;
+  if (length === 0) return 0;
+  return length <= 160 ? 1 : Math.ceil(length / 153);
+}
+
+function statusVariant(status: string) {
+  return status === "FAILED" || status === "UNDELIVERED" ? "destructive" : "default";
 }
 
 async function parseError(response: Response, fallback: string) {
@@ -88,23 +131,26 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
   const [mode, setMode] = useState<RecipientMode>("direct");
   const [targets, setTargets] = useState<SmsTarget[]>([]);
   const [logs, setLogs] = useState<SmsLogRow[]>([]);
+  const [threads, setThreads] = useState<InboxThread[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedThreadPhone, setSelectedThreadPhone] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [message, setMessage] = useState("");
+  const [replyMessage, setReplyMessage] = useState("");
   const [senderId, setSenderId] = useState(defaultSenderId);
   const [loadingTargets, setLoadingTargets] = useState(true);
   const [loadingLogs, setLoadingLogs] = useState(true);
+  const [loadingInbox, setLoadingInbox] = useState(true);
   const [sending, setSending] = useState(false);
+  const [sendingReply, setSendingReply] = useState(false);
   const [summary, setSummary] = useState<SendSummary | null>(null);
 
   const loadTargets = useCallback(async () => {
     setLoadingTargets(true);
     try {
       const response = await fetch(`/api/${departmentId}/sms/targets`, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(await parseError(response, "Unable to load SMS targets."));
-      }
+      if (!response.ok) throw new Error(await parseError(response, "Unable to load SMS targets."));
       const body = (await response.json()) as { employees: SmsTarget[] };
       setTargets(body.employees);
     } catch (error) {
@@ -121,10 +167,8 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
   const loadLogs = useCallback(async () => {
     setLoadingLogs(true);
     try {
-      const response = await fetch(`/api/${departmentId}/sms/logs?limit=10`, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(await parseError(response, "Unable to load SMS logs."));
-      }
+      const response = await fetch(`/api/${departmentId}/sms/logs?limit=20`, { cache: "no-store" });
+      if (!response.ok) throw new Error(await parseError(response, "Unable to load SMS logs."));
       const body = (await response.json()) as { logs: SmsLogRow[] };
       setLogs(body.logs);
     } catch (error) {
@@ -138,30 +182,59 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
     }
   }, [departmentId, toast]);
 
+  const loadInbox = useCallback(async () => {
+    setLoadingInbox(true);
+    try {
+      const response = await fetch(`/api/${departmentId}/sms/inbox`, { cache: "no-store" });
+      if (!response.ok) throw new Error(await parseError(response, "Unable to load inbox."));
+      const body = (await response.json()) as { threads: InboxThread[] };
+      setThreads(body.threads);
+      setSelectedThreadPhone((current) => current ?? body.threads[0]?.phoneNumber ?? null);
+    } catch (error) {
+      toast({
+        title: "Unable to load inbox",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingInbox(false);
+    }
+  }, [departmentId, toast]);
+
   useEffect(() => {
     void loadTargets();
     void loadLogs();
-  }, [loadTargets, loadLogs]);
+    void loadInbox();
+  }, [loadTargets, loadLogs, loadInbox]);
 
   const filteredTargets = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return targets;
-
-    return targets.filter((target) => {
-      return [target.name, target.contactNumber, target.position, target.office]
+    return targets.filter((target) =>
+      [target.name, target.contactNumber, target.position, target.office]
         .join(" ")
         .toLowerCase()
-        .includes(query);
-    });
+        .includes(query)
+    );
   }, [search, targets]);
 
+  const selectedThread = useMemo(
+    () => threads.find((thread) => thread.phoneNumber === selectedThreadPhone) ?? threads[0] ?? null,
+    [selectedThreadPhone, threads]
+  );
   const selectedCount = selectedIds.length;
   const messageLength = message.trim().length;
+  const replyLength = replyMessage.trim().length;
+  const segmentCount = estimateSegments(message);
+  const replySegmentCount = estimateSegments(replyMessage);
+  const recipientCount = mode === "direct" ? 1 : selectedCount;
+  const estimatedCredits = segmentCount * Math.max(recipientCount, 0);
   const canSend =
     !sending &&
     messageLength > 0 &&
     messageLength <= MAX_SMS_LENGTH &&
     (mode === "direct" ? phoneNumber.trim().length > 0 : selectedCount > 0);
+  const canReply = !sendingReply && !!selectedThread && replyLength > 0 && replyLength <= MAX_SMS_LENGTH;
 
   const toggleSelected = (employeeId: string) => {
     setSelectedIds((current) =>
@@ -176,11 +249,8 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
     setSelectedIds((current) => Array.from(new Set([...current, ...visibleIds])));
   };
 
-  const clearSelected = () => setSelectedIds([]);
-
   const sendSms = async () => {
     if (!canSend) return;
-
     setSending(true);
     setSummary(null);
     try {
@@ -194,17 +264,14 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(await parseError(response, "Unable to send SMS."));
-      }
-
+      if (!response.ok) throw new Error(await parseError(response, "Unable to send SMS."));
       const body = (await response.json()) as SendSummary;
       setSummary(body);
       toast({
         title: "SMS send completed",
-        description: `${body.sent} sent, ${body.failed} failed.`,
+        description: `${body.sent} queued/sent, ${body.failed} failed.`,
       });
-      await loadLogs();
+      await Promise.all([loadLogs(), loadInbox()]);
     } catch (error) {
       toast({
         title: "SMS send failed",
@@ -216,248 +283,318 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
     }
   };
 
+  const sendReply = async () => {
+    if (!canReply || !selectedThread) return;
+    setSendingReply(true);
+    try {
+      const response = await fetch(`/api/${departmentId}/sms/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: selectedThread.phoneNumber,
+          message: replyMessage,
+        }),
+      });
+
+      if (!response.ok) throw new Error(await parseError(response, "Unable to send reply."));
+      setReplyMessage("");
+      toast({ title: "Reply queued", description: `Reply sent to ${selectedThread.phoneNumber}.` });
+      await Promise.all([loadLogs(), loadInbox()]);
+    } catch (error) {
+      toast({
+        title: "Reply failed",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
-      <div className="space-y-6">
-        <Card className="border-white/40 bg-white/70 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <MessageSquare className="h-5 w-5 text-indigo-600" />
-              Compose SMS
-            </CardTitle>
-            <CardDescription>
-              Messages are sent through UniSMS and logged per recipient.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Button
-                type="button"
-                variant={mode === "direct" ? "default" : "outline"}
-                className="justify-start"
-                onClick={() => setMode("direct")}
-              >
-                Direct number
-              </Button>
-              <Button
-                type="button"
-                variant={mode === "employees" ? "default" : "outline"}
-                className="justify-start"
-                onClick={() => setMode("employees")}
-              >
-                Select employees
-                {selectedCount > 0 ? <Badge className="ml-auto">{selectedCount}</Badge> : null}
-              </Button>
-            </div>
+    <Tabs defaultValue="compose" className="space-y-6">
+      <TabsList className="grid w-full max-w-lg grid-cols-3">
+        <TabsTrigger value="compose">Compose</TabsTrigger>
+        <TabsTrigger value="logs">Logs</TabsTrigger>
+        <TabsTrigger value="inbox">Inbox</TabsTrigger>
+      </TabsList>
 
-            {mode === "direct" ? (
-              <div className="space-y-2">
-                <Label htmlFor="sms-phone">Phone number</Label>
-                <Input
-                  id="sms-phone"
-                  value={phoneNumber}
-                  onChange={(event) => setPhoneNumber(event.target.value)}
-                  placeholder="09171234567 or +639171234567"
-                />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="relative w-full sm:max-w-md">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      className="pl-9"
-                      placeholder="Search name, number, office, position"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={selectVisible}>
-                      Select visible
-                    </Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={clearSelected}>
-                      Clear
-                    </Button>
-                  </div>
+      <TabsContent value="compose" className="space-y-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
+          <div className="space-y-6">
+            <Card className="border-white/40 bg-white/70 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <MessageSquare className="h-5 w-5 text-indigo-600" />
+                  Compose SMS
+                </CardTitle>
+                <CardDescription>
+                  Twilio sends first. UniSMS is used only if Twilio fails before queueing.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Button type="button" variant={mode === "direct" ? "default" : "outline"} className="justify-start" onClick={() => setMode("direct")}>
+                    Direct number
+                  </Button>
+                  <Button type="button" variant={mode === "employees" ? "default" : "outline"} className="justify-start" onClick={() => setMode("employees")}>
+                    Select employees
+                    {selectedCount > 0 ? <Badge className="ml-auto">{selectedCount}</Badge> : null}
+                  </Button>
                 </div>
 
-                <div className="max-h-80 overflow-auto rounded-md border bg-white">
-                  {loadingTargets ? (
-                    <div className="flex items-center gap-2 p-4 text-sm text-slate-500">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading recipients...
+                {mode === "direct" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="sms-phone">Phone number</Label>
+                    <Input id="sms-phone" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} placeholder="09171234567 or +639171234567" />
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="relative w-full sm:max-w-md">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search name, number, office, position" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={selectVisible}>Select visible</Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedIds([])}>Clear</Button>
+                      </div>
                     </div>
-                  ) : filteredTargets.length === 0 ? (
-                    <div className="p-4 text-sm text-slate-500">No matching employees with contact numbers.</div>
-                  ) : (
-                    <div className="divide-y">
-                      {filteredTargets.map((target) => {
-                        const checked = selectedIds.includes(target.id);
-                        return (
-                          <button
-                            key={target.id}
-                            type="button"
-                            className={cn(
-                              "flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-slate-50",
-                              checked && "bg-indigo-50"
-                            )}
-                            onClick={() => toggleSelected(target.id)}
-                          >
-                            <Checkbox checked={checked} className="mt-1" />
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-semibold text-slate-900">
-                                {target.name}
-                              </span>
-                              <span className="block truncate text-xs text-slate-500">
-                                {target.contactNumber} {target.office ? `- ${target.office}` : ""}
-                              </span>
-                            </span>
-                          </button>
-                        );
-                      })}
+
+                    <div className="max-h-80 overflow-auto rounded-md border bg-white">
+                      {loadingTargets ? (
+                        <div className="flex items-center gap-2 p-4 text-sm text-slate-500">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading recipients...
+                        </div>
+                      ) : filteredTargets.length === 0 ? (
+                        <div className="p-4 text-sm text-slate-500">No matching employees with contact numbers.</div>
+                      ) : (
+                        <div className="divide-y">
+                          {filteredTargets.map((target) => {
+                            const checked = selectedIds.includes(target.id);
+                            return (
+                              <button key={target.id} type="button" className={cn("flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-slate-50", checked && "bg-indigo-50")} onClick={() => toggleSelected(target.id)}>
+                                <Checkbox checked={checked} className="mt-1" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-semibold text-slate-900">{target.name}</span>
+                                  <span className="block truncate text-xs text-slate-500">{target.contactNumber} {target.office ? `- ${target.office}` : ""}</span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="sms-sender">UniSMS fallback Sender ID</Label>
+                  <Input id="sms-sender" value={senderId} onChange={(event) => setSenderId(event.target.value)} placeholder="Optional; Twilio uses TWILIO_FROM_NUMBER" />
                 </div>
-              </div>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="sms-sender">Sender ID</Label>
-              <Input
-                id="sms-sender"
-                value={senderId}
-                onChange={(event) => setSenderId(event.target.value)}
-                placeholder="Default sender from UNISMS_SENDER_ID"
-              />
-            </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="sms-message">Message</Label>
+                    <span className={cn("text-xs font-medium", messageLength > MAX_SMS_LENGTH ? "text-red-600" : "text-slate-500")}>
+                      {messageLength}/{MAX_SMS_LENGTH}
+                    </span>
+                  </div>
+                  <Textarea id="sms-message" rows={7} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Type the SMS content..." />
+                  <p className="text-xs text-slate-500">
+                    Estimated {segmentCount || 0} SMS segment{segmentCount === 1 ? "" : "s"} per recipient. Estimated total: {estimatedCredits || 0}.
+                  </p>
+                </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <Label htmlFor="sms-message">Message</Label>
-                <span
-                  className={cn(
-                    "text-xs font-medium",
-                    messageLength > MAX_SMS_LENGTH ? "text-red-600" : "text-slate-500"
-                  )}
-                >
-                  {messageLength}/{MAX_SMS_LENGTH}
-                </span>
-              </div>
-              <Textarea
-                id="sms-message"
-                rows={7}
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder="Type the SMS content..."
-              />
-            </div>
+                <Button type="button" disabled={!canSend} onClick={sendSms} className="w-full sm:w-auto">
+                  {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                  Send SMS
+                </Button>
+              </CardContent>
+            </Card>
 
-            <Button type="button" disabled={!canSend} onClick={sendSms} className="w-full sm:w-auto">
-              {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Send SMS
-            </Button>
-          </CardContent>
-        </Card>
+            {summary ? (
+              <Card className="border-white/40 bg-white/70 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg">Send result</CardTitle>
+                  <CardDescription>{summary.sent} queued/sent, {summary.failed} failed, {summary.total} total.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {summary.results.map((result, index) => (
+                      <div key={`${result.normalizedPhoneNumber ?? result.phoneNumber ?? "recipient"}-${index}`} className="flex items-start gap-3 rounded-md border bg-white p-3">
+                        {result.status === "FAILED" ? <XCircle className="mt-0.5 h-4 w-4 text-red-600" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{result.employeeName ?? result.normalizedPhoneNumber ?? result.phoneNumber ?? "Recipient"}</p>
+                          <p className="text-xs text-slate-500">
+                            {result.status === "FAILED" ? result.errorMessage ?? "Failed" : `${result.provider ?? "provider"} ${result.providerMessageId ?? result.status}`}
+                          </p>
+                        </div>
+                        <Badge variant={statusVariant(result.status)}>{result.status}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
 
-        {summary ? (
+          <RecentLogsCard logs={logs} loadingLogs={loadingLogs} onRefresh={loadLogs} />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="logs">
+        <RecentLogsCard logs={logs} loadingLogs={loadingLogs} onRefresh={loadLogs} />
+      </TabsContent>
+
+      <TabsContent value="inbox">
+        <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
           <Card className="border-white/40 bg-white/70 shadow-sm">
             <CardHeader>
-              <CardTitle className="text-lg">Send result</CardTitle>
-              <CardDescription>
-                {summary.sent} sent, {summary.failed} failed, {summary.total} total.
-              </CardDescription>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Inbox className="h-5 w-5 text-indigo-600" />
+                    Inbox
+                  </CardTitle>
+                  <CardDescription>Replies received through Twilio.</CardDescription>
+                </div>
+                <Button type="button" variant="outline" size="icon" onClick={loadInbox} disabled={loadingInbox}>
+                  <RefreshCw className={cn("h-4 w-4", loadingInbox && "animate-spin")} />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {summary.results.map((result, index) => (
-                  <div
-                    key={`${result.normalizedPhoneNumber ?? result.phoneNumber ?? "recipient"}-${index}`}
-                    className="flex items-start gap-3 rounded-md border bg-white p-3"
-                  >
-                    {result.status === "SENT" ? (
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
-                    ) : (
-                      <XCircle className="mt-0.5 h-4 w-4 text-red-600" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {result.employeeName ?? result.normalizedPhoneNumber ?? result.phoneNumber ?? "Recipient"}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {result.status === "SENT"
-                          ? result.providerMessageId
-                            ? `Provider ID: ${result.providerMessageId}`
-                            : "Sent"
-                          : result.errorMessage ?? "Failed"}
-                      </p>
-                    </div>
-                    <Badge variant={result.status === "SENT" ? "default" : "destructive"}>
-                      {result.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
+              {loadingInbox ? (
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading inbox...
+                </div>
+              ) : threads.length === 0 ? (
+                <p className="text-sm text-slate-500">No replies yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {threads.map((thread) => (
+                    <button key={thread.phoneNumber} type="button" className={cn("w-full rounded-md border bg-white p-3 text-left transition-colors hover:bg-slate-50", selectedThread?.phoneNumber === thread.phoneNumber && "border-indigo-300 bg-indigo-50")} onClick={() => setSelectedThreadPhone(thread.phoneNumber)}>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="truncate text-sm font-semibold">{thread.employeeName ?? thread.phoneNumber}</p>
+                        <Badge variant={thread.latestDirection === "inbound" ? "default" : "outline"}>{thread.latestDirection}</Badge>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-slate-500">{thread.latestMessage}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
-        ) : null}
-      </div>
 
-      <Card className="border-white/40 bg-white/70 shadow-sm">
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-lg">Recent logs</CardTitle>
-              <CardDescription>Latest SMS attempts in this department.</CardDescription>
-            </div>
-            <Button type="button" variant="outline" size="icon" onClick={loadLogs} disabled={loadingLogs}>
-              <RefreshCw className={cn("h-4 w-4", loadingLogs && "animate-spin")} />
-            </Button>
+          <Card className="border-white/40 bg-white/70 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">{selectedThread?.employeeName ?? selectedThread?.phoneNumber ?? "Conversation"}</CardTitle>
+              <CardDescription>{selectedThread ? selectedThread.phoneNumber : "Select a thread to view messages."}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!selectedThread ? (
+                <p className="text-sm text-slate-500">No conversation selected.</p>
+              ) : (
+                <>
+                  <div className="max-h-[520px] space-y-3 overflow-auto rounded-md border bg-slate-50 p-3">
+                    {selectedThread.messages.map((item) => (
+                      <div key={`${item.direction}-${item.id}`} className={cn("flex", item.direction === "outbound" ? "justify-end" : "justify-start")}>
+                        <div className={cn("max-w-[82%] rounded-lg border p-3 text-sm shadow-sm", item.direction === "outbound" ? "bg-indigo-600 text-white" : "bg-white text-slate-900")}>
+                          <p className="whitespace-pre-wrap">{item.message}</p>
+                          <p className={cn("mt-2 text-[11px]", item.direction === "outbound" ? "text-indigo-100" : "text-slate-500")}>
+                            {formatDateTime(item.createdAt)} - {item.status}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="sms-reply">Reply with Twilio</Label>
+                      <span className={cn("text-xs font-medium", replyLength > MAX_SMS_LENGTH ? "text-red-600" : "text-slate-500")}>
+                        {replyLength}/{MAX_SMS_LENGTH} - {replySegmentCount || 0} segment{replySegmentCount === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <Textarea id="sms-reply" rows={4} value={replyMessage} onChange={(event) => setReplyMessage(event.target.value)} placeholder="Type a reply..." />
+                    <Button type="button" disabled={!canReply} onClick={sendReply}>
+                      {sendingReply ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                      Send reply
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function RecentLogsCard({
+  logs,
+  loadingLogs,
+  onRefresh,
+}: {
+  logs: SmsLogRow[];
+  loadingLogs: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <Card className="border-white/40 bg-white/70 shadow-sm">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg">Recent logs</CardTitle>
+            <CardDescription>Latest SMS attempts in this department.</CardDescription>
           </div>
-        </CardHeader>
-        <CardContent>
-          {loadingLogs ? (
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading logs...
-            </div>
-          ) : logs.length === 0 ? (
-            <p className="text-sm text-slate-500">No SMS logs yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Recipient</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Sent at</TableHead>
+          <Button type="button" variant="outline" size="icon" onClick={onRefresh} disabled={loadingLogs}>
+            <RefreshCw className={cn("h-4 w-4", loadingLogs && "animate-spin")} />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loadingLogs ? (
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading logs...
+          </div>
+        ) : logs.length === 0 ? (
+          <p className="text-sm text-slate-500">No SMS logs yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Recipient</TableHead>
+                <TableHead>Provider</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Sent at</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell className="max-w-[240px]">
+                    <div className="truncate font-medium">{log.employeeName ?? log.phoneNumber}</div>
+                    <div className="truncate text-xs text-slate-500">{log.errorMessage ?? log.message}</div>
+                  </TableCell>
+                  <TableCell className="uppercase text-xs">{log.provider}</TableCell>
+                  <TableCell>
+                    <Badge variant={statusVariant(log.status)}>{log.status}</Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-slate-500">
+                    {formatDateTime(log.createdAt)}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="max-w-[220px]">
-                      <div className="truncate font-medium">
-                        {log.employeeName ?? log.phoneNumber}
-                      </div>
-                      <div className="truncate text-xs text-slate-500">
-                        {log.errorMessage ?? log.message}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={log.status === "SENT" ? "default" : "destructive"}>
-                        {log.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-xs text-slate-500">
-                      {formatDateTime(log.createdAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

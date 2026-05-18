@@ -21,6 +21,7 @@ model Department {
   backups                     DepartmentBackup[]
   employee                    Employee[]                   @relation("DepartmentToEmployee")
   employeeHistorySnapshots    EmployeeHistorySnapshot[]
+  smsInboundMessages          SmsInboundMessage[]
   smsLogs                     SmsLog[]
   offices                     Offices[]                    @relation("DepartmentToOffices")
   orgChartVersions            OrgChartVersion[]
@@ -188,6 +189,7 @@ model Employee {
   employmentEvents       EmploymentEvent[]
   images                 Image[]
   scheduleExceptions     ScheduleException[]
+  smsInboundMessages     SmsInboundMessage[]
   smsLogs                SmsLog[]
   weeklyExclusions       WeeklyExclusion[]
   workSchedules          WorkSchedule[]
@@ -514,7 +516,29 @@ model SmsLog {
   @@index([departmentId])
   @@index([employeeId])
   @@index([phoneNumber])
+  @@index([providerMessageId])
   @@index([status])
+  @@index([createdAt])
+}
+
+model SmsInboundMessage {
+  id                String     @id @default(cuid())
+  departmentId      String?
+  employeeId        String?
+  phoneNumber       String
+  toNumber          String?
+  message           String
+  provider          String     @default("twilio")
+  providerMessageId String?    @unique
+  requestMeta       Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  department        Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  employee          Employee?   @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([departmentId])
+  @@index([employeeId])
+  @@index([phoneNumber])
   @@index([createdAt])
 }
 
@@ -578,6 +602,10 @@ enum MaritalStatus {
 }
 
 enum SmsLogStatus {
+  QUEUED
   SENT
+  DELIVERED
   FAILED
+  UNDELIVERED
+  RECEIVED
 }

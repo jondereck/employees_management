@@ -57,6 +57,7 @@ export async function GET(
         phoneNumber: log.phoneNumber,
         message: log.message,
         senderId: log.senderId,
+        provider: log.provider,
         status: log.status,
         errorMessage: log.errorMessage,
         providerMessageId: log.providerMessageId,

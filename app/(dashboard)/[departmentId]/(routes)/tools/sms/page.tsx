@@ -20,7 +20,7 @@ export default async function SmsToolPage({
     <ToolsLayout
       params={params}
       title="Text Blast"
-      description="Send UniSMS messages to current department employee contact numbers."
+      description="Send Twilio SMS messages, review logs, and manage replies."
       breadcrumbs={[{ label: "Text Blast" }]}
       contentClassName="space-y-6"
     >

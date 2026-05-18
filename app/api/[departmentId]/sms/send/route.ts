@@ -5,9 +5,10 @@ import { z } from "zod";
 import { requireSmsAdmin, smsAuthErrorResponse } from "@/lib/auth/require-sms-admin";
 import { normalizePhilippineMobileNumber } from "@/lib/phone";
 import prismadb from "@/lib/prismadb";
-import { sendUniSms } from "@/lib/sms/unisms";
+import { sendSmsViaProviders } from "@/lib/sms/providers";
+import { getTwilioWebhookBaseUrl } from "@/lib/sms/twilio";
 
-const MAX_SMS_LENGTH = 160;
+const MAX_SMS_LENGTH = 1600;
 
 const sendSmsSchema = z
   .object({
@@ -45,7 +46,8 @@ type SmsSendResult = {
   employeeName: string | null;
   phoneNumber: string | null;
   normalizedPhoneNumber: string | null;
-  status: "SENT" | "FAILED";
+  status: "QUEUED" | "SENT" | "FAILED";
+  provider: string | null;
   errorMessage: string | null;
   providerMessageId: string | null;
 };
@@ -76,6 +78,7 @@ async function writeSmsLog(input: {
   status: SmsLogStatus;
   errorMessage?: string | null;
   providerMessageId?: string | null;
+  provider?: string | null;
   requestMeta?: Record<string, unknown>;
   responseBody?: unknown;
   createdByUserId: string;
@@ -86,6 +89,7 @@ async function writeSmsLog(input: {
       employeeId: input.employeeId,
       phoneNumber: input.phoneNumber,
       message: input.message,
+      provider: input.provider || undefined,
       senderId: input.senderId || null,
       status: input.status,
       errorMessage: input.errorMessage || null,
@@ -95,6 +99,22 @@ async function writeSmsLog(input: {
       createdByUserId: input.createdByUserId,
     },
   });
+}
+
+function buildStatusCallbackUrl(request: Request) {
+  const configuredBaseUrl = getTwilioWebhookBaseUrl();
+  if (configuredBaseUrl) {
+    return `${configuredBaseUrl}/api/webhooks/twilio/sms/status`;
+  }
+
+  const url = new URL(request.url);
+  return `${url.origin}/api/webhooks/twilio/sms/status`;
+}
+
+function statusForProviderResult(result: { provider: string; ok: boolean; queued: boolean }) {
+  if (!result.ok) return SmsLogStatus.FAILED;
+  if (result.provider === "twilio" && result.queued) return SmsLogStatus.QUEUED;
+  return SmsLogStatus.SENT;
 }
 
 export async function POST(
@@ -170,6 +190,7 @@ export async function POST(
           senderId: body.senderId,
           status: SmsLogStatus.FAILED,
           errorMessage: target.phoneNumber ? normalized.error : "Employee has no contact number.",
+          provider: null,
           requestMeta: { source: target.source, rawPhoneNumber: target.phoneNumber },
           createdByUserId: access.userId,
         });
@@ -180,6 +201,7 @@ export async function POST(
           phoneNumber: target.phoneNumber || null,
           normalizedPhoneNumber: null,
           status: "FAILED",
+          provider: null,
           errorMessage: target.phoneNumber ? normalized.error : "Employee has no contact number.",
           providerMessageId: null,
         });
@@ -191,10 +213,11 @@ export async function POST(
       }
       seenNumbers.add(normalized.value);
 
-      const providerResult = await sendUniSms({
+      const providerResult = await sendSmsViaProviders({
         recipient: normalized.value,
         content: body.message,
         senderId: body.senderId,
+        statusCallbackUrl: buildStatusCallbackUrl(req),
         metadata: {
           departmentId: params.departmentId,
           employeeId: target.employeeId,
@@ -209,10 +232,15 @@ export async function POST(
         phoneNumber: normalized.value,
         message: body.message,
         senderId: body.senderId,
-        status: providerResult.ok ? SmsLogStatus.SENT : SmsLogStatus.FAILED,
+        status: statusForProviderResult(providerResult),
+        provider: providerResult.provider,
         errorMessage: providerResult.errorMessage,
         providerMessageId: providerResult.providerMessageId,
-        requestMeta: { source: target.source, rawPhoneNumber: target.phoneNumber },
+        requestMeta: {
+          source: target.source,
+          rawPhoneNumber: target.phoneNumber,
+          attempts: providerResult.attempts,
+        },
         responseBody: providerResult.responseBody,
         createdByUserId: access.userId,
       });
@@ -222,13 +250,14 @@ export async function POST(
         employeeName: target.employeeName,
         phoneNumber: target.phoneNumber,
         normalizedPhoneNumber: normalized.value,
-        status: providerResult.ok ? "SENT" : "FAILED",
+        status: providerResult.ok ? (providerResult.provider === "twilio" ? "QUEUED" : "SENT") : "FAILED",
+        provider: providerResult.provider,
         errorMessage: providerResult.errorMessage,
         providerMessageId: providerResult.providerMessageId,
       });
     }
 
-    const sent = results.filter((result) => result.status === "SENT").length;
+    const sent = results.filter((result) => result.status === "SENT" || result.status === "QUEUED").length;
     const failed = results.filter((result) => result.status === "FAILED").length;
 
     return NextResponse.json({
