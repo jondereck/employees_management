@@ -5,6 +5,7 @@ const TOOL_KEYS = [
   "copy-options",
   "sg-range",
   "workforce-history",
+  "sms",
   "org-chart",
   "approvals",
   "holidays",

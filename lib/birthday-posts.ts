@@ -22,6 +22,7 @@ export type GenerateBirthdayCaptionInput = {
   mode: BirthdayPostMode;
   month: number;
   year?: number;
+  variationNonce?: string | null;
   person?: BirthdayPostPerson | null;
   celebrants?: BirthdayPostPerson[];
   departmentName?: string | null;
@@ -100,6 +101,15 @@ function pickVariant<T>(variants: readonly T[], seed: number) {
 
 function pickEmojiSet(seed: number) {
   return pickVariant(SUBTLE_EMOJI_SETS, seed);
+}
+
+function nonceSeed(value?: string | null) {
+  if (!value) return 0;
+  let hash = 0;
+  for (const char of value) {
+    hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  }
+  return Math.abs(hash);
 }
 
 function buildDisplayName(person: BirthdayPostPerson) {
@@ -213,7 +223,11 @@ export function buildBirthdayCaptionFallback(input: GenerateBirthdayCaptionInput
   const year = input.year ?? getCurrentYearInTimeZone();
   const officeName = input.officeName ?? input.person?.officeName ?? null;
   const hrmo = isHrmoOffice(officeName);
-  const seedBase = year + input.month + (input.person?.id.length ?? input.celebrants?.length ?? 0);
+  const seedBase =
+    year +
+    input.month +
+    (input.person?.id.length ?? input.celebrants?.length ?? 0) +
+    nonceSeed(input.variationNonce);
 
   if (input.mode === "individual" && input.person) {
     const personName = buildDisplayName(input.person);
@@ -272,7 +286,7 @@ export async function generateBirthdayCaption(input: GenerateBirthdayCaptionInpu
           {
             role: "system",
             content:
-              "You write short Facebook-ready birthday greetings for the HRMO Facebook page of a government office. Return only JSON. Keep the caption warm, concise, varied, and free of markdown. Add at least 3 but no more than 5 subtle birthday-appropriate emoji total and do not overload the caption. Avoid repeating the same opener and closer. The request includes selectedMonthName; always use that exact month name for monthly captions. For individual mode, use exactly three short paragraphs separated by blank lines: headline, greeting body, hashtags. For monthly mode, use the monthly board format: uppercase '{MONTH} BIRTHDAY CELEBRATORS' headline, a short greeting paragraph for all monthly celebrators, a scan-ID reminder paragraph for personalized greeting cards, a warm closing paragraph, then a hashtag block with each hashtag on its own line. Do not list all monthly celebrant names by default. Position may be provided only as private context; only sometimes use it to inspire generic wording about service, care, leadership, diligence, or dedication, and never mention the actual position/title. Do not mention the celebrant's assigned office as the sender and never say phrases like 'Rural Health Unit family', 'office family', or '[office] family'. Always include #HappyBirthday and #HRMOInsights. For monthly mode, also include the selected month celebrants hashtag such as #MayCelebrants and #BirthdayCheers.",
+              "You write short Facebook-ready birthday greetings for the HRMO Facebook page of a government office. Return only JSON. Keep the caption warm, concise, varied, and free of markdown. Add at least 3 but no more than 5 subtle birthday-appropriate emoji total and do not overload the caption. Avoid repeating the same opener and closer. The request includes selectedMonthName; always use that exact month name for monthly captions. A generationNonce may be provided to encourage wording variation across repeated generations for the same person or month. For individual mode, use exactly three short paragraphs separated by blank lines: headline, greeting body, hashtags. For monthly mode, use the monthly board format: uppercase '{MONTH} BIRTHDAY CELEBRATORS' headline, a short greeting paragraph for all monthly celebrators, a scan-ID reminder paragraph for personalized greeting cards, a warm closing paragraph, then a hashtag block with each hashtag on its own line. Do not list all monthly celebrant names by default. Position may be provided only as private context; only sometimes use it to inspire generic wording about service, care, leadership, diligence, or dedication, and never mention the actual position/title. Do not mention the celebrant's assigned office as the sender and never say phrases like 'Rural Health Unit family', 'office family', or '[office] family'. Always include #HappyBirthday and #HRMOInsights. For monthly mode, also include the selected month celebrants hashtag such as #MayCelebrants and #BirthdayCheers.",
           },
           {
             role: "user",

@@ -37,6 +37,7 @@ import {
   GitBranch,
   CheckSquare,
   History,
+  MessageSquare,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
@@ -90,6 +91,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     label: "Workforce History",
     path: "tools/workforce-history",
     icon: History,
+  },
+  sms: {
+    label: "Text Blast",
+    path: "tools/sms",
+    icon: MessageSquare,
   },
   approvals: {
     label: "Approval Center",

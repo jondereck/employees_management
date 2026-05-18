@@ -243,6 +243,14 @@ function styleText(value: string, style: "bold" | "italic") {
   return Array.from(value).map((char) => styleChar(char, style)).join("");
 }
 
+function generateVariationNonce() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 async function waitForImg(img: HTMLImageElement, timeout = 8000) {
   return new Promise<boolean>((resolve) => {
     if (img.complete && img.naturalWidth > 0) return resolve(true);
@@ -747,6 +755,7 @@ export default function BirthdayMonthClient({
           exportSafe,
           headsFilter,
           excludedIds: Array.from(excluded),
+          variationNonce: generateVariationNonce(),
           prepareOnly: true,
         }),
       });

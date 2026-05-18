@@ -25,6 +25,17 @@ function normalizeHeadsFilter(value: unknown): BirthdayHeadsFilter {
   return value === "heads-only" ? "heads-only" : "all";
 }
 
+function normalizeVariationNonce(value: unknown) {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (normalized) {
+      return normalized.slice(0, 128);
+    }
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function dataUrlToBlob(dataUrl: string) {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return null;
@@ -98,6 +109,7 @@ export async function POST(
     const mode = body?.mode === "individual" ? "individual" : "monthly";
     const month = normalizeMonth(body?.month);
     const headsFilter = normalizeHeadsFilter(body?.headsFilter);
+    const variationNonce = normalizeVariationNonce(body?.variationNonce);
     const excludedIds = Array.isArray(body?.excludedIds)
       ? body.excludedIds.filter((value: unknown): value is string => typeof value === "string")
       : [];
@@ -179,6 +191,7 @@ export async function POST(
       mode: mode as BirthdayPostMode,
       month,
       year: getCurrentYearInTimeZone(),
+      variationNonce,
       person,
       celebrants,
       departmentName: access.department?.name ?? null,

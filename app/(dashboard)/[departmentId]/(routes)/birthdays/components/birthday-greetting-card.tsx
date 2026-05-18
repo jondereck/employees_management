@@ -103,6 +103,14 @@ function formatBirthday(value?: string | Date | null) {
   return `${BIRTHDAY_MONTH_NAMES[monthDay.month - 1]} ${monthDay.day}`;
 }
 
+function generateVariationNonce() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export default function IndividualBirthdayCard({
   departmentId,
   month,
@@ -231,6 +239,7 @@ export default function IndividualBirthdayCard({
         month,
         year,
         personId: person.id,
+        variationNonce: generateVariationNonce(),
         prepareOnly: true,
       }),
     });

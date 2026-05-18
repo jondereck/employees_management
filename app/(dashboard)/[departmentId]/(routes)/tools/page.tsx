@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   GitBranch,
   History,
+  MessageSquare,
 } from "lucide-react";
 import { cookies } from "next/headers";
 
@@ -68,6 +69,13 @@ const TOOL_CARD_CONFIG: Array<{
     description: "Yearly status reports by office group and employee profile fields.",
     slug: "tools/workforce-history",
     icon: History,
+  },
+  {
+    key: "sms",
+    label: "Text Blast",
+    description: "Send UniSMS messages to selected employee contact numbers.",
+    slug: "tools/sms",
+    icon: MessageSquare,
   },
   {
     key: "approvals",
