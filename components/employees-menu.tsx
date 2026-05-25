@@ -86,7 +86,7 @@ export function EmployeesMenu({
       <DropdownMenuContent
         align="center"
         sideOffset={10}
-        className="z-70 max-h-[min(72vh,560px)] w-[min(calc(100vw-1rem),680px)] overflow-y-auto p-3"
+        className="z-[250] max-h-[min(72vh,560px)] w-[min(calc(100vw-1rem),680px)] overflow-y-auto p-3"
       >
         <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
           {menuLinks.map((link) => {

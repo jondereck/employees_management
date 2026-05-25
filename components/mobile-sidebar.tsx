@@ -211,16 +211,11 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
     navGroups.push({ title: "Tools", items: toolItems });
   }
 
-  navGroups.push({
-    title: "Settings",
-    items: [
-      {
-        label: "Settings",
-        path: `settings`,
-        icon: Settings,
-      },
-    ],
-  });
+  const settingsItem: NavItem = {
+    label: "Settings",
+    path: "settings",
+    icon: Settings,
+  };
 
 
   return (
@@ -294,6 +289,22 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
                 </AccordionItem>
               </Accordion>
             ))}
+            <div className="pt-3">
+              <button
+                disabled={loading}
+                onClick={() => handleLinkClick(getHref(settingsItem.path))}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm transition-colors",
+                  pathname === getHref(settingsItem.path)
+                    ? "bg-green-100 font-semibold text-green-700"
+                    : "text-muted-foreground hover:bg-muted",
+                  loading && "cursor-not-allowed opacity-50"
+                )}
+              >
+                <Settings className="h-4 w-4" aria-hidden="true" />
+                <span>Settings</span>
+              </button>
+            </div>
           </nav>
         </SheetContent>
       </Sheet>

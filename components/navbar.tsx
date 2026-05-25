@@ -68,7 +68,7 @@ export const Navbar = async ({ departmentId }: NavbarProps) => {
   const imageUrl = user?.imageUrl ?? null;
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
+    <header className="sticky top-0 z-[120] w-full border-b border-slate-200 bg-white shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
       <ApprovalsGlobalListener />
       <nav
         aria-label="Top navigation"
