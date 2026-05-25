@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Building2, LayoutDashboard, Wrench } from "lucide-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 
 import Loading from "@/app/loading";
@@ -13,7 +12,6 @@ type Route = {
   href: string;
   label: string;
   active: boolean;
-  icon?: React.ReactNode;
 };
 
 export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElement>) {
@@ -53,13 +51,11 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       href: `/${departmentId}`,
       label: "Overview",
       active: pathname === `/${departmentId}`,
-      icon: <LayoutDashboard className="h-4 w-4" aria-hidden="true" />,
     },
     {
       href: `/${departmentId}/offices`,
       label: "Offices",
       active: pathname === `/${departmentId}/offices`,
-      icon: <Building2 className="h-4 w-4" aria-hidden="true" />,
     },
   ];
 
@@ -131,7 +127,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
 
       <nav aria-label="Main navigation" className={cn("flex w-full items-center justify-center py-2", className)} {...props}>
         <div className="flex min-w-0 items-center gap-1 lg:gap-2">
-          {routes.map(({ href, label, active, icon }) => (
+          {routes.map(({ href, label, active }) => (
             <button
               key={href}
               type="button"
@@ -141,9 +137,6 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                 active ? "text-green-700" : "text-slate-600 hover:text-slate-900"
               )}
             >
-              <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                {icon}
-              </span>
               <span className="hidden lg:inline">{label}</span>
               {active ? <span className="absolute inset-x-2 -bottom-[13px] h-1 rounded-full bg-green-600" aria-hidden="true" /> : null}
             </button>
@@ -168,7 +161,6 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
               toolsSectionActive ? "text-green-700" : "text-slate-600 hover:text-slate-900"
             )}
           >
-            <Wrench className="h-4 w-4" aria-hidden="true" />
             <span className="hidden lg:inline">Tools</span>
             {toolsSectionActive ? <span className="absolute inset-x-2 -bottom-[13px] h-1 rounded-full bg-green-600" aria-hidden="true" /> : null}
           </button>

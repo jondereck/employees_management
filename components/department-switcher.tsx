@@ -7,7 +7,7 @@ import useStoreModal from "@/hooks/use-store-modal";
 import { useRouter, useParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "./ui/button";
-import { Building, Building2, Check, ChevronsUpDownIcon, PlusCircle } from "lucide-react";
+import { Building, Check, ChevronsUpDownIcon, PlusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "./ui/command";
 
@@ -55,7 +55,6 @@ export default function DepartmentSwitcher({
       )}
     >
       <div className="flex items-center text-slate-700 font-bold tracking-tight">
-        <Building2 className="mr-2 h-4 w-4 text-blue-500" />
         <span className="truncate">{currentDepartment?.label || "Select Institution"}</span>
       </div>
       <ChevronsUpDownIcon className="ml-auto h-4 w-4 shrink-0 opacity-50" />

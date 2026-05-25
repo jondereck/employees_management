@@ -91,6 +91,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
     const bIndex = customOrder.indexOf(b.name.trim().toLowerCase());
     return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
   });
+  const visibleTotals = sortedTotals.filter((employeeType) => employeeType.total > 0);
 
 
   return (
@@ -135,7 +136,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
 </Card>
 
     {/* INDIVIDUAL EMPLOYEE TYPE CARDS */}
-    {sortedTotals.map((employeeType) => (
+    {visibleTotals.map((employeeType) => (
       <Card 
         key={employeeType.id} 
         className="bg-white/10 dark:bg-black/20 backdrop-blur-lg border border-white/30 dark:border-white/10 shadow-xl rounded-2xl transition-transform duration-300 hover:-translate-y-1 hover:shadow-2xl"

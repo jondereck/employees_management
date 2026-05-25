@@ -218,9 +218,12 @@ const Notifications = ({ data }: NotificationsProps) => {
     </button>
   </PopoverTrigger>
   
-  <PopoverContent 
-    className="w-[420px] p-0 border-white/40 bg-white/70 backdrop-blur-2xl rounded-[2rem] shadow-2xl overflow-hidden mr-4 mt-2" 
+  <PopoverContent
     align="end"
+    side="bottom"
+    sideOffset={10}
+    collisionPadding={16}
+    className="w-[min(420px,calc(100vw-2rem))] p-0 border-white/40 bg-white/70 backdrop-blur-2xl rounded-[2rem] shadow-2xl overflow-hidden"
   >
     <Tabs defaultValue="birthdays" className="w-full" onValueChange={handleTabChange}>
       {/* FROSTED TAB LIST */}
@@ -244,7 +247,7 @@ const Notifications = ({ data }: NotificationsProps) => {
         </TabsList>
       </div>
 
-      <div className="max-h-[500px] overflow-y-auto no-scrollbar px-4 pb-6">
+      <div className="max-h-[min(75vh,560px)] overflow-y-auto no-scrollbar px-4 pb-6">
         <TabsContent value="approvals" className="mt-2 outline-none">
           <div className="rounded-2xl bg-white/40 p-1 border border-white/40">
             <ApprovalsRealtimeTab departmentId={departmentId} />

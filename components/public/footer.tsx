@@ -147,7 +147,7 @@ const openCreatorWithDelay = (href?: string) => {
       alt={creatorImage.alt ?? "Creator"}
       width={creatorImage.width ?? (dense ? 80 : 96)}
       height={creatorImage.height ?? (dense ? 16 : 18)}
-      className="inline-block align-middle h-auto w-auto max-h-[20px] max-w-[90px] sm:max-h-[22px] sm:max-w-[110px] object-contain"
+      className="inline-block align-middle h-auto w-auto max-h-[22px] max-w-[88px] sm:max-h-[28px] sm:max-w-[112px] object-contain"
       priority={false}
       loading="lazy"
     />

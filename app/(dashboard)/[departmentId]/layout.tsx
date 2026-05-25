@@ -52,7 +52,7 @@ export default async function DashboardLayout({
             alt: "Made by JDN",
             width: 96,
             height: 18,
-            href: "https://jdnifas.netlify.app/" // ← opened when tapped/clicked
+            href: "https://jdnifas.vercel.app/" // ← opened when tapped/clicked
           }}
           className="shrink-0"
           dense={true}                  // compact mobile (default true)
