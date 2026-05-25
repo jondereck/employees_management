@@ -17,8 +17,6 @@ import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { ApiAlert } from "@/components/api-alert";
 import { useOrigin } from "@/hooks/use-origin";
-import NeonUsageCard from "@/components/neon-usage-card";
-
 
 
 
@@ -143,7 +141,7 @@ export const SettingsForm = ({
           </Button>
         </form>
       </Form>
-      <NeonUsageCard />
+
       <Separator />
       <ApiAlert 
         title="NEXT_PUBLIC_API_URL" 

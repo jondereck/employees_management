@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Building2, LayoutDashboard, Settings, Wrench } from "lucide-react";
+import { Building2, LayoutDashboard, Wrench } from "lucide-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 
 import Loading from "@/app/loading";
@@ -22,9 +22,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   const router = useRouter();
   const [loading, setLoading] = React.useState(false);
   const departmentParam = params.departmentId;
-  const departmentId = Array.isArray(departmentParam)
-    ? departmentParam[0]
-    : departmentParam ?? "";
+  const departmentId = Array.isArray(departmentParam) ? departmentParam[0] : departmentParam ?? "";
   const currentBirthdayMonth = getCurrentMonthIndexInTimeZone();
 
   const getBirthdayHref = React.useCallback(
@@ -55,13 +53,13 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
       href: `/${departmentId}`,
       label: "Overview",
       active: pathname === `/${departmentId}`,
-      icon: <LayoutDashboard className="mr-1 h-5 w-5" aria-hidden="true" />,
+      icon: <LayoutDashboard className="h-4 w-4" aria-hidden="true" />,
     },
     {
       href: `/${departmentId}/offices`,
       label: "Offices",
       active: pathname === `/${departmentId}/offices`,
-      icon: <Building2 className="mr-1 h-5 w-5" aria-hidden="true" />,
+      icon: <Building2 className="h-4 w-4" aria-hidden="true" />,
     },
   ];
 
@@ -119,95 +117,64 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
   const manageRoute = employeesLinks[0];
   const quickLinks = employeesLinks.slice(1);
   const activeEmployeesRoute = employeesLinks.find((route) => route.active);
-
   const toolsSectionActive = pathname.startsWith(`/${departmentId}/tools`);
 
   return (
-  <>
-  {loading && (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/40 dark:bg-black/40 backdrop-blur-md">
-      <div className="p-8 rounded-full bg-white/20 border border-white/30 shadow-2xl animate-pulse">
-        <Loading />
-      </div>
-    </div>
-  )}
+    <>
+      {loading ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/40 backdrop-blur-md">
+          <div className="animate-pulse rounded-full border border-white/30 bg-white/20 p-8 shadow-2xl">
+            <Loading />
+          </div>
+        </div>
+      ) : null}
 
-<nav
-  className={cn(
-    "relative flex w-full items-center gap-1 overflow-x-auto whitespace-nowrap  py-3 no-scrollbar",
-   
-    className
-  )}
-  {...props}
->
-  <div className="flex items-center gap-1 lg:gap-2">
-    {routes.map(({ href, label, active, icon }) => (
-      <button
-        key={href}
-        type="button"
-        onClick={() => handleNavClick(href)}
-        className={cn(
-          "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 lg:px-4 lg:py-2 rounded-xl transition-all duration-500",
-          active
-            ? "text-green-600 dark:text-green-400 font-bold"
-            : "text-muted-foreground hover:bg-white/10 hover:text-foreground"
-        )}
-      >
-        {/* Active Background Capsule */}
-        {active && (
-          <div className="absolute inset-0 bg-green-500/10 rounded-xl border border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)] animate-in fade-in zoom-in duration-300" />
-        )}
-        
-        <span className={cn("relative z-10", active && "scale-110")}>
-          {icon}
-        </span>
-        
-        {/* Hide text on very small screens to save space, or keep it—Liquid UI often prefers icons + thin text */}
-        <span className="relative z-10 text-sm lg:text-base">{label}</span>
-      </button>
-    ))}
+      <nav aria-label="Main navigation" className={cn("flex w-full items-center justify-center py-2", className)} {...props}>
+        <div className="flex min-w-0 items-center gap-1 lg:gap-2">
+          {routes.map(({ href, label, active, icon }) => (
+            <button
+              key={href}
+              type="button"
+              onClick={() => handleNavClick(href)}
+              className={cn(
+                "relative inline-flex items-center gap-1 rounded-md px-2 py-2 text-sm font-medium transition-colors lg:px-3",
+                active ? "text-green-700" : "text-slate-600 hover:text-slate-900"
+              )}
+            >
+              <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                {icon}
+              </span>
+              <span className="hidden xl:inline">{label}</span>
+              {active ? <span className="absolute inset-x-2 -bottom-[11px] h-0.5 rounded-full bg-green-600" aria-hidden="true" /> : null}
+            </button>
+          ))}
 
-    {/* Small divider that disappears or shrinks on mobile */}
-    <div className="h-4 w-[1px] bg-white/10 mx-1 lg:mx-2 flex-shrink-0" />
+          <EmployeesMenu
+            manageRoute={manageRoute}
+            quickLinks={quickLinks}
+            activeRoute={activeEmployeesRoute}
+            onNavigate={handleNavClick}
+            className={cn(
+              "relative rounded-md px-2 py-2 text-sm font-medium transition-colors lg:px-3",
+              activeEmployeesRoute ? "text-green-700" : "text-slate-600 hover:text-slate-900"
+            )}
+          />
 
-    <EmployeesMenu
-      manageRoute={manageRoute}
-      quickLinks={quickLinks}
-      activeRoute={activeEmployeesRoute}
-      onNavigate={handleNavClick}
-      className="flex-shrink-0"
-    />
+          <button
+            type="button"
+            onClick={() => handleNavClick(`/${departmentId}/tools`)}
+            className={cn(
+              "relative inline-flex items-center gap-1 rounded-md px-2 py-2 text-sm font-medium transition-colors lg:px-3",
+              toolsSectionActive ? "text-green-700" : "text-slate-600 hover:text-slate-900"
+            )}
+          >
+            <Wrench className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden xl:inline">Tools</span>
+            {toolsSectionActive ? <span className="absolute inset-x-2 -bottom-[11px] h-0.5 rounded-full bg-green-600" aria-hidden="true" /> : null}
+          </button>
 
-    {/* Secondary Actions */}
-    <div className="flex items-center gap-1">
-      <button
-        type="button"
-        onClick={() => handleNavClick(`/${departmentId}/tools`)}
-        className={cn(
-          "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 rounded-xl transition-all duration-300",
-          toolsSectionActive ? "text-green-600 font-bold" : "text-muted-foreground hover:bg-white/10"
-        )}
-      >
-        {toolsSectionActive && <div className="absolute inset-0 bg-green-500/5 rounded-xl border border-green-500/20" />}
-        <Wrench className="h-4 w-4 lg:h-5 lg:w-5 relative z-10" />
-        <span className="text-sm lg:text-base relative z-10">Tools</span>
-      </button>
-
-      <button
-        type="button"
-        onClick={() => handleNavClick(`/${departmentId}/settings`)}
-        className={cn(
-          "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 rounded-xl transition-all duration-300",
-          pathname === `/${departmentId}/settings` ? "text-green-600 font-bold" : "text-muted-foreground hover:bg-white/10"
-        )}
-      >
-        {pathname === `/${departmentId}/settings` && <div className="absolute inset-0 bg-green-500/5 rounded-xl border border-green-500/20" />}
-        <Settings className="h-4 w-4 lg:h-5 lg:w-5 relative z-10" />
-        <span className="text-sm lg:text-base relative z-10">Settings</span>
-      </button>
-    </div>
-  </div>
-</nav>
-</>
+        </div>
+      </nav>
+    </>
   );
 }

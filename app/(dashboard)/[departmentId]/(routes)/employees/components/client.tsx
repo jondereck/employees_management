@@ -167,7 +167,7 @@ export const EmployeesClient = ({
     <div className="flex flex-col min-h-screen bg-[#f9fafb]">
       {/* Top Header Section */}
       <header className="bg-white border-b   shadow-sm px-6 py-4">
-        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="mx-auto w-full max-w-[1880px] flex flex-col md:flex-row md:items-center justify-between gap-4">
           <Heading 
             title={`Employees`} 
             description="Manage your workforce, track positions, and view history." 
@@ -186,7 +186,7 @@ export const EmployeesClient = ({
         </div>
       </header>
 
-      <main className="flex-1 p-6 space-y-6 max-w-[1600px] mx-auto w-full">
+      <main className="mx-auto w-full max-w-[1880px] flex-1 space-y-6 p-4 sm:p-5 lg:p-6">
         
         {/* Quick Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

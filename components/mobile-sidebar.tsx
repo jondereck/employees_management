@@ -234,17 +234,23 @@ export default function MobileSidebar({ onClose }: { onClose?: () => void }) {
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSheetOpen(true)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden"
+            onClick={() => setSheetOpen(true)}
+            aria-label="Open mobile navigation menu"
+          >
             <Menu className="h-6 w-6" />
           </Button>
         </SheetTrigger>
 
-        <SheetContent side="left" className="p-4 w-72 sm:w-80">
-          <SheetHeader>
-            <SheetTitle className="text-lg font-bold"></SheetTitle>
+        <SheetContent side="left" className="w-72 overflow-y-auto p-4 sm:w-80">
+          <SheetHeader className="border-b pb-4 pr-8 text-left">
+            <SheetTitle className="text-base font-semibold text-slate-900">Menu</SheetTitle>
           </SheetHeader>
 
-          <nav className="mt-6 space-y-4">
+          <nav className="mt-4 space-y-3">
             {navGroups.map((group, index) => (
               <Accordion
                 key={group.title}

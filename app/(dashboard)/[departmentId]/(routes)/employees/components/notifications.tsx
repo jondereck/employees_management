@@ -126,7 +126,8 @@ const Notifications = ({ data }: NotificationsProps) => {
   {/* Notification Trigger Button */}
   <button 
     onClick={openNotifications}
-    className="relative p-2 rounded-full transition-active active:scale-90"
+    aria-label="Open notifications"
+    className="relative inline-flex h-9 w-9 items-center justify-center rounded-full transition-all hover:bg-slate-100 active:scale-95"
   >
     <NotificationBell hasDot={hasDot} />
   </button>
@@ -209,7 +210,10 @@ const Notifications = ({ data }: NotificationsProps) => {
       ) : (
   <Popover onOpenChange={(open) => { if (open) markTodaySeen(); }}>
   <PopoverTrigger asChild>
-    <button className="relative p-2 rounded-full transition-all hover:bg-white/20 active:scale-95">
+    <button
+      aria-label="Open notifications"
+      className="relative inline-flex h-9 w-9 items-center justify-center rounded-full transition-all hover:bg-slate-100 active:scale-95"
+    >
       <NotificationBell hasDot={hasDot} />
     </button>
   </PopoverTrigger>

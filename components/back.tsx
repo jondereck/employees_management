@@ -29,6 +29,7 @@ const Navigation = () => {
         onClick={back}
         variant="ghost"
         size="icon"
+        aria-label="Go back"
       >
         <ArrowLeft />
       </Button>
@@ -38,6 +39,7 @@ const Navigation = () => {
         onClick={prev}
         variant="ghost"
         size="icon"
+        aria-label="Go forward"
       >
         <ArrowRight />
       </Button>
