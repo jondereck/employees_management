@@ -87,12 +87,12 @@ export const Navbar = async ({ departmentId }: NavbarProps) => {
           <div className="lg:hidden">
             <MobileSidebar />
           </div>
-          <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-slate-500 lg:flex">
+          <div className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-slate-500 lg:flex">
             <Image
               src={currentDepartment?.logoUrl ?? "/icon-192x192.png"}
               alt="Department system logo"
-              width={28}
-              height={28}
+              width={32}
+              height={32}
               className="rounded-full object-cover"
             />
           </div>

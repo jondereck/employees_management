@@ -5,13 +5,17 @@ import { GENIO_COMMANDS } from "./genio-chat";
 import clsx from "clsx";
 import { useIsScrolling } from "@/hooks/use-is-scrolling";
 
+type AnchorSide = "left" | "right";
+
 const THOUGHTS = GENIO_COMMANDS
   .filter((c) => c.quickChip)
   .map((c) => c.template);
 
 export function IdleThinkingBubbles({
+  anchorSide = "right",
   onSelect,
 }: {
+  anchorSide?: AnchorSide;
   onSelect: (template: string) => void;
 }) {
   const [thought, setThought] = useState<string | null>(null);
@@ -47,7 +51,12 @@ export function IdleThinkingBubbles({
   if (!thought || isScrolling) return null;
 
   return (
-    <div className="absolute -top-20 right-4 flex flex-col items-end gap-1.5">
+    <div
+      className={clsx(
+        "absolute -top-20 flex flex-col gap-1.5",
+        anchorSide === "left" ? "left-4 items-start" : "right-4 items-end"
+      )}
+    >
       
       {/* BIG CLICKABLE BUBBLE */}
       <button

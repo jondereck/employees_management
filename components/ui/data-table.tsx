@@ -101,6 +101,12 @@ interface DataTableProps<TData, TValue> {
   syncPageToUrl?: boolean
   enableColumnReorder?: boolean
   columnOrderStorageKey?: string
+  hideInternalViewOptions?: boolean
+  onViewOptionsReady?: (payload: {
+    table: any
+    onResetColumns: () => void
+    canReset: boolean
+  }) => void
 }
 
 export function DataTable<TData, TValue>({
@@ -111,6 +117,8 @@ export function DataTable<TData, TValue>({
   syncPageToUrl = true,
   enableColumnReorder = false,
   columnOrderStorageKey,
+  hideInternalViewOptions = false,
+  onViewOptionsReady,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -388,15 +396,25 @@ export function DataTable<TData, TValue>({
     table.resetColumnVisibility?.()
   }, [enableColumnReorder, defaultColumnOrder, ORDER_STORAGE_KEY, table])
 
+  useEffect(() => {
+    onViewOptionsReady?.({
+      table,
+      onResetColumns: handleResetColumns,
+      canReset: canResetLayout,
+    })
+  }, [onViewOptionsReady, table, handleResetColumns, canResetLayout])
+
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-end">
-        <DataTableViewOptions
-          table={table}
-          onResetColumns={handleResetColumns}
-          canReset={canResetLayout}
-        />
-      </div>
+      {!hideInternalViewOptions ? (
+        <div className="flex items-end justify-end">
+          <DataTableViewOptions
+            table={table}
+            onResetColumns={handleResetColumns}
+            canReset={canResetLayout}
+          />
+        </div>
+      ) : null}
      
       <div className="rounded-md border overflow-x-auto">
         <Table>

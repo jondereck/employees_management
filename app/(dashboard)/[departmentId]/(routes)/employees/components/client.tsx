@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useTransition } from 'react';
+import React, { useState, useMemo, useEffect, useTransition, useCallback } from 'react';
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { 
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import Heading from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
 import { DataTable } from "@/components/ui/data-table";
+import { DataTableViewOptions } from "@/components/ui/column-toggle";
 import { Badge } from "@/components/ui/badge";
 import ApiList from "@/components/ui/api-list";
 
@@ -57,6 +58,11 @@ export const EmployeesClient = ({
   const router = useRouter();
   const params = useParams();
   const [isPending, startTransition] = useTransition();
+  const [viewOptionsPayload, setViewOptionsPayload] = useState<{
+    table: any;
+    onResetColumns: () => void;
+    canReset: boolean;
+  } | null>(null);
 
   // --- State ---
   const SEARCH_STORAGE_KEY = "employees_search_v1";
@@ -78,6 +84,13 @@ export const EmployeesClient = ({
 
   const { employees: swrEmployees = [], isLoading } = useEmployees(departmentId);
   const debouncedSearchTerm = useDebounce(searchTerm, 400);
+  const handleViewOptionsReady = useCallback((payload: {
+    table: any;
+    onResetColumns: () => void;
+    canReset: boolean;
+  }) => {
+    setViewOptionsPayload(payload);
+  }, []);
 
   // --- Persistence ---
   useEffect(() => {
@@ -212,6 +225,15 @@ export const EmployeesClient = ({
               positions={activePositionOptions}
               onFilterChange={setFilters}
             />
+            {viewOptionsPayload ? (
+              <div className="[&>button]:ml-0">
+                <DataTableViewOptions
+                  table={viewOptionsPayload.table}
+                  onResetColumns={viewOptionsPayload.onResetColumns}
+                  canReset={viewOptionsPayload.canReset}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -247,6 +269,8 @@ export const EmployeesClient = ({
                 storageKey="employees_table_v1"
                 syncPageToUrl
                 enableColumnReorder
+                hideInternalViewOptions
+                onViewOptionsReady={handleViewOptionsReady}
                 renderExtra={(table) => (
                   <FloatingSelectionBar table={table} departmentId={departmentId} />
                 )}
