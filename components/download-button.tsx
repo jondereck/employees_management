@@ -85,6 +85,16 @@ const TAB_VALUE_TO_KEY = Object.entries(TAB_KEY_TO_VALUE).reduce<Record<string, 
   {}
 );
 
+const EXPORT_TAB_DESCRIPTIONS: Record<ExportTabKey, string> = {
+  filter: 'Limit employees by appointment, office, heads, and sheet mode.',
+  columns: 'Pick the fields that will appear in the Excel file.',
+  order: 'Arrange selected columns in the exact export sequence.',
+  sort: 'Choose the primary and secondary sorting used in the file.',
+  paths: 'Configure image and QR path values for generated columns.',
+  findreplace: 'Clean up position labels before exporting.',
+  id: 'Choose which ID value appears in the Employee No column.',
+};
+
 const BIO_INDEX_EMPTY_KEY = '__NO_CODE__';
 
 const COLUMN_STORAGE_KEY = 'hrps-emp-export-columns';
@@ -779,9 +789,10 @@ export default function DownloadStyledExcel() {
   // at the top of DownloadStyledExcel component
   const [showAdvanced, setShowAdvanced] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('showAdvancedPaths') === 'true';
+      const stored = localStorage.getItem('showAdvancedPaths');
+      return stored === null ? true : stored === 'true';
     }
-    return false; // hidden by default
+    return true;
   });
 
   useEffect(() => {
@@ -1195,6 +1206,41 @@ export default function DownloadStyledExcel() {
         .map((key) => columnLabelMap.get(key))
         .filter((col): col is { key: string; name: string } => Boolean(col)),
     [selectedColumns, columnLabelMap]
+  );
+
+  const sheetModeLabel =
+    sheetMode === 'plain'
+      ? 'Plain sheet'
+      : sheetMode === 'merged'
+        ? 'Merged offices'
+        : 'Per office';
+
+  const statusFilterLabel =
+    statusFilter === 'all'
+      ? 'All employees'
+      : statusFilter === 'active'
+        ? 'Active only'
+        : 'Retired only';
+
+  const tabMeta = useMemo<Record<ExportTabKey, string>>(
+    () => ({
+      filter: `${appointmentFilters.length || 0}/${APPOINTMENT_OPTIONS.length || 0} appointments`,
+      columns: `${selectedColumns.length} selected`,
+      order: `${selectedColumnItems.length} selected`,
+      sort: `${combinedSortLevels.length} level${combinedSortLevels.length === 1 ? '' : 's'}`,
+      paths: 'Image & QR',
+      findreplace: `${positionReplaceRules.length} rule${positionReplaceRules.length === 1 ? '' : 's'}`,
+      id: idColumnSource === 'employeeNo' ? 'Employee No' : idColumnSource === 'uuid' ? 'UUID' : 'Bio No',
+    }),
+    [
+      APPOINTMENT_OPTIONS.length,
+      appointmentFilters.length,
+      combinedSortLevels.length,
+      idColumnSource,
+      positionReplaceRules.length,
+      selectedColumnItems.length,
+      selectedColumns.length,
+    ]
   );
 
   const [activeDragColumnId, setActiveDragColumnId] = useState<string | null>(null);
@@ -1655,25 +1701,28 @@ export default function DownloadStyledExcel() {
 
       {/* MODAL for column selection */}
       <Modal
-        title="Select Columns to Export"
-        description="Choose which fields to include in the Excel file."
+        title="Employee Export Builder"
+        description="Choose template, columns, filters, then export."
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         hideDefaultHeader
         contentClassName={cn(
-          'z-[160] flex max-h-[min(88vh,960px)] rounded-2xl sm:rounded-2xl overflow-visible sm:max-w-none gap-0 p-0 flex-col',
+          'z-[160] flex max-h-[min(90vh,980px)] overflow-hidden rounded-[28px] border border-slate-200 bg-white p-0 shadow-[0_24px_80px_rgba(15,23,42,0.18)] sm:max-w-none flex-col',
           MODAL_WIDTH_CLASSES[modalSize]
         )}
-        bodyClassName="flex h-full min-h-0 flex-col overflow-visible scrollbar-gutter-stable"
+        bodyClassName="flex h-full min-h-0 flex-col overflow-hidden scrollbar-gutter-stable"
       >
         <div className="flex h-full min-h-0 w-full min-w-0 flex-col">
-          <div className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-5 py-5 backdrop-blur supports-[backdrop-filter]:bg-white/85 sm:px-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-1">
-                <h2 className="text-base font-semibold leading-tight text-foreground">Select Columns to Export</h2>
-                <p className="text-sm text-muted-foreground">Choose which fields to include in the Excel file.</p>
+                <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                  Excel export
+                </div>
+                <h2 className="text-xl font-semibold leading-tight text-slate-950">Employee Export Builder</h2>
+                <p className="text-sm leading-6 text-slate-500">Choose template, columns, filters, then export.</p>
               </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground md:justify-end">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500 lg:justify-end">
                 <button
                   onClick={() => {
                     const name = prompt("Template name?");
@@ -1705,48 +1754,52 @@ export default function DownloadStyledExcel() {
                     applyTemplate(newTpl);
                     toast.success(`Saved template "${name}"`);
                   }}
-                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                  aria-label="Save export template"
+                  className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                   title="Save current selections as a new template"
                 >
                   <Save className="h-4 w-4" />
-                  Save Template
+                  <span className="hidden sm:inline">Save Template</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleExport(false)}
+                  aria-label="Export user templates"
                   title="Export user templates (.json)"
-                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                  className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
                   <FileDown className="h-4 w-4" />
-                  Export
+                  <span className="hidden sm:inline">Export Template</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleExport(true)}
+                  aria-label="Export all templates"
                   title="Export all templates (.json)"
-                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                  className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
                   <FileDown className="h-4 w-4" />
-                  Export All
+                  <span className="hidden sm:inline">Export All</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleClickImport}
+                  aria-label="Import templates"
                   title="Import templates (.json)"
-                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition hover:text-foreground"
+                  className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
                   <FileUp className="h-4 w-4" />
-                  Import
+                  <span className="hidden sm:inline">Import</span>
                 </button>
 
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 text-xs"
+                  className="h-9 rounded-lg px-3 text-xs font-medium text-slate-600 hover:bg-slate-100"
                   title="Toggle modal size"
                   onClick={toggleModalSize}
                 >
@@ -1764,48 +1817,64 @@ export default function DownloadStyledExcel() {
             </div>
           </div>
 
-          <div className="flex-1 w-full min-h-0 min-w-0 pl-4 pr-2 py-4 pb-6 overflow-x-hidden flex flex-col">
-            <TemplatePickerBar
-              className="mb-3 w-full"
-              value={selectedTemplateId}
-              templates={templates}
-              onApply={(tpl) => {
-                applyTemplate(tpl);
-                setSelectedTemplateId(tpl.id);
-              }}
-              onChangeSelected={setSelectedTemplateId}
-              clearLastUsedTemplate={clearLastUsedTemplate}
-              clearAllUserTemplates={clearAllUserTemplates}
-              deleteUserTemplate={deleteUserTemplate}
-              refreshTemplates={refreshTemplates}
-              onRequestOverwrite={(id) => handleOverwriteTemplate(id)}
-              onRequestRename={(id, newName) => handleRenameTemplate(id, newName)}
-            />
+          <div className="flex w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-slate-50/60 px-5 py-4 pb-6 sm:px-6">
+            <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-950">Export template</h3>
+                  <p className="text-xs text-slate-500">Start from a saved layout or update the current export setup.</p>
+                </div>
+                {selectedTemplateId ? (
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                    {selectedTemplateName}
+                  </span>
+                ) : null}
+              </div>
+              <TemplatePickerBar
+                className="w-full"
+                value={selectedTemplateId}
+                templates={templates}
+                onApply={(tpl) => {
+                  applyTemplate(tpl);
+                  setSelectedTemplateId(tpl.id);
+                }}
+                onChangeSelected={setSelectedTemplateId}
+                clearLastUsedTemplate={clearLastUsedTemplate}
+                clearAllUserTemplates={clearAllUserTemplates}
+                deleteUserTemplate={deleteUserTemplate}
+                refreshTemplates={refreshTemplates}
+                onRequestOverwrite={(id) => handleOverwriteTemplate(id)}
+                onRequestRename={(id, newName) => handleRenameTemplate(id, newName)}
+              />
+            </section>
 
             {/* ADVANCED (single collapsible with both subsections) */}
             <div className="w-full min-w-0">
               {/* ADVANCED (single box; sticky header + conditional mount for content) */}
-              <div className="mb-4 rounded-lg border bg-white shadow-sm">
+              <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {/* Sticky header so the toggle stays visible */}
-            <div className="border-b bg-background px-3 py-2">
+            <div className="border-b border-slate-200 bg-white px-4 py-3">
               <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
-                className="w-full flex items-center justify-between"
+                className="flex w-full items-center justify-between text-left"
                 aria-expanded={showAdvanced}
               >
-                <span className="text-sm font-semibold">Advanced settings</span>
+                <span>
+                  <span className="block text-sm font-semibold text-slate-950">Export options</span>
+                  <span className="block text-xs text-slate-500">Set filters, columns, order, sorting, paths, and IDs before exporting.</span>
+                </span>
 
-                <span className="text-xs text-gray-600 px-3 py-2 flex justify-end">{showAdvanced ? 'Hide' : 'Show'}</span>
+                <span className="inline-flex h-8 items-center rounded-lg px-3 text-xs font-medium text-slate-600 hover:bg-slate-100">{showAdvanced ? 'Hide' : 'Show'}</span>
               </button>
             </div>
 
             <div className={showAdvanced ? 'block' : 'hidden'}>
-              <div className="px-3 pb-3 space-y-4">
-                <div className="px-3 pb-3">
+              <div className="space-y-4 p-4">
+                <div>
                     <Tabs value={advancedTab} onValueChange={handleAdvancedTabChange} className="w-full min-w-0">
-                      <div className="border-b bg-background">
-                        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-contain px-2 py-2">
+                      <div className="border-b border-slate-200 pb-3">
+                        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-contain rounded-xl bg-slate-100 p-1">
                         {EXPORT_TABS.map((tab) => {
                           const Icon = tab.icon;
                           const isActive = activeTabKey === tab.key;
@@ -1820,10 +1889,25 @@ export default function DownloadStyledExcel() {
                               aria-selected={isActive}
                               aria-current={isActive ? 'page' : undefined}
                               aria-controls={`panel-${tab.key}`}
-                              className="h-8 shrink-0 px-2 gap-2"
+                              className={cn(
+                                "h-auto min-h-12 shrink-0 items-start gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium",
+                                isActive
+                                  ? "bg-white text-slate-950 shadow-sm ring-1 ring-emerald-100 hover:bg-white"
+                                  : "text-slate-600 hover:bg-white/70 hover:text-slate-950"
+                              )}
                             >
-                              <Icon className="size-4" />
-                              <span className="whitespace-nowrap">{tab.label}</span>
+                              <Icon className="mt-0.5 size-4 shrink-0" />
+                              <span className="flex min-w-0 flex-col gap-0.5">
+                                <span className="flex items-center gap-2 whitespace-nowrap">
+                                  {tab.label}
+                                  <span className="rounded-full bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-slate-600">
+                                    {tabMeta[tab.key]}
+                                  </span>
+                                </span>
+                                <span className="hidden max-w-48 text-xs font-normal leading-4 text-slate-500 sm:block">
+                                  {EXPORT_TAB_DESCRIPTIONS[tab.key]}
+                                </span>
+                              </span>
                             </Button>
                           );
                         })}
@@ -2319,36 +2403,37 @@ export default function DownloadStyledExcel() {
                       </div>
                     </TabsContent>
                     <TabsContent value="filters" id="panel-filter" className="mt-3">
-                      <div className="rounded-md border bg-white p-3 space-y-4 w-full min-w-0">
+                      <div className="w-full min-w-0 space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         {/* Appointment filter */}
-                        <div>
-                          <div className="mb-2 flex justify-between items-center text-sm">
-                            <label className="font-medium">Filter by Appointment</label>
+                        <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                          <div className="mb-3 flex items-center justify-between gap-3 text-sm">
+                            <label className="font-semibold text-slate-900">Filter by Appointment</label>
                             <button
                               onClick={toggleAllAppointments}
-                              className="text-blue-600 hover:underline text-xs"
+                              className="rounded-md px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
                             >
                               {isAllAppointments ? 'Deselect All' : 'Select All'}
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
+                          <div className="grid max-h-44 min-w-0 grid-cols-1 gap-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
                             {APPOINTMENT_OPTIONS.map((label) => (
-                              <label key={label} className="flex items-center space-x-2 text-sm">
+                              <label key={label} className="flex min-h-9 items-center gap-2 rounded-lg px-2 text-sm text-slate-700 hover:bg-slate-50">
                                 <input
                                   type="checkbox"
                                   checked={appointmentFilters.includes(label)}
                                   onChange={() => toggleAppointment(label)}
+                                  className="h-4 w-4 accent-emerald-600"
                                 />
                                 <span>{label}</span>
                               </label>
                             ))}
                           </div>
-                        </div>
+                        </section>
 
-                        <div>
-                          <div className="text-xs font-medium text-muted-foreground">Heads filter</div>
-                          <div className="mt-2 flex flex-wrap items-center gap-4 text-sm">
+                        <section className="rounded-xl border border-slate-200 bg-white p-3">
+                          <div className="text-xs font-semibold uppercase text-slate-500">Heads filter</div>
+                          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
                             <label htmlFor="heads-all" className="flex items-center gap-2">
                               <input
                                 type="radio"
@@ -2357,6 +2442,7 @@ export default function DownloadStyledExcel() {
                                 value="all"
                                 checked={headsMode === 'all'}
                                 onChange={() => setHeadsMode('all')}
+                                className="h-4 w-4 accent-emerald-600"
                               />
                               <span>All employees</span>
                             </label>
@@ -2368,34 +2454,35 @@ export default function DownloadStyledExcel() {
                                 value="headsOnly"
                                 checked={headsMode === 'headsOnly'}
                                 onChange={() => setHeadsMode('headsOnly')}
+                                className="h-4 w-4 accent-emerald-600"
                               />
                               <span>Heads only</span>
                             </label>
                           </div>
-                        </div>
+                        </section>
 
-                        <div>
+                        <section className="rounded-xl border border-slate-200 bg-white p-3">
                           <div className="mb-2 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-                            <label className="font-medium">Filter by Office</label>
-                            <div className="flex gap-2 text-xs">
+                            <label className="font-semibold text-slate-900">Filter by Office</label>
+                            <div className="flex gap-1 text-xs">
                               <button
                                 type="button"
                                 onClick={selectAllFilteredOffices}
-                                className="text-blue-600 hover:underline"
+                                className="rounded-md px-2 py-1 font-medium text-emerald-700 hover:bg-emerald-50"
                               >
                                 Select All
                               </button>
                               <button
                                 type="button"
                                 onClick={deselectAllFilteredOffices}
-                                className="text-blue-600 hover:underline"
+                                className="rounded-md px-2 py-1 font-medium text-emerald-700 hover:bg-emerald-50"
                               >
                                 Deselect All
                               </button>
                             </div>
                           </div>
 
-                          <div className="mb-2 space-y-2 text-sm">
+                          <div className="mb-3 space-y-2 text-sm">
                             <span className="font-medium text-foreground">Group &amp; Filter by</span>
                             <div className="flex flex-wrap gap-4">
                               <label className="flex items-center gap-2">
@@ -2405,6 +2492,7 @@ export default function DownloadStyledExcel() {
                                   value="office"
                                   checked={filterGroupMode === 'office'}
                                   onChange={() => setFilterGroupMode('office')}
+                                  className="h-4 w-4 accent-emerald-600"
                                 />
                                 <span>Office</span>
                               </label>
@@ -2415,6 +2503,7 @@ export default function DownloadStyledExcel() {
                                   value="bioIndex"
                                   checked={filterGroupMode === 'bioIndex'}
                                   onChange={() => setFilterGroupMode('bioIndex')}
+                                  className="h-4 w-4 accent-emerald-600"
                                 />
                                 <span>Bio Index Code (merge same codes)</span>
                               </label>
@@ -2426,10 +2515,10 @@ export default function DownloadStyledExcel() {
                             value={officeSearch}
                             onChange={(e) => setOfficeSearch(e.target.value)}
                             placeholder={filterGroupMode === 'bioIndex' ? 'Search codes or offices...' : 'Search offices...'}
-                            className="w-full mb-2 rounded border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                            className="mb-3 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
 
-                          <div className="space-y-2 max-h-48 overflow-y-auto border p-2 rounded bg-white shadow min-w-0">
+                          <div className="max-h-52 min-w-0 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/60 p-3 shadow-inner">
                             {filterGroupMode === 'bioIndex' ? (
                               filteredBioIndexGroups.length === 0 ? (
                                 <p className="px-1 text-xs text-gray-500">No bio index codes match your search.</p>
@@ -2439,7 +2528,7 @@ export default function DownloadStyledExcel() {
                                   const partiallySelected = !allSelected && group.officeIds.some((id) => selectedOffices.includes(id));
                                   const label = group.code ? `BIO ${group.code}` : 'BIO (Unassigned)';
                                   return (
-                                    <label key={group.key} className="flex items-start gap-2 text-sm">
+                                    <label key={group.key} className="flex items-start gap-2 rounded-lg bg-white px-2 py-2 text-sm shadow-sm">
                                       <input
                                         type="checkbox"
                                         checked={allSelected}
@@ -2447,7 +2536,7 @@ export default function DownloadStyledExcel() {
                                           if (el) el.indeterminate = partiallySelected;
                                         }}
                                         onChange={() => toggleBioIndexGroup(group.key)}
-                                        className="mt-1"
+                                        className="mt-1 h-4 w-4 accent-emerald-600"
                                       />
                                       <span className="flex flex-col">
                                         <span className="font-medium">{label}</span>
@@ -2466,12 +2555,12 @@ export default function DownloadStyledExcel() {
                               <p className="px-1 text-xs text-gray-500">No offices match your search.</p>
                             ) : (
                               filteredOfficeOptions.map((office) => (
-                                <label key={office.id} className="flex items-start gap-2 text-sm">
+                                <label key={office.id} className="flex items-start gap-2 rounded-lg bg-white px-2 py-2 text-sm shadow-sm">
                                   <input
                                     type="checkbox"
                                     checked={selectedOffices.includes(office.id)}
                                     onChange={() => toggleOfficeSelection(office.id)}
-                                    className="mt-1"
+                                    className="mt-1 h-4 w-4 accent-emerald-600"
                                   />
                                   <span className="flex flex-col">
                                     <span>{office.name}</span>
@@ -2483,15 +2572,15 @@ export default function DownloadStyledExcel() {
                               ))
                             )}
                           </div>
-                        </div>
+                        </section>
 
-                        <div className="border-t border-gray-200 pt-3">
+                        <section className="rounded-xl border border-slate-200 bg-white p-3">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-medium">Sheet mode</span>
+                            <span className="text-sm font-semibold text-slate-900">Sheet mode</span>
                             <button
                               type="button"
                               onClick={() => setSheetMode('plain')}
-                              className="text-xs text-blue-600 hover:underline disabled:text-muted-foreground disabled:cursor-default"
+                              className="rounded-md px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-default disabled:text-muted-foreground"
                               disabled={sheetMode === 'plain'}
                             >
                               Clear selection
@@ -2502,7 +2591,7 @@ export default function DownloadStyledExcel() {
                               Export as a single plain sheet without office headers.
                             </p>
                           ) : null}
-                          <div className="mt-2 space-y-2 text-sm">
+                          <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                             <label className="flex items-center gap-2">
                               <input
                                 type="radio"
@@ -2510,6 +2599,7 @@ export default function DownloadStyledExcel() {
                                 value="perOffice"
                                 checked={sheetMode === 'perOffice'}
                                 onChange={() => setSheetMode('perOffice')}
+                                className="h-4 w-4 accent-emerald-600"
                               />
                               <span>One sheet per office</span>
                             </label>
@@ -2520,11 +2610,12 @@ export default function DownloadStyledExcel() {
                                 value="merged"
                                 checked={sheetMode === 'merged'}
                                 onChange={() => setSheetMode('merged')}
+                                className="h-4 w-4 accent-emerald-600"
                               />
                               <span>Single sheet (merge selected offices)</span>
                             </label>
                           </div>
-                        </div>
+                        </section>
 
                       </div>
                     </TabsContent>
@@ -2585,7 +2676,7 @@ export default function DownloadStyledExcel() {
                     onClick={() => setShowAdvanced(false)}
                     className="text-xs text-blue-600 hover:underline"
                   >
-                    Hide advanced settings
+                    Hide export options
                   </button>
                 </div>
               </div>
@@ -2597,60 +2688,83 @@ export default function DownloadStyledExcel() {
 
 
 
-        <div className="mt-4 space-y-2">
-          <label className="font-medium text-sm">Include Status:</label>
-          <div className="flex space-x-4 text-sm">
-            <label className="flex items-center space-x-1">
-              <input
-                type="radio"
-                name="status"
-                value="all"
-                checked={statusFilter === 'all'}
-                onChange={() => setStatusFilter('all')}
-              />
-              <span>All</span>
-            </label>
-            <label className="flex items-center space-x-1">
-              <input
-                type="radio"
-                name="status"
-                value="active"
-                checked={statusFilter === 'active'}
-                onChange={() => setStatusFilter('active')}
-              />
-              <span>Active</span>
-            </label>
-            <label className="flex items-center space-x-1">
-              <input
-                type="radio"
-                name="status"
-                value="retired"
-                checked={statusFilter === 'retired'}
-                onChange={() => setStatusFilter('retired')}
-              />
-              <span>Retired</span>
-            </label>
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <label className="text-sm font-semibold text-slate-950">Employee status</label>
+              <p className="text-xs text-slate-500">Choose which employee records are included in the Excel file.</p>
+            </div>
+            <div className="grid gap-2 text-sm sm:grid-cols-3">
+              {[
+                { value: 'all', label: 'All' },
+                { value: 'active', label: 'Active' },
+                { value: 'retired', label: 'Retired' },
+              ].map((option) => (
+                <label
+                  key={option.value}
+                  className={cn(
+                    'flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium transition',
+                    statusFilter === option.value
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="status"
+                    value={option.value}
+                    checked={statusFilter === option.value}
+                    onChange={() => setStatusFilter(option.value as 'all' | 'active' | 'retired')}
+                    className="h-4 w-4 accent-emerald-600"
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
           </div>
+        </section>
         </div>
-
-        <div className="flex justify-end mt-4 space-x-2">
-          <button
-            onClick={() => setModalOpen(false)}
-            className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => {
-              setModalOpen(false);
-              handleDownload(selectedColumnsRef.current);
-            }}
-            className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded text-sm"
-          >
-            Download
-          </button>
-        </div>
-        </div>
+          <div className="border-t border-slate-200 bg-white/95 px-5 py-4 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] backdrop-blur sm:px-6">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+                  {selectedColumns.length} columns
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+                  {selectedOffices.length ? `${selectedOffices.length} offices` : 'All offices'}
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+                  {appointmentFilters.length || 0}/{APPOINTMENT_OPTIONS.length || 0} appointments
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+                  {sheetModeLabel}
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+                  {statusFilterLabel}
+                </span>
+              </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalOpen(false);
+                    handleDownload(selectedColumnsRef.current);
+                  }}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                >
+                  <FaFileExcel className="text-base" />
+                  Export Excel
+                </button>
+              </div>
+            </div>
+          </div>
       </div>
       </Modal>
 
