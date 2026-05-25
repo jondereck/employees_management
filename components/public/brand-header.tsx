@@ -1,7 +1,10 @@
 import Image from "next/image";
-import { cn } from "@/lib/utils";
 
-export default function BrandHeader() {
+interface BrandHeaderProps {
+  logoSrc?: string;
+}
+
+export default function BrandHeader({ logoSrc = "/logo.png" }: BrandHeaderProps) {
   return (
   <header className="w-full sticky top-0 z-50 bg-white/10 dark:bg-black/20 backdrop-blur-xl border-b border-white/20 dark:border-white/10 shadow-[0_2px_20px_rgba(0,0,0,0.02)]">
   <div className="mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:h-16 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
@@ -16,7 +19,7 @@ export default function BrandHeader() {
         <div className="absolute inset-0 bg-[#DA1677]/10 blur-md rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
 
         <Image
-          src="/logo.png"
+          src={logoSrc}
           alt="LGU Lingayen Seal"
           width={32}
           height={32}

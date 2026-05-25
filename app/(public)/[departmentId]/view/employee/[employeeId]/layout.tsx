@@ -1,10 +1,21 @@
 // app/(public)/layout.tsx
 import FooterPup from "@/components/footer-pup";
 import PublicFooter from "@/components/public/footer";
+import prismadb from "@/lib/prismadb";
 import type { ReactNode } from "react";
 
 
-export default function PublicLayout({ children }: { children: ReactNode }) {
+export default async function PublicLayout({
+  children,
+  params,
+}: {
+  children: ReactNode;
+  params: { departmentId: string };
+}) {
+  const department = await prismadb.department.findUnique({
+    where: { id: params.departmentId },
+  }) as ({ logoUrl?: string | null } | null);
+
   return (
     <div className="min-h-screen">
       {/* Content gets extra bottom padding so the fixed footer won't overlap */}
@@ -13,8 +24,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
 <PublicFooter
   systemName="HR Profiling System"
   systemLogo={{ src: "/icon-192x192.png", alt: "HRPS Logo" }}
-  hrLogo={{ src: "/hrmo-logo.png", alt: "HRMO Logo" }}
-  lguLogo={{ src: "/logo.png", alt: "LGU Lingayen Seal" }}
+  lguLogo={{ src: department?.logoUrl ?? "/logo.png", alt: "LGU Lingayen Seal" }}
   brand={{ c1: "#cf1337", c2: "#ff8fa3", c3: "#ffd166" }}
   creatorMode="image"
     creatorImage={{

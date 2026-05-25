@@ -145,7 +145,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                 {icon}
               </span>
               <span className="hidden lg:inline">{label}</span>
-              {active ? <span className="absolute inset-x-2 -bottom-[11px] h-0.5 rounded-full bg-green-600" aria-hidden="true" /> : null}
+              {active ? <span className="absolute inset-x-2 -bottom-[13px] h-1 rounded-full bg-green-600" aria-hidden="true" /> : null}
             </button>
           ))}
 
@@ -170,7 +170,7 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
           >
             <Wrench className="h-4 w-4" aria-hidden="true" />
             <span className="hidden lg:inline">Tools</span>
-            {toolsSectionActive ? <span className="absolute inset-x-2 -bottom-[11px] h-0.5 rounded-full bg-green-600" aria-hidden="true" /> : null}
+            {toolsSectionActive ? <span className="absolute inset-x-2 -bottom-[13px] h-1 rounded-full bg-green-600" aria-hidden="true" /> : null}
           </button>
 
         </div>

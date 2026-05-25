@@ -15,7 +15,7 @@ type PublicFooterProps = {
   // left-side logos + system name
   systemName?: string;
   systemLogo: Logo;
-  hrLogo: Logo;
+  hrLogo?: Logo;
   lguLogo?: Logo;
 
   // creator
@@ -368,7 +368,7 @@ const openCreatorWithDelay = (href?: string) => {
           {/* Left: logos small */}
           <div className="flex items-center gap-2">
             <LogoImg {...systemLogo} small />
-            <LogoImg {...hrLogo} small />
+            {hrLogo ? <LogoImg {...hrLogo} small /> : null}
             {lguLogo ? <LogoImg {...lguLogo} small /> : null}
           </div>
 
@@ -392,7 +392,7 @@ const openCreatorWithDelay = (href?: string) => {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <LogoImg {...systemLogo} />
-              <LogoImg {...hrLogo} />
+              {hrLogo ? <LogoImg {...hrLogo} /> : null}
               {lguLogo ? <LogoImg {...lguLogo} /> : null}
             </div>
             <div className="flex-1 text-center sm:text-left">

@@ -22,6 +22,7 @@ import Image from "next/image";
 
 type Props = {
   employeeId: string;
+  lguLogoSrc?: string;
   employeeType?: string | null;  
   isActive?: boolean;
   leaveFormUrl?: string;
@@ -73,6 +74,7 @@ function getPrimaryDocForType(employeeType?: string | null) {
 
 export default function PublicSelfServiceActions({
   employeeId,
+  lguLogoSrc = "/logo.png",
   employeeType,
    isActive = false,
   leaveFormUrl = "/files/CSForm6_LeaveApplication.pdf",
@@ -199,7 +201,7 @@ export default function PublicSelfServiceActions({
             description="A transparent guide to frontline services, processes, and commitments under the ARTA framework."
             pdfUrl="/_pdf/ARTA.pdf"
             watermarkText="Municipality of Lingayen"
-            watermarkImageUrl="/logo.png"
+            watermarkImageUrl={lguLogoSrc}
             downloadFileName="Citizen's-Charter"
             wmSize={200}
             wmOpacity={0.12}
@@ -212,7 +214,7 @@ export default function PublicSelfServiceActions({
             description="A formal oath expressing the values, responsibilities, and ethical standards expected of every public servant."
             pdfUrl="/_pdf/panunumpa.pdf"
             watermarkText="Municipality of Lingayen"
-            watermarkImageUrl="/logo.png"
+            watermarkImageUrl={lguLogoSrc}
             downloadFileName="Panunumpa-ng-Lingkod-Bayan"
             wmSize={200}
             wmOpacity={0.12}
@@ -407,7 +409,7 @@ export default function PublicSelfServiceActions({
             className="block w-full h-auto"
           />
           <Image
-            src="/logo.png"
+            src={lguLogoSrc}
             alt=""
             width={320}
             height={320}

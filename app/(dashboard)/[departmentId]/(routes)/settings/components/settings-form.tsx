@@ -17,17 +17,19 @@ import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { ApiAlert } from "@/components/api-alert";
 import { useOrigin } from "@/hooks/use-origin";
+import LogoUpload from "@/components/ui/logo-upload";
 
 
 
 interface SettingsFormProps {
-  initialData: Department;
+  initialData: Department & { logoUrl?: string | null };
 }
 
 const formSchema = z.object({
   name: z.string().min(1, {
     message: "Department name is required"
   }),
+  logoUrl: z.string().optional().nullable(),
 });
 
 type SettingsFormValues = z.infer<typeof formSchema>;
@@ -43,7 +45,10 @@ export const SettingsForm = ({
 
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData
+    defaultValues: {
+      name: initialData.name,
+      logoUrl: initialData.logoUrl ?? "",
+    }
   });
 
   const onDelete = async () => {
@@ -117,6 +122,24 @@ export const SettingsForm = ({
        
       <Form {...form} >
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 w-full">
+          <FormField
+            control={form.control}
+            name="logoUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>LGU Logo</FormLabel>
+                <FormControl>
+                  <LogoUpload
+                    value={field.value}
+                    disabled={loading}
+                    onChange={(url) => field.onChange(url)}
+                    onRemove={() => field.onChange("")}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
             <FormField
               control={form.control}

@@ -81,6 +81,7 @@ export function EmployeesMenu({
         >
           {activeRoute ? activeRoute.label : "Employees"}
           <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          {activeRoute ? <span className="absolute inset-x-2 -bottom-[13px] h-1 rounded-full bg-green-600" aria-hidden="true" /> : null}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

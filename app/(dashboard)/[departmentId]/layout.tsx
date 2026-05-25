@@ -26,7 +26,7 @@ export default async function DashboardLayout({
       id: params.departmentId,
       userId
     }
-  });
+  }) as ({ id: string; logoUrl?: string | null } | null);
 
   if (!department) {
     redirect('/');
@@ -38,14 +38,13 @@ export default async function DashboardLayout({
         <ModalProvider />
         <Navbar departmentId={params.departmentId} />
         <AskGenio departmentId={params.departmentId} />
-        <main className="min-w-0 flex-1">
+        <main className="min-w-0 flex-1 pb-10">
           {children}
         </main>
         <PublicFooter
           systemName="HR Profiling System"
           systemLogo={{ src: "/icon-192x192.png", alt: "HRPS Logo" }}
-          hrLogo={{ src: "/hrmo-logo.png", alt: "HRMO Logo" }}
-          lguLogo={{ src: "/logo.png", alt: "LGU Lingayen Seal" }}
+          lguLogo={{ src: department.logoUrl ?? "/logo.png", alt: "LGU Lingayen Seal" }}
           brand={{ c1: "#cf1337", c2: "#ff8fa3", c3: "#ffd166" }}
           creatorMode="image"
             creatorImage={{
@@ -55,7 +54,6 @@ export default async function DashboardLayout({
             height: 18,
             href: "https://jdnifas.netlify.app/" // ← opened when tapped/clicked
           }}
-          position="static"
           className="shrink-0"
           dense={true}                  // compact mobile (default true)
           showYearOnMobile={true}      // hide © on very small screens

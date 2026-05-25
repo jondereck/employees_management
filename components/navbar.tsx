@@ -1,5 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Settings } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -29,7 +30,15 @@ export const Navbar = async ({ departmentId }: NavbarProps) => {
       userId,
     },
   });
-
+  const currentDepartment = await prismadb.department.findFirst({
+    where: {
+      id: departmentId,
+      userId,
+    },
+    select: {
+      logoUrl: true,
+    },
+  });
   const employees = await prismadb.employee.findMany({
     where: {
       departmentId,
@@ -68,18 +77,24 @@ export const Navbar = async ({ departmentId }: NavbarProps) => {
   const imageUrl = user?.imageUrl ?? null;
 
   return (
-    <header className="sticky top-0 z-[120] w-full border-b border-slate-200 bg-white shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
+    <header className="sticky top-0 z-[120] w-full rounded-b-2xl border-b border-slate-200 bg-white shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
       <ApprovalsGlobalListener />
       <nav
         aria-label="Top navigation"
-        className="grid h-16 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 pl-3 pr-2 sm:px-4 lg:grid-cols-[1fr_auto_1fr] lg:px-6 2xl:px-8"
+        className="grid h-16 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 pl-3 pr-2 sm:px-4 lg:grid-cols-[1fr_auto_1fr] lg:px-5 2xl:px-6"
       >
         <div className="flex min-w-0 items-center gap-2">
           <div className="lg:hidden">
             <MobileSidebar />
           </div>
-          <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-[10px] font-semibold text-slate-500 lg:flex">
-            LOGO
+          <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-slate-500 lg:flex">
+            <Image
+              src={currentDepartment?.logoUrl ?? "/icon-192x192.png"}
+              alt="Department system logo"
+              width={28}
+              height={28}
+              className="rounded-full object-cover"
+            />
           </div>
           <div className="hidden min-w-0 items-center xl:flex">
             <DepartmentSwitcher items={department} className="min-w-0" />
@@ -91,6 +106,7 @@ export const Navbar = async ({ departmentId }: NavbarProps) => {
         </div>
 
         <div className="flex min-w-0 justify-self-end items-center justify-end gap-1.5 sm:gap-2">
+          <Notifications data={employees as unknown as EmployeesColumn[]} />
           <Link
             href={`/${departmentId}/settings`}
             aria-label="Open settings"
@@ -98,7 +114,6 @@ export const Navbar = async ({ departmentId }: NavbarProps) => {
           >
             <Settings className="h-4 w-4" aria-hidden="true" />
           </Link>
-          <Notifications data={employees as unknown as EmployeesColumn[]} />
           <NavbarProfile username={username} role={role} initials={initials} imageUrl={imageUrl} />
           <NavbarProfile username={username} role={role} initials={initials} imageUrl={imageUrl} compact />
         </div>

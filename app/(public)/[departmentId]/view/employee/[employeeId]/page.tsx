@@ -251,8 +251,7 @@ if (!isAdmin) {
 
   const dept = await prismadb.department.findUnique({
     where: { id: params.departmentId },
-    select: { name: true },
-  });
+  }) as ({ name?: string | null; logoUrl?: string | null } | null);
 
   /** ==========================
    *  PUBLIC VIEW (revamped)
@@ -458,6 +457,7 @@ if (!isAdmin) {
     }).format(new Date(d));
   }
   const orgName = dept?.name || "LGU Lingayen";
+  const lguLogoSrc = dept?.logoUrl ?? "/logo.png";
   const workingLine = isInactive
     ? `Previously associated with ${orgName} as`
     : `Currently working at ${orgName} as`;
@@ -504,7 +504,7 @@ if (!isAdmin) {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <BrandHeader />
+      <BrandHeader logoSrc={lguLogoSrc} />
 <main className="flex-1 relative overflow-hidden bg-[#f8fafc] dark:bg-[#020617] min-h-screen">
   {/* Dynamic Liquid Background - Ambient Aura */}
   <div 
@@ -531,7 +531,7 @@ if (!isAdmin) {
         <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden select-none">
           <div className="absolute -right-20 -bottom-20 opacity-[0.04] dark:opacity-[0.08] rotate-[15deg]">
             <Image
-              src="/logo.png"
+              src={lguLogoSrc}
               alt=""
               width={400}
               height={400}
@@ -706,6 +706,7 @@ if (!isAdmin) {
       <section id="self-service" className="rounded-lg border p-4">
         <PublicSelfServiceActions
           employeeId={employeeId}
+          lguLogoSrc={lguLogoSrc}
           employeeType={publicData.employeeType?.name ?? null}
           isActive={publicData.isArchived}
           leaveFormUrl="/files/CSForm6_LeaveApplication.pdf"
