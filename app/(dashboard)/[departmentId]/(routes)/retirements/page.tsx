@@ -132,7 +132,15 @@ export default async function RetirementsPage({
 }) {
   const { departmentId } = params;
   const today = new Date();
-  const currentYear = today.getFullYear();
+
+  const employeeTypes = await prismadb.employeeType.findMany({
+    where: {
+      departmentId,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
 
   const employees = await prismadb.employee.findMany({
     where: { departmentId },
@@ -162,7 +170,7 @@ export default async function RetirementsPage({
 
     const retirementYear = birthDate.getFullYear() + 65;
     const retirementDate = new Date(retirementYear, birthDate.getMonth(), birthDate.getDate());
-    const isUpcoming = retirementYear === currentYear && retirementDate >= today;
+    const isUpcoming = retirementDate >= today;
 
     let serviceYears: number | null = null;
     if (employee.dateHired) {
@@ -256,7 +264,7 @@ export default async function RetirementsPage({
         description="Review who is scheduled to retire so you can plan endorsements, clearances, and turnover activities."
         emptyMessage="No matching retirements. Check birth dates or explore the Completed tab for retirement history."
         people={sorted}
-        employeeTypes={[]}
+        employeeTypes={employeeTypes}
          enableDownload={true}
         defaultFilter="upcoming"
       />

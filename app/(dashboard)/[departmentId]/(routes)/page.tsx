@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Cake,
   Clock3,
+  FileWarning,
   Medal,
   ShieldCheck,
   Users,
@@ -239,6 +240,109 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                     </Link>
                   );
                 })}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <Card className={`${glassCard} rounded-2xl`}>
+              <CardHeader className="p-4 pb-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base text-slate-900 dark:text-slate-100">
+                      Incomplete Records
+                    </CardTitle>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Data cleanup items to review.
+                    </p>
+                  </div>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 ring-1 ring-rose-500/20">
+                    <FileWarning className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <Link
+                  href={`/${departmentId}/employees`}
+                  className="block rounded-xl border border-white/30 bg-white/35 p-3 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
+                >
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <p className="text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                        {dashboardSummary.incompleteRecords.count}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        employees with missing key data
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                      Review
+                    </span>
+                  </div>
+                </Link>
+                <div className="mt-3 space-y-2">
+                  {dashboardSummary.incompleteRecords.fields.length ? (
+                    dashboardSummary.incompleteRecords.fields.map((field) => (
+                      <div
+                        key={field.label}
+                        className="flex items-center justify-between gap-3 text-xs"
+                      >
+                        <span className="truncate text-slate-600 dark:text-slate-300">
+                          {field.label}
+                        </span>
+                        <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                          {field.count}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      No missing key data detected.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={`${glassCard} rounded-2xl`}>
+              <CardHeader className="p-4 pb-3">
+                <CardTitle className="text-base text-slate-900 dark:text-slate-100">
+                  Employees With Missing Data
+                </CardTitle>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  All records with missing key fields.
+                </p>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                {dashboardSummary.incompleteRecords.employees.length ? (
+                  <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                    {dashboardSummary.incompleteRecords.employees.map((employee) => (
+                      <Link
+                        key={employee.id}
+                        href={employee.href}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-white/30 bg-white/35 px-3 py-2.5 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                            {employee.title}
+                          </p>
+                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                            Missing: {employee.subtitle}
+                          </p>
+                        </div>
+                        {employee.meta ? (
+                          <span className="shrink-0 rounded-full bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                            {employee.meta}
+                          </span>
+                        ) : null}
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex min-h-[136px] items-center justify-center rounded-xl border border-dashed border-slate-300 px-3 text-center text-sm text-slate-500 dark:border-slate-700">
+                    No incomplete employee records detected.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

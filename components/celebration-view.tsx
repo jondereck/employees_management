@@ -80,7 +80,8 @@ const [employeeType, setEmployeeType] = useState<string>(() => {
       new Set(people.map(p => new Date(p.eventDate).getFullYear()))
     ).sort((a, b) => b - a);
 
-    return years[0] ?? new Date().getFullYear();
+    const currentYear = new Date().getFullYear();
+    return years.includes(currentYear) ? currentYear : (years[0] ?? currentYear);
   });
 
   const activePeople = useMemo(() => {

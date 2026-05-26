@@ -11,6 +11,20 @@ export type DashboardChartSlice = {
   color: string;
 };
 
+export type DashboardListItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  href: string;
+  meta?: string;
+};
+
+export type DashboardIncompleteSummary = {
+  count: number;
+  fields: { label: string; count: number }[];
+  employees: DashboardListItem[];
+};
+
 export type DashboardSummary = {
   pendingApprovals: number;
   officeCount: number;
@@ -18,6 +32,7 @@ export type DashboardSummary = {
   birthdaysThisMonth: number;
   upcomingRetirements: number;
   upcomingLoyaltyMilestones: number;
+  incompleteRecords: DashboardIncompleteSummary;
   appointmentSlices: DashboardChartSlice[];
   genderSlices: DashboardChartSlice[];
   eligibilitySlices: DashboardChartSlice[];
@@ -71,6 +86,32 @@ const buildOtherLimitedSlices = (
       color: "#94a3b8",
     },
   ];
+};
+
+const fullNameFromParts = (employee: {
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+  suffix?: string | null;
+  prefix?: string | null;
+  nickname?: string | null;
+}) => {
+  if (employee.nickname?.trim()) {
+    return [employee.firstName, `"${employee.nickname.trim()}"`, employee.lastName]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return [
+    employee.prefix,
+    employee.firstName,
+    employee.middleName,
+    employee.lastName,
+    employee.suffix,
+  ]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(" ");
 };
 
 const isRetirementUpcomingThisYear = (employee: {
@@ -172,7 +213,24 @@ export const getDashboardSummary = async (
     }),
     prismadb.employee.findMany({
       where: { departmentId, isArchived: false },
-      select: { birthday: true, dateHired: true },
+      select: {
+        id: true,
+        prefix: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        suffix: true,
+        nickname: true,
+        birthday: true,
+        dateHired: true,
+        employeeNo: true,
+        contactNumber: true,
+        emergencyContactName: true,
+        emergencyContactNumber: true,
+        publicEnabled: true,
+        salaryGrade: true,
+        offices: { select: { name: true } },
+      },
     }),
   ]);
 
@@ -238,6 +296,67 @@ export const getDashboardSummary = async (
     (sum, employee) => sum + countUpcomingLoyaltyMilestones(employee.dateHired),
     0,
   );
+  const incompleteFieldChecks = [
+    {
+      label: "Employee No.",
+      isMissing: (employee: (typeof activeEmployees)[number]) => !employee.employeeNo.trim(),
+    },
+    {
+      label: "Contact Number",
+      isMissing: (employee: (typeof activeEmployees)[number]) => !employee.contactNumber.trim(),
+    },
+    {
+      label: "Emergency Contact",
+      isMissing: (employee: (typeof activeEmployees)[number]) =>
+        !employee.emergencyContactName.trim() || !employee.emergencyContactNumber.trim(),
+    },
+    {
+      label: "Public QR",
+      isMissing: (employee: (typeof activeEmployees)[number]) => !employee.publicEnabled,
+    },
+    {
+      label: "Salary Grade",
+      isMissing: (employee: (typeof activeEmployees)[number]) =>
+        employee.salaryGrade == null || employee.salaryGrade <= 0,
+    },
+  ];
+
+  const incompleteRecordIds = new Set<string>();
+  const missingFieldsByEmployee = new Map<string, string[]>();
+  const incompleteFields = incompleteFieldChecks
+    .map((field) => {
+      const count = activeEmployees.filter((employee) => {
+        const missing = field.isMissing(employee);
+        if (missing) {
+          incompleteRecordIds.add(employee.id);
+          const current = missingFieldsByEmployee.get(employee.id) ?? [];
+          current.push(field.label);
+          missingFieldsByEmployee.set(employee.id, current);
+        }
+        return missing;
+      }).length;
+      return { label: field.label, count };
+    })
+    .filter((field) => field.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  const incompleteEmployees = activeEmployees
+    .filter((employee) => missingFieldsByEmployee.has(employee.id))
+    .sort((a, b) => {
+      const aMissing = missingFieldsByEmployee.get(a.id)?.length ?? 0;
+      const bMissing = missingFieldsByEmployee.get(b.id)?.length ?? 0;
+      return bMissing - aMissing || a.lastName.localeCompare(b.lastName);
+    })
+    .map((employee) => {
+      const missingFields = missingFieldsByEmployee.get(employee.id) ?? [];
+      return {
+        id: employee.id,
+        title: fullNameFromParts(employee) || "Unnamed employee",
+        subtitle: missingFields.join(", "),
+        href: `/${departmentId}/employees/${employee.id}`,
+        meta: `${missingFields.length} missing`,
+      };
+    });
 
   return {
     pendingApprovals,
@@ -246,6 +365,11 @@ export const getDashboardSummary = async (
     birthdaysThisMonth,
     upcomingRetirements,
     upcomingLoyaltyMilestones,
+    incompleteRecords: {
+      count: incompleteRecordIds.size,
+      fields: incompleteFields.slice(0, 3),
+      employees: incompleteEmployees,
+    },
     appointmentSlices,
     genderSlices,
     eligibilitySlices,
