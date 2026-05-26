@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import usePreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/hooks/use-preview-modal";
-import { FiMaximize, FiMaximize2, FiMinimize, FiMinimize2, FiRefreshCcw } from "react-icons/fi";
 
 import {
   loadGenioCache,
@@ -15,14 +13,22 @@ import {
 
 import { nanoid } from "nanoid";
 
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import Image from "next/image";
-import { ArrowUp, Mic, Plus, Square, Trash } from "lucide-react";
-import { extractStats, formatGenioMessage } from "@/src/genio/utils";
+import {
+  Maximize2,
+  Mic,
+  Minimize2,
+  Plus,
+  RotateCcw,
+  Send,
+  Sparkles,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react";
+import { extractStats } from "@/src/genio/utils";
 import { AnimatedMarkdown } from "@/src/genio/components/AnimatedMarkdown";
 import { GenioStatCard } from "@/src/genio/components/GenioStatCard";
-import { Avatar } from "../ui/avatar";
 
 
 type GenioMessage = {
@@ -47,6 +53,18 @@ type GenioContext = {
   lastOfficeName?: string;
   signature?: string;
 };
+
+const THINKING_MESSAGE = "__thinking__";
+const EXPORTING_MESSAGE = "__exporting__";
+const EXPORT_STARTED_MESSAGE = "Excel export started. Check your Downloads folder.";
+const EXPORT_STARTED_VISIBLE_MS = 5000;
+const EXPORT_WATCHDOG_MS = 12000;
+
+function getDownloadFilename(res: Response) {
+  const disposition = res.headers.get("content-disposition");
+  const match = disposition?.match(/filename="?([^"]+)"?/i);
+  return match?.[1] || "employees-export.xlsx";
+}
 
 function getLatestGenioContext(messages: GenioMessage[]) {
   return (
@@ -537,6 +555,8 @@ export const GenioChat = ({
   const sendMessage = async (preset?: string) => {
     const text = preset ?? input;
     if (!text.trim() || isLoading) return;
+    const isExportRequest = /\b(export|download|excel|i-export)\b/i.test(text);
+    let exportWatchdog: number | null = null;
 
 
     setInput("");
@@ -565,10 +585,28 @@ export const GenioChat = ({
         {
           id: aiId,
           role: "ai",
-          content: "__thinking__",
+          content: isExportRequest ? EXPORTING_MESSAGE : THINKING_MESSAGE,
           context: undefined,
         },
       ]);
+    }
+
+    if (isExportRequest && typeof window !== "undefined") {
+      exportWatchdog = window.setTimeout(() => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiId && m.content === EXPORTING_MESSAGE
+              ? { ...m, content: EXPORT_STARTED_MESSAGE }
+              : m
+          )
+        );
+        setIsLoading(false);
+        window.setTimeout(() => {
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== aiId || m.content !== EXPORT_STARTED_MESSAGE)
+          );
+        }, EXPORT_STARTED_VISIBLE_MS);
+      }, EXPORT_WATCHDOG_MS);
     }
 
 
@@ -580,10 +618,18 @@ export const GenioChat = ({
         body: JSON.stringify({
           message: text,
           context: lastAIContext,
+          clientMeta: {
+            locale: typeof navigator !== "undefined" ? navigator.language : undefined,
+            languageHint: typeof navigator !== "undefined" ? navigator.language?.split("-")[0] : undefined,
+          },
         }),
 
         signal: controller.signal,
       });
+
+      if (!res.ok) {
+        throw new Error(`Genio request failed with status ${res.status}`);
+      }
 
       const ctx = res.headers.get("x-genio-context");
 
@@ -617,19 +663,36 @@ export const GenioChat = ({
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           )
       ) {
+        if (exportWatchdog) {
+          window.clearTimeout(exportWatchdog);
+          exportWatchdog = null;
+        }
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
+        const filename = getDownloadFilename(res);
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiId
+              ? { ...m, content: EXPORT_STARTED_MESSAGE }
+              : m
+          )
+        );
 
         const a = document.createElement("a");
         a.href = url;
-        a.download = "employees-export.xlsx";
+        a.download = filename;
+        a.style.display = "none";
+        document.body.appendChild(a);
         a.click();
+        a.remove();
 
-        window.URL.revokeObjectURL(url);
-
-        setMessages((prev) =>
-          prev.filter((m) => m.id !== aiId)
-        );
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+        window.setTimeout(() => {
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== aiId || m.content !== EXPORT_STARTED_MESSAGE)
+          );
+        }, EXPORT_STARTED_VISIBLE_MS);
 
         return;
       }
@@ -682,12 +745,16 @@ export const GenioChat = ({
     } catch (err) {
       setMessages((prev) =>
         prev.map((m) =>
-          m.role === "ai" && m.content === "__thinking__"
+          m.id === aiId && (m.content === THINKING_MESSAGE || m.content === EXPORTING_MESSAGE)
             ? { ...m, content: "Something went wrong." }
             : m
         )
       );
     } finally {
+      if (exportWatchdog) {
+        window.clearTimeout(exportWatchdog);
+        exportWatchdog = null;
+      }
       setIsLoading(false);
       abortControllerRef.current = null;
       readerRef.current = null;
@@ -806,6 +873,13 @@ export const GenioChat = ({
     readerRef.current = null;
 
     setIsLoading(false);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.role === "ai" && (m.content === THINKING_MESSAGE || m.content === EXPORTING_MESSAGE)
+          ? { ...m, content: m.content === EXPORTING_MESSAGE ? "Export cancelled." : "Request stopped." }
+          : m
+      )
+    );
   };
 
   const getRandomCommands = () => {
@@ -863,55 +937,56 @@ export const GenioChat = ({
   return (
     <div
       className={`
-    flex flex-col overflow-hidden border bg-background shadow-2xl
+    flex flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl shadow-slate-900/15
     transition-all duration-300
     ${hidden ? "hidden" : ""}
 
     ${isFullscreen
           ? "fixed inset-0 z-[100] h-screen w-screen rounded-none"
-          : "rounded-2xl h-[100dvh] w-full sm:h-[520px] sm:w-[380px]"
+          : "h-[620px] w-[min(420px,calc(100vw-32px))] max-h-[calc(100vh-48px)] rounded-3xl"
         }
   `}
+      aria-label="Genio AI Chat Box"
     >
 
 
 
 
       {/* HEADER */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-2">
+      <div className="flex h-[76px] items-center justify-between border-b border-slate-200 bg-white px-4">
+        <div className="flex min-w-0 items-center gap-3">
 
 
 
 
-          <div className="relative w-12 h-12">
+          <div className="relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-100 text-violet-600">
             <Image
               src="/genio/genio-avatar.png"
               alt="Genio AI"
               fill
-              className="rounded-full object-contain absolute top-2 left-2"
+              className="rounded-2xl object-contain p-1"
               priority
             />
+            <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500" />
 
 
           </div>
 
-          <div>
-            <p className="text-sm font-semibold">Genio</p>
-            <p className="flex items-center gap-1 text-xs text-green-500">
-              <span className="h-2 w-2 rounded-full bg-green-500" />
-              Online
-            </p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-sm font-black text-slate-950">Genio</p>
+              <Sparkles size={13} className="text-violet-500" />
+            </div>
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1">
 
 
           {/* Reset*/}
 
           <button
-            className="text-muted-foreground hover:text-foreground"
+            className="grid h-9 w-9 place-items-center rounded-xl text-rose-500 transition hover:bg-rose-50"
             onClick={() => {
               clearGenioCache();
               latestContextRef.current = null;
@@ -919,23 +994,26 @@ export const GenioChat = ({
 
               setInput("");
             }}
+            aria-label="Clear chat"
           >
-            <Trash className="h-4 w-4 text-red-500 hover:text-red-700" />
+            <Trash2 className="h-4 w-4" />
           </button>
           {/* Fullscreen*/}
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className="text-muted-foreground hover:text-foreground"
+            className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100"
+            aria-label={isFullscreen ? "Minimize chat" : "Expand chat"}
           >
-            {isFullscreen ? <FiMinimize /> : <FiMaximize />}
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
           {/* Close */}
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground"
+            className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100"
             title="Close"
+            aria-label="Close chat"
           >
-            ✕
+            <X className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -952,12 +1030,63 @@ export const GenioChat = ({
 
 
 
+      {visibleChips.length > 0 && (
+        <div className="border-b border-slate-200 bg-white/80 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="custom-scrollbar-thin flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+              {visibleChips.map((cmd) => (
+                <button
+                  key={cmd.value}
+                  className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 disabled:pointer-events-none disabled:opacity-50"
+                  disabled={isLoading}
+                  onClick={() => handleChipClick(cmd)}
+                >
+                  {cmd.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              title={showCommandSheet ? "Showing all commands" : "Refresh suggestions"}
+              onMouseDown={handleLongPressStart}
+              onMouseUp={handleLongPressEnd}
+              onMouseLeave={handleLongPressEnd}
+              onTouchStart={handleLongPressStart}
+              onTouchEnd={handleLongPressEnd}
+              onClick={handleRefreshClick}
+              disabled={isLoading}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-50"
+              aria-label="Refresh suggestions"
+            >
+              <RotateCcw
+                className={`h-3.5 w-3.5 transition-transform ${showCommandSheet ? "rotate-180 text-violet-600" : ""
+                  }`}
+              />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MESSAGES */}
-      <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4 text-sm">
+      <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto bg-slate-50/70 px-4 py-4 text-sm">
         {messages.length === 0 && (
-          <p className="text-center text-muted-foreground">
-            Ask Genio in natural language about employees, offices, counts, and analytics.
-          </p>
+          <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+            <div className="mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-violet-100 text-violet-600">
+              <Image
+                src="/genio/genio-avatar.png"
+                alt="Genio AI"
+                width={42}
+                height={42}
+                className="object-contain"
+              />
+            </div>
+            <h3 className="text-base font-black text-slate-950">
+              Ask Genio about HRPS records
+            </h3>
+            <p className="mt-2 max-w-xs text-sm text-slate-500">
+              Try asking about employees, offices, counts, analytics, or workforce summaries.
+            </p>
+          </div>
         )}
 
         {messages.map((m) => (
@@ -967,21 +1096,25 @@ export const GenioChat = ({
               }`}
           >
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-2 ${m.role === "user"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted"
+              className={`max-w-[82%] whitespace-pre-line rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm ${m.role === "user"
+                ? "rounded-br-md bg-slate-950 text-white"
+                : "rounded-bl-md border border-slate-200 bg-white text-slate-800"
                 }`}
             >
 
 
-              {m.content === "__thinking__" ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {m.content === THINKING_MESSAGE || m.content === EXPORTING_MESSAGE ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
                   <div className="flex gap-1">
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-primary" />
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:0.15s]" />
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:0.3s]" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-violet-500" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-violet-500 [animation-delay:0.15s]" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-violet-500 [animation-delay:0.3s]" />
                   </div>
-                  <span className="italic">{messagesLoad[index]}</span>
+                  <span className="italic">
+                    {m.content === EXPORTING_MESSAGE
+                      ? "Exporting Excel file..."
+                      : messagesLoad[index]}
+                  </span>
                 </div>
 
               ) : m.role === "ai" ? (() => {
@@ -1011,7 +1144,7 @@ export const GenioChat = ({
     prose-p:my-1
     prose-ul:my-1
     prose-li:my-0
-    prose-strong:text-foreground
+    prose-strong:text-slate-950
     prose-headings:mb-1
     prose-headings:mt-2
     max-w-none
@@ -1025,7 +1158,7 @@ export const GenioChat = ({
                     {isLong && (
                       <button
                         onClick={() => toggleExpand(m.id)}
-                        className="mt-1 text-xs text-primary hover:underline"
+                        className="mt-1 text-xs font-semibold text-violet-600 hover:underline"
                       >
                         {isExpanded ? "See less ▲" : "See more ▼"}
                       </button>
@@ -1041,6 +1174,7 @@ export const GenioChat = ({
                   size="sm"
                   variant="outline"
                   className="mt-2 mr-2"
+                  disabled={isLoading}
                   onClick={() => sendMessage("Export this")}
                 >
                   Export to Excel
@@ -1053,6 +1187,7 @@ export const GenioChat = ({
                   size="sm"
                   variant="outline"
                   className="mt-2"
+                  disabled={isLoading}
                   onClick={async () => {
                     const res = await fetch(
                       `/api/${departmentId}/employees/${m.employeeId}`
@@ -1076,64 +1211,12 @@ export const GenioChat = ({
 
 
       {/* INPUT */}
-      <div className="border-t bg-background px-3 py-3">
-        {/* QUICK COMMAND CHIPS */}
-        {visibleChips.length > 0 && (
-          <div className="mb-2 flex items-center justify-between gap-2">
-            {/* LEFT: COMMAND CHIPS */}
-            <div className="flex flex-wrap gap-2">
-              {visibleChips.map((cmd) => (
-                <button
-                  key={cmd.value}
-                  className="
-            rounded-full border px-3 py-1
-            text-xs text-muted-foreground
-            hover:bg-muted transition
-          "
-                  onClick={() => handleChipClick(cmd)}
-                >
-                  {cmd.label}
-                </button>
-              ))}
-            </div>
-
-            {/* RIGHT: REFRESH BUTTON */}
-            <button
-              title={showCommandSheet ? "Showing all commands" : "Refresh suggestions"}
-              onMouseDown={handleLongPressStart}
-              onMouseUp={handleLongPressEnd}
-              onMouseLeave={handleLongPressEnd}
-              onTouchStart={handleLongPressStart}
-              onTouchEnd={handleLongPressEnd}
-              onClick={handleRefreshClick}
-              className="
-    flex h-7 w-7 items-center justify-center
-    rounded-full border
-    text-muted-foreground
-    hover:bg-muted hover:text-foreground
-    transition
-    active:scale-95
-  "
-            >
-              <FiRefreshCcw
-                className={`h-3.5 w-3.5 transition-transform ${showCommandSheet ? "rotate-180 text-primary" : ""
-                  }`}
-              />
-            </button>
-
-          </div>
-        )}
-
-        {showCommandSheet && (
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            Long-press 🔄 to toggle suggestions
-          </p>
-        )}
+      <div className="border-t border-slate-200 bg-white p-3">
 
 
 
         <div
-          className="relative flex items-center gap-2 rounded-full border bg-white px-3 py-2 shadow-sm"
+          className="relative flex items-center gap-2 rounded-3xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-inner focus-within:border-violet-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-100"
           onClick={() => inputRef.current?.focus()}
         >
 
@@ -1141,8 +1224,9 @@ export const GenioChat = ({
           {/* ➕ PLUS */}
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-slate-500 transition hover:bg-white hover:text-violet-600 disabled:pointer-events-none disabled:opacity-50"
             title="More options"
+            disabled={isLoading}
           >
             <Plus className="h-5 w-5" />
           </button>
@@ -1150,8 +1234,8 @@ export const GenioChat = ({
 
           {/* COMMANDS DROPDOWN */}
           {showCommands && filteredCommands.length > 0 && (
-            <div className="absolute bottom-full left-0 right-0 mb-2 z-50 rounded-xl border bg-white shadow-lg">
-              <div className="max-h-48 overflow-y-auto py-1">
+            <div className="absolute bottom-full left-0 right-0 z-50 mb-2 rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div className="custom-scrollbar max-h-48 overflow-y-auto py-1">
                 {filteredCommands.map((cmd, index) => (
                   <button
                     key={cmd.value}
@@ -1159,9 +1243,11 @@ export const GenioChat = ({
                     type="button"
                     className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm
             ${index === activeCommandIndex
-                        ? "bg-muted"
-                        : "hover:bg-muted"}
+                        ? "bg-violet-50 text-violet-700"
+                        : "hover:bg-slate-50"}
+            disabled:pointer-events-none disabled:opacity-50
           `}
+                    disabled={isLoading}
                     onClick={() => {
                       setInput(cmd.template);
                       setShowCommands(false);
@@ -1171,10 +1257,10 @@ export const GenioChat = ({
                       );
                     }}
                   >
-                    <span className="font-mono text-xs text-primary">
+                    <span className="font-mono text-xs text-violet-600">
                       {cmd.value}
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="text-slate-600">
                       {cmd.label}
                     </span>
                   </button>
@@ -1189,12 +1275,13 @@ export const GenioChat = ({
             ref={inputRef}
             rows={1}
             value={input}
-            placeholder="Ask anything"
-            disabled={isLoading && messages.length > 0}
+            placeholder="Ask Genio anything..."
+            disabled={isLoading}
             className="
-        flex-1 resize-none bg-transparent text-sm
-        outline-none placeholder:text-muted-foreground
-        max-h-[120px] overflow-y-auto
+        h-9 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm leading-5 text-slate-800
+        outline-none placeholder:text-slate-400
+        disabled:cursor-not-allowed disabled:opacity-60
+        max-h-28 overflow-hidden
       "
             onChange={(e) => {
               setInput(e.target.value);
@@ -1260,8 +1347,9 @@ export const GenioChat = ({
           {/* 🎤 MIC */}
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-slate-500 transition hover:bg-white hover:text-violet-600 disabled:pointer-events-none disabled:opacity-50"
             title="Voice input"
+            disabled={isLoading}
           >
             <Mic className="h-5 w-5" />
           </button>
@@ -1273,21 +1361,21 @@ export const GenioChat = ({
               onClick={() => sendMessage()}
               disabled={!input.trim()}
               className="
-      flex h-8 w-8 items-center justify-center
-      rounded-full bg-black text-white
-      transition hover:opacity-90
-      disabled:opacity-40
+      grid h-9 w-9 shrink-0 place-items-center
+      rounded-full bg-slate-900 text-white
+      transition hover:bg-violet-600
+      disabled:cursor-not-allowed disabled:bg-slate-300
     "
               title="Send"
             >
-              <ArrowUp className="h-4 w-4" />
+              <Send className="h-4 w-4" />
             </button>
           ) : (
             <button
               type="button"
               onClick={stopGenerating}
               className="
-      flex h-9 w-9 items-center justify-center
+      flex h-9 w-9 shrink-0 items-center justify-center
       rounded-full
       border border-black/10
       bg-white
@@ -1358,10 +1446,10 @@ export const GenioChat = ({
       )}
 
       {/* FOOTER */}
-      <div className="border-t border-black/10 px-4 py-2 text-center text-[11px] text-black">
-        <div className="flex justify-center gap-3 italic">
-          <button className="hover:text-black/80 transition">
-            Genio AI can make mistakes. Check important info.
+      <div className="border-t border-slate-200 bg-white px-4 py-2 text-center">
+        <div className="flex justify-center gap-3">
+          <button className="text-[11px] text-slate-500 transition hover:text-slate-700">
+            Genio AI can make mistakes. Check important HR records.
           </button>
 
         </div>

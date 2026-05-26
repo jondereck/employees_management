@@ -73,6 +73,15 @@ export function streamReply(
   meta?: {
     canExport?: boolean;
     metadata?: unknown;
+    routing?: {
+      intent?: string;
+      selectedTool?: string;
+      confidence: number;
+      blockedReason?: string;
+      fallbackReason?: string;
+      memoryUsed: boolean;
+      answerabilityClass: string;
+    };
   }
 ) {
   const encoder = new TextEncoder();
@@ -95,6 +104,17 @@ export function streamReply(
         ...(viewProfileEmployeeId ? { viewProfileEmployeeId } : {}),
         ...(meta?.canExport ? { canExport: true } : {}),
         ...(meta?.metadata ? { metadata: meta.metadata } : {}),
+        ...(meta?.routing
+          ? {
+              intent: meta.routing.intent ?? null,
+              selectedTool: meta.routing.selectedTool ?? null,
+              confidence: meta.routing.confidence,
+              blockedReason: meta.routing.blockedReason ?? null,
+              fallbackReason: meta.routing.fallbackReason ?? null,
+              memoryUsed: meta.routing.memoryUsed,
+              answerabilityClass: meta.routing.answerabilityClass,
+            }
+          : {}),
       }),
     },
   });

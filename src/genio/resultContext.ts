@@ -11,16 +11,21 @@ import type { GenioToolResult } from "./tools";
 type SaveGenioResultContextInput = {
   departmentId: string;
   userId: string;
-  question: string;
+  question?: string;
+  languageHint?: string;
+  localeHint?: string;
   result: GenioToolResult;
 };
 
-const RESULT_CONTEXT_TTL_HOURS = 12;
+const RESULT_CONTEXT_TTL_HOURS = 24 * 7;
+const RESULT_CONTEXT_MAX_ROWS_PER_USER = 120;
 
 export async function saveGenioResultContext({
   departmentId,
   userId,
   question,
+  languageHint,
+  localeHint,
   result,
 }: SaveGenioResultContextInput): Promise<GenioContext | null> {
   if (result.kind !== "text") return null;
@@ -32,11 +37,14 @@ export async function saveGenioResultContext({
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + RESULT_CONTEXT_TTL_HOURS);
 
-  const saved = await prisma.genioResultContext.create({
+  const saved = await (prisma.genioResultContext as any).create({
     data: {
       departmentId,
       userId,
       question,
+      languageHint,
+      localeHint,
+      recencyScore: 1,
       toolName: metadata?.tool ?? lastResult?.type ?? "unknown",
       toolArgsJson: toJson(metadata?.filters ?? lastResult?.filters ?? {}),
       resultKind: lastResult?.type ?? metadata?.tool ?? "summary",
@@ -49,6 +57,10 @@ export async function saveGenioResultContext({
       expiresAt,
     },
     select: { id: true },
+  });
+
+  await trimOldContexts({ departmentId, userId }).catch((error) => {
+    console.warn("[GENIO_CONTEXT_TRIM]", error);
   });
 
   return {
@@ -67,13 +79,30 @@ export async function loadGenioResultContext({
   userId: string;
 }) {
   if (!id) return null;
-  return prisma.genioResultContext.findFirst({
+  return (prisma.genioResultContext as any).findFirst({
     where: {
       id,
       departmentId,
       userId,
       expiresAt: { gt: new Date() },
     },
+  });
+}
+
+export async function loadRecentGenioResultContext({
+  departmentId,
+  userId,
+}: {
+  departmentId: string;
+  userId: string;
+}) {
+  return (prisma.genioResultContext as any).findFirst({
+    where: {
+      departmentId,
+      userId,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: [{ recencyScore: "desc" }, { createdAt: "desc" }],
   });
 }
 
@@ -116,4 +145,25 @@ function asStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const values = value.filter((item): item is string => typeof item === "string");
   return values.length ? values : undefined;
+}
+
+async function trimOldContexts({
+  departmentId,
+  userId,
+}: {
+  departmentId: string;
+  userId: string;
+}) {
+  const rows = await (prisma.genioResultContext as any).findMany({
+    where: { departmentId, userId },
+    select: { id: true },
+    orderBy: { createdAt: "desc" },
+    skip: RESULT_CONTEXT_MAX_ROWS_PER_USER,
+  });
+  if (!rows.length) return;
+  await (prisma.genioResultContext as any).deleteMany({
+    where: {
+      id: { in: rows.map((row: { id: string }) => row.id) },
+    },
+  });
 }

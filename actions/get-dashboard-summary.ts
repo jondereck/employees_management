@@ -48,6 +48,16 @@ const FALLBACK_COLORS = [
   "#dc2626",
   "#64748b",
 ];
+const ELIGIBILITY_CHART_COLORS = [
+  "#0ea5e9",
+  "#22c55e",
+  "#f97316",
+  "#a855f7",
+  "#ef4444",
+  "#14b8a6",
+  "#eab308",
+  "#3b82f6",
+];
 
 const MILESTONE_YEARS = [10, 15, 20, 25, 30, 35, 40];
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -265,7 +275,7 @@ export const getDashboardSummary = async (
     }))
     .filter((slice) => slice.value > 0);
 
-  const eligibilitySlices = buildOtherLimitedSlices(
+  const rawEligibilitySlices = buildOtherLimitedSlices(
     eligibilities
       .map((eligibility, index) => ({
         name: eligibility.name.trim() || "Unspecified",
@@ -277,6 +287,13 @@ export const getDashboardSummary = async (
       }))
       .sort((a, b) => b.value - a.value),
   );
+  const eligibilitySlices = rawEligibilitySlices.map((slice, index) => ({
+    ...slice,
+    color:
+      slice.name === "Others"
+        ? "#94a3b8"
+        : ELIGIBILITY_CHART_COLORS[index % ELIGIBILITY_CHART_COLORS.length],
+  }));
 
   const birthdaysToday = activeEmployees.filter((employee) => {
     const monthDay = getMonthDayInTimeZone(employee.birthday);

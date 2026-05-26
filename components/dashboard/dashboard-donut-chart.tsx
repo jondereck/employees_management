@@ -1,6 +1,6 @@
 "use client";
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 
 import type { DashboardChartSlice } from "@/actions/get-dashboard-summary";
 
@@ -33,7 +33,7 @@ export function DashboardDonutChart({
 
       {total > 0 ? (
         <div className="mt-3 grid grid-cols-[120px_1fr] items-center gap-3">
-          <div className="relative h-[120px]">
+          <div className="relative h-[120px] overflow-hidden">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -50,14 +50,6 @@ export function DashboardDonutChart({
                     <Cell key={item.name} fill={item.color} />
                   ))}
                 </Pie>
-                <Tooltip
-                  formatter={(value: number, name: string) => [`${value}`, name]}
-                  contentStyle={{
-                    borderRadius: 12,
-                    border: "1px solid rgba(148, 163, 184, 0.25)",
-                    boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
-                  }}
-                />
               </PieChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">

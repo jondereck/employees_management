@@ -24,7 +24,7 @@ test("sealed Genio context opens only for the same user and department", () => {
 
   const sealed = sealGenioContext(context, scope);
 
-  assert.deepEqual(openGenioContext(sealed, scope), context);
+  assert.deepEqual(openGenioContext(sealed, scope), { version: 2, ...context });
   assert.deepEqual(
     openGenioContext(sealed, { ...scope, departmentId: "department-b" }),
     {}
@@ -77,3 +77,19 @@ test("Genio context strips raw Prisma where data before signing", () => {
   );
 });
 
+test("Genio context accepts history snapshot follow-up context", () => {
+  process.env.GENIO_CONTEXT_SECRET = "test-genio-secret";
+
+  const context: GenioContext = {
+    lastResult: {
+      type: "history_snapshot",
+      filters: { year: 2023 },
+      employeeIds: ["employee-a"],
+    },
+  };
+
+  const opened = openGenioContext(sealGenioContext(context, scope), scope);
+
+  assert.equal(opened.lastResult?.type, "history_snapshot");
+  assert.deepEqual(opened.lastResult?.employeeIds, ["employee-a"]);
+});

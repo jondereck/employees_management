@@ -1588,9 +1588,10 @@ async function ageAnalysis(env: ToolEnvironment, args: unknown): Promise<GenioTe
       : typeof filters.age?.min === "number"
       ? `${filters.age.min} and above`
       : `${filters.age?.max} and below`;
+  const audience = filters.gender ? `${filters.gender.toLowerCase()} active employees` : "active employees";
 
   return textResult(
-    `There are ${count} active employees aged ${label}${filters.officeName ? ` in ${filters.officeName}` : ""}.`,
+    `There are ${count} ${audience} aged ${label}${filters.officeName ? ` in ${filters.officeName}` : ""}.`,
     {
       ...env.context,
       lastResult: {
@@ -1781,6 +1782,12 @@ function exportFilename(last: GenioLastResult) {
       ? "employees-by-age"
       : last.type === "tenure_analysis"
       ? "employees-by-tenure"
+      : last.type === "history_snapshot"
+      ? `history-snapshot-${last.filters?.year ?? "results"}`
+      : last.type === "award_analytics"
+      ? `award-employees-${last.filters?.year ?? "results"}`
+      : last.type === "employment_event_lookup"
+      ? `employment-event-employees-${last.filters?.year ?? "results"}`
       : last.type === "list_heads"
       ? "office-heads"
       : "employees-export";
@@ -1894,7 +1901,23 @@ async function historySnapshot(env: ToolEnvironment, args: unknown): Promise<Gen
     return `${index + 1}. ${employee} - ${office}, ${type}, ${snapshot.status} (${snapshot.effectiveAt.toLocaleDateString()})`;
   });
 
-  return textResult(`Workforce history snapshots found:\n\n${rows.join("\n")}`, env.context);
+  return textResult(
+    `Workforce history snapshots found:\n\n${rows.join("\n")}`,
+    {
+      ...env.context,
+      lastResult: {
+        type: "history_snapshot",
+        filters: {
+          year: parsed.year,
+          office: parsed.office,
+          officeId: typeof where.officeId === "string" ? where.officeId : undefined,
+        },
+        employeeIds: snapshots.map((snapshot) => snapshot.employeeId).slice(0, 500),
+        label: parsed.year ? `workforce history snapshot ${parsed.year}` : "workforce history snapshot",
+      },
+    },
+    { canExport: true }
+  );
 }
 
 async function awardAnalytics(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
@@ -1936,7 +1959,22 @@ async function awardAnalytics(env: ToolEnvironment, args: unknown): Promise<Geni
     return `${index + 1}. ${award.title} - ${employee} (${office}), ${award.givenAt.toLocaleDateString()}`;
   });
 
-  return textResult(`Awards from the HRPS database:\n\n${rows.join("\n")}`, env.context);
+  return textResult(
+    `Awards from the HRPS database:\n\n${rows.join("\n")}`,
+    {
+      ...env.context,
+      lastResult: {
+        type: "award_analytics",
+        filters: {
+          year: parsed.year,
+          query: parsed.employeeName,
+        },
+        employeeIds: awards.map((award) => award.employeeId).slice(0, 500),
+        label: parsed.year ? `awards ${parsed.year}` : "awards",
+      },
+    },
+    { canExport: true }
+  );
 }
 
 async function employmentEventLookup(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
@@ -1984,7 +2022,22 @@ async function employmentEventLookup(env: ToolEnvironment, args: unknown): Promi
     return `${index + 1}. ${event.type} - ${employee} (${office}), ${event.occurredAt.toLocaleDateString()}`;
   });
 
-  return textResult(`Employment events from the HRPS database:\n\n${rows.join("\n")}`, env.context);
+  return textResult(
+    `Employment events from the HRPS database:\n\n${rows.join("\n")}`,
+    {
+      ...env.context,
+      lastResult: {
+        type: "employment_event_lookup",
+        filters: {
+          year: parsed.year,
+          query: parsed.employeeName,
+        },
+        employeeIds: events.map((event) => event.employeeId).slice(0, 500),
+        label: parsed.year ? `employment events ${parsed.year}` : "employment events",
+      },
+    },
+    { canExport: true }
+  );
 }
 
 async function scheduleMetadata(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {

@@ -56,6 +56,10 @@ export const genioLastResultSchema = z
       "smallest_office",
       "compare_offices",
       "compare_employee_types",
+      "history_snapshot",
+      "award_analytics",
+      "employment_event_lookup",
+      "schedule_metadata",
     ]),
     filters: genioFiltersSchema.optional(),
     employeeIds: z.array(z.string().trim().min(1).max(100)).max(500).optional(),
@@ -66,6 +70,7 @@ export const genioLastResultSchema = z
 
 export const genioContextSchema = z
   .object({
+    version: z.number().int().min(1).max(10).optional(),
     lastResult: genioLastResultSchema.optional(),
     resultContextId: z.string().trim().min(1).max(100).optional(),
     lastEmployeeId: z.string().trim().min(1).max(100).optional(),
@@ -134,7 +139,7 @@ export function sealGenioContext(
   context: GenioContext | null | undefined,
   scope: ContextScope
 ): SignedGenioContext {
-  const safeContext = genioContextSchema.parse(context ?? {});
+  const safeContext = genioContextSchema.parse({ version: 2, ...(context ?? {}) });
   return {
     ...safeContext,
     signature: signContext(safeContext, scope),
