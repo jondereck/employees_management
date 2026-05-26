@@ -106,6 +106,56 @@ export const genioToolArgumentSchemas = {
     date: boundedString(40).optional(),
     limit: z.number().int().min(1).max(50).optional(),
   }).strip(),
+  eligibility_query: z.object({
+    mode: z.enum(["count", "list", "missing", "distribution"]),
+    eligibilityName: boundedString(160).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
+  employee_type_query: z.object({
+    mode: z.enum(["count", "list", "distribution", "compare"]),
+    employeeType: boundedString(120).optional(),
+    employeeTypes: stringArraySchema.min(2).max(5).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
+  salary_grade_query: z.object({
+    mode: z.enum(["count", "distribution", "highest", "missing"]),
+    salaryGrade: z.number().int().min(1).max(40).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
+  retirement_query: z.object({
+    mode: z.enum(["near_retirement", "age_at_least", "retirement_this_year"]),
+    age: z.number().int().min(1).max(120).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
+  data_quality_query: z.object({
+    field: z.enum(["birthday", "employee_number", "office", "latest_appointment"]),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
+  public_profile_query: z.object({
+    mode: z.enum(["enabled", "disabled", "count_enabled"]),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
+  office_staffing_query: z.object({
+    mode: z.enum(["empty_offices", "single_employee_offices"]),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
+  designation_query: z.object({
+    mode: z.enum(["with_designation", "designation_mismatch"]),
+    office: boundedString(200).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
+  award_query: z.object({
+    mode: z.enum(["this_year", "most_awarded", "by_issuer", "without_awards"]),
+    issuer: boundedString(160).optional(),
+    year: z.number().int().min(1900).max(2200).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
+  employment_event_query: z.object({
+    mode: z.enum(["by_type", "recent_hires", "without_events"]),
+    eventType: boundedString(80).optional(),
+    year: z.number().int().min(1900).max(2200).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }).strip(),
   not_answerable: notAnswerableArgsSchema,
 } as const;
 

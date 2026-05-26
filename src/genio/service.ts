@@ -224,6 +224,10 @@ export async function runGenioV1({
 export async function runGenio(input: RunGenioInput): Promise<GenioToolResult> {
   const { departmentId, message, context } = input;
   const env = { departmentId, message, context };
+  const localRoute = classifyLocalGenioRoute(message, context);
+  const frontDesk = frontDeskResult(localRoute.intent, message, context);
+  if (frontDesk) return frontDesk;
+
   const policy = checkGenioPolicy(message);
   if (policy) {
     if (policy.intent === "unsupported") {

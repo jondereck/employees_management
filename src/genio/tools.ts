@@ -46,6 +46,16 @@ type GenioToolName =
   | "award_analytics"
   | "employment_event_lookup"
   | "schedule_metadata"
+  | "eligibility_query"
+  | "employee_type_query"
+  | "salary_grade_query"
+  | "retirement_query"
+  | "data_quality_query"
+  | "public_profile_query"
+  | "office_staffing_query"
+  | "designation_query"
+  | "award_query"
+  | "employment_event_query"
   | "not_answerable";
 
 type ToolMeta = GenioToolMeta;
@@ -2107,6 +2117,458 @@ async function scheduleMetadata(env: ToolEnvironment, args: unknown): Promise<Ge
   return textResult(`Schedule metadata only:\n\n${rows.join("\n")}`, env.context);
 }
 
+async function resolveEligibility(departmentId: string, input?: string) {
+  const eligibilities = await prisma.eligibility.findMany({
+    where: { departmentId },
+    orderBy: { name: "asc" },
+  });
+  if (!input?.trim()) return { eligibility: null, eligibilities };
+
+  const query = input.toLowerCase();
+  const eligibility =
+    eligibilities.find((item) => item.name.toLowerCase() === query) ??
+    eligibilities.find((item) => item.name.toLowerCase().includes(query) || query.includes(item.name.toLowerCase()));
+
+  return { eligibility: eligibility ?? null, eligibilities };
+}
+
+async function eligibilityQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.eligibility_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+
+  if (parsed.mode === "missing") {
+    const employees = await prisma.employee.findMany({
+      where: {
+        departmentId: env.departmentId,
+        isArchived: false,
+        OR: [{ eligibilityId: "" }],
+      },
+      include: { offices: { select: { name: true } } },
+      orderBy: { lastName: "asc" },
+      take: limit,
+    });
+
+    if (!employees.length) {
+      return textResult("No active employees are missing eligibility in the current schema.", env.context);
+    }
+
+    return textResult(
+      `Employees missing eligibility:\n\n${formatEmployeeList(employees, limit)}`,
+      {
+        ...env.context,
+        lastResult: { type: "employee_filter", employeeIds: employees.map((employee) => employee.id), label: "employees missing eligibility" },
+      },
+      { canExport: true }
+    );
+  }
+
+  if (parsed.mode === "distribution" || !parsed.eligibilityName) {
+    const rows = await prisma.employee.groupBy({
+      by: ["eligibilityId"],
+      where: { departmentId: env.departmentId, isArchived: false },
+      _count: { _all: true },
+    });
+    const eligibilities = await prisma.eligibility.findMany({
+      where: { departmentId: env.departmentId, id: { in: rows.map((row) => row.eligibilityId) } },
+    });
+    const nameById = new Map(eligibilities.map((item) => [item.id, item.name]));
+    const lines = rows
+      .map((row) => ({ name: nameById.get(row.eligibilityId) ?? "Unknown eligibility", count: row._count._all }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .map((row, index) => `${index + 1}. ${row.name}: ${row.count}`);
+
+    return textResult(`Eligibility distribution:\n\n${lines.join("\n") || "No active employees found."}`, env.context);
+  }
+
+  const { eligibility, eligibilities } = await resolveEligibility(env.departmentId, parsed.eligibilityName);
+  if (!eligibility) {
+    const suggestions = eligibilities.slice(0, 8).map((item) => `- ${item.name}`).join("\n");
+    return textResult(`I could not identify that eligibility. Available examples:\n\n${suggestions}`, env.context);
+  }
+
+  const employees = await prisma.employee.findMany({
+    where: { departmentId: env.departmentId, isArchived: false, eligibilityId: eligibility.id },
+    include: { offices: { select: { name: true } } },
+    orderBy: { lastName: "asc" },
+    take: parsed.mode === "list" ? limit : undefined,
+  });
+
+  if (parsed.mode === "count") {
+    return textResult(
+      `There are ${employees.length} active employees with ${eligibility.name} eligibility.`,
+      {
+        ...env.context,
+        lastResult: { type: "employee_filter", employeeIds: employees.slice(0, 500).map((employee) => employee.id), label: `${eligibility.name} eligibility` },
+      },
+      { canExport: true }
+    );
+  }
+
+  return textResult(
+    `Employees with ${eligibility.name} eligibility:\n\n${formatEmployeeList(employees, limit)}`,
+    {
+      ...env.context,
+      lastResult: { type: "employee_filter", employeeIds: employees.map((employee) => employee.id), label: `${eligibility.name} eligibility` },
+    },
+    { canExport: true }
+  );
+}
+
+async function employeeTypeQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.employee_type_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+  const employeeTypes = await departmentEmployeeTypes(env.departmentId);
+
+  if (parsed.mode === "distribution" || !parsed.employeeType && parsed.mode !== "compare") {
+    const rows = await prisma.employee.groupBy({
+      by: ["employeeTypeId"],
+      where: { departmentId: env.departmentId, isArchived: false },
+      _count: { _all: true },
+    });
+    const nameById = new Map(employeeTypes.map((type) => [type.id, type.name]));
+    const lines = rows
+      .map((row) => ({ name: nameById.get(row.employeeTypeId) ?? "Unknown employee type", count: row._count._all }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .map((row, index) => `${index + 1}. ${row.name}: ${row.count}`);
+
+    return textResult(`Employee type distribution:\n\n${lines.join("\n") || "No active employees found."}`, env.context);
+  }
+
+  if (parsed.mode === "compare") {
+    const targets = (parsed.employeeTypes ?? []).map((name) => resolveEmployeeType(name, employeeTypes)).filter(Boolean);
+    if (targets.length < 2) {
+      return textResult("Please include at least two employee types to compare, like Regular vs Casual.", env.context);
+    }
+    const counts = await Promise.all(
+      targets.map(async (type) => ({
+        name: type!.name,
+        count: await prisma.employee.count({ where: { departmentId: env.departmentId, isArchived: false, employeeTypeId: type!.id } }),
+      }))
+    );
+    return textResult(`Employee type comparison:\n\n${counts.map((item) => `- ${item.name}: ${item.count}`).join("\n")}`, env.context);
+  }
+
+  const employeeType = resolveEmployeeType(parsed.employeeType ?? env.message, employeeTypes);
+  if (!employeeType) return textResult("I could not identify that employee type.", env.context);
+
+  const employees = await prisma.employee.findMany({
+    where: { departmentId: env.departmentId, isArchived: false, employeeTypeId: employeeType.id },
+    include: { offices: { select: { name: true } } },
+    orderBy: { lastName: "asc" },
+    take: parsed.mode === "list" ? limit : undefined,
+  });
+
+  if (parsed.mode === "count") {
+    return textResult(
+      `There are ${employees.length} active ${employeeType.name} employees.`,
+      { ...env.context, lastResult: { type: "employee_filter", employeeIds: employees.slice(0, 500).map((employee) => employee.id), label: employeeType.name } },
+      { canExport: true }
+    );
+  }
+
+  return textResult(
+    `${employeeType.name} employees:\n\n${formatEmployeeList(employees, limit)}`,
+    { ...env.context, lastResult: { type: "employee_filter", employeeIds: employees.map((employee) => employee.id), label: employeeType.name } },
+    { canExport: true }
+  );
+}
+
+async function salaryGradeQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.salary_grade_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+
+  if (parsed.mode === "missing") {
+    const employees = await prisma.employee.findMany({
+      where: { departmentId: env.departmentId, isArchived: false, salaryGrade: null },
+      include: { offices: { select: { name: true } } },
+      orderBy: { lastName: "asc" },
+      take: limit,
+    });
+    return textResult(
+      employees.length ? `Employees missing salary grade:\n\n${formatEmployeeList(employees, limit)}` : "No active employees are missing salary grade.",
+      { ...env.context, lastResult: { type: "employee_filter", employeeIds: employees.map((employee) => employee.id), label: "missing salary grade" } },
+      { canExport: employees.length > 0 }
+    );
+  }
+
+  if (parsed.mode === "highest") {
+    const employees = await prisma.employee.findMany({
+      where: { departmentId: env.departmentId, isArchived: false, salaryGrade: { not: null } },
+      include: { offices: { select: { name: true } } },
+      orderBy: [{ salaryGrade: "desc" }, { lastName: "asc" }],
+      take: limit,
+    });
+    const highest = employees[0]?.salaryGrade;
+    const rows = employees.filter((employee) => employee.salaryGrade === highest);
+    return textResult(
+      rows.length ? `Highest salary grade found: SG ${highest}\n\n${formatEmployeeList(rows, limit)}` : "No salary grade data available.",
+      { ...env.context, lastResult: { type: "employee_filter", employeeIds: rows.map((employee) => employee.id), label: `SG ${highest}` } },
+      { canExport: rows.length > 0 }
+    );
+  }
+
+  if (parsed.mode === "distribution" || !parsed.salaryGrade) {
+    const rows = await prisma.employee.groupBy({
+      by: ["salaryGrade"],
+      where: { departmentId: env.departmentId, isArchived: false },
+      _count: { _all: true },
+      orderBy: { salaryGrade: "asc" },
+    });
+    const lines = rows.map((row) => `- ${row.salaryGrade ? `SG ${row.salaryGrade}` : "Missing SG"}: ${row._count._all}`);
+    return textResult(`Salary grade distribution:\n\n${lines.join("\n") || "No active employees found."}`, env.context);
+  }
+
+  const employees = await prisma.employee.findMany({
+    where: { departmentId: env.departmentId, isArchived: false, salaryGrade: parsed.salaryGrade },
+    include: { offices: { select: { name: true } } },
+    orderBy: { lastName: "asc" },
+  });
+  return textResult(
+    `There are ${employees.length} active employees with SG ${parsed.salaryGrade}.`,
+    { ...env.context, lastResult: { type: "employee_filter", employeeIds: employees.slice(0, 500).map((employee) => employee.id), label: `SG ${parsed.salaryGrade}` } },
+    { canExport: true }
+  );
+}
+
+async function retirementQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.retirement_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+  const age = parsed.mode === "age_at_least" ? parsed.age ?? 60 : 60;
+  const employees = await prisma.employee.findMany({
+    where: { departmentId: env.departmentId, isArchived: false },
+    include: { offices: { select: { name: true } } },
+    orderBy: { lastName: "asc" },
+  });
+  const currentYear = new Date().getFullYear();
+  const matched = employees.filter((employee) => {
+    const employeeAge = calculateAge(employee.birthday);
+    if (parsed.mode === "retirement_this_year") return employeeAge === 65 || employee.birthday.getFullYear() + 65 === currentYear;
+    if (parsed.mode === "near_retirement") return employeeAge >= 60;
+    return employeeAge >= age;
+  });
+  const label = parsed.mode === "retirement_this_year" ? "retirement candidates this year" : `employees age ${age} and above`;
+  return textResult(
+    matched.length ? `${label}:\n\n${formatEmployeeList(matched, limit)}` : `No ${label} found.`,
+    { ...env.context, lastResult: { type: "employee_filter", employeeIds: matched.slice(0, 500).map((employee) => employee.id), label } },
+    { canExport: matched.length > 0 }
+  );
+}
+
+async function dataQualityQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.data_quality_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+  const whereByField: Record<typeof parsed.field, Prisma.EmployeeWhereInput | null> = {
+    birthday: null,
+    employee_number: { OR: [{ employeeNo: "" }] },
+    office: { OR: [{ officeId: "" }] },
+    latest_appointment: { OR: [{ latestAppointment: "" }] },
+  };
+  const extraWhere = whereByField[parsed.field];
+  if (!extraWhere) {
+    return textResult("No active employees are missing birthday because birthday is required by the current HRIS schema.", env.context);
+  }
+  const employees = await prisma.employee.findMany({
+    where: { departmentId: env.departmentId, isArchived: false, ...extraWhere },
+    include: { offices: { select: { name: true } } },
+    orderBy: { lastName: "asc" },
+    take: limit,
+  });
+  const label = parsed.field.replace(/_/g, " ");
+  return textResult(
+    employees.length ? `Employees missing ${label}:\n\n${formatEmployeeList(employees, limit)}` : `No active employees are missing ${label}.`,
+    { ...env.context, lastResult: { type: "employee_filter", employeeIds: employees.map((employee) => employee.id), label: `missing ${label}` } },
+    { canExport: employees.length > 0 }
+  );
+}
+
+async function publicProfileQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.public_profile_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+  if (parsed.mode === "count_enabled") {
+    const count = await prisma.employee.count({ where: { departmentId: env.departmentId, isArchived: false, publicEnabled: true } });
+    return textResult(`There are ${count} active employees with public profile enabled.`, env.context);
+  }
+  const enabled = parsed.mode === "enabled";
+  const employees = await prisma.employee.findMany({
+    where: { departmentId: env.departmentId, isArchived: false, publicEnabled: enabled },
+    include: { offices: { select: { name: true } } },
+    orderBy: { lastName: "asc" },
+    take: limit,
+  });
+  const label = enabled ? "public profile enabled" : "public profile disabled";
+  return textResult(
+    employees.length ? `Employees with ${label}:\n\n${formatEmployeeList(employees, limit)}` : `No active employees with ${label}.`,
+    { ...env.context, lastResult: { type: "employee_filter", employeeIds: employees.map((employee) => employee.id), label } },
+    { canExport: employees.length > 0 }
+  );
+}
+
+async function officeStaffingQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.office_staffing_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+  const offices = await prisma.offices.findMany({
+    where: { departmentId: env.departmentId },
+    select: {
+      id: true,
+      name: true,
+      _count: { select: { employee: { where: { departmentId: env.departmentId, isArchived: false } } } },
+    },
+    orderBy: { name: "asc" },
+  });
+  const targetCount = parsed.mode === "empty_offices" ? 0 : 1;
+  const matched = offices.filter((office) => office._count.employee === targetCount).slice(0, limit);
+  const label = targetCount === 0 ? "offices with no active employees" : "offices with only one active employee";
+  return textResult(
+    matched.length
+      ? `${label}:\n\n${matched.map((office, index) => `${index + 1}. ${office.name}`).join("\n")}`
+      : `No ${label} found.`,
+    {
+      ...env.context,
+      lastResult: { type: targetCount === 0 ? "smallest_office" : "top_offices", officeIds: matched.map((office) => office.id), label },
+    }
+  );
+}
+
+async function designationQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.designation_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+  const where: Prisma.EmployeeWhereInput = {
+    departmentId: env.departmentId,
+    isArchived: false,
+    designationId: { not: null },
+  };
+  if (parsed.office) {
+    const resolved = await resolveOfficeOrReply(env.departmentId, parsed.office, env.message, env.context);
+    if (resolved.result) return resolved.result;
+    if (resolved.office) where.officeId = resolved.office.id;
+  }
+  const employees = await prisma.employee.findMany({
+    where,
+    include: {
+      offices: { select: { name: true } },
+      designation: { select: { name: true } },
+    },
+    orderBy: { lastName: "asc" },
+    take: limit,
+  });
+  const matched = parsed.mode === "designation_mismatch"
+    ? employees.filter((employee) => employee.designationId && employee.designationId !== employee.officeId)
+    : employees;
+  const rows = matched.map((employee, index) => {
+    const assigned = employee.offices?.name ?? "No assigned office";
+    const designation = employee.designation?.name ?? "No designation office";
+    return `${index + 1}. ${employeeName(employee)} - assigned: ${assigned}; designated: ${designation}`;
+  });
+  const label = parsed.mode === "designation_mismatch" ? "designation differs from assigned office" : "with designation office";
+  return textResult(
+    rows.length ? `Employees ${label}:\n\n${rows.join("\n")}` : `No active employees ${label}.`,
+    { ...env.context, lastResult: { type: "employee_filter", employeeIds: matched.map((employee) => employee.id), label } },
+    { canExport: rows.length > 0 }
+  );
+}
+
+async function awardQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.award_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+  const year = parsed.year ?? new Date().getFullYear();
+
+  if (parsed.mode === "without_awards") {
+    const employees = await prisma.employee.findMany({
+      where: { departmentId: env.departmentId, isArchived: false, awards: { none: { deletedAt: null } } },
+      include: { offices: { select: { name: true } } },
+      orderBy: { lastName: "asc" },
+      take: limit,
+    });
+    return textResult(
+      employees.length ? `Employees without awards:\n\n${formatEmployeeList(employees, limit)}` : "All active employees have at least one award record.",
+      { ...env.context, lastResult: { type: "employee_filter", employeeIds: employees.map((employee) => employee.id), label: "without awards" } },
+      { canExport: employees.length > 0 }
+    );
+  }
+
+  if (parsed.mode === "most_awarded") {
+    const employees = await prisma.employee.findMany({
+      where: { departmentId: env.departmentId, isArchived: false },
+      include: { offices: { select: { name: true } }, awards: { where: { deletedAt: null }, select: { id: true } } },
+    });
+    const ranked = employees
+      .map((employee) => ({ employee, count: employee.awards.length }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count || employeeName(a.employee).localeCompare(employeeName(b.employee)))
+      .slice(0, limit);
+    return textResult(
+      ranked.length
+        ? `Most awarded employees:\n\n${ranked.map((item, index) => `${index + 1}. ${employeeName(item.employee)} - ${item.count} awards`).join("\n")}`
+        : "No award records found.",
+      { ...env.context, lastResult: { type: "employee_filter", employeeIds: ranked.map((item) => item.employee.id), label: "most awarded" } },
+      { canExport: ranked.length > 0 }
+    );
+  }
+
+  const awards = await prisma.award.findMany({
+    where: {
+      deletedAt: null,
+      ...(parsed.mode === "this_year" ? { givenAt: { gte: startOfYear(year), lte: endOfYear(year) } } : {}),
+      ...(parsed.mode === "by_issuer" && parsed.issuer ? { issuer: { contains: parsed.issuer, mode: "insensitive" } } : {}),
+      employee: { departmentId: env.departmentId, isArchived: false },
+    },
+    include: { employee: { select: { id: true, firstName: true, middleName: true, lastName: true, offices: { select: { name: true } } } } },
+    orderBy: { givenAt: "desc" },
+    take: limit,
+  });
+  const rows = awards.map((award, index) => `${index + 1}. ${award.title} - ${employeeName(award.employee)} (${award.givenAt.toLocaleDateString()})`);
+  const label = parsed.mode === "by_issuer" ? `awards by ${parsed.issuer}` : `awards ${year}`;
+  return textResult(
+    rows.length ? `${label}:\n\n${rows.join("\n")}` : `No ${label} found.`,
+    { ...env.context, lastResult: { type: "award_analytics", employeeIds: awards.map((award) => award.employeeId), label } },
+    { canExport: rows.length > 0 }
+  );
+}
+
+async function employmentEventQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.employment_event_query.parse(parseJsonObject(args));
+  const limit = parsed.limit ?? 50;
+
+  if (parsed.mode === "without_events") {
+    const employees = await prisma.employee.findMany({
+      where: { departmentId: env.departmentId, isArchived: false, employmentEvents: { none: { deletedAt: null } } },
+      include: { offices: { select: { name: true } } },
+      orderBy: { lastName: "asc" },
+      take: limit,
+    });
+    return textResult(
+      employees.length ? `Employees without employment events:\n\n${formatEmployeeList(employees, limit)}` : "All active employees have at least one employment event.",
+      { ...env.context, lastResult: { type: "employee_filter", employeeIds: employees.map((employee) => employee.id), label: "without employment events" } },
+      { canExport: employees.length > 0 }
+    );
+  }
+
+  const eventTypeInput = parsed.mode === "recent_hires" ? "HIRED" : parsed.eventType;
+  const requestedEventType = eventTypeInput?.toUpperCase().replace(/\s+/g, "_");
+  const eventType = requestedEventType && Object.values(EmploymentEventType).includes(requestedEventType as EmploymentEventType)
+    ? requestedEventType as EmploymentEventType
+    : undefined;
+  const year = parsed.year;
+  const events = await prisma.employmentEvent.findMany({
+    where: {
+      deletedAt: null,
+      ...(eventType ? { type: eventType } : {}),
+      ...(year ? { occurredAt: { gte: startOfYear(year), lte: endOfYear(year) } } : {}),
+      employee: { departmentId: env.departmentId, isArchived: false },
+    },
+    include: { employee: { select: { id: true, firstName: true, middleName: true, lastName: true, offices: { select: { name: true } } } } },
+    orderBy: { occurredAt: "desc" },
+    take: limit,
+  });
+  const rows = events.map((event, index) => `${index + 1}. ${event.type} - ${employeeName(event.employee)} (${event.occurredAt.toLocaleDateString()})`);
+  const label = parsed.mode === "recent_hires" ? "recent hires" : `${eventType ?? "employment events"}${year ? ` ${year}` : ""}`;
+  return textResult(
+    rows.length ? `${label}:\n\n${rows.join("\n")}` : `No ${label} found.`,
+    { ...env.context, lastResult: { type: "employment_event_lookup", employeeIds: events.map((event) => event.employeeId), label } },
+    { canExport: rows.length > 0 }
+  );
+}
+
 async function notAnswerable(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
   const parsed = genioToolArgumentSchemas.not_answerable.parse(parseJsonObject(args));
   return textResult(notAnswerableMessage(parsed), env.context);
@@ -2179,6 +2641,26 @@ export async function executeGenioTool(
       return employmentEventLookup(env, args);
     case "schedule_metadata":
       return scheduleMetadata(env, args);
+    case "eligibility_query":
+      return eligibilityQuery(env, args);
+    case "employee_type_query":
+      return employeeTypeQuery(env, args);
+    case "salary_grade_query":
+      return salaryGradeQuery(env, args);
+    case "retirement_query":
+      return retirementQuery(env, args);
+    case "data_quality_query":
+      return dataQualityQuery(env, args);
+    case "public_profile_query":
+      return publicProfileQuery(env, args);
+    case "office_staffing_query":
+      return officeStaffingQuery(env, args);
+    case "designation_query":
+      return designationQuery(env, args);
+    case "award_query":
+      return awardQuery(env, args);
+    case "employment_event_query":
+      return employmentEventQuery(env, args);
     case "not_answerable":
       return notAnswerable(env, args);
     default:

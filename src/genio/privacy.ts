@@ -64,6 +64,7 @@ export const GENIO_FIELD_ALLOWLIST = {
   award: ["id", "employeeId", "title", "description", "givenAt", "issuer", "tags"],
   employmentEvent: ["id", "employeeId", "type", "details", "occurredAt"],
   schedule: ["id", "employeeId", "type", "startTime", "endTime", "effectiveFrom", "effectiveTo", "timezone"],
+  publicProfile: ["id", "employeeNo", "firstName", "middleName", "lastName", "officeId", "publicEnabled", "publicId"],
 } as const;
 
 export function isSensitiveGenioField(field: string) {

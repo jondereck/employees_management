@@ -96,6 +96,31 @@ function extractAge(message: string) {
   return undefined;
 }
 
+function extractYear(text: string) {
+  const year = text.match(/\b(19|20|21)\d{2}\b/)?.[0];
+  return year ? Number(year) : undefined;
+}
+
+function extractSalaryGrade(text: string) {
+  const match = text.match(/\b(?:sg|salary grade)\s*(\d{1,2})\b/i);
+  return match ? Number(match[1]) : undefined;
+}
+
+function extractEligibilityName(message: string) {
+  return message
+    .replace(/\b(ilan|how many|count|list|employees?|employee|ang|with|by|eligibility|eligible|sino|mga)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractEmployeeTypes(message: string) {
+  return message
+    .split(/\bvs\b|,|\/|\band\b/gi)
+    .map((part) => part.replace(/\b(compare|employee types?|employees?|regular|casual|cos|jo|job order)\b/gi, (match) => match).trim())
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
 function hasPreviousContext(context: GenioContext) {
   return Boolean(context.lastResult || context.lastEmployeeId || context.resultContextId);
 }
@@ -144,6 +169,111 @@ export function deterministicGenioSelection(
   if (listLastPattern.test(text)) return { name: "list_last_result", args: {} };
   if (/\b(?:ilan|how many|count|total)\b/.test(text) && /\b(?:active )?(?:employee|employees|staff|empleyado)\b/.test(text) && !/\b(?:as of|noong|in|current in)\s+(?:19|20|21)\d{2}\b/.test(text)) {
     return { name: "count_employees", args: { gender: extractGender(text) } };
+  }
+  if (/\b(walang eligibility|without eligibility|missing eligibility|no eligibility)\b/i.test(text)) {
+    return { name: "eligibility_query", args: { mode: "missing" } };
+  }
+  if (/\b(eligibility distribution|by eligibility|list employees by eligibility)\b/i.test(text)) {
+    return { name: "eligibility_query", args: { mode: "distribution" } };
+  }
+  if (/\b(civil service|eligibility|professional|subprofessional|board passer|bar passer)\b/i.test(text)) {
+    const mode = /\b(list|sino)\b/i.test(text) ? "list" : "count";
+    return { name: "eligibility_query", args: { mode, eligibilityName: extractEligibilityName(message) || message } };
+  }
+  if (/\b(compare regular|regular vs|casual vs|cos vs|compare employee type|compare employee types)\b/i.test(text)) {
+    return { name: "employee_type_query", args: { mode: "compare", employeeTypes: extractEmployeeTypes(message) } };
+  }
+  if (/\b(employee type distribution|by employee type|breakdown by employee type)\b/i.test(text)) {
+    return { name: "employee_type_query", args: { mode: "distribution" } };
+  }
+  if (/\b(regular|casual|cos|job order|jo)\b/i.test(text) && /\b(employee|employees|staff|ilan|list|count)\b/i.test(text)) {
+    const mode = /\b(list|sino)\b/i.test(text) ? "list" : "count";
+    return { name: "employee_type_query", args: { mode, employeeType: message } };
+  }
+  if (/\b(missing salary grade|without salary grade|no salary grade|walang salary grade|walang sg)\b/i.test(text)) {
+    return { name: "salary_grade_query", args: { mode: "missing" } };
+  }
+  if (/\b(highest salary grade|highest sg|pinakamataas na sg)\b/i.test(text)) {
+    return { name: "salary_grade_query", args: { mode: "highest" } };
+  }
+  if (/\b(salary grade distribution|sg distribution|salary grade breakdown)\b/i.test(text)) {
+    return { name: "salary_grade_query", args: { mode: "distribution" } };
+  }
+  if (/\b(?:sg|salary grade)\s*\d{1,2}\b/i.test(text)) {
+    return { name: "salary_grade_query", args: { mode: "count", salaryGrade: extractSalaryGrade(text) } };
+  }
+  if (/\b(retirement candidates this year|retire this year|mag retire this year)\b/i.test(text)) {
+    return { name: "retirement_query", args: { mode: "retirement_this_year" } };
+  }
+  if (/\b(malapit na mag retire|near retirement|retirement candidates|retiring employees)\b/i.test(text)) {
+    return { name: "retirement_query", args: { mode: "near_retirement" } };
+  }
+  if (/\b(age|aged|edad)\s*(\d{2,3})\s*(?:and above|above|pataas|\+)?\b/i.test(text)) {
+    const age = Number(text.match(/\b(\d{2,3})\b/)?.[1]);
+    if (age >= 50) return { name: "retirement_query", args: { mode: "age_at_least", age } };
+  }
+  if (/\b(missing birthday|without birthday|no birthday|walang birthday)\b/i.test(text)) {
+    return { name: "data_quality_query", args: { field: "birthday" } };
+  }
+  if (/\b(missing employee number|without employee number|no employee number|walang employee number|missing bio)\b/i.test(text)) {
+    return { name: "data_quality_query", args: { field: "employee_number" } };
+  }
+  if (/\b(missing office|without office|no office|walang office)\b/i.test(text)) {
+    return { name: "data_quality_query", args: { field: "office" } };
+  }
+  if (/\b(missing latest appointment|without latest appointment|walang latest appointment)\b/i.test(text)) {
+    return { name: "data_quality_query", args: { field: "latest_appointment" } };
+  }
+  if (/\b(count public-enabled|count public enabled|public-enabled count|public enabled count)\b/i.test(text)) {
+    return { name: "public_profile_query", args: { mode: "count_enabled" } };
+  }
+  if (/\b(public profile disabled|public disabled|profile disabled)\b/i.test(text)) {
+    return { name: "public_profile_query", args: { mode: "disabled" } };
+  }
+  if (/\b(public profile enabled|public enabled|naka-public profile|naka public profile)\b/i.test(text)) {
+    return { name: "public_profile_query", args: { mode: "enabled" } };
+  }
+  if (/\b(offices? with no employees|offices? without employees|empty offices?|walang employees)\b/i.test(text)) {
+    return { name: "office_staffing_query", args: { mode: "empty_offices" } };
+  }
+  if (/\b(offices? with only one employee|only one employee|iisa lang employee)\b/i.test(text)) {
+    return { name: "office_staffing_query", args: { mode: "single_employee_offices" } };
+  }
+  if (/\b(designation.*assigned|assigned.*designation|assigned.*designated|designated.*assigned|designation mismatch)\b/i.test(text)) {
+    return { name: "designation_query", args: { mode: "designation_mismatch" } };
+  }
+  if (/\b(with designation|has designation|list employees with designation)\b/i.test(text)) {
+    return { name: "designation_query", args: { mode: "with_designation" } };
+  }
+  if (/\b(employees without awards|without awards|no awards|walang awards)\b/i.test(text)) {
+    return { name: "award_query", args: { mode: "without_awards" } };
+  }
+  if (/\b(most awarded|pinakamaraming awards)\b/i.test(text)) {
+    return { name: "award_query", args: { mode: "most_awarded" } };
+  }
+  if (/\b(awards by issuer|issuer)\b/i.test(text) && /\baward/i.test(text)) {
+    return { name: "award_query", args: { mode: "by_issuer", issuer: message } };
+  }
+  if (/\b(awards this year|awards ngayong taon)\b/i.test(text)) {
+    return { name: "award_query", args: { mode: "this_year" } };
+  }
+  if (/\b(without employment events|no employment events|walang employment events)\b/i.test(text)) {
+    return { name: "employment_event_query", args: { mode: "without_events" } };
+  }
+  if (/\b(recently hired|recent hires|new hires|bagong hire)\b/i.test(text)) {
+    return { name: "employment_event_query", args: { mode: "recent_hires" } };
+  }
+  if (/\b(promoted|promotion|transferred|reassigned|terminated|hired)\b/i.test(text)) {
+    const eventType = /promoted|promotion/i.test(text)
+      ? "PROMOTED"
+      : /transferred/i.test(text)
+      ? "TRANSFERRED"
+      : /reassigned/i.test(text)
+      ? "REASSIGNED"
+      : /terminated/i.test(text)
+      ? "TERMINATED"
+      : "HIRED";
+    return { name: "employment_event_query", args: { mode: "by_type", eventType, year: extractYear(text) } };
   }
   if (/\b(ilan babae|ilang babae|female count|count female|ilan ang babae|babae at lalaki)\b/i.test(text)) {
     return { name: "gender_distribution", args: {} };

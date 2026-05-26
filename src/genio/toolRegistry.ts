@@ -39,6 +39,16 @@ export const GENIO_TOOL_REGISTRY = Object.freeze({
   award_analytics: { selectedFields: GENIO_FIELD_ALLOWLIST.award },
   employment_event_lookup: { selectedFields: GENIO_FIELD_ALLOWLIST.employmentEvent },
   schedule_metadata: { selectedFields: GENIO_FIELD_ALLOWLIST.schedule },
+  eligibility_query: { selectedFields: ["id", "firstName", "middleName", "lastName", "employeeNo", "eligibilityId"] },
+  employee_type_query: { selectedFields: ["id", "firstName", "middleName", "lastName", "employeeNo", "employeeTypeId"] },
+  salary_grade_query: { selectedFields: ["id", "firstName", "middleName", "lastName", "employeeNo", "salaryGrade"] },
+  retirement_query: { selectedFields: ["id", "firstName", "middleName", "lastName", "employeeNo", "birthday"] },
+  data_quality_query: { selectedFields: ["id", "firstName", "middleName", "lastName", "employeeNo", "birthday", "latestAppointment", "officeId"] },
+  public_profile_query: { selectedFields: GENIO_FIELD_ALLOWLIST.publicProfile },
+  office_staffing_query: { selectedFields: ["id", "name"] },
+  designation_query: { selectedFields: ["id", "firstName", "middleName", "lastName", "employeeNo", "officeId", "designationId"] },
+  award_query: { selectedFields: GENIO_FIELD_ALLOWLIST.award },
+  employment_event_query: { selectedFields: GENIO_FIELD_ALLOWLIST.employmentEvent },
   not_answerable: { selectedFields: [] },
 } satisfies Record<GenioToolName, { selectedFields: readonly string[] }>);
 

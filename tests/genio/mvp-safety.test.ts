@@ -15,6 +15,16 @@ test("Genio exposes the MVP semantic tools", () => {
   assert.ok(toolNames.includes("award_analytics"));
   assert.ok(toolNames.includes("employment_event_lookup"));
   assert.ok(toolNames.includes("schedule_metadata"));
+  assert.ok(toolNames.includes("eligibility_query"));
+  assert.ok(toolNames.includes("employee_type_query"));
+  assert.ok(toolNames.includes("salary_grade_query"));
+  assert.ok(toolNames.includes("retirement_query"));
+  assert.ok(toolNames.includes("data_quality_query"));
+  assert.ok(toolNames.includes("public_profile_query"));
+  assert.ok(toolNames.includes("office_staffing_query"));
+  assert.ok(toolNames.includes("designation_query"));
+  assert.ok(toolNames.includes("award_query"));
+  assert.ok(toolNames.includes("employment_event_query"));
 });
 
 test("Genio rejects write actions before any DB-backed handler runs", async () => {
@@ -53,6 +63,7 @@ test("sensitive fields are not part of the normal employee allowlist", () => {
 
 test("tool registry recognizes only allowlisted tools", () => {
   assert.equal(isGenioToolName("count_employees"), true);
+  assert.equal(isGenioToolName("salary_grade_query"), true);
   assert.equal(isGenioToolName("not_answerable"), true);
   assert.equal(isGenioToolName("delete_employee"), false);
   assert.equal(isGenioToolName("raw_sql"), false);

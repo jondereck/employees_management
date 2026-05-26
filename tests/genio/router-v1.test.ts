@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { parseGenioIntent } from "@/src/genio/parse-intent";
 import { classifyLocalGenioRoute } from "@/src/genio/router";
-import { runGenioV1 } from "@/src/genio/service";
+import { runGenio, runGenioV1 } from "@/src/genio/service";
 
 test("parseGenioIntent handles Taglish follow-up phrases", () => {
   const parsed = parseGenioIntent("sino sila", { lastResult: { type: "employee_filter" } });
@@ -50,6 +50,26 @@ test("classifyLocalGenioRoute catches front-desk prompts before HR tools", () =>
   assert.equal(taglishHelp.selectedTool, undefined);
 });
 
+test("runGenio answers front-desk prompts even when v1 flag is disabled", async () => {
+  const taglishHelp = await runGenio({
+    departmentId: "department-1",
+    message: "ano kaya mo?",
+    context: {},
+  });
+
+  assert.equal(taglishHelp.kind, "text");
+  assert.match(taglishHelp.reply, /Kaya kong sumagot/i);
+
+  const greeting = await runGenio({
+    departmentId: "department-1",
+    message: "hi",
+    context: {},
+  });
+
+  assert.equal(greeting.kind, "text");
+  assert.match(greeting.reply, /Genio/i);
+});
+
 test("classifyLocalGenioRoute maps deterministic HR prompts to current tool names", () => {
   assert.equal(classifyLocalGenioRoute("list all offices").selectedTool, "list_offices");
   assert.equal(classifyLocalGenioRoute("list office heads").selectedTool, "list_office_heads");
@@ -78,4 +98,17 @@ test("classifyLocalGenioRoute blocks sensitive and unsupported prompts", () => {
   const unsupportedRoute = classifyLocalGenioRoute("sino late ngayon?");
   assert.equal(unsupportedRoute.intent, "unsupported");
   assert.equal(unsupportedRoute.blockedReason, "missing_database_field");
+});
+
+test("classifyLocalGenioRoute maps high-value schema-backed prompts", () => {
+  assert.equal(classifyLocalGenioRoute("Ilan ang Civil Service Professional?").selectedTool, "eligibility_query");
+  assert.equal(classifyLocalGenioRoute("List COS employees").selectedTool, "employee_type_query");
+  assert.equal(classifyLocalGenioRoute("Salary grade distribution").selectedTool, "salary_grade_query");
+  assert.equal(classifyLocalGenioRoute("Employees age 60 and above").selectedTool, "retirement_query");
+  assert.equal(classifyLocalGenioRoute("Employees missing latest appointment").selectedTool, "data_quality_query");
+  assert.equal(classifyLocalGenioRoute("Employees with public profile disabled").selectedTool, "public_profile_query");
+  assert.equal(classifyLocalGenioRoute("Offices with no employees").selectedTool, "office_staffing_query");
+  assert.equal(classifyLocalGenioRoute("Employees assigned to office X but designated to office Y").selectedTool, "designation_query");
+  assert.equal(classifyLocalGenioRoute("Most awarded employees").selectedTool, "award_query");
+  assert.equal(classifyLocalGenioRoute("Who was promoted in 2025?").selectedTool, "employment_event_query");
 });
