@@ -69,11 +69,8 @@ export function EmployeesMenu({
         <button
           type="button"
           className={cn(
-            "relative inline-flex flex-shrink-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2 rounded-xl transition-all duration-500 text-sm md:text-base"
-,
-            activeRoute
-              ? "border-green-600 text-green-700"
-              : "border-transparent text-muted-foreground hover:border-green-400 hover:text-green-600",
+            "relative inline-flex flex-shrink-0 items-center gap-1 rounded-md transition-colors",
+            activeRoute ? "text-green-700" : "text-slate-600 hover:text-slate-900",
             className
           )}
           aria-haspopup="menu"

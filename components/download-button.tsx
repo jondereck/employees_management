@@ -1519,7 +1519,10 @@ export default function DownloadStyledExcel() {
       });
 
       let base: string;
-      if (sheetMode === 'merged') {
+      const hasSelectedTemplate = Boolean(selectedTemplateId && selectedTemplateName?.trim());
+      if (hasSelectedTemplate) {
+        base = makeSafeFilename(selectedTemplateName);
+      } else if (sheetMode === 'merged') {
         const now = new Date();
         const datePart = now.toISOString().slice(0, 10);
         const timePart = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
@@ -1529,18 +1532,7 @@ export default function DownloadStyledExcel() {
         const datePart = now.toISOString().slice(0, 10);
         base = makeSafeFilename(`Employees_Plain_${datePart}`);
       } else {
-        base = makeSafeFilename(selectedTemplateName); // e.g., "HR Core"
-        if (officesSelection.length === 1) {
-          const officeId = officesSelection[0];
-          const info = officeMetadata[officeId];
-          const suffixSource = info?.bioIndexCode || info?.name || officeId;
-          if (suffixSource) {
-            const safeSuffix = makeSafeFilename(`${suffixSource}`);
-            if (safeSuffix) {
-              base = makeSafeFilename(`${base}_${safeSuffix}`);
-            }
-          }
-        }
+        base = makeSafeFilename('Employees_ByOffice');
       }
       const filename = `${base}.xlsx`;
 

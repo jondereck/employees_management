@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   AlertCircle,
   Bell,
-  Briefcase,
   Building2,
   CalendarDays,
   Cake,
@@ -50,11 +49,6 @@ const DashboardPage = async ({ params }: DashboardProps) => {
     getHeadcountTrend(departmentId),
     getDashboardSummary(departmentId),
   ]);
-
-  const appointmentTotal = dashboardSummary.appointmentSlices.reduce(
-    (sum, item) => sum + item.value,
-    0,
-  );
 
   const attentionItems = [
     {
@@ -157,54 +151,37 @@ const DashboardPage = async ({ params }: DashboardProps) => {
             </MetricCard>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="grid gap-6 xl:grid-cols-[1.5fr_0.85fr]">
             <Card className={`${glassCard} rounded-2xl`}>
               <CardHeader className="p-4 pb-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base text-slate-900 dark:text-slate-100">
-                      Appointment Distribution
-                    </CardTitle>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Zero-count appointment types are hidden.
-                    </p>
-                  </div>
-                  <Briefcase className="h-5 w-5 text-slate-400" aria-hidden="true" />
-                </div>
+                <CardTitle className="text-base text-slate-900 dark:text-slate-100">
+                  Workforce Composition
+                </CardTitle>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Appointment type, gender, and eligibility breakdown.
+                </p>
               </CardHeader>
-              <CardContent className="space-y-3 p-4 pt-0">
-                {dashboardSummary.appointmentSlices.length ? (
-                  dashboardSummary.appointmentSlices.map((item) => {
-                    const percent = appointmentTotal
-                      ? Math.round((item.value / appointmentTotal) * 100)
-                      : 0;
-                    return (
-                      <div key={item.name} className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="truncate font-medium text-slate-700 dark:text-slate-200">
-                              {item.name}
-                            </span>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
-                            <span className="tabular-nums">{item.value}</span>
-                            <span className="text-xs text-slate-500">{percent}%</span>
-                          </div>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-white/50 dark:bg-white/10">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${percent}%`, backgroundColor: item.color }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700">
-                    No active appointment data found.
-                  </p>
-                )}
+              <CardContent className="p-4 pt-8">
+                <div className="mx-auto grid w-full gap-3 lg:grid-cols-3">
+                  <DashboardDonutChart
+                    title="Appointment Type"
+                    description="Active workforce mix"
+                    data={dashboardSummary.appointmentSlices}
+                    compact
+                  />
+                  <DashboardDonutChart
+                    title="Gender"
+                    description="Active employee split"
+                    data={dashboardSummary.genderSlices}
+                    compact
+                  />
+                  <DashboardDonutChart
+                    title="Eligibility"
+                    description="Top eligibility groups"
+                    data={dashboardSummary.eligibilitySlices}
+                    compact
+                  />
+                </div>
               </CardContent>
             </Card>
 
@@ -345,24 +322,6 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                 )}
               </CardContent>
             </Card>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <DashboardDonutChart
-              title="Appointment Type"
-              description="Active workforce mix"
-              data={dashboardSummary.appointmentSlices}
-            />
-            <DashboardDonutChart
-              title="Gender"
-              description="Active employee split"
-              data={dashboardSummary.genderSlices}
-            />
-            <DashboardDonutChart
-              title="Eligibility"
-              description="Top eligibility groups"
-              data={dashboardSummary.eligibilitySlices}
-            />
           </div>
 
           <Card className={`${glassCard} rounded-2xl`}>

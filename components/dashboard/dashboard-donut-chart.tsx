@@ -8,25 +8,27 @@ type DashboardDonutChartProps = {
   title: string;
   description: string;
   data: DashboardChartSlice[];
+  compact?: boolean;
 };
 
 export function DashboardDonutChart({
   title,
   description,
   data,
+  compact = false,
 }: DashboardDonutChartProps) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
+  const shellClass = compact
+    ? "rounded-xl border border-white/20 bg-white/20 p-3 dark:border-white/10 dark:bg-white/[0.03]"
+    : "rounded-2xl border border-white/30 bg-white/30 p-4 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04]";
 
   return (
-    <div className="rounded-2xl border border-white/30 bg-white/30 p-4 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04]">
+    <div className={shellClass}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
         </div>
-        <span className="rounded-full bg-slate-900/5 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-slate-200">
-          {total}
-        </span>
       </div>
 
       {total > 0 ? (
