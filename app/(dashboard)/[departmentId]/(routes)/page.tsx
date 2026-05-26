@@ -1,218 +1,325 @@
-import { getTotalEmployees } from "@/actions/get-total-employee";
-import { getTotal } from "@/actions/get-total";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import Heading from "@/components/ui/heading";
-import { Separator } from "@/components/ui/separator";
-import { Award, Shield, ShieldCheck, ShieldEllipsis, ShieldOff, Star, Users } from "lucide-react";
-import Overview from "@/components/overview";
-import { getGraph } from "@/actions/get-graph";
-import ClientEmployeeChange from "@/components/client-employee-change";
-import { ActionTooltip } from "@/components/ui/action-tooltip";
-import { CardListClient } from "@/components/ui/card-list-client";
-import CameraScanner from "@/components/camera";
-import CameraScannerWrapper from "@/components/camera-scanner-wrapper";
-import { getMonthlyEmployeeActivity } from "@/actions/get-monthly-employee-activity";
-import { getHeadcountTrend } from "@/actions/get-headcount-trend";
-import HeadcountTrend from "@/components/headcount-trend";
-import { useCountUp } from "@/hooks/use-count-up";
-import { AnimatedNumber } from "@/components/animated-number";
+import Link from "next/link";
+import {
+  AlertCircle,
+  Bell,
+  Briefcase,
+  Building2,
+  CalendarDays,
+  Cake,
+  Clock3,
+  Medal,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 
+import { getDashboardSummary } from "@/actions/get-dashboard-summary";
+import { getGraph } from "@/actions/get-graph";
+import { getHeadcountTrend } from "@/actions/get-headcount-trend";
+import { getMonthlyEmployeeActivity } from "@/actions/get-monthly-employee-activity";
+import { getTotalEmployees } from "@/actions/get-total-employee";
+import { AnimatedNumber } from "@/components/animated-number";
+import { DashboardAnalyticsTabs } from "@/components/dashboard/dashboard-analytics-tabs";
+import { DashboardClock } from "@/components/dashboard/dashboard-clock";
+import { DashboardDonutChart } from "@/components/dashboard/dashboard-donut-chart";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { getCurrentMonthIndexInTimeZone } from "@/lib/birthday";
 
 interface DashboardProps {
-  params: { departmentId: string; officeId: string };
+  params: { departmentId: string };
 }
 
-// Map icon names from DB to actual components
-const iconMap: Record<string, any> = {
-  ShieldCheck,
-  Shield,
-  ShieldOff,
-  Star,
-  Award,
-  ShieldEllipsis
-};
-
-const iconNameMap: Record<string, keyof typeof iconMap> = {
-  Permanent: "ShieldCheck",
-  Casual: "Shield",
-  "Job Order": "ShieldOff",
-  Coterminous: "Star",
-  Elected: "Award",
-  "Contract of Service": "ShieldEllipsis",
-};
-
+const glassCard =
+  "border border-white/30 bg-white/40 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04]";
 
 const DashboardPage = async ({ params }: DashboardProps) => {
   const { departmentId } = params;
+  const birthdayMonth = getCurrentMonthIndexInTimeZone();
 
-  // 🔄 Dynamically fetch employee types from API route
-  const res = await fetch(`${process.env.NEXT_PRIVATE_API_URL}/${departmentId}/employee_type`, {
-    cache: "no-store",
-  });
+  const [
+    totalEmployee,
+    graphEmployee,
+    monthlyActivity,
+    headcountTrend,
+    dashboardSummary,
+  ] = await Promise.all([
+    getTotalEmployees(departmentId),
+    getGraph(departmentId),
+    getMonthlyEmployeeActivity(departmentId),
+    getHeadcountTrend(departmentId),
+    getDashboardSummary(departmentId),
+  ]);
 
-
-  const dynamicEmployeeTypes = await res.json();
-
-  // 🧮 Fetch total employee count
-  const totalEmployee = await getTotalEmployees(departmentId);
-  const graphEmployee = await getGraph(departmentId);
-  const { currentCount: currentMonthActivity, previousCount: previousMonthActivity } =
-    await getMonthlyEmployeeActivity(departmentId);
-  const headcountTrend = await getHeadcountTrend(departmentId);
-
-  // 🧠 Map employeeTypes and get totals
-  const totals = await Promise.all(
-    dynamicEmployeeTypes.map(async (employeeType: any) => {
-      const total = await getTotal(employeeType.id, departmentId);
-
-      const iconKey = iconNameMap[employeeType.name.trim()] || "Shield";
-      const icon = iconMap[iconKey];
-      const percent = Math.round((total / totalEmployee) * 100);
-
-      const previousTotal = total - Math.floor(Math.random() * 5);
-      const trend = total > previousTotal ? "↑" : total < previousTotal ? "↓" : "→";
-      return {
-        ...employeeType,
-        total,
-        icon,
-        percent,
-        trend
-
-      };
-
-
-    })
+  const appointmentTotal = dashboardSummary.appointmentSlices.reduce(
+    (sum, item) => sum + item.value,
+    0,
   );
 
-
-  const customOrder = ["permanent", "casual", "job order", "elected", "coterminous"];
-  const sortedTotals = totals.sort((a, b) => {
-    const aIndex = customOrder.indexOf(a.name.trim().toLowerCase());
-    const bIndex = customOrder.indexOf(b.name.trim().toLowerCase());
-    return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-  });
-  const visibleTotals = sortedTotals.filter((employeeType) => employeeType.total > 0);
-
+  const attentionItems = [
+    {
+      label: "Pending approvals",
+      value: dashboardSummary.pendingApprovals,
+      href: `/${departmentId}/approvals`,
+      icon: AlertCircle,
+      tone: "text-amber-600 bg-amber-500/10 ring-amber-500/20",
+    },
+    {
+      label: "Birthdays today",
+      value: dashboardSummary.birthdaysToday,
+      href: `/${departmentId}/birthdays?month=${birthdayMonth}`,
+      icon: Cake,
+      tone: "text-pink-600 bg-pink-500/10 ring-pink-500/20",
+    },
+    {
+      label: "Birthdays this month",
+      value: dashboardSummary.birthdaysThisMonth,
+      href: `/${departmentId}/birthdays?month=${birthdayMonth}`,
+      icon: CalendarDays,
+      tone: "text-blue-600 bg-blue-500/10 ring-blue-500/20",
+    },
+    {
+      label: "Upcoming retirements",
+      value: dashboardSummary.upcomingRetirements,
+      href: `/${departmentId}/retirements`,
+      icon: Clock3,
+      tone: "text-slate-700 bg-slate-500/10 ring-slate-500/20 dark:text-slate-200",
+    },
+    {
+      label: "Loyalty milestones",
+      value: dashboardSummary.upcomingLoyaltyMilestones,
+      href: `/${departmentId}/anniversaries`,
+      icon: Medal,
+      tone: "text-emerald-600 bg-emerald-500/10 ring-emerald-500/20",
+    },
+  ];
 
   return (
     <div className="flex-col">
-     <div className="flex-1 space-y-4 p-4 lg:p-8 pt-6 bg-gradient-to-br from-slate-50 to-slate-200 dark:from-slate-950 dark:to-slate-900 min-h-screen">
-  <Heading title="Dashboard" description="Overview of your Employees" />
-  <Separator className="bg-white/20" />
-
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-    {/* TOTAL EMPLOYEE CARD */}
-   <Card className="relative overflow-hidden group bg-white/10 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-3xl transition-all duration-500 hover:bg-white/15 hover:shadow-[0_20px_50px_rgba(0,0,0,0.2)]">
-  
-  {/* The "Liquid" Highlight - Adds a subtle sheen at the top */}
-  <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none" />
-
-  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-    <CardTitle className="text-sm font-semibold tracking-wide text-slate-800 dark:text-slate-100 opacity-70 group-hover:opacity-100 transition-opacity">
-      Total Employees
-    </CardTitle>
-    <div className="p-2.5 bg-blue-500/10 dark:bg-blue-400/10 rounded-xl ring-1 ring-blue-500/20 backdrop-blur-sm">
-      <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-    </div>
-  </CardHeader>
-
-  <CardContent className="relative z-10">
-    <div className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">
-    <AnimatedNumber value={totalEmployee} />
-    </div>
-    
-    <div className="mt-2 flex items-center gap-1">
-      <ClientEmployeeChange
-        currentCount={currentMonthActivity}
-        previousCount={previousMonthActivity}
-        label="active this month"
-       
-      />
-    </div>
-
-    {/* Decorative Liquid Element */}
-    <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/20 transition-colors" />
-  </CardContent>
-</Card>
-
-    {/* INDIVIDUAL EMPLOYEE TYPE CARDS */}
-    {visibleTotals.map((employeeType) => (
-      <Card 
-        key={employeeType.id} 
-        className="bg-white/10 dark:bg-black/20 backdrop-blur-lg border border-white/30 dark:border-white/10 shadow-xl rounded-2xl transition-transform duration-300 hover:-translate-y-1 hover:shadow-2xl"
-      >
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between items-start space-y-2 sm:space-y-0 pb-2">
-          <div className="flex-1">
-            <CardTitle className="text-sm font-semibold opacity-90">
-              {employeeType.name}
-              <span className="text-xs ml-2 px-1.5 py-0.5 rounded-full bg-white/20">
-                {employeeType.trend === "↑" && <span className="text-green-500">{employeeType.trend}</span>}
-                {employeeType.trend === "↓" && <span className="text-red-500">{employeeType.trend}</span>}
-                {employeeType.trend === "→" && <span className="text-gray-400">{employeeType.trend}</span>}
-              </span>
-            </CardTitle>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 p-4 pt-6 dark:from-slate-950 dark:to-slate-900 lg:p-6">
+        <div className="mx-auto max-w-[1600px] space-y-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                Dashboard
+              </h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Compact overview of employees, approvals, and HR reminders
+              </p>
+            </div>
+            <DashboardClock />
           </div>
 
-          {employeeType.icon && (
-            <ActionTooltip label={`${employeeType.name}`} side="top">
-              <div
-                className="p-2.5 rounded-xl backdrop-blur-sm border border-white/10 shadow-inner"
-                style={{ 
-                    backgroundColor: `${employeeType.value}20`,
-                    boxShadow: `0 0 15px ${employeeType.value}30` 
-                }}
-              >
-                <employeeType.icon
-                  size={20}
-                  className="transition-transform duration-500 group-hover:scale-110"
-                  style={{ color: employeeType.value }}
-                />
-              </div>
-            </ActionTooltip>
-          )}
-        </CardHeader>
+          <Separator className="bg-white/30 dark:bg-white/10" />
 
-        <CardContent>
-          <div className="text-2xl font-bold"> <AnimatedNumber value={employeeType.total} /></div>
-          <div className="mt-1 w-full bg-white/10 h-1 rounded-full overflow-hidden">
-             <div 
-                className="h-full bg-current opacity-60" 
-                style={{ width: `${employeeType.percent}%`, backgroundColor: employeeType.value }} 
-             />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Total Employees"
+              value={totalEmployee}
+              icon={Users}
+              tone="text-blue-600 bg-blue-500/10 ring-blue-500/20"
+            >
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Current active employee records.
+              </p>
+            </MetricCard>
+            <MetricCard
+              title="Active This Month"
+              value={monthlyActivity.currentCount}
+              icon={Bell}
+              tone="text-emerald-600 bg-emerald-500/10 ring-emerald-500/20"
+            >
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Created or updated employee records.
+              </p>
+            </MetricCard>
+            <MetricCard
+              title="Pending Approvals"
+              value={dashboardSummary.pendingApprovals}
+              icon={ShieldCheck}
+              href={`/${departmentId}/approvals`}
+              tone="text-amber-600 bg-amber-500/10 ring-amber-500/20"
+            >
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Change requests waiting for review.
+              </p>
+            </MetricCard>
+            <MetricCard
+              title="Offices"
+              value={dashboardSummary.officeCount}
+              icon={Building2}
+              href={`/${departmentId}/offices`}
+              tone="text-cyan-600 bg-cyan-500/10 ring-cyan-500/20"
+            >
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Active department office records.
+              </p>
+            </MetricCard>
           </div>
-          <p className="text-[10px] mt-2 uppercase tracking-widest opacity-60 font-semibold">
-            {employeeType.percent}% Distribution
-          </p>
-        </CardContent>
-      </Card>
-    ))}
-  </div>
 
-        <div>
-          {/* <CardListClient totals={sortedTotals} /> */}
+          <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+            <Card className={`${glassCard} rounded-2xl`}>
+              <CardHeader className="p-4 pb-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base text-slate-900 dark:text-slate-100">
+                      Appointment Distribution
+                    </CardTitle>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Zero-count appointment types are hidden.
+                    </p>
+                  </div>
+                  <Briefcase className="h-5 w-5 text-slate-400" aria-hidden="true" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 p-4 pt-0">
+                {dashboardSummary.appointmentSlices.length ? (
+                  dashboardSummary.appointmentSlices.map((item) => {
+                    const percent = appointmentTotal
+                      ? Math.round((item.value / appointmentTotal) * 100)
+                      : 0;
+                    return (
+                      <div key={item.name} className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="truncate font-medium text-slate-700 dark:text-slate-200">
+                              {item.name}
+                            </span>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
+                            <span className="tabular-nums">{item.value}</span>
+                            <span className="text-xs text-slate-500">{percent}%</span>
+                          </div>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-white/50 dark:bg-white/10">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${percent}%`, backgroundColor: item.color }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700">
+                    No active appointment data found.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className={`${glassCard} rounded-2xl`}>
+              <CardHeader className="p-4 pb-3">
+                <CardTitle className="text-base text-slate-900 dark:text-slate-100">
+                  Needs Attention
+                </CardTitle>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Quick HR reminders for the current cycle.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-2 p-4 pt-0">
+                {attentionItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-white/30 bg-white/35 px-3 py-2.5 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${item.tone}`}>
+                          <Icon className="h-4 w-4" aria-hidden="true" />
+                        </span>
+                        <span className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+                          {item.label}
+                        </span>
+                      </div>
+                      <span className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                        {item.value}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <DashboardDonutChart
+              title="Appointment Type"
+              description="Active workforce mix"
+              data={dashboardSummary.appointmentSlices}
+            />
+            <DashboardDonutChart
+              title="Gender"
+              description="Active employee split"
+              data={dashboardSummary.genderSlices}
+            />
+            <DashboardDonutChart
+              title="Eligibility"
+              description="Top eligibility groups"
+              data={dashboardSummary.eligibilitySlices}
+            />
+          </div>
+
+          <Card className={`${glassCard} rounded-2xl`}>
+            <CardContent className="p-4">
+              <DashboardAnalyticsTabs
+                monthlyData={graphEmployee}
+                trendData={headcountTrend.data}
+                trendSeries={headcountTrend.series}
+              />
+            </CardContent>
+          </Card>
         </div>
-
-        {/* OVERVIEW CHART */}
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Overview</CardTitle>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <Overview data={graphEmployee} />
-          </CardContent>
-        </Card>
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Headcount Trend by Employee Type</CardTitle>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <HeadcountTrend data={headcountTrend.data} series={headcountTrend.series} />
-          </CardContent>
-        </Card>
-        <CameraScannerWrapper />
       </div>
     </div>
   );
 };
+
+type MetricCardProps = {
+  title: string;
+  value: number;
+  icon: typeof Users;
+  tone: string;
+  href?: string;
+  children: React.ReactNode;
+};
+
+function MetricCard({
+  title,
+  value,
+  icon: Icon,
+  tone,
+  href,
+  children,
+}: MetricCardProps) {
+  const content = (
+    <Card className={`${glassCard} group relative overflow-hidden rounded-2xl transition hover:bg-white/60 dark:hover:bg-white/[0.07]`}>
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/30 to-transparent dark:from-white/[0.04]" />
+      <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 p-4 pb-2">
+        <CardTitle className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+          {title}
+        </CardTitle>
+        <span className={`flex h-10 w-10 items-center justify-center rounded-xl ring-1 ${tone}`}>
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+      </CardHeader>
+      <CardContent className="relative z-10 p-4 pt-0">
+        <div className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          <AnimatedNumber value={value} />
+        </div>
+        <div className="mt-1 min-h-[18px]">{children}</div>
+      </CardContent>
+    </Card>
+  );
+
+  if (!href) return content;
+
+  return (
+    <Link href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+      {content}
+    </Link>
+  );
+}
 
 export default DashboardPage;

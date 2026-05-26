@@ -161,7 +161,6 @@ export default async function RetirementsPage({
     if (Number.isNaN(birthDate.getTime())) continue;
 
     const retirementYear = birthDate.getFullYear() + 65;
-    if (retirementYear > currentYear) continue;
     const retirementDate = new Date(retirementYear, birthDate.getMonth(), birthDate.getDate());
     const isUpcoming = retirementYear === currentYear && retirementDate >= today;
 

@@ -179,9 +179,6 @@ if (Number.isNaN(hireDate.getTime())) continue;
   for (const milestone of MILESTONE_YEARS) {
     const milestoneYear = hireDate.getFullYear() + milestone;
 
-    // ❌ Skip future milestones
-    if (milestoneYear > currentYear) continue;
-
     const milestoneDate = new Date(
       milestoneYear,
       hireDate.getMonth(),

@@ -1,0 +1,96 @@
+"use client";
+
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+
+import type { DashboardChartSlice } from "@/actions/get-dashboard-summary";
+
+type DashboardDonutChartProps = {
+  title: string;
+  description: string;
+  data: DashboardChartSlice[];
+};
+
+export function DashboardDonutChart({
+  title,
+  description,
+  data,
+}: DashboardDonutChartProps) {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+
+  return (
+    <div className="rounded-2xl border border-white/30 bg-white/30 p-4 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
+        </div>
+        <span className="rounded-full bg-slate-900/5 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-white/10 dark:text-slate-200">
+          {total}
+        </span>
+      </div>
+
+      {total > 0 ? (
+        <div className="mt-3 grid grid-cols-[120px_1fr] items-center gap-3">
+          <div className="relative h-[120px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={38}
+                  outerRadius={56}
+                  paddingAngle={3}
+                  stroke="rgba(255,255,255,0.7)"
+                  strokeWidth={2}
+                >
+                  {data.map((item) => (
+                    <Cell key={item.name} fill={item.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number, name: string) => [`${value}`, name]}
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "1px solid rgba(148, 163, 184, 0.25)",
+                    boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                {total}
+              </span>
+              <span className="text-[10px] uppercase tracking-wide text-slate-500">Total</span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {data.map((item) => {
+              const percent = Math.round((item.value / total) * 100);
+              return (
+                <div key={item.name} className="flex items-center justify-between gap-2 text-xs">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="truncate text-slate-600 dark:text-slate-300">{item.name}</span>
+                  </div>
+                  <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                    {percent}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex h-[120px] items-center justify-center rounded-xl border border-dashed border-slate-300 text-xs text-slate-500 dark:border-slate-700">
+          No active data
+        </div>
+      )}
+    </div>
+  );
+}

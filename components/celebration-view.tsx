@@ -83,7 +83,6 @@ const [employeeType, setEmployeeType] = useState<string>(() => {
     return years[0] ?? new Date().getFullYear();
   });
 
-  const isCurrentYear = year === new Date().getFullYear();
   const activePeople = useMemo(() => {
     return people.filter(
       (person) => !(person as CelebrationEntry).previewData?.isArchived
@@ -234,9 +233,7 @@ const [employeeType, setEmployeeType] = useState<string>(() => {
       onValueChange={(value) => value && setFilter(value as FilterValue)}
       className="inline-flex rounded-xl bg-slate-100 p-1"
     >
-      {FILTER_OPTIONS
-        .filter((opt) => opt.value !== "upcoming" || isCurrentYear)
-        .map((option) => (
+      {FILTER_OPTIONS.map((option) => (
           <ToggleGroupItem
             key={option.value}
             value={option.value}
