@@ -26,7 +26,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { extractStats } from "@/src/genio/utils";
+import { extractStats, removeVisualizedStats } from "@/src/genio/utils";
 import { AnimatedMarkdown } from "@/src/genio/components/AnimatedMarkdown";
 import { GenioStatCard } from "@/src/genio/components/GenioStatCard";
 
@@ -942,7 +942,7 @@ export const GenioChat = ({
     ${hidden ? "hidden" : ""}
 
     ${isFullscreen
-          ? "fixed inset-0 z-[100] h-screen w-screen rounded-none"
+          ? "fixed inset-0 z-[100] h-screen w-screen rounded-none sm:inset-x-0 sm:bottom-0 sm:top-[76px] sm:h-[calc(100vh-76px)]"
           : "h-[620px] w-[min(420px,calc(100vw-32px))] max-h-[calc(100vh-48px)] rounded-3xl"
         }
   `}
@@ -1096,7 +1096,7 @@ export const GenioChat = ({
               }`}
           >
             <div
-              className={`max-w-[82%] whitespace-pre-line rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm ${m.role === "user"
+              className={`w-[min(82%,34rem)] break-words whitespace-pre-line rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm ${m.role === "user"
                 ? "rounded-br-md bg-slate-950 text-white"
                 : "rounded-bl-md border border-slate-200 bg-white text-slate-800"
                 }`}
@@ -1118,24 +1118,22 @@ export const GenioChat = ({
                 </div>
 
               ) : m.role === "ai" ? (() => {
-                const lines = m.content.split("\n");
-                const isLong = lines.length > MAX_VISIBLE_LINES;
+                const stats = extractStats(m.content);
+                const displayContent = removeVisualizedStats(m.content, stats);
+                const displayLines = displayContent.split("\n");
+                const isLong = displayLines.length > MAX_VISIBLE_LINES;
                 const isExpanded = expandedMessages[m.id];
-
                 const visibleText =
                   isExpanded || !isLong
-                    ? m.content
-                    : lines.slice(0, MAX_VISIBLE_LINES).join("\n");
+                    ? displayContent
+                    : displayLines.slice(0, MAX_VISIBLE_LINES).join("\n");
 
-                const stats = extractStats(m.content);
                 return (
                   <div>
                     {/* 📊 STAT CARD GOES HERE */}
                     {stats && (
                       <GenioStatCard
-                        total={stats.total}
-                        male={stats.male}
-                        female={stats.female}
+                        stats={stats}
                       />
                     )}
                     <div
@@ -1150,7 +1148,7 @@ export const GenioChat = ({
     max-w-none
   "
                     >
-                      <AnimatedMarkdown content={visibleText} />
+                      {visibleText ? <AnimatedMarkdown content={visibleText} /> : null}
 
                     </div>
 
