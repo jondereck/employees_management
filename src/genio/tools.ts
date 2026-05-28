@@ -102,6 +102,7 @@ const countEmployeesSchema = z
     office: z.string().trim().min(1).max(200).optional(),
     gender: z.enum(["Male", "Female"]).optional(),
     employeeType: z.string().trim().min(1).max(120).optional(),
+    age: genioAgeFilterSchema.optional(),
   })
   .strip();
 
@@ -999,10 +1000,11 @@ async function countEmployees(env: ToolEnvironment, args: unknown): Promise<Geni
     gender: input.gender,
     office: input.office,
     employeeType: input.employeeType,
+    age: input.age,
   });
   filters = await resolveEmployeeFilter(env.departmentId, filters, env.message);
 
-  const mentionsOffice = /office|department|division|unit|\bin\s+|\bsa\s+/i.test(env.message);
+  const mentionsOffice = /office|department|division|unit|\bin\s+|\bsa\s+|\bon\s+|\bat\s+|\bunder\s+/i.test(env.message);
   if (!filters.officeId && !input.office && mentionsOffice) {
     const resolved = await resolveOfficeOrReply(env.departmentId, undefined, env.message, env.context);
     if (resolved.result) return resolved.result;
@@ -1023,17 +1025,31 @@ async function countEmployees(env: ToolEnvironment, args: unknown): Promise<Geni
     prisma.employee.count({ where: { ...where, gender: Gender.Female } }),
   ]);
 
+  // Keep precise follow-up context for small result sets (e.g. "who is it?").
+  const followUpEmployeeIds =
+    total > 0 && total <= 200
+      ? (
+          await prisma.employee.findMany({
+            where,
+            select: { id: true },
+            orderBy: { lastName: "asc" },
+          })
+        ).map((employee) => employee.id)
+      : undefined;
+
   const filterLabel = [
     filters.gender?.toLowerCase(),
     filters.employeeTypeName,
+    ageLabel(filters.age) ? `aged ${ageLabel(filters.age)}` : null,
     filters.officeName ? `in ${filters.officeName}` : null,
   ]
     .filter(Boolean)
     .join(" ");
 
+  const descriptor = filterLabel || "active";
   const reply = filters.gender
-    ? `There are ${total} ${filterLabel || "matching"} employees.`
-    : `There are ${total} active employees${filters.officeName ? ` in ${filters.officeName}` : ""}.\n\n- Male: ${male}\n- Female: ${female}`;
+    ? `There are ${total} ${descriptor} employees.`
+    : `There are ${total} ${descriptor} employees.\n\n- Male: ${male}\n- Female: ${female}`;
 
   return textResult(
     reply,
@@ -1042,6 +1058,7 @@ async function countEmployees(env: ToolEnvironment, args: unknown): Promise<Geni
       lastResult: {
         type: "employee_filter",
         filters,
+        employeeIds: followUpEmployeeIds,
       },
       lastOfficeId: filters.officeId ?? env.context.lastOfficeId,
       lastOfficeName: filters.officeName ?? env.context.lastOfficeName,
@@ -1743,6 +1760,23 @@ async function listLastResult(env: ToolEnvironment): Promise<GenioTextResult> {
   const employees = await employeesForLastResult(env.departmentId, last, 100);
   if (!employees.length) {
     return textResult("I could not find employees for the last result.", env.context);
+  }
+
+  if (employees.length === 1) {
+    const employee = employees[0];
+    const employeeType = employee.employeeType?.name ?? "No employee type";
+    const office = employee.offices?.name ?? "No office";
+
+    return textResult(
+      `It is ${employeeName(employee)} (${employee.employeeNo ?? "No employee number"}).\n\n- Office: ${office}\n- Employee Type: ${employeeType}\n- Position: ${employee.position ?? "No position"}`,
+      {
+        ...env.context,
+        lastEmployeeId: employee.id,
+        lastOfficeId: employee.officeId ?? env.context.lastOfficeId,
+        lastOfficeName: office !== "No office" ? office : env.context.lastOfficeName,
+      },
+      { viewProfileEmployeeId: employee.id, canExport: true }
+    );
   }
 
   return textResult(

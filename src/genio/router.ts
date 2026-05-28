@@ -49,7 +49,7 @@ const capabilityPattern =
 const exportPattern =
   /\b(export|download|export to excel|export this|export that|export results|save to excel|i-export)\b/i;
 const listLastPattern =
-  /\b(list them|show list|show them|who are they|sino sila|sino siya|pakilista sila|ipakita ang listahan)\b/i;
+  /\b(list them|show list|show them|who are they|who is it|who is that|who's that|whos that|sino sila|sino siya|sino yan|sino iyon|sino yun|pakilista sila|ipakita ang listahan)\b/i;
 const showProfilePattern =
   /\b(show profile|open profile|open the first one|open first one|view employee|ipakita ang profile)\b/i;
 
@@ -66,6 +66,13 @@ function extractGender(message: string) {
   if (/\b(female|women|woman|babae)\b/i.test(message)) return "Female";
   if (/\b(male|men|man|lalaki)\b/i.test(message)) return "Male";
   return undefined;
+}
+
+function extractEmployeeType(message: string) {
+  const match = message.match(
+    /\b(permanent|regular|casual|contract of service|cos|job order|job-order|jo|coterminous|elected)\b/i
+  );
+  return match?.[1];
 }
 
 function extractAge(message: string) {
@@ -163,12 +170,25 @@ export function deterministicGenioSelection(
   context: GenioContext
 ): GenioToolSelection | null {
   const text = normalizeGenioMessage(message);
+  const parsedGender = extractGender(text);
+  const parsedEmployeeType = extractEmployeeType(text);
+  const parsedAge = extractAge(text);
 
   if (exportPattern.test(text)) return { name: "export_last_result", args: {} };
   if (showProfilePattern.test(text)) return { name: "show_profile", args: {} };
   if (listLastPattern.test(text)) return { name: "list_last_result", args: {} };
-  if (/\b(?:ilan|how many|count|total)\b/.test(text) && /\b(?:active )?(?:employee|employees|staff|empleyado)\b/.test(text) && !/\b(?:as of|noong|in|current in)\s+(?:19|20|21)\d{2}\b/.test(text)) {
-    return { name: "count_employees", args: { gender: extractGender(text) } };
+  const hasCountPhrase = /\b(?:ilan|how many|count|total)\b/.test(text);
+  const hasEmployeeNoun = /\b(?:active )?(?:employee|employees|staff|empleyado)\b/.test(text);
+  const hasStrongEmployeeFilter = Boolean(parsedEmployeeType || parsedAge);
+  if (hasCountPhrase && (hasEmployeeNoun || hasStrongEmployeeFilter) && !/\b(?:as of|noong|in|current in)\s+(?:19|20|21)\d{2}\b/.test(text)) {
+    return {
+      name: "count_employees",
+      args: {
+        gender: parsedGender,
+        employeeType: parsedEmployeeType,
+        age: parsedAge,
+      },
+    };
   }
   if (/\b(walang eligibility|without eligibility|missing eligibility|no eligibility)\b/i.test(text)) {
     return { name: "eligibility_query", args: { mode: "missing" } };

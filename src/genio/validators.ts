@@ -31,6 +31,11 @@ export const genioToolArgumentSchemas = {
     office: boundedString(200).optional(),
     gender: z.enum(["Male", "Female"]).optional(),
     employeeType: boundedString(120).optional(),
+    age: z.object({
+      min: z.number().int().min(0).max(120).optional(),
+      max: z.number().int().min(0).max(120).optional(),
+      exact: z.number().int().min(0).max(120).optional(),
+    }).strip().optional(),
   }).strip(),
   office_distribution: z.object({
     gender: z.enum(["Male", "Female"]).optional(),

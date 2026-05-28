@@ -78,12 +78,37 @@ test("classifyLocalGenioRoute maps deterministic HR prompts to current tool name
   assert.equal(classifyLocalGenioRoute("ilan babae?").selectedTool, "gender_distribution");
 });
 
+test("classifyLocalGenioRoute keeps combined filters on count prompts", () => {
+  const route = classifyLocalGenioRoute("How many casual male employee between 22-50 age on HRMO?");
+
+  assert.equal(route.selectedTool, "count_employees");
+  assert.deepEqual(route.args, {
+    gender: "Male",
+    employeeType: "casual",
+    age: { min: 22, max: 50 },
+  });
+});
+
+test("classifyLocalGenioRoute treats short HRIS count prompts as employee counts", () => {
+  const route = classifyLocalGenioRoute("how many male casual");
+  assert.equal(route.selectedTool, "count_employees");
+  assert.deepEqual(route.args, {
+    gender: "Male",
+    employeeType: "casual",
+    age: undefined,
+  });
+});
+
 test("classifyLocalGenioRoute resolves signed-context style follow-up prompts", () => {
   const context = { lastResult: { type: "employee_filter" as const, employeeIds: ["employee-a"] } };
 
   const listRoute = classifyLocalGenioRoute("list them", context);
   assert.equal(listRoute.intent, "context_followup");
   assert.equal(listRoute.selectedTool, "list_last_result");
+
+  const singularRoute = classifyLocalGenioRoute("who is it", context);
+  assert.equal(singularRoute.intent, "context_followup");
+  assert.equal(singularRoute.selectedTool, "list_last_result");
 
   const exportRoute = classifyLocalGenioRoute("export that", context);
   assert.equal(exportRoute.intent, "context_followup");

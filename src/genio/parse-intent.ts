@@ -10,7 +10,7 @@ type ParseContext = {
 type ParseOutput = { intent: GenioIntent; confidence: number };
 
 const YEAR_PATTERN = /\b(19|20|21)\d{2}\b/;
-const FOLLOW_UP_PATTERN = /\b(list them|show them|show list|who are they|sino sila|show that|export that)\b/i;
+const FOLLOW_UP_PATTERN = /\b(list them|show them|show list|who are they|who is it|who is that|who's that|whos that|sino sila|sino yan|sino iyon|sino yun|show that|export that)\b/i;
 const WHO_IS_HEAD_PATTERN = /\b(who is the head of|sino ang head ng)\b/i;
 const IS_HEAD_PATTERN = /^is\s+.+\s+the head of\s+.+/i;
 
