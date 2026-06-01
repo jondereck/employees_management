@@ -1856,6 +1856,7 @@ async function exportLastResult(env: ToolEnvironment): Promise<GenioToolResult> 
     "Employee No": employee.employeeNo,
     "Last Name": employee.lastName,
     "First Name": employee.firstName,
+    Nickname: employee.nickname?.trim() ?? "",
     "Contact Number": employee.contactNumber?.trim() ?? "",
     "M.I.": employee.middleName ? employee.middleName.charAt(0) : "",
     Suffix: employee.suffix ?? "",

@@ -85,12 +85,14 @@ import {
   ClipboardPaste,
   Copy,
   Download,
+  Database,
   GitBranch,
   Hand,
   Layers,
   ListFilter,
   Lock,
   Minus,
+  MoreHorizontal,
   MousePointer2,
   Plus,
   Redo2,
@@ -101,7 +103,7 @@ import {
   Unlock,
   User,
   Users,
-  Wand2,
+  ChevronDown,
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import { PDFDocument } from "pdf-lib";
@@ -116,6 +118,8 @@ const DEFAULT_EDGE_COLOR = "#0F172A";
 const DEFAULT_EDGE_STROKE_WIDTH = 2;
 const NEUTRAL_OUTLINE_COLOR = "#E2E8F0";
 const HISTORY_LIMIT = 100;
+const DEFAULT_CANVAS_ZOOM = 0.8;
+const DEFAULT_TOOL_UI_SCALE = 0.9;
 
 const DEFAULT_ANNOTATION_TEXT = "New text";
 const DEFAULT_ANNOTATION_COLOR = "#111827";
@@ -663,6 +667,7 @@ const resolveEdgeLayout = (
 // React Flow uses "step" as the built-in orthogonal connection/edge type.
 // Use the enum instead of a string cast to avoid runtime/type issues.
 const ORTHOGONAL_CONNECTION_LINE = ConnectionLineType.Step;
+const SMOOTH_CONNECTION_LINE = ConnectionLineType.Bezier;
 
 type EmployeeOption = {
   id: string;
@@ -739,6 +744,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [isChartLoading, setIsChartLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [canvasZoom, setCanvasZoom] = useState(DEFAULT_CANVAS_ZOOM);
   const [focusOfficeId, setFocusOfficeId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [officeSearch, setOfficeSearch] = useState("");
@@ -795,7 +801,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const { fitView, project, getNode, setViewport, getNodes, getViewport, setCenter } = reactFlowInstance;
 
   const MIN_FOCUS_ZOOM = 0.25;
-  const MAX_FOCUS_ZOOM = 1.5;
+  const MAX_FOCUS_ZOOM = DEFAULT_CANVAS_ZOOM;
 
   const requestFocus = useCallback(() => {
     setFocusTrigger((prev) => prev + 1);
@@ -1627,6 +1633,25 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       }, delay);
     },
     [collectNodesForOffice, fitView, MAX_FOCUS_ZOOM, MIN_FOCUS_ZOOM]
+  );
+
+  const zoomToOfficeContent = useCallback(
+    (nextZoom: number) => {
+      const targetZoom = clamp(nextZoom, 0.2, 3);
+      const targets = collectNodesForOffice(focusOfficeId, nodesRef.current);
+      if (!targets.length) {
+        const vp = getViewport();
+        setViewport({ ...vp, zoom: targetZoom }, { duration: 150 });
+        setCanvasZoom(targetZoom);
+        return;
+      }
+      const bounds = getRectOfNodes(targets);
+      const centerX = bounds.x + bounds.width / 2;
+      const centerY = bounds.y + bounds.height / 2;
+      setCenter(centerX, centerY, { zoom: targetZoom, duration: 150 });
+      setCanvasZoom(targetZoom);
+    },
+    [collectNodesForOffice, focusOfficeId, getViewport, setCenter, setViewport]
   );
 
   const handleNodeDragStart = useCallback(() => {
@@ -3378,7 +3403,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       `}</style>
       <CanvasSettingsContext.Provider value={{ showPhotos, focusedOfficeId: focusOfficeId }}>
         <CanvasActionsContext.Provider value={actionsContextValue}>
-          <div className="relative flex h-[calc(100dvh-170px)] min-h-0 flex-col gap-3 overflow-hidden">
+          <div
+            className="relative flex h-[calc(100dvh-170px)] min-h-0 flex-col gap-3 overflow-hidden origin-top-left"
+            style={{
+              transform: `scale(${DEFAULT_TOOL_UI_SCALE})`,
+              width: `${100 / DEFAULT_TOOL_UI_SCALE}%`,
+              height: `calc((100dvh - 170px) / ${DEFAULT_TOOL_UI_SCALE})`,
+            }}
+          >
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background px-6 py-4 shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-500 text-white shadow">
@@ -3413,12 +3445,13 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   </Select>
                 </div>
                 <Button onClick={loadInitialData} variant="outline" size="sm" className="h-11 px-5">
-                  <RefreshCw className="mr-2 h-4 w-4" /> Build from DB
+                  <Database className="mr-2 h-4 w-4" /> Build from DB
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" disabled={isExporting} className="h-11 px-5">
                       <Download className="mr-2 h-4 w-4" /> Export
+                      <ChevronDown className="ml-2 h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
@@ -3432,6 +3465,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-11 px-5">
+                      <MoreHorizontal className="mr-2 h-4 w-4" />
                       More
                     </Button>
                   </DropdownMenuTrigger>
@@ -3563,7 +3597,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
         <section className="relative flex min-h-0 flex-col overflow-hidden rounded-lg border bg-background">
           <div className="flex items-center border-b px-4 py-2">
-            <div className="flex items-center gap-1 rounded-md border bg-background p-1">
+            <div className="flex w-full items-center justify-between gap-2 rounded-md border bg-background p-1">
+              <div className="flex items-center gap-1">
               <Button
                 variant={tool === "select" ? "default" : "outline"}
                 size="sm"
@@ -3607,7 +3642,9 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   </SelectContent>
                 </Select>
               </div>
+              </div>
               <div className="mx-1 h-7 w-px bg-border" />
+              <div className="flex items-center gap-1">
               <Button
                 variant="outline"
                 size="icon"
@@ -3638,7 +3675,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 size="icon"
                 onClick={() => {
                   const vp = getViewport();
-                  setViewport({ ...vp, zoom: Math.max(0.2, vp.zoom - 0.1) }, { duration: 150 });
+                  zoomToOfficeContent(vp.zoom - 0.1);
                 }}
                 title="Zoom out"
               >
@@ -3649,21 +3686,27 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 size="icon"
                 onClick={() => {
                   const vp = getViewport();
-                  setViewport({ ...vp, zoom: Math.min(3, vp.zoom + 0.1) }, { duration: 150 });
+                  zoomToOfficeContent(vp.zoom + 0.1);
                 }}
                 title="Zoom in"
               >
                 <Plus className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="sm" className="min-w-[64px]" onClick={() => setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 200 })}>
-                {`${Math.round(getViewport().zoom * 100)}%`}
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-w-[64px]"
+                onClick={() => {
+                  setViewport({ x: 0, y: 0, zoom: DEFAULT_CANVAS_ZOOM }, { duration: 200 });
+                  setCanvasZoom(DEFAULT_CANVAS_ZOOM);
+                }}
+              >
+                {`${Math.round(canvasZoom * 100)}%`}
               </Button>
-              <Button variant="outline" size="sm" className="px-3" onClick={() => focusOffice(focusOfficeId)}>
+              <Button variant="outline" size="sm" className="px-3" onClick={() => focusOffice(focusOfficeId, 0)}>
                 Fit to screen
               </Button>
-              <Button variant="outline" size="icon" onClick={() => setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 400 })}>
-                <Wand2 className="h-4 w-4" />
-              </Button>
+              </div>
             </div>
             {isChartLoading ? (
               <div className="absolute inset-0 z-[70] flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
@@ -3706,10 +3749,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 onNodeDragStop={handleNodeDragStop}
                 onMoveStart={handleMoveStart}
                 onMoveEnd={handleMoveEnd}
+                onMove={(_, viewport) => setCanvasZoom(viewport.zoom)}
                 minZoom={0.2}
                 maxZoom={3}
+                defaultViewport={{ x: 0, y: 0, zoom: DEFAULT_CANVAS_ZOOM }}
                 deleteKeyCode={["Delete", "Backspace"]}
-                connectionLineType={ORTHOGONAL_CONNECTION_LINE}
+                connectionLineType={
+                  edgeType === "smoothstep" ? SMOOTH_CONNECTION_LINE : ORTHOGONAL_CONNECTION_LINE
+                }
                 proOptions={{ hideAttribution: true }}
                 style={{ width: "100%", height: "100%" }}
               >
@@ -3896,7 +3943,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                         />
                         <div className="flex justify-between text-xs text-muted-foreground">
                           <span>
-                            {MIN_ANNOTATION_ROTATION}° – {MAX_ANNOTATION_ROTATION}°
+                            {MIN_ANNOTATION_ROTATION}° - {MAX_ANNOTATION_ROTATION}°
                           </span>
                           <span>{selectedAnnotationRotation}°</span>
                         </div>
@@ -4597,7 +4644,7 @@ function getHandlesForType(type: OrgNodeType): HandleConfig[] {
 }
 
 function mapDocEdgeTypeToFlow(type?: "orth" | "smoothstep" | "straight"): Edge["type"] {
-  if (type === "smoothstep") return "default";
+  if (type === "smoothstep") return "smoothstep";
   if (type === "straight") return "straight";
   // Default/document value "orth" maps to React Flow's built-in "step" type
   return "step";

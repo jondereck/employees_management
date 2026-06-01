@@ -198,6 +198,7 @@ export async function handleExport(context: any) {
     "Employee No": e.employeeNo,
     "Last Name": e.lastName,
     "First Name": e.firstName,
+    Nickname: e.nickname?.trim() ?? "",
     "Contact Number": e.contactNumber?.trim() ?? "",
     "M.I.": e.middleName ? e.middleName.charAt(0) : "",
     Suffix: e.suffix ?? "",
