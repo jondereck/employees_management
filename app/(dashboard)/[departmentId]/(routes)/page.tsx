@@ -151,8 +151,8 @@ const DashboardPage = async ({ params }: DashboardProps) => {
             </MetricCard>
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1.5fr_0.85fr]">
-            <Card className={`${glassCard} rounded-2xl`}>
+          <div className="grid items-stretch gap-6 xl:grid-cols-[1.5fr_0.85fr]">
+            <Card className={`${glassCard} min-w-0 h-full rounded-2xl`}>
               <CardHeader className="p-4 pb-3">
                 <CardTitle className="text-base text-slate-900 dark:text-slate-100">
                   Workforce Composition
@@ -185,7 +185,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
               </CardContent>
             </Card>
 
-            <Card className={`${glassCard} rounded-2xl`}>
+            <Card className={`${glassCard} min-w-0 h-full rounded-2xl`}>
               <CardHeader className="p-4 pb-3">
                 <CardTitle className="text-base text-slate-900 dark:text-slate-100">
                   Needs Attention
@@ -221,8 +221,8 @@ const DashboardPage = async ({ params }: DashboardProps) => {
             </Card>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-            <Card className={`${glassCard} rounded-2xl`}>
+          <div className="grid items-stretch gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <Card className={`${glassCard} min-w-0 h-full rounded-2xl`}>
               <CardHeader className="p-4 pb-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -281,7 +281,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
               </CardContent>
             </Card>
 
-            <Card className={`${glassCard} rounded-2xl`}>
+            <Card className={`${glassCard} min-w-0 h-full rounded-2xl`}>
               <CardHeader className="p-4 pb-3">
                 <CardTitle className="text-base text-slate-900 dark:text-slate-100">
                   Employees With Missing Data
@@ -292,7 +292,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
               </CardHeader>
               <CardContent className="p-4 pt-0">
                 {dashboardSummary.incompleteRecords.employees.length ? (
-                  <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                  <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1 sm:pr-2">
                     {dashboardSummary.incompleteRecords.employees.map((employee) => (
                       <Link
                         key={employee.id}

@@ -1007,6 +1007,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     const firstOfficeId = firstOffice.data.officeId ?? firstOffice.id;
     const storedOfficeId = window.localStorage.getItem(officeFocusStorageKey);
 
+    let shouldRequestFocus = false;
     setFocusOfficeId((current) => {
       const currentOffice = offices.find((office) => {
         const officeId = office.data.officeId ?? office.id;
@@ -1018,11 +1019,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         const officeId = office.data.officeId ?? office.id;
         return officeId === storedOfficeId || office.id === storedOfficeId;
       });
+      shouldRequestFocus = true;
       return storedOffice ? storedOffice.data.officeId ?? storedOffice.id : firstOfficeId ?? current;
     });
     hasRestoredOfficeFocusRef.current = true;
     hasInitializedOfficeFocusPersistenceRef.current = true;
-    requestFocus();
+    if (shouldRequestFocus) {
+      requestFocus();
+    }
   }, [officeFocusStorageKey, offices, requestFocus]);
 
   const getCurrentGraphState = useCallback(
@@ -1234,6 +1238,52 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     [cloneFlowNode, cloneFlowEdge, edges, focusOfficeId, nodes, selectedNodeIds, toast]
   );
 
+  const cutSelection = useCallback(() => {
+    if (!selectedNodeIds.length && !selectedEdgeIds.length) {
+      toast({
+        title: "Nothing to cut",
+        description: "Select nodes or edges first.",
+      });
+      return;
+    }
+
+    copySelection(lastCopyPeopleRef.current);
+
+    const selectedNodeIdSet = new Set(selectedNodeIds);
+    const selectedEdgeIdSet = new Set(selectedEdgeIds);
+
+    runWithHistory(() => {
+      setEdges((existing) =>
+        existing.filter(
+          (edge) =>
+            !selectedEdgeIdSet.has(edge.id) &&
+            !selectedNodeIdSet.has(edge.source) &&
+            !selectedNodeIdSet.has(edge.target)
+        )
+      );
+      setNodes((existing) => existing.filter((node) => !selectedNodeIdSet.has(node.id)));
+    });
+
+    setSelectedNodeIds([]);
+    setSelectedEdgeIds([]);
+    requestFocus();
+    toast({
+      title: "Cut to clipboard",
+      description: "Selection removed and ready to paste.",
+    });
+  }, [
+    copySelection,
+    requestFocus,
+    runWithHistory,
+    selectedEdgeIds,
+    selectedNodeIds,
+    setEdges,
+    setNodes,
+    setSelectedEdgeIds,
+    setSelectedNodeIds,
+    toast,
+  ]);
+
   const pasteIntoOffice = useCallback(
     (options?: { targetOfficeId?: string | null; centerOnViewport?: boolean }) => {
       const clipboard = clipboardRef.current;
@@ -1306,10 +1356,19 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           x: projectedCenter.x - sourceCenter.x,
           y: projectedCenter.y - sourceCenter.y,
         };
+      } else if (pointerPositionRef.current) {
+        const sourceCenter = {
+          x: bbox.minX + width / 2,
+          y: bbox.minY + height / 2,
+        };
+        offset = {
+          x: pointerPositionRef.current.x - sourceCenter.x,
+          y: pointerPositionRef.current.y - sourceCenter.y,
+        };
       }
 
       if (targetOfficeId === clipboard.sourceOfficeId && !options?.centerOnViewport) {
-        offset = { x: 120, y: 120 };
+        offset = pointerPositionRef.current ? offset : { x: 120, y: 120 };
       }
 
       const pastedNodeIds: string[] = [];
@@ -1446,6 +1505,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         event.preventDefault();
         return;
       }
+      if (key === "x") {
+        if (event.shiftKey) return;
+        cutSelection();
+        event.preventDefault();
+        return;
+      }
       if (key === "v") {
         if (event.shiftKey) {
           pasteIntoOffice({ centerOnViewport: true });
@@ -1461,7 +1526,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [copySelection, pasteIntoOffice, redo, undo]);
+  }, [copySelection, cutSelection, pasteIntoOffice, redo, undo]);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeIds.length) return null;
