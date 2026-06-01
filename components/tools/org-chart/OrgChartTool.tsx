@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -81,7 +82,6 @@ import {
   BadgeCheck,
   Bold,
   Building2,
-  ClipboardCopy,
   ClipboardPaste,
   Copy,
   Download,
@@ -90,6 +90,8 @@ import {
   Layers,
   ListFilter,
   Lock,
+  Minus,
+  MousePointer2,
   Plus,
   Redo2,
   RefreshCw,
@@ -645,7 +647,7 @@ const resolveEdgeLayout = (
     return {
       source: sourceAboveTarget ? "b" : "t",
       target: sourceAboveTarget ? "t" : "b",
-      type: alignsX ? "straight" : "step",
+      type: fallbackType === "default" ? fallbackType : alignsX ? "straight" : "step",
     };
   }
 
@@ -654,7 +656,7 @@ const resolveEdgeLayout = (
   return {
     source: sourceLeftOfTarget ? "l" : "r",
     target: sourceLeftOfTarget ? "r" : "l",
-    type: alignsY ? "straight" : "step",
+    type: fallbackType === "default" ? fallbackType : alignsY ? "straight" : "step",
   };
 };
 
@@ -693,7 +695,10 @@ type CanvasActions = {
 };
 
 const CanvasActionsContext = createContext<CanvasActions | null>(null);
-const CanvasSettingsContext = createContext<{ showPhotos: boolean }>({ showPhotos: false });
+const CanvasSettingsContext = createContext<{ showPhotos: boolean; focusedOfficeId: string | null }>({
+  showPhotos: false,
+  focusedOfficeId: null,
+});
 
 const useCanvasActions = () => {
   const ctx = useContext(CanvasActionsContext);
@@ -731,6 +736,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [availableEmployees, setAvailableEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isChartLoading, setIsChartLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [focusOfficeId, setFocusOfficeId] = useState<string | null>(null);
@@ -749,6 +755,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     () => `org-chart:current-version:${departmentId}`,
     [departmentId]
   );
+  const officeFocusStorageKey = useMemo(
+    () => `org-chart:last-office-focus:${departmentId}`,
+    [departmentId]
+  );
+  const hasRestoredOfficeFocusRef = useRef(false);
+  const hasInitializedOfficeFocusPersistenceRef = useRef(false);
   const persistCurrentVersionId = useCallback(
     (id: string | null) => {
       if (typeof window === "undefined") return;
@@ -813,7 +825,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     if (!query) return offices;
     return offices.filter((office) => office.data.name.toLowerCase().includes(query));
   }, [officeSearch, offices]);
-  const officesPerPage = 10;
+  const officesPerPage = 5;
   const totalOfficePages = Math.max(1, Math.ceil(filteredOffices.length / officesPerPage));
   const paginatedOffices = useMemo(() => {
     const start = (officePage - 1) * officesPerPage;
@@ -830,8 +842,37 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     }
   }, [officePage, totalOfficePages]);
 
+  useEffect(() => {
+    hasRestoredOfficeFocusRef.current = false;
+    hasInitializedOfficeFocusPersistenceRef.current = false;
+  }, [departmentId]);
+
+  useEffect(() => {
+    if (!hasInitializedOfficeFocusPersistenceRef.current) return;
+    if (typeof window === "undefined") return;
+    if (focusOfficeId) {
+      window.localStorage.setItem(officeFocusStorageKey, focusOfficeId);
+    }
+  }, [focusOfficeId, officeFocusStorageKey]);
+
   const isHand = tool === "hand";
   const customMarkerDefinitions = useMemo(() => getCustomMarkerDefinitions(edges), [edges]);
+  const handleEdgeTypeChange = useCallback(
+    (value: "orth" | "smoothstep") => {
+      setEdgeType(value);
+      setEdges((currentEdges: FlowEdge[]) =>
+        currentEdges.map((edge: FlowEdge) => ({
+          ...edge,
+          type: mapDocEdgeTypeToFlow(value),
+          data: {
+            ...edge.data,
+            customType: value,
+          },
+        }))
+      );
+    },
+    [setEdges]
+  );
   const hideInterfaceForExport = useCallback(() => {
     const targets = [
       ".react-flow__controls",
@@ -953,23 +994,29 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   useEffect(() => {
     if (!offices.length) return;
+    if (typeof window === "undefined") return;
+
     const firstOffice = offices[0];
     const firstOfficeId = firstOffice.data.officeId ?? firstOffice.id;
+    const storedOfficeId = window.localStorage.getItem(officeFocusStorageKey);
 
     setFocusOfficeId((current) => {
-      if (
-        current &&
-        offices.some((office) => {
-          const officeId = office.data.officeId ?? office.id;
-          return officeId === current || office.id === current;
-        })
-      ) {
-        return current;
-      }
-      return firstOfficeId ?? current;
+      const currentOffice = offices.find((office) => {
+        const officeId = office.data.officeId ?? office.id;
+        return officeId === current || office.id === current;
+      });
+      if (currentOffice) return currentOffice.data.officeId ?? currentOffice.id;
+
+      const storedOffice = offices.find((office) => {
+        const officeId = office.data.officeId ?? office.id;
+        return officeId === storedOfficeId || office.id === storedOfficeId;
+      });
+      return storedOffice ? storedOffice.data.officeId ?? storedOffice.id : firstOfficeId ?? current;
     });
+    hasRestoredOfficeFocusRef.current = true;
+    hasInitializedOfficeFocusPersistenceRef.current = true;
     requestFocus();
-  }, [offices, requestFocus]);
+  }, [officeFocusStorageKey, offices, requestFocus]);
 
   const getCurrentGraphState = useCallback(
     (): GraphState =>
@@ -1544,7 +1591,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   }, []);
 
   const focusOffice = useCallback(
-    (officeId: string | null) => {
+    (officeId: string | null, delay = 5000) => {
       if (isDraggingRef.current || isPanningRef.current) {
         return;
       }
@@ -1577,7 +1624,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         } finally {
           focusTimeoutRef.current = null;
         }
-      }, 5000);
+      }, delay);
     },
     [collectNodesForOffice, fitView, MAX_FOCUS_ZOOM, MIN_FOCUS_ZOOM]
   );
@@ -1797,7 +1844,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       const currentCustomType = edge.data?.customType;
       const fallbackType =
         currentCustomType === "smoothstep"
-          ? "smoothstep"
+          ? mapDocEdgeTypeToFlow("smoothstep")
           : currentCustomType === "straight"
           ? "straight"
           : mapDocEdgeTypeToFlow(edgeType);
@@ -1845,7 +1892,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         const desiredCustomType: FlowEdgeData["customType"] =
           layout.type === "straight"
             ? "straight"
-            : layout.type === "smoothstep"
+            : layout.type === "smoothstep" || layout.type === "default"
             ? "smoothstep"
             : "orth";
 
@@ -1983,6 +2030,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const loadInitialData = useCallback(async () => {
     try {
       setLoading(true);
+      setIsChartLoading(true);
       const [previewRes, employeesRes, versionsRes] = await Promise.all([
         fetch(`/api/${departmentId}/org-chart/preview`, {
           method: "POST",
@@ -2061,6 +2109,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       });
     } finally {
       setLoading(false);
+      setIsChartLoading(false);
     }
   }, [applyCurrentVersionId, departmentId, loadVersionById, setDocument, toast, versionStorageKey]);
 
@@ -2100,44 +2149,52 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     setEdges((eds: FlowEdge[]) => normalizeEdges(eds, nodesRef.current));
   }, [normalizeEdges, setEdges, nodes]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
-    const visibleNodeIds = new Set<string>();
+    const isNodeVisible = (node: FlowNode) => {
+      const officeMatch =
+        !focusOfficeId ||
+        (node.type === "office"
+          ? (node.data.officeId ?? node.id) === focusOfficeId || node.id === focusOfficeId
+          : node.data.officeId === focusOfficeId);
 
-    setNodes((nds: FlowNode[]) =>
-      nds.map((node: FlowNode) => {
-        const officeMatch =
-          !focusOfficeId ||
-          (node.type === "office"
-            ? (node.data.officeId ?? node.id) === focusOfficeId || node.id === focusOfficeId
-            : node.data.officeId === focusOfficeId);
+      const searchMatch =
+        !normalizedSearch ||
+        node.data.name.toLowerCase().includes(normalizedSearch) ||
+        (node.data.title ?? "").toLowerCase().includes(normalizedSearch) ||
+        (node.data.employeeTypeName ?? "").toLowerCase().includes(normalizedSearch);
 
-        const searchMatch =
-          !normalizedSearch ||
-          node.data.name.toLowerCase().includes(normalizedSearch) ||
-          (node.data.title ?? "").toLowerCase().includes(normalizedSearch) ||
-          (node.data.employeeTypeName ?? "").toLowerCase().includes(normalizedSearch);
+      return officeMatch && searchMatch;
+    };
 
-        const visible = officeMatch && searchMatch;
-        if (visible) {
-          visibleNodeIds.add(node.id);
-        }
+    const visibleNodeIds = new Set(nodes.filter(isNodeVisible).map((node) => node.id));
 
-        return { ...node, hidden: !visible };
-      })
-    );
+    setNodes((nds: FlowNode[]) => {
+      let changed = false;
+      const nextNodes = nds.map((node: FlowNode) => {
+        const hidden = !isNodeVisible(node);
+        if (node.hidden === hidden) return node;
+        changed = true;
+        return { ...node, hidden };
+      });
+      return changed ? nextNodes : nds;
+    });
 
-    setEdges((eds: FlowEdge[]) =>
-      eds.map((edge: FlowEdge) => ({
-        ...edge,
-        hidden: !(visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)),
-      }))
-    );
-  }, [focusOfficeId, searchTerm, setEdges, setNodes]);
+    setEdges((eds: FlowEdge[]) => {
+      let changed = false;
+      const nextEdges = eds.map((edge: FlowEdge) => {
+        const hidden = !(visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
+        if (edge.hidden === hidden) return edge;
+        changed = true;
+        return { ...edge, hidden };
+      });
+      return changed ? nextEdges : eds;
+    });
+  }, [focusOfficeId, focusTrigger, nodes, searchTerm, setEdges, setNodes]);
 
   useEffect(() => {
     if (!nodesRef.current.length) return;
-    focusOffice(focusOfficeId);
+    focusOffice(focusOfficeId, 0);
   }, [focusOffice, focusOfficeId, focusTrigger]);
 
   const handleNodesChange = useCallback(
@@ -2235,7 +2292,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       const resolvedCustomType: FlowEdgeData["customType"] =
         resolvedType === "straight"
           ? "straight"
-          : resolvedType === "smoothstep"
+          : resolvedType === "smoothstep" || resolvedType === "default"
           ? "smoothstep"
           : "orth";
 
@@ -3056,14 +3113,17 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   const handleVersionChange = useCallback(
     async (value: string) => {
+      setIsChartLoading(true);
       if (value === "__draft__") {
         applyCurrentVersionId(null);
+        setIsChartLoading(false);
         return;
       }
 
       const result = await loadVersionById(value);
       if (result.status === "success") {
         toast({ title: "Version loaded", description: result.record.label });
+        setIsChartLoading(false);
         return;
       }
 
@@ -3074,6 +3134,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           description: "The requested version is unavailable.",
           variant: "destructive",
         });
+        setIsChartLoading(false);
         return;
       }
 
@@ -3084,6 +3145,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           variant: "destructive",
         });
       }
+      setIsChartLoading(false);
     },
     [applyCurrentVersionId, loadVersionById, toast]
   );
@@ -3097,40 +3159,34 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         return;
       }
 
-      const bounds = getRectOfNodes(nodesForExport);
-      const exportWidth = Math.max(bounds.width, 1);
-      const exportHeight = Math.max(bounds.height, 1);
       const restoreInterface = hideInterfaceForExport();
       const wrapper = reactFlowWrapper.current;
-      const viewportElement = wrapper.querySelector(".react-flow__viewport") as HTMLElement | null;
-      const originalTransform = viewportElement?.style.transform ?? "";
-      const originalTransformOrigin = viewportElement?.style.transformOrigin ?? "";
-      const originalWidth = wrapper.style.width;
-      const originalHeight = wrapper.style.height;
-      const originalPosition = wrapper.style.position;
-      const { zoom } = getViewport();
-      const exportStrokeWidth = Math.max(4, 4 / Math.max(zoom, 0.5));
+      const originalViewport = getViewport();
+      const exportWidth = Math.max(wrapper.clientWidth, 1);
+      const exportHeight = Math.max(wrapper.clientHeight, 1);
+      const exportStrokeWidth = Math.max(4, 4 / Math.max(originalViewport.zoom, 0.5));
 
       try {
         setIsExporting(true);
         wrapper.classList.add("orgchart-exporting");
         wrapper.style.setProperty("--orgchart-export-stroke", `${exportStrokeWidth}px`);
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-
-        wrapper.style.width = `${exportWidth}px`;
-        wrapper.style.height = `${exportHeight}px`;
-        wrapper.style.position = "relative";
-
-        if (viewportElement) {
-          viewportElement.style.transform = `translate(${-bounds.x}px, ${-bounds.y}px) scale(1)`;
-          viewportElement.style.transformOrigin = "0 0";
-        }
-
-        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await fitView({
+          nodes: nodesForExport,
+          padding: 0.2,
+          duration: 0,
+          includeHiddenNodes: false,
+          minZoom: 0.1,
+          maxZoom: 2,
+        });
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
         const dataUrl = await htmlToImage.toPng(wrapper, {
           backgroundColor: "#ffffff",
           pixelRatio: 3,
+          width: exportWidth,
+          height: exportHeight,
+          canvasWidth: exportWidth * 3,
+          canvasHeight: exportHeight * 3,
           style: {
             transform: "none",
             transformOrigin: "top left",
@@ -3175,18 +3231,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       } finally {
         wrapper.classList.remove("orgchart-exporting");
         wrapper.style.removeProperty("--orgchart-export-stroke");
-        wrapper.style.width = originalWidth;
-        wrapper.style.height = originalHeight;
-        wrapper.style.position = originalPosition;
-        if (viewportElement) {
-          viewportElement.style.transform = originalTransform;
-          viewportElement.style.transformOrigin = originalTransformOrigin;
-        }
+        setViewport(originalViewport, { duration: 0 });
         restoreInterface();
         setIsExporting(false);
       }
     },
-    [getNodes, getViewport, hideInterfaceForExport, toast]
+    [fitView, getNodes, getViewport, hideInterfaceForExport, setViewport, toast]
   );
 
     const updateSelectedNode = useCallback(
@@ -3326,40 +3376,48 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           display: none !important;
         }
       `}</style>
-      <CanvasSettingsContext.Provider value={{ showPhotos }}>
+      <CanvasSettingsContext.Provider value={{ showPhotos, focusedOfficeId: focusOfficeId }}>
         <CanvasActionsContext.Provider value={actionsContextValue}>
-          <div className="flex h-[calc(100dvh-170px)] min-h-0 flex-col gap-3 overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background px-4 py-3">
-              <div>
-                <h2 className="text-lg font-semibold">Org Chart Builder</h2>
-                <p className="text-xs text-muted-foreground">Build, edit, and export per-office organizational charts.</p>
-                {unsavedChanges ? (
-                  <Badge variant="secondary" className="mt-1 text-xs">
-                    Unsaved changes
-                  </Badge>
-                ) : null}
+          <div className="relative flex h-[calc(100dvh-170px)] min-h-0 flex-col gap-3 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background px-6 py-4 shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-500 text-white shadow">
+                  <GitBranch className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-4 font-semibold leading-tight">Org Chart Builder</h2>
+                  <p className="text-sm text-muted-foreground">Build, edit, and export per-office organizational charts.</p>
+                  {unsavedChanges ? (
+                    <Badge variant="secondary" className="mt-1 text-xs">
+                      Unsaved changes
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={currentVersionId ?? "__draft__"} onValueChange={handleVersionChange}>
-                  <SelectTrigger className="h-9 w-[250px]">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="rounded-lg border bg-background px-3 py-1.5">
+                  <p className="text-[11px] leading-none text-muted-foreground">Version</p>
+                  <Select value={currentVersionId ?? "__draft__"} onValueChange={handleVersionChange}>
+                    <SelectTrigger className="h-7 w-[190px] border-0 p-0 shadow-none">
                     <SelectValue placeholder="Current draft" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    <SelectItem value="__draft__">Current draft</SelectItem>
-                    {versions.map((version) => (
-                      <SelectItem key={version.id} value={version.id}>
-                        {version.label}
-                        {version.isDefault ? " (default)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button onClick={loadInitialData} variant="outline" size="sm">
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      <SelectItem value="__draft__">Current draft</SelectItem>
+                      {versions.map((version) => (
+                        <SelectItem key={version.id} value={version.id}>
+                          {version.label}
+                          {version.isDefault ? " (default)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={loadInitialData} variant="outline" size="sm" className="h-11 px-5">
                   <RefreshCw className="mr-2 h-4 w-4" /> Build from DB
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={isExporting}>
+                    <Button variant="outline" size="sm" disabled={isExporting} className="h-11 px-5">
                       <Download className="mr-2 h-4 w-4" /> Export
                     </Button>
                   </DropdownMenuTrigger>
@@ -3368,27 +3426,31 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                     <DropdownMenuItem onClick={() => void handleExport("pdf")}>Export PDF</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button onClick={handleSaveVersion} size="sm" disabled={isSaving}>
+                <Button onClick={handleSaveVersion} size="sm" disabled={isSaving} className="h-11 bg-indigo-600 px-5 hover:bg-indigo-500">
                   <Plus className="mr-2 h-4 w-4" /> Save version
                 </Button>
-                <Button
-                  onClick={handleSetDefault}
-                  variant="outline"
-                  size="sm"
-                  disabled={!currentVersionId}
-                  className="flex items-center gap-2"
-                >
-                  <BadgeCheck className="h-4 w-4" /> Set default
-                </Button>
-                <Button
-                  onClick={handleDeleteVersion}
-                  variant="destructive"
-                  size="sm"
-                  disabled={!currentVersionId || isDeletingVersion}
-                  className="flex items-center gap-2"
-                >
-                  <Trash2 className="h-4 w-4" /> Delete version
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-11 px-5">
+                      More
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => void handleSetDefault()}
+                      disabled={!currentVersionId}
+                    >
+                      <BadgeCheck className="mr-2 h-4 w-4" /> Set default
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleDeleteVersion}
+                      disabled={!currentVersionId || isDeletingVersion}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete version
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
             <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[280px,1fr,320px]">
@@ -3465,16 +3527,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                     </Button>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="mt-2 w-full text-right text-xs font-semibold text-primary hover:underline"
-                  onClick={() => setFocusOfficeId(null)}
-                >
-                  View all offices
-                </button>
+       
               </div>
 
-              <div className="rounded-lg border p-3">
+              <div className="rounded-xl border p-3">
                 <Label className="mb-2 block text-sm font-semibold">Quick Add</Label>
                 <div className="grid gap-2">
                   <Button size="sm" variant="outline" className="border-blue-200 text-blue-700" onClick={() => setIsAddOfficeOpen(true)}>Add office</Button>
@@ -3483,7 +3539,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 </div>
               </div>
 
-              <div className="space-y-2 border-t pt-2">
+              <div className="space-y-2 rounded-xl border p-3">
+                <Label className="text-sm font-semibold">View Options</Label>
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">Allow cross-office links</Label>
                   <Switch
@@ -3505,14 +3562,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         </aside>
 
         <section className="relative flex min-h-0 flex-col overflow-hidden rounded-lg border bg-background">
-          <div className="flex items-center justify-between border-b px-4 py-2">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center border-b px-4 py-2">
+            <div className="flex items-center gap-1 rounded-md border bg-background p-1">
               <Button
                 variant={tool === "select" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setTool("select")}
               >
-                Select
+                <MousePointer2 className="mr-2 h-4 w-4" /> Select
               </Button>
               <Button
                 variant={tool === "hand" ? "default" : "outline"}
@@ -3533,26 +3590,24 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 <span className="text-sm font-semibold leading-none">T</span>
                 Text
               </Button>
-              <Select value={edgeType} onValueChange={(value: "orth" | "smoothstep") => setEdgeType(value)}>
-                <SelectTrigger className="h-9 w-36">
-                  <SelectValue placeholder="Edge type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {EDGE_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="icon" onClick={() => setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 400 })}>
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="icon" onClick={() => focusOffice(focusOfficeId)}>
-                <Wand2 className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
+              <div className="mx-1 h-7 w-px bg-border" />
+              <div className="relative pt-1.5">
+                <span className="absolute left-1 top-0 text-[9px] leading-none text-muted-foreground">Connector style</span>
+                <Select value={edgeType} onValueChange={handleEdgeTypeChange}>
+                  <SelectTrigger className="h-8 w-36 gap-1.5">
+                    <GitBranch className="h-4 w-4 shrink-0" />
+                    <SelectValue placeholder="Edge type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EDGE_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="mx-1 h-7 w-px bg-border" />
               <Button
                 variant="outline"
                 size="icon"
@@ -3577,28 +3632,47 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               >
                 <Redo2 className="h-4 w-4" />
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" title="Copy" aria-label="Copy" disabled={loading}>
-                    <ClipboardCopy className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => copySelection(false)}>Copy structure only</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => copySelection(true)}>Copy with people</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="mx-1 h-7 w-px bg-border" />
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => pasteIntoOffice()}
-                disabled={!clipboardAvailable}
-                title="Paste (Ctrl/Cmd+V)"
-                aria-label="Paste"
+                onClick={() => {
+                  const vp = getViewport();
+                  setViewport({ ...vp, zoom: Math.max(0.2, vp.zoom - 0.1) }, { duration: 150 });
+                }}
+                title="Zoom out"
               >
-                <ClipboardPaste className="h-4 w-4" />
+                <Minus className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  const vp = getViewport();
+                  setViewport({ ...vp, zoom: Math.min(3, vp.zoom + 0.1) }, { duration: 150 });
+                }}
+                title="Zoom in"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="sm" className="min-w-[64px]" onClick={() => setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 200 })}>
+                {`${Math.round(getViewport().zoom * 100)}%`}
+              </Button>
+              <Button variant="outline" size="sm" className="px-3" onClick={() => focusOffice(focusOfficeId)}>
+                Fit to screen
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 400 })}>
+                <Wand2 className="h-4 w-4" />
               </Button>
             </div>
+            {isChartLoading ? (
+              <div className="absolute inset-0 z-[70] flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+                <div className="flex items-center gap-3 rounded-md border bg-background px-4 py-2 shadow-sm">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                  <p className="text-sm text-foreground">Loading org chart...</p>
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
             <div
@@ -3656,6 +3730,9 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 <Controls showInteractive={false} position="bottom-right" />
 
               </ReactFlow>
+              <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full border bg-background/95 px-4 py-1.5 text-sm text-muted-foreground shadow-sm">
+                Drag to pan • Scroll to zoom • Click a node to edit
+              </div>
               {isHand ? (
                 <div
                   data-orgchart-export-ignore="true"
@@ -3849,6 +3926,57 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                         <Button variant="destructive" size="sm" onClick={removeSelectedNode} className="flex items-center gap-2">
                           <Trash2 className="h-4 w-4" /> Remove
                         </Button>
+                      </div>
+                    </div>
+                  ) : selectedNode.type === "office" ? (
+                    <div className="space-y-3">
+                      <div className="rounded-lg border bg-muted/20 p-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Building2 className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold leading-tight">{selectedNode.data.name}</p>
+                            <Badge variant="secondary" className="mt-1 text-[10px]">Office</Badge>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="office-name">Name</Label>
+                        <Input
+                          id="office-name"
+                          value={selectedNode.data.name}
+                          onChange={(event) => updateSelectedNode({ name: event.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="office-type">Type</Label>
+                        <Select value="office" onValueChange={() => undefined} disabled>
+                          <SelectTrigger id="office-type">
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="office">Office</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="office-select">Office</Label>
+                        <Select
+                          value={selectedNode.data.officeId ?? selectedNode.id}
+                          onValueChange={(value) => setFocusOfficeId(value)}
+                        >
+                          <SelectTrigger id="office-select">
+                            <SelectValue placeholder="Office" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {offices.map((office) => (
+                              <SelectItem key={office.id} value={office.data.officeId ?? office.id}>
+                                {office.data.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   ) : (
@@ -4104,29 +4232,44 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           </Card>
 
           <Card>
-            <CardContent className="space-y-2 pt-6 text-sm text-muted-foreground">
-              <p className="text-sm font-semibold text-foreground">Summary</p>
-              <p>
-                <span className="font-semibold text-foreground">{offices.length}</span> offices
-              </p>
-              <p>
-                <span className="font-semibold text-foreground">{nodes.filter((node: FlowNode) => node.type === "unit").length}</span> units
-              </p>
-              <p>
-                <span className="font-semibold text-foreground">{nodes.filter((node: FlowNode) => node.type === "person").length}</span> people
-              </p>
-              <p>
-                <span className="font-semibold text-foreground">{nodes.length}</span> total nodes
-              </p>
+            <CardContent className="space-y-3 pt-6 text-sm text-muted-foreground">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-foreground">Summary</p>
+                <span className="text-xs text-muted-foreground">i</span>
+              </div>
+              <div className="rounded-md border bg-background p-2">
+                <div className="flex items-center justify-between px-1 py-1.5">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Building2 className="h-3.5 w-3.5 text-primary" />
+                    <span>Offices</span>
+                  </div>
+                  <span className="font-semibold text-foreground">{offices.length}</span>
+                </div>
+                <div className="flex items-center justify-between px-1 py-1.5">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Users className="h-3.5 w-3.5 text-primary" />
+                    <span>Units</span>
+                  </div>
+                  <span className="font-semibold text-foreground">{nodes.filter((node: FlowNode) => node.type === "unit").length}</span>
+                </div>
+                <div className="flex items-center justify-between px-1 py-1.5">
+                  <div className="flex items-center gap-2 text-xs">
+                    <User className="h-3.5 w-3.5 text-primary" />
+                    <span>People</span>
+                  </div>
+                  <span className="font-semibold text-foreground">{nodes.filter((node: FlowNode) => node.type === "person").length}</span>
+                </div>
+                <div className="flex items-center justify-between px-1 py-1.5">
+                  <div className="flex items-center gap-2 text-xs">
+                    <GitBranch className="h-3.5 w-3.5 text-primary" />
+                    <span>Total nodes</span>
+                  </div>
+                  <span className="font-semibold text-foreground">{nodes.length}</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
-          <Card className="border-primary/20 bg-primary/5">
-            <CardContent className="space-y-2 pt-6 text-sm text-muted-foreground">
-              <p className="text-sm font-semibold text-foreground">Tips</p>
-              <p>- Select a node, then drag from connector handles to add a child.</p>
-              <p>- Hold Shift while connecting to create a straight line.</p>
-            </CardContent>
-          </Card>
+         
         </aside>
             </div>
           </div>
@@ -4181,7 +4324,7 @@ type FlowNodeCardProps = NodeProps<FlowNodeData> & { icon: ReactNode; showHeader
 function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }: FlowNodeCardProps) {
   const actions = useCanvasActions();
   const handles = getHandlesForType(type as OrgNodeType);
-  const { showPhotos } = useCanvasSettings();
+  const { showPhotos, focusedOfficeId } = useCanvasSettings();
   const outlineColor = normalizeColor(data.outlineColor) ?? NEUTRAL_OUTLINE_COLOR;
   const borderWidth = data.isHead ? 3 : 2;
   const glowSize = data.isHead ? 6 : 3;
@@ -4195,7 +4338,12 @@ function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }
   const showHeaderBar = showHeaderLabel && type !== "person" && Boolean(data.label);
 
   const renderAvatar = () => {
-    if (showPhotos && data.imageUrl) {
+    const belongsToFocusedOffice =
+      !focusedOfficeId ||
+      (data.officeId != null && data.officeId === focusedOfficeId) ||
+      id === focusedOfficeId;
+
+    if (showPhotos && belongsToFocusedOffice && data.imageUrl) {
       return (
         <Image
           src={data.imageUrl}
@@ -4449,14 +4597,14 @@ function getHandlesForType(type: OrgNodeType): HandleConfig[] {
 }
 
 function mapDocEdgeTypeToFlow(type?: "orth" | "smoothstep" | "straight"): Edge["type"] {
-  if (type === "smoothstep") return "smoothstep";
+  if (type === "smoothstep") return "default";
   if (type === "straight") return "straight";
   // Default/document value "orth" maps to React Flow's built-in "step" type
   return "step";
 }
 
 function mapFlowEdgeTypeToDoc(type?: string): "orth" | "smoothstep" | "straight" {
-  if (type === "smoothstep") return "smoothstep";
+  if (type === "smoothstep" || type === "default" || type === "bezier") return "smoothstep";
   if (type === "straight") return "straight";
   // Treat any orthogonal/step-like type as "orth" in the document
   if (type === "step" || type === "orthogonal" || type === "orth") return "orth";
