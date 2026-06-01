@@ -227,22 +227,7 @@ export default function EmployeeFilters({
         </div>
       </Modal>
 
-      {/* Floating Mobile Trigger */}
-      {!isGenioOpen && (
-        <div className="fixed bottom-24 right-6 z-50 md:hidden animate-in fade-in slide-in-from-bottom-4">
-          <Button
-            onClick={() => setIsOpen(true)}
-            className="h-14 w-14 rounded-full shadow-2xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center p-0"
-          >
-            <Filter className="h-6 w-6" />
-            {activeCount > 0 && (
-              <span className="absolute -top-1 -right-1 h-6 w-6 bg-rose-500 border-2 border-white rounded-full text-[10px] font-bold flex items-center justify-center">
-                {activeCount}
-              </span>
-            )}
-          </Button>
-        </div>
-      )}
+      {/* Mobile floating trigger removed by request */}
     </div>
   );
 }

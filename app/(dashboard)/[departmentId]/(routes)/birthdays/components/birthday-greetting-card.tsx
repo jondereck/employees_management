@@ -344,14 +344,13 @@ export default function IndividualBirthdayCard({
   };
 
   return (
-    <div className="grid w-full grid-cols-1 items-stretch gap-5 lg:grid-cols-[540px_minmax(360px,1fr)]">
-      <div className="flex min-h-[640px] w-full flex-col items-center justify-between gap-4 rounded-xl border bg-card p-4 shadow-sm">
+    <div className="grid w-full grid-cols-1 items-stretch gap-4 lg:grid-cols-[540px_minmax(360px,1fr)]">
+      <div className="flex w-full flex-col items-center justify-between gap-3 rounded-xl border bg-card p-3 shadow-sm sm:min-h-[640px] sm:p-4">
         <div className="h-7" data-hide-in-export />
 
         <div
           ref={cardRef}
-          className="relative overflow-hidden rounded-xl border shadow bg-white"
-          style={{ width: 540, height: 540 }}
+          className="relative aspect-square w-full max-w-[540px] overflow-hidden rounded-xl border bg-white shadow"
         >
           <Image
             src="/individual-bday-greet.png"
@@ -425,7 +424,7 @@ export default function IndividualBirthdayCard({
         <div className="h-10" data-hide-in-export />
       </div>
 
-      <aside className="flex min-h-[640px] w-full flex-col rounded-xl border bg-card p-4 shadow-sm">
+      <aside className="flex w-full flex-col rounded-xl border bg-card p-3 shadow-sm sm:min-h-[640px] sm:p-4">
         <div className="mb-3 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -493,21 +492,21 @@ export default function IndividualBirthdayCard({
             }
           }}
           placeholder="Click Generate Caption or type your Facebook caption here..."
-          className="min-h-[390px] flex-1 resize-none whitespace-pre-wrap text-sm leading-6"
+          className="min-h-[240px] flex-1 resize-none whitespace-pre-wrap text-sm leading-6 sm:min-h-[390px]"
         />
 
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <Button type="button" variant="outline" onClick={copyCaption}>
-            <Copy className="mr-2 h-4 w-4" />
-            Copy
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Button type="button" variant="outline" onClick={copyCaption} className="h-9 px-0 sm:h-10 sm:px-3">
+            <Copy className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only">Copy</span>
           </Button>
-          <Button type="button" variant="outline" onClick={prepareFacebookPost} disabled={generating}>
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Open
+          <Button type="button" variant="outline" onClick={prepareFacebookPost} disabled={generating} className="h-9 px-0 sm:h-10 sm:px-3">
+            <ExternalLink className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only">Open</span>
           </Button>
-          <Button type="button" onClick={handleDownloadPreparedImage} disabled={exporting}>
-            <Download className="mr-2 h-4 w-4" />
-            Image
+          <Button type="button" onClick={handleDownloadPreparedImage} disabled={exporting} className="h-9 px-0 sm:h-10 sm:px-3">
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only">Image</span>
           </Button>
         </div>
       </aside>

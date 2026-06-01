@@ -942,7 +942,7 @@ export const GenioChat = ({
     ${hidden ? "hidden" : ""}
 
     ${isFullscreen
-          ? "fixed inset-0 z-[100] h-screen w-screen rounded-none sm:inset-x-0 sm:bottom-0 sm:top-[76px] sm:h-[calc(100vh-76px)]"
+          ? "fixed inset-x-0 bottom-0 top-[56px] z-[100] h-[calc(100dvh-56px)] w-screen rounded-none sm:inset-x-0 sm:bottom-0 sm:top-[76px] sm:h-[calc(100vh-76px)]"
           : "h-[620px] w-[min(420px,calc(100vw-32px))] max-h-[calc(100vh-48px)] rounded-3xl"
         }
   `}
@@ -999,13 +999,15 @@ export const GenioChat = ({
             <Trash2 className="h-4 w-4" />
           </button>
           {/* Fullscreen*/}
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100"
-            aria-label={isFullscreen ? "Minimize chat" : "Expand chat"}
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </button>
+          {!isMobile && (
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100"
+              aria-label={isFullscreen ? "Minimize chat" : "Expand chat"}
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+          )}
           {/* Close */}
           <button
             onClick={onClose}

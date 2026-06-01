@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
@@ -65,6 +65,8 @@ export default function PublicFooter({
 }: PublicFooterProps) {
   const year = new Date().getFullYear();
   const creatorTimerRef = useRef<number | null>(null);
+  const scrollIdleTimerRef = useRef<number | null>(null);
+  const [isMobileHidden, setIsMobileHidden] = useState(false);
   const navigateTo = (href: string) => {
   if (href.startsWith("/") || href.startsWith(window.location.origin)) {
     router.push(href.replace(window.location.origin, ""));
@@ -92,6 +94,54 @@ const cancelPreview = () => {
     visible: boolean;
     href?: string;
   }>({ visible: false, href: undefined });
+
+  useEffect(() => {
+    if (position !== "fixed") return;
+
+    let lastY = window.scrollY;
+    let ticking = false;
+
+    const onScroll = () => {
+      const currentY = window.scrollY;
+      if (!window.matchMedia("(max-width: 639px)").matches) {
+        setIsMobileHidden(false);
+        lastY = currentY;
+        return;
+      }
+
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const delta = currentY - lastY;
+        if (currentY <= 8) {
+          setIsMobileHidden(false);
+        } else if (delta > 4) {
+          setIsMobileHidden(true);
+        } else if (delta < -4) {
+          setIsMobileHidden(false);
+        }
+
+        if (scrollIdleTimerRef.current) {
+          window.clearTimeout(scrollIdleTimerRef.current);
+        }
+        scrollIdleTimerRef.current = window.setTimeout(() => {
+          setIsMobileHidden(false);
+          scrollIdleTimerRef.current = null;
+        }, 180);
+
+        lastY = currentY;
+        ticking = false;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (scrollIdleTimerRef.current) {
+        window.clearTimeout(scrollIdleTimerRef.current);
+      }
+    };
+  }, [position]);
 
 const openCreatorWithDelay = (href?: string) => {
   if (!href) return;
@@ -353,6 +403,8 @@ const openCreatorWithDelay = (href?: string) => {
         position === "fixed" ? "fixed inset-x-0 bottom-0 z-40" : "",
         "w-full border-t bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-neutral-900/70 dark:supports-[backdrop-filter]:bg-neutral-900/50",
         "pb-[max(0px,env(safe-area-inset-bottom))]",
+        "transition-transform duration-200 ease-out sm:translate-y-0",
+        isMobileHidden ? "translate-y-full" : "translate-y-0",
         className
       )}
       style={cssVars}

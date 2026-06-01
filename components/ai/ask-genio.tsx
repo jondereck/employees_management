@@ -56,8 +56,8 @@ export const AskGenio = ({
       <div
         className={
           anchorSide === "left"
-            ? "fixed bottom-6 left-6 z-50"
-            : "fixed bottom-6 right-6 z-50"
+            ? "fixed bottom-3 left-3 z-50 sm:bottom-6 sm:left-6"
+            : "fixed bottom-3 right-3 z-50 sm:bottom-6 sm:right-6"
         }
       >
         <GenioChat

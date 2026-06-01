@@ -243,8 +243,8 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                   href={`/${departmentId}/employees`}
                   className="block rounded-xl border border-white/30 bg-white/35 p-3 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
                 >
-                  <div className="flex items-end justify-between gap-3">
-                    <div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+                    <div className="min-w-0">
                       <p className="text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
                         {dashboardSummary.incompleteRecords.count}
                       </p>
@@ -252,7 +252,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                         employees with missing key data
                       </p>
                     </div>
-                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                    <span className="self-start text-xs font-semibold text-emerald-700 sm:self-auto dark:text-emerald-300">
                       Review
                     </span>
                   </div>
@@ -297,9 +297,9 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                       <Link
                         key={employee.id}
                         href={employee.href}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-white/30 bg-white/35 px-3 py-2.5 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
+                        className="flex flex-col gap-2 rounded-xl border border-white/30 bg-white/35 px-3 py-2.5 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:flex-row sm:items-center sm:justify-between sm:gap-3 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
                       >
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
                             {employee.title}
                           </p>
@@ -308,7 +308,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                           </p>
                         </div>
                         {employee.meta ? (
-                          <span className="shrink-0 rounded-full bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                          <span className="shrink-0 self-start rounded-full bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-700 sm:self-auto dark:text-rose-300">
                             {employee.meta}
                           </span>
                         ) : null}

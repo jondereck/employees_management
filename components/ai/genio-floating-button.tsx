@@ -15,6 +15,7 @@ const TOP_GAP_PX = 16;
 const NAVBAR_GAP_PX = 8;
 const FOOTER_GAP_PX = 8;
 const GENIO_ANCHOR_TOP_KEY = "genio.anchorTop";
+const COMPACT_VIEWPORT_QUERY = "(max-width: 900px), (max-height: 760px)";
 
 export function GenioFloatingButton({
   anchorSide,
@@ -41,6 +42,7 @@ export function GenioFloatingButton({
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [top, setTop] = useState<number | null>(null);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
 
   const canThink = isThinking && !isScrolling;
   const getFooterTop = () => {
@@ -66,15 +68,40 @@ export function GenioFloatingButton({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const media = window.matchMedia(COMPACT_VIEWPORT_QUERY);
+    const applyViewportMode = () => {
+      const compact = media.matches;
+      setIsCompactViewport(compact);
+      if (compact) {
+        setTop(null);
+        setTranslate({ x: 0, y: 0 });
+      }
+    };
+    applyViewportMode();
+    media.addEventListener("change", applyViewportMode);
+    return () => media.removeEventListener("change", applyViewportMode);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isCompactViewport) {
+      setTop(null);
+      return;
+    }
     const fallbackTop = window.innerHeight - EDGE_OFFSET_REM * 16 - 64;
     const raw = window.localStorage.getItem(GENIO_ANCHOR_TOP_KEY);
     const parsed = raw ? Number(raw) : Number.NaN;
     const candidate = Number.isFinite(parsed) ? parsed : fallbackTop;
     setTop(clampTop(candidate));
-  }, []);
+  }, [isCompactViewport]);
 
   useEffect(() => {
     const onResize = () => {
+      if (isCompactViewport) {
+        setTop(null);
+        setTranslate({ x: 0, y: 0 });
+        return;
+      }
       setTop((current) => {
         if (typeof current !== "number") return current;
         return clampTop(current);
@@ -82,9 +109,9 @@ export function GenioFloatingButton({
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
+  }, [isCompactViewport]);
 
-  const anchorClass = anchorSide === "left" ? "left-6" : "right-6";
+  const anchorClass = anchorSide === "left" ? "left-3 sm:left-6" : "right-3 sm:right-6";
   const dragStyle = useMemo(
     () => ({
       top: top ?? "auto",
@@ -150,7 +177,9 @@ export function GenioFloatingButton({
       onAnchorSideChange(nextSide);
       const nextTop = clampTop(rootRect.top);
       setTop(nextTop);
-      window.localStorage.setItem(GENIO_ANCHOR_TOP_KEY, String(nextTop));
+      if (!isCompactViewport) {
+        window.localStorage.setItem(GENIO_ANCHOR_TOP_KEY, String(nextTop));
+      }
       setTranslate({ x: 0, y: 0 });
 
       window.removeEventListener("pointermove", handlePointerMove);
@@ -203,7 +232,7 @@ export function GenioFloatingButton({
           onClick={handleButtonClick}
           onPointerDown={handlePointerDown}
           className={clsx(
-            "relative h-16 w-16 rounded-full p-0 overflow-hidden border-white/20 shadow-2xl transition-transform active:scale-90 hover:scale-110 cursor-grab active:cursor-grabbing",
+            "relative h-14 w-14 sm:h-16 sm:w-16 rounded-full p-0 overflow-hidden border-white/20 shadow-2xl transition-transform active:scale-90 hover:scale-110 cursor-grab active:cursor-grabbing",
             isThinking && "animate-genio-breath"
           )}
         >

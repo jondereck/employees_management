@@ -1019,17 +1019,17 @@ export default function BirthdayMonthClient({
       {/* Sticky Controls */}
       <div
         className={cn(
-          "z-30 sticky top-0 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          "bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           "border-b px-3 py-2 sm:px-4"
         )}
       >
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between bg-card p-4 rounded-xl border shadow-sm">
+      <div className="bg-card p-4 rounded-2xl border shadow-sm">
   {/* Left Section: Context & Core Filters */}
-  <div className="flex flex-wrap items-center gap-3">
-    <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-lg border">
+  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+    <div className="flex items-center gap-2 rounded-xl border bg-muted/30 px-3 py-2">
       <Calendar className="h-4 w-4 text-indigo-500" />
       <Select value={String(month)} onValueChange={onChangeMonth}>
-        <SelectTrigger className="w-[140px] border-none bg-transparent focus:ring-0 h-7 shadow-none p-0">
+        <SelectTrigger className="h-8 w-full border-none bg-transparent focus:ring-0 shadow-none p-0">
           <SelectValue placeholder="Select month" />
         </SelectTrigger>
         <SelectContent>
@@ -1040,36 +1040,22 @@ export default function BirthdayMonthClient({
       </Select>
     </div>
 
-    <div className="h-6 w-[1px] bg-border hidden sm:block" />
-
-    <div className="flex items-center gap-2">
-      <Badge variant="secondary" className="px-2 py-1 rounded-md font-medium">
+    <div className="flex items-center gap-2 rounded-xl border bg-muted/30 px-3 py-2">
+      <Share2 className="h-4 w-4 text-slate-500" />
+      <span className="text-sm font-semibold text-slate-700">
         {celebrants.length} {celebrants.length === 1 ? "Celebrant" : "Celebrants"}
-      </Badge>
-      
-      {excludedPeople.length > 0 && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowExcluded(true)}
-          className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-          data-hide-in-export
-        >
-          <EyeOff className="h-3.5 w-3.5 mr-1.5" />
-          Excluded ({excludedPeople.length})
-        </Button>
-      )}
+      </span>
     </div>
   </div>
 
   {/* Right Section: Actions & Settings */}
-  <div className="flex flex-wrap items-center gap-2" data-hide-in-export>
+  <div className="mt-3 grid grid-cols-1 gap-3" data-hide-in-export>
     {/* Filter Group */}
-    <div className="flex items-center bg-muted/50 rounded-lg p-1 border">
+    <div className="grid grid-cols-2 rounded-xl border bg-muted/30 p-1">
       <Button 
         variant={headsFilter === 'all' ? 'secondary' : 'ghost'} 
         size="sm" 
-        className="h-7 px-3 text-xs"
+        className="h-10 rounded-lg text-sm"
         onClick={() => onHeadsFilterChange('all')}
       >
         All
@@ -1077,17 +1063,18 @@ export default function BirthdayMonthClient({
       <Button 
         variant={headsFilter === 'heads-only' ? 'secondary' : 'ghost'} 
         size="sm" 
-        className="h-7 px-3 text-xs"
+        className="h-10 rounded-lg text-sm"
         onClick={() => onHeadsFilterChange('heads-only')}
       >
         Special
       </Button>
     </div>
 
+    <div className="grid grid-cols-2 gap-2">
     {/* Configuration Popover */}
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="shadow-sm">
+        <Button variant="outline" size="sm" className="h-11 rounded-xl shadow-sm">
           <Settings2 className="mr-2 h-4 w-4 text-muted-foreground" />
           Customize
         </Button>
@@ -1162,12 +1149,10 @@ export default function BirthdayMonthClient({
       </PopoverContent>
     </Popover>
 
-    <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block" />
-
     {/* Export Actions */}
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="default" size="sm" className="bg-indigo-600 hover:bg-indigo-700 shadow-md">
+        <Button variant="default" size="sm" className="h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 shadow-md">
           <Download className="h-4 w-4 mr-2" />
           Export
         </Button>
@@ -1185,6 +1170,19 @@ export default function BirthdayMonthClient({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    </div>
+
+    {excludedPeople.length > 0 && (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setShowExcluded(true)}
+        className="w-fit text-xs text-muted-foreground hover:text-destructive transition-colors"
+      >
+        <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+        Excluded ({excludedPeople.length})
+      </Button>
+    )}
   </div>
 </div>
       </div>
@@ -1520,7 +1518,7 @@ export default function BirthdayMonthClient({
       </Dialog>
 
       <Dialog open={!!cardPerson} onOpenChange={(o) => !o && closeCard()}>
-        <DialogContent className="max-w-[1120px]">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[1120px] max-h-[90vh] overflow-y-auto">
           {cardPerson && (
             <div className="w-full flex justify-center">
               <BirthdayGreetingCard

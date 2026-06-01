@@ -1670,25 +1670,18 @@ export default function DownloadStyledExcel() {
   return (
     <div className="flex justify-end">
       <button
-        onClick={() => setModalOpen(true)}   >
-        <div>
-          <div
-            className={`px-4 py-2 text-sm sm:text-base rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${loading
-              ? 'bg-gray-500 cursor-not-allowed'
-              : 'bg-green-700 hover:bg-green-800 focus:ring-green-600'
-              } text-white flex items-center justify-center space-x-2`}
-          >
-            {loading ? (
-              'Generating...'
-            ) : (
-              <>
-                <FaFileExcel className="text-base sm:text-lg" />
-                <span className="hidden sm:inline">Download</span>
-              </>
-            )}
-          </div>
-        </div>
-
+        type="button"
+        onClick={() => setModalOpen(true)}
+        disabled={loading}
+        className={cn(
+          "inline-flex h-10 items-center justify-center gap-2 rounded-md border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          loading
+            ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-500"
+            : "border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800 focus-visible:ring-emerald-600"
+        )}
+      >
+        <FaFileExcel className="text-base" />
+        <span>{loading ? "Generating..." : "Export to Excel"}</span>
       </button>
 
       {/* MODAL for column selection */}
