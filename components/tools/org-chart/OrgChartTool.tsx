@@ -90,7 +90,6 @@ import {
   Layers,
   ListFilter,
   Lock,
-  Move,
   Plus,
   Redo2,
   RefreshCw,
@@ -737,6 +736,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [focusOfficeId, setFocusOfficeId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [officeSearch, setOfficeSearch] = useState("");
+  const [officePage, setOfficePage] = useState(1);
   const [draftSnapshot, setDraftSnapshot] = useState<string>(JSON.stringify(docRef.current));
   const [showPhotos, setShowPhotos] = useState(false);
     const [focusTrigger, setFocusTrigger] = useState(0);
@@ -813,6 +813,22 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     if (!query) return offices;
     return offices.filter((office) => office.data.name.toLowerCase().includes(query));
   }, [officeSearch, offices]);
+  const officesPerPage = 10;
+  const totalOfficePages = Math.max(1, Math.ceil(filteredOffices.length / officesPerPage));
+  const paginatedOffices = useMemo(() => {
+    const start = (officePage - 1) * officesPerPage;
+    return filteredOffices.slice(start, start + officesPerPage);
+  }, [filteredOffices, officePage]);
+
+  useEffect(() => {
+    setOfficePage(1);
+  }, [officeSearch]);
+
+  useEffect(() => {
+    if (officePage > totalOfficePages) {
+      setOfficePage(totalOfficePages);
+    }
+  }, [officePage, totalOfficePages]);
 
   const isHand = tool === "hand";
   const customMarkerDefinitions = useMemo(() => getCustomMarkerDefinitions(edges), [edges]);
@@ -3312,42 +3328,46 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       `}</style>
       <CanvasSettingsContext.Provider value={{ showPhotos }}>
         <CanvasActionsContext.Provider value={actionsContextValue}>
-          <div
-            className="grid min-h-0 gap-4 lg:grid-cols-[280px,1fr,320px]"
-            style={{ height: "calc(100vh - 140px)" }}
-        >
-        <aside className="space-y-4">
-          <Card>
-            <CardContent className="space-y-4 pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold">Versions</p>
-                  {unsavedChanges ? (
-                    <Badge variant="secondary" className="mt-1 text-xs">
-                      Unsaved changes
-                    </Badge>
-                  ) : null}
-                </div>
-                <GitBranch className="h-5 w-5 text-muted-foreground" />
+          <div className="flex h-[calc(100dvh-170px)] min-h-0 flex-col gap-3 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background px-4 py-3">
+              <div>
+                <h2 className="text-lg font-semibold">Org Chart Builder</h2>
+                <p className="text-xs text-muted-foreground">Build, edit, and export per-office organizational charts.</p>
+                {unsavedChanges ? (
+                  <Badge variant="secondary" className="mt-1 text-xs">
+                    Unsaved changes
+                  </Badge>
+                ) : null}
               </div>
-              <Select value={currentVersionId ?? "__draft__"} onValueChange={handleVersionChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Current draft" />
-                </SelectTrigger>
-                <SelectContent className="max-h-60">
-                  <SelectItem value="__draft__">Current draft</SelectItem>
-                  {versions.map((version) => (
-                    <SelectItem key={version.id} value={version.id}>
-                      {version.label}
-                      {version.isDefault ? " (default)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="grid gap-2">
-                <Button onClick={loadInitialData} variant="secondary" size="sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={currentVersionId ?? "__draft__"} onValueChange={handleVersionChange}>
+                  <SelectTrigger className="h-9 w-[250px]">
+                    <SelectValue placeholder="Current draft" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    <SelectItem value="__draft__">Current draft</SelectItem>
+                    {versions.map((version) => (
+                      <SelectItem key={version.id} value={version.id}>
+                        {version.label}
+                        {version.isDefault ? " (default)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={loadInitialData} variant="outline" size="sm">
                   <RefreshCw className="mr-2 h-4 w-4" /> Build from DB
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={isExporting}>
+                      <Download className="mr-2 h-4 w-4" /> Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => void handleExport("png")}>Export PNG</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void handleExport("pdf")}>Export PDF</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button onClick={handleSaveVersion} size="sm" disabled={isSaving}>
                   <Plus className="mr-2 h-4 w-4" /> Save version
                 </Button>
@@ -3360,153 +3380,177 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 >
                   <BadgeCheck className="h-4 w-4" /> Set default
                 </Button>
-                  <Button
-                    onClick={handleDeleteVersion}
-                    variant="destructive"
-                    size="sm"
-                    disabled={!currentVersionId || isDeletingVersion}
-                    className="flex items-center gap-2"
-                  >
-                    <Trash2 className="h-4 w-4" /> Delete version
-                  </Button>
+                <Button
+                  onClick={handleDeleteVersion}
+                  variant="destructive"
+                  size="sm"
+                  disabled={!currentVersionId || isDeletingVersion}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete version
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="space-y-4 pt-6">
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Offices</Label>
+            </div>
+            <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[280px,1fr,320px]">
+        <aside className="flex min-h-0 flex-col gap-3 overflow-hidden">
+          <Card className="min-h-0 flex-1">
+            <CardContent className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pt-4">
+              <div className="rounded-lg border p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Offices</Label>
+                  <Badge variant="secondary" className="text-xs">{offices.length}</Badge>
+                </div>
                 <div className="relative">
                   <Input
                     value={officeSearch}
                     onChange={(event) => setOfficeSearch(event.target.value)}
-                    placeholder="Search offices"
+                    placeholder="Search offices..."
                     className="h-8 pr-8"
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         const first = filteredOffices[0];
-                        if (first) {
-                          setFocusOfficeId(first.data.officeId ?? first.id);
-                        }
+                        if (first) setFocusOfficeId(first.data.officeId ?? first.id);
                       }
                     }}
                   />
-                  {officeSearch ? (
-                    <button
-                      type="button"
-                      onClick={() => setOfficeSearch("")}
-                      aria-label="Clear office search"
-                      className="absolute right-2 top-1.5 text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      ×
-                    </button>
-                  ) : null}
+                  <ListFilter className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-muted-foreground" />
                 </div>
-                <ScrollArea className="mt-2 h-64 pr-2">
-                  <div className="space-y-1 pr-1">
+                <div className="mt-2 space-y-1">
+                  {paginatedOffices.length ? paginatedOffices.map((office: FlowNode) => {
+                    const officeIdentifier = office.data.officeId ?? office.id;
+                    const isActive = focusOfficeId === officeIdentifier || focusOfficeId === office.id;
+                    return (
+                      <button
+                        key={office.id}
+                        type="button"
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                          isActive ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                        )}
+                        onClick={() => setFocusOfficeId(officeIdentifier)}
+                        title={office.data.name}
+                      >
+                        <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate">{office.data.name}</span>
+                      </button>
+                    );
+                  }) : (
+                    <p className="px-2 py-4 text-sm text-muted-foreground">No matches</p>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Page {officePage} of {totalOfficePages}
+                  </p>
+                  <div className="flex items-center gap-1">
                     <Button
-                      variant={focusOfficeId ? "ghost" : "secondary"}
+                      type="button"
+                      variant="outline"
                       size="sm"
-                      className="w-full justify-start"
-                      onClick={() => setFocusOfficeId(null)}
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setOfficePage((prev) => Math.max(1, prev - 1))}
+                      disabled={officePage <= 1}
                     >
-                      Organizational Chart
+                      Prev
                     </Button>
-                    {filteredOffices.length ? filteredOffices.map((office: FlowNode) => {
-                      const officeIdentifier = office.data.officeId ?? office.id;
-                      const isActive = focusOfficeId === officeIdentifier || focusOfficeId === office.id;
-                      return (
-                        <div key={office.id} className="flex items-center gap-2">
-                          <Button
-                            variant={isActive ? "secondary" : "ghost"}
-                            size="sm"
-                            className="flex-1 justify-start"
-                            onClick={() => setFocusOfficeId(officeIdentifier)}
-                          >
-                            {office.data.name}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="px-2"
-                            onClick={() => pasteIntoOffice({ targetOfficeId: officeIdentifier, centerOnViewport: true })}
-                            disabled={!clipboardAvailable}
-                            title="Paste into this office"
-                          >
-                            <ClipboardPaste className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      );
-                    }) : (
-                      <p className="px-2 py-4 text-sm text-muted-foreground">No matches</p>
-                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setOfficePage((prev) => Math.min(totalOfficePages, prev + 1))}
+                      disabled={officePage >= totalOfficePages}
+                    >
+                      Next
+                    </Button>
                   </div>
-                </ScrollArea>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="org-search" className="text-sm font-semibold">
-                  Search
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="org-search"
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Search nodes"
-                    className="pl-9"
-                  />
-                  <ListFilter className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 </div>
+                <button
+                  type="button"
+                  className="mt-2 w-full text-right text-xs font-semibold text-primary hover:underline"
+                  onClick={() => setFocusOfficeId(null)}
+                >
+                  View all offices
+                </button>
               </div>
-              <div className="space-y-1">
-                <Label className="text-sm font-semibold">New node</Label>
+
+              <div className="rounded-lg border p-3">
+                <Label className="mb-2 block text-sm font-semibold">Quick Add</Label>
                 <div className="grid gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setIsAddOfficeOpen(true)}>Add office</Button>
-                  <Button size="sm" variant="outline" onClick={() => addStandaloneNode("unit")}>Add unit</Button>
-                  <Button size="sm" variant="outline" onClick={() => setIsAddPersonOpen(true)}>Add person</Button>
+                  <Button size="sm" variant="outline" className="border-blue-200 text-blue-700" onClick={() => setIsAddOfficeOpen(true)}>Add office</Button>
+                  <Button size="sm" variant="outline" className="border-emerald-200 text-emerald-700" onClick={() => addStandaloneNode("unit")}>Add unit</Button>
+                  <Button size="sm" variant="outline" className="border-violet-200 text-violet-700" onClick={() => setIsAddPersonOpen(true)}>Add person</Button>
                 </div>
               </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium">Allow cross-office edges</Label>
-                  <p className="text-xs text-muted-foreground">Permit connectors between offices.</p>
+
+              <div className="space-y-2 border-t pt-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Allow cross-office links</Label>
+                  <Switch
+                    checked={allowCrossOfficeEdges}
+                    onCheckedChange={(state) => setAllowCrossOfficeEdges(Boolean(state))}
+                  />
                 </div>
-                <Switch
-                  checked={allowCrossOfficeEdges}
-                  onCheckedChange={(state) => setAllowCrossOfficeEdges(Boolean(state))}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
+                <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">Show photos</Label>
-                  <p className="text-xs text-muted-foreground">Display employee portraits when available.</p>
+                  <Switch
+                    checked={showPhotos}
+                    onCheckedChange={(state) => setShowPhotos(Boolean(state))}
+                  />
                 </div>
-                <Switch
-                  checked={showPhotos}
-                  onCheckedChange={(state) => setShowPhotos(Boolean(state))}
-                />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="space-y-3 pt-6">
-              <Label className="text-sm font-semibold">Export</Label>
-              <Button onClick={() => void handleExport("png")} size="sm" disabled={isExporting}>
-                <Download className="mr-2 h-4 w-4" /> PNG
-              </Button>
-              <Button onClick={() => void handleExport("pdf")} size="sm" variant="outline" disabled={isExporting}>
-                <Download className="mr-2 h-4 w-4" /> PDF
-              </Button>
-            </CardContent>
-          </Card>
         </aside>
 
         <section className="relative flex min-h-0 flex-col overflow-hidden rounded-lg border bg-background">
           <div className="flex items-center justify-between border-b px-4 py-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Move className="h-4 w-4" /> Drag, pan, and connect nodes freely
+            <div className="flex items-center gap-2">
+              <Button
+                variant={tool === "select" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTool("select")}
+              >
+                Select
+              </Button>
+              <Button
+                variant={tool === "hand" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTool((current) => (current === "hand" ? "select" : "hand"))}
+                title="Hand (H) - pan the canvas"
+                aria-pressed={tool === "hand"}
+              >
+                <Hand className="mr-2 h-4 w-4" /> Hand / Pan
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => addStandaloneNode("annotation")}
+                title="Add text annotation"
+                className="flex items-center gap-2"
+              >
+                <span className="text-sm font-semibold leading-none">T</span>
+                Text
+              </Button>
+              <Select value={edgeType} onValueChange={(value: "orth" | "smoothstep") => setEdgeType(value)}>
+                <SelectTrigger className="h-9 w-36">
+                  <SelectValue placeholder="Edge type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EDGE_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="icon" onClick={() => setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 400 })}>
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => focusOffice(focusOfficeId)}>
+                <Wand2 className="h-4 w-4" />
+              </Button>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -3535,71 +3579,24 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    title="Copy"
-                    aria-label="Copy"
-                    disabled={loading}
-                  >
+                  <Button variant="outline" size="icon" title="Copy" aria-label="Copy" disabled={loading}>
                     <ClipboardCopy className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => copySelection(false)}>
-                    Copy structure only
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => copySelection(true)}>
-                    Copy with people
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => copySelection(false)}>Copy structure only</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => copySelection(true)}>Copy with people</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => pasteIntoOffice()}
-                  disabled={!clipboardAvailable}
-                  title="Paste (Ctrl/Cmd+V)"
-                  aria-label="Paste"
-                >
-                  <ClipboardPaste className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => addStandaloneNode("annotation")}
-                  title="Add text annotation"
-                  className="flex items-center gap-2"
-                >
-                  <span className="text-sm font-semibold leading-none">T</span>
-                  Text
-                </Button>
-                <Button
-                  variant={tool === "hand" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setTool((current) => (current === "hand" ? "select" : "hand"))}
-                  title="Hand (H) – pan the canvas"
-                aria-pressed={tool === "hand"}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => pasteIntoOffice()}
+                disabled={!clipboardAvailable}
+                title="Paste (Ctrl/Cmd+V)"
+                aria-label="Paste"
               >
-                <Hand className="mr-2 h-4 w-4" /> Hand
-              </Button>
-              <Select value={edgeType} onValueChange={(value: "orth" | "smoothstep") => setEdgeType(value)}>
-                <SelectTrigger className="h-9 w-36">
-                  <SelectValue placeholder="Edge type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {EDGE_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="icon" onClick={() => setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 400 })}>
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="icon" onClick={() => focusOffice(focusOfficeId)}>
-                <Wand2 className="h-4 w-4" />
+                <ClipboardPaste className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -3644,23 +3641,19 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               >
                 <MarkerDefinitionsLayer definitions={customMarkerDefinitions} />
                 <Background gap={10} color="rgba(15,23,42,0.08)" size={1} />
-             <MiniMap
-  className="rounded-md border bg-background"
-  zoomable
-  pannable
-  nodeStrokeWidth={3}
-  nodeColor={(node: FlowNode) =>
-    node.data.outlineColor ??
-    node.data.headerColor ??
-    DEFAULT_NODE_COLORS[node.type as OrgNodeType]
-  }
-  position="top-right"   // ⬅️ add this
-/>
-
-<Controls
-  showInteractive={false}
-  position="top-right"   // ⬅️ change from "bottom-right"
-/>
+                <MiniMap
+                  className="rounded-md border bg-background"
+                  zoomable
+                  pannable
+                  nodeStrokeWidth={3}
+                  nodeColor={(node: FlowNode) =>
+                    node.data.outlineColor ??
+                    node.data.headerColor ??
+                    DEFAULT_NODE_COLORS[node.type as OrgNodeType]
+                  }
+                  position="bottom-left"
+                />
+                <Controls showInteractive={false} position="bottom-right" />
 
               </ReactFlow>
               {isHand ? (
@@ -3675,11 +3668,13 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           </div>
         </section>
 
-          <aside className="space-y-4">
+          <aside className="min-h-0 space-y-4 overflow-auto pr-1">
             <Card>
               <CardContent className="space-y-4 pt-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Properties</h3>
+                  <h3 className="text-sm font-semibold">
+                    {selectedNode ? "Selected Node" : selectedEdge ? "Selected Edge" : "Selection"}
+                  </h3>
                   {selectedNode ? (
                     selectedNode.type === "person" ? (
                       <User className="h-4 w-4" />
@@ -4120,9 +4115,20 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               <p>
                 <span className="font-semibold text-foreground">{nodes.filter((node: FlowNode) => node.type === "person").length}</span> people
               </p>
+              <p>
+                <span className="font-semibold text-foreground">{nodes.length}</span> total nodes
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="space-y-2 pt-6 text-sm text-muted-foreground">
+              <p className="text-sm font-semibold text-foreground">Tips</p>
+              <p>- Select a node, then drag from connector handles to add a child.</p>
+              <p>- Hold Shift while connecting to create a straight line.</p>
             </CardContent>
           </Card>
         </aside>
+            </div>
           </div>
         </CanvasActionsContext.Provider>
       </CanvasSettingsContext.Provider>
@@ -4456,3 +4462,5 @@ function mapFlowEdgeTypeToDoc(type?: string): "orth" | "smoothstep" | "straight"
   if (type === "step" || type === "orthogonal" || type === "orth") return "orth";
   return "orth";
 }
+
+
