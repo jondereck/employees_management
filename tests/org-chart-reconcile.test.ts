@@ -229,3 +229,53 @@ test("build refresh leaves existing lines untouched for surviving employees", ()
 
   assert.deepEqual(result.edges, current.edges);
 });
+
+test("build refresh pulls an existing detached DB employee back near the office cluster", () => {
+  const farEmployee = person("e-far", "a", { name: "Far employee" });
+  farEmployee.position = { x: 2400, y: 1800 };
+
+  const result = reconcileOrgChartDocument(
+    {
+      nodes: [office("a"), farEmployee],
+      edges: [],
+      edgeType: "orth",
+    },
+    latestDocument(office("a"), person("e-far", "a", { name: "Updated employee" })),
+    {
+      scopeOfficeId: "a",
+      preserveConnections: true,
+      placeNewEmployeesNearOfficeCluster: true,
+    }
+  );
+
+  const employee = result.nodes.find((node) => node.data.employeeId === "e-far");
+  assert.ok(employee);
+  assert.deepEqual(employee.position, { x: 240, y: 0 });
+  assert.equal(employee.data.name, "Updated employee");
+  assert.equal(result.edges.length, 0);
+});
+
+test("build refresh does not reposition a connected employee even when far away", () => {
+  const connectedEmployee = person("e-linked", "a");
+  connectedEmployee.position = { x: 2400, y: 1800 };
+  const current = {
+    nodes: [office("a"), connectedEmployee],
+    edges: [{ id: "manual-line", source: "office-a", target: "person-e-linked" }],
+    edgeType: "orth" as const,
+  };
+
+  const result = reconcileOrgChartDocument(
+    current,
+    latestDocument(office("a"), person("e-linked", "a", { name: "Updated employee" })),
+    {
+      scopeOfficeId: "a",
+      preserveConnections: true,
+      placeNewEmployeesNearOfficeCluster: true,
+    }
+  );
+
+  const employee = result.nodes.find((node) => node.data.employeeId === "e-linked");
+  assert.ok(employee);
+  assert.deepEqual(employee.position, { x: 2400, y: 1800 });
+  assert.deepEqual(result.edges, current.edges);
+});
