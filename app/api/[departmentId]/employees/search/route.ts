@@ -1,6 +1,7 @@
 import prismadb from "@/lib/prismadb";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { requireOrgChartDepartmentAccess } from "@/lib/org-chart-access";
 
 type Params = {
   params: {
@@ -16,6 +17,8 @@ export async function GET(request: Request, { params }: Params) {
   if (!departmentId) {
     return new NextResponse("Department Id is required", { status: 400 });
   }
+  const access = await requireOrgChartDepartmentAccess(departmentId);
+  if (access.error) return access.error;
 
   const url = new URL(request.url);
   const searchParams = url.searchParams;

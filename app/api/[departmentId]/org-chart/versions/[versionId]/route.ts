@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireOrgChartDepartmentAccess } from "@/lib/org-chart-access";
 
 type Params = {
   params: {
@@ -24,6 +25,8 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   const { departmentId, versionId } = parsed.data;
+  const access = await requireOrgChartDepartmentAccess(departmentId);
+  if (access.error) return access.error;
 
   try {
     const record = await prisma.orgChartVersion.findFirst({
@@ -68,6 +71,8 @@ export async function DELETE(_request: Request, { params }: Params) {
   }
 
   const { departmentId, versionId } = parsed.data;
+  const access = await requireOrgChartDepartmentAccess(departmentId);
+  if (access.error) return access.error;
 
   try {
     const record = await prisma.orgChartVersion.findFirst({

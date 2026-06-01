@@ -1,4 +1,5 @@
 import { buildInitialOrgDocument } from "@/lib/org-chart";
+import { requireOrgChartDepartmentAccess } from "@/lib/org-chart-access";
 import { NextResponse } from "next/server";
 
 type Params = {
@@ -9,6 +10,8 @@ type Params = {
 
 export async function POST(request: Request, { params }: Params) {
   try {
+    const access = await requireOrgChartDepartmentAccess(params.departmentId);
+    if (access.error) return access.error;
     const body = await request.json().catch(() => ({}));
     const includeStaffUnit = Boolean(body?.includeStaffUnit ?? false);
     const document = await buildInitialOrgDocument(params.departmentId, {

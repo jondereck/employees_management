@@ -1,5 +1,6 @@
 import prismadb from "@/lib/prismadb";
 import { NextResponse } from "next/server";
+import { requireOrgChartDepartmentAccess } from "@/lib/org-chart-access";
 
 type Params = {
   params: {
@@ -8,6 +9,8 @@ type Params = {
 };
 
 export async function GET(_request: Request, { params }: Params) {
+  const access = await requireOrgChartDepartmentAccess(params.departmentId);
+  if (access.error) return access.error;
   const employees = await prismadb.employee.findMany({
     where: { departmentId: params.departmentId, isArchived: false },
     orderBy: [{ isHead: "desc" }, { lastName: "asc" }],

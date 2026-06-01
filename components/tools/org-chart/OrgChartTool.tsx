@@ -79,7 +79,6 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
-  BadgeCheck,
   Bold,
   Building2,
   ClipboardPaste,
@@ -107,6 +106,7 @@ import {
 } from "lucide-react";
 import * as htmlToImage from "html-to-image";
 import { PDFDocument } from "pdf-lib";
+import { reconcileOrgChartDocument } from "@/lib/org-chart-reconcile";
 
 const DEFAULT_NODE_COLORS: Record<OrgNodeType, string> = {
   office: "#1E88E5",
@@ -728,6 +728,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
   const pointerPositionRef = useRef<{ x: number; y: number } | null>(null);
   const docRef = useRef<OrgChartDocument>({ nodes: [], edges: [], edgeType: "orth" });
+  const latestDraftRef = useRef<OrgChartDocument>({ nodes: [], edges: [], edgeType: "orth" });
   const lastSavedSnapshotRef = useRef<string>(JSON.stringify(docRef.current));
   const saveTimer = useRef<number | null>(null);
 
@@ -2052,80 +2053,46 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     [applyCurrentVersionId, departmentId, setDocument]
   );
 
+  const fetchLatestDbDraft = useCallback(async (): Promise<{
+    document: OrgChartDocument;
+    employees: EmployeeOption[];
+  }> => {
+    const [previewRes, employeesRes] = await Promise.all([
+      fetch(`/api/${departmentId}/org-chart/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includeStaffUnit: false }),
+      }),
+      fetch(`/api/${departmentId}/employees/simple`),
+    ]);
+
+    if (!previewRes.ok) throw new Error(await previewRes.text());
+    if (!employeesRes.ok) throw new Error(await employeesRes.text());
+
+    const previewData = (await previewRes.json()) as { document: OrgChartDocument };
+    const employees = (await employeesRes.json()) as EmployeeOption[];
+    return { document: previewData.document, employees };
+  }, [departmentId]);
+
   const loadInitialData = useCallback(async () => {
     try {
       setLoading(true);
       setIsChartLoading(true);
-      const [previewRes, employeesRes, versionsRes] = await Promise.all([
-        fetch(`/api/${departmentId}/org-chart/preview`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ includeStaffUnit: false }),
-        }),
-        fetch(`/api/${departmentId}/employees/simple`),
+      const [latestDraft, versionsRes] = await Promise.all([
+        fetchLatestDbDraft(),
         fetch(`/api/${departmentId}/org-chart/versions`),
       ]);
 
-      if (!previewRes.ok) throw new Error(await previewRes.text());
-      const previewData = (await previewRes.json()) as { document: OrgChartDocument };
-      setDocument(previewData.document, true, true);
-
-      if (employeesRes.ok) {
-        const employees = (await employeesRes.json()) as EmployeeOption[];
-        setAvailableEmployees(employees);
-      }
+      latestDraftRef.current = latestDraft.document;
+      setDocument(latestDraft.document, true, true);
+      setAvailableEmployees(latestDraft.employees);
+      applyCurrentVersionId(null);
 
       let versionList: OrgChartVersionSummary[] = [];
       if (versionsRes.ok) {
         versionList = (await versionsRes.json()) as OrgChartVersionSummary[];
       }
       setVersions(versionList);
-
-      let hasLoadedVersion = false;
-
-      const storedVersionId =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem(versionStorageKey)
-          : null;
-
-      if (storedVersionId) {
-        const restored = await loadVersionById(storedVersionId);
-        if (restored.status === "success") {
-          hasLoadedVersion = true;
-        } else if (restored.status === "not_found") {
-          applyCurrentVersionId(null);
-          toast({
-            title: "Version not found",
-            description: "Showing current draft.",
-          });
-        } else if (restored.status === "error") {
-          toast({
-            title: "Failed to restore version",
-            description: restored.message,
-            variant: "destructive",
-          });
-        }
-      }
-
-      if (!hasLoadedVersion && versionList.length) {
-        const defaultVersion = versionList.find((item) => item.isDefault);
-        if (defaultVersion) {
-          const loadDefault = await loadVersionById(defaultVersion.id);
-          if (loadDefault.status === "success") {
-            hasLoadedVersion = true;
-          } else if (loadDefault.status === "not_found") {
-            applyCurrentVersionId(null);
-            toast({
-              title: "Default version missing",
-              description: "Showing current draft.",
-            });
-          }
-        }
-      }
-
-      if (!hasLoadedVersion) {
-        applyCurrentVersionId(null);
-      }
     } catch (error) {
       toast({
         title: "Failed to load org chart",
@@ -2136,7 +2103,59 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       setLoading(false);
       setIsChartLoading(false);
     }
-  }, [applyCurrentVersionId, departmentId, loadVersionById, setDocument, toast, versionStorageKey]);
+  }, [applyCurrentVersionId, departmentId, fetchLatestDbDraft, setDocument, toast]);
+
+  const handleBuildFromDb = useCallback(async () => {
+    try {
+      setIsChartLoading(true);
+      const latestDraft = await fetchLatestDbDraft();
+      const currentDocument = serializeDocument(nodesRef.current, edgesRef.current, edgeType);
+      const selectedOfficeId =
+        focusOfficeId &&
+        offices.some((office) => {
+          const officeId = office.data.officeId ?? office.id;
+          return officeId === focusOfficeId || office.id === focusOfficeId;
+        })
+          ? focusOfficeId
+          : null;
+      const reconciledDocument = reconcileOrgChartDocument(
+        currentDocument,
+        latestDraft.document,
+        {
+          scopeOfficeId: selectedOfficeId,
+          preserveConnections: true,
+          placeNewEmployeesNearOfficeCluster: true,
+        }
+      );
+      latestDraftRef.current = reconciledDocument;
+      applyCurrentVersionId(null);
+      setAvailableEmployees(latestDraft.employees);
+      setDocument(reconciledDocument, false, true);
+      toast({
+        title: "Latest DB draft loaded",
+        description: selectedOfficeId
+          ? "Selected office was refreshed from DB while preserving the current arrangement."
+          : "Employee details were refreshed while preserving the current arrangement.",
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to build from DB",
+        description: error instanceof Error ? error.message : "Unable to load data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsChartLoading(false);
+    }
+  }, [
+    applyCurrentVersionId,
+    edgeType,
+    fetchLatestDbDraft,
+    focusOfficeId,
+    offices,
+    serializeDocument,
+    setDocument,
+    toast,
+  ]);
 
   useEffect(() => {
     void loadInitialData();
@@ -2150,13 +2169,16 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     saveTimer.current = window.setTimeout(() => {
       docRef.current = snapshotDocument;
       setDraftSnapshot(JSON.stringify(snapshotDocument));
+      if (!currentVersionId) {
+        latestDraftRef.current = snapshotDocument;
+      }
     }, 800);
     return () => {
       if (saveTimer.current) {
         window.clearTimeout(saveTimer.current);
       }
     };
-  }, [edgeType, edges, nodes, serializeDocument]);
+  }, [currentVersionId, edgeType, edges, nodes, serializeDocument]);
 
   useEffect(() => {
     setEdges((eds: FlowEdge[]) =>
@@ -3084,26 +3106,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     }
   }, [applyCurrentVersionId, departmentId, edgeType, edges, nodes, serializeDocument, toast]);
 
-  const handleSetDefault = useCallback(async () => {
-    if (!currentVersionId) return;
-    try {
-      const response = await fetch(
-        `/api/${departmentId}/org-chart/versions/${currentVersionId}/default`,
-        { method: "POST" }
-      );
-      if (!response.ok) throw new Error(await response.text());
-      const updated = (await response.json()) as OrgChartVersion;
-      setVersions((prev) => prev.map((item) => ({ ...item, isDefault: item.id === updated.id })));
-      toast({ title: "Default version updated", description: updated.label });
-    } catch (error) {
-      toast({
-        title: "Failed to set default",
-        description: error instanceof Error ? error.message : "Unable to set default version",
-        variant: "destructive",
-      });
-    }
-  }, [currentVersionId, departmentId, toast]);
-
     const handleDeleteVersion = useCallback(() => {
       if (!currentVersionId) return;
       setIsDeleteVersionOpen(true);
@@ -3141,6 +3143,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       setIsChartLoading(true);
       if (value === "__draft__") {
         applyCurrentVersionId(null);
+        setDocument(latestDraftRef.current, false, true);
         setIsChartLoading(false);
         return;
       }
@@ -3172,7 +3175,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       }
       setIsChartLoading(false);
     },
-    [applyCurrentVersionId, loadVersionById, toast]
+    [applyCurrentVersionId, loadVersionById, setDocument, toast]
   );
 
   const handleExport = useCallback(
@@ -3438,13 +3441,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                       {versions.map((version) => (
                         <SelectItem key={version.id} value={version.id}>
                           {version.label}
-                          {version.isDefault ? " (default)" : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={loadInitialData} variant="outline" size="sm" className="h-11 px-5">
+                <Button onClick={handleBuildFromDb} variant="outline" size="sm" className="h-11 px-5">
                   <Database className="mr-2 h-4 w-4" /> Build from DB
                 </Button>
                 <DropdownMenu>
@@ -3470,12 +3472,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => void handleSetDefault()}
-                      disabled={!currentVersionId}
-                    >
-                      <BadgeCheck className="mr-2 h-4 w-4" /> Set default
-                    </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={handleDeleteVersion}
                       disabled={!currentVersionId || isDeletingVersion}

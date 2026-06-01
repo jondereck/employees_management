@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireOrgChartDepartmentAccess } from "@/lib/org-chart-access";
 
 type Params = {
   params: {
@@ -35,6 +36,8 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   const { departmentId } = parseParams.data;
+  const access = await requireOrgChartDepartmentAccess(departmentId);
+  if (access.error) return access.error;
 
   try {
     const versions = await prisma.orgChartVersion.findMany({
@@ -76,6 +79,8 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const { departmentId } = parseParams.data;
+  const access = await requireOrgChartDepartmentAccess(departmentId);
+  if (access.error) return access.error;
 
   let payload: z.infer<typeof SaveSchema>;
   try {
