@@ -59,6 +59,7 @@ export type EmployeesColumn = {
   isFeatured: boolean;
   isHead: boolean;
   isArchived: boolean;
+  idQueueAt?: string | Date | null;
   eligibility: Eligibility;
   employeeType: EmployeeType;
   images: Image[];
@@ -178,6 +179,11 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
             <span className="text-[10px] text-muted-foreground truncate italic">
               {middleName || "No middle name"}
             </span>
+            {row.original.idQueueAt ? (
+              <Badge variant="secondary" className="mt-1 w-fit bg-amber-50 text-[10px] font-semibold text-amber-700 hover:bg-amber-50">
+                For ID
+              </Badge>
+            ) : null}
           </div>
         </ActionTooltip>
       );

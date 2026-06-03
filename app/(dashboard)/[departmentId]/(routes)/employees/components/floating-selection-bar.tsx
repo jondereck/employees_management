@@ -15,10 +15,10 @@ import { mutate } from "swr";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Archive, ArchiveRestore, QrCode, Trash2, Globe, Globe2, MoreHorizontal } from "lucide-react";
+import { Archive, ArchiveRestore, CreditCard, QrCode, Trash2, Globe, Globe2, MoreHorizontal } from "lucide-react";
 
 
-type RowEmployee = { id: string; isArchived?: boolean; publicEnabled?: boolean };
+type RowEmployee = { id: string; isArchived?: boolean; publicEnabled?: boolean; idQueueAt?: string | Date | null };
 
 interface FloatingSelectionBarProps<TData> {
   table: Table<TData>;
@@ -38,6 +38,8 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
   // Public toggle eligibility: ignore isArchived
   const eligibleForEnablePublic = selectedEmployees.filter(e => !e.publicEnabled);
   const eligibleForDisablePublic = selectedEmployees.filter(e => e.publicEnabled);
+  const eligibleForIdQueue = selectedEmployees.filter(e => !e.idQueueAt);
+  const eligibleForRemoveIdQueue = selectedEmployees.filter(e => e.idQueueAt);
 
   // 2) Recompute eligibility using isArchived/publicEnabled
   const eligibleForArchive = selectedEmployees.filter(e => e.isArchived === false);
@@ -276,6 +278,35 @@ const handleBulkPublicToggle = async (enable: boolean) => {
   }
 };
 
+const handleBulkIdQueue = async (queued: boolean) => {
+  try {
+    setLoading(true);
+
+    const target = (queued ? eligibleForIdQueue : eligibleForRemoveIdQueue).map((e) => e.id);
+
+    if (target.length === 0) return;
+
+    await axios.patch(`/api/${departmentId}/employees/id-queue`, {
+      employeeIds: target,
+      queued,
+    });
+
+    toast.success(
+      queued
+        ? `${target.length} employees marked for ID`
+        : `${target.length} employees removed from ID queue`
+    );
+
+    mutate(`/api/${departmentId}/employees`);
+    table.resetRowSelection();
+  } catch (error) {
+    console.error(error);
+    toast.error("Failed to update ID queue.");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <AnimatePresence>
@@ -317,6 +348,31 @@ const handleBulkPublicToggle = async (enable: boolean) => {
                   <QrCode className="h-4 w-4" />
                   <span>QR Code</span>
                 </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline" disabled={loading} className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4" />
+                      For ID
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem
+                      onClick={() => handleBulkIdQueue(true)}
+                      disabled={eligibleForIdQueue.length === 0}
+                      className="gap-2"
+                    >
+                      <CreditCard className="h-4 w-4" /> Mark for ID
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleBulkIdQueue(false)}
+                      disabled={eligibleForRemoveIdQueue.length === 0}
+                      className="gap-2"
+                    >
+                      <CreditCard className="h-4 w-4" /> Remove from ID Queue
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                 {/* Archive group */}
                 <DropdownMenu>
@@ -431,6 +487,26 @@ const handleBulkPublicToggle = async (enable: boolean) => {
                         className="justify-start gap-2"
                       >
                         <QrCode className="h-4 w-4" /> QR Code
+                      </Button>
+
+                      <Button
+                        onClick={() => handleBulkIdQueue(true)}
+                        disabled={loading || eligibleForIdQueue.length === 0}
+                        size="sm"
+                        variant="outline"
+                        className="justify-start gap-2"
+                      >
+                        <CreditCard className="h-4 w-4" /> Mark for ID
+                      </Button>
+
+                      <Button
+                        onClick={() => handleBulkIdQueue(false)}
+                        disabled={loading || eligibleForRemoveIdQueue.length === 0}
+                        size="sm"
+                        variant="outline"
+                        className="justify-start gap-2"
+                      >
+                        <CreditCard className="h-4 w-4" /> Remove from ID Queue
                       </Button>
 
                       <Button

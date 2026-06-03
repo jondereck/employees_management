@@ -74,9 +74,10 @@ const EmployeesPage = async ({
         select: { type: true, occurredAt: true, deletedAt: true },
       },
     },
-    orderBy: {
-      updatedAt: 'desc'
-    }
+    orderBy: [
+      { idQueueAt: "desc" },
+      { updatedAt: "desc" },
+    ],
   });
 
 
@@ -109,6 +110,7 @@ const EmployeesPage = async ({
     isFeatured: item.isFeatured,
     isArchived: item.isArchived,
     isHead: item.isHead,
+    idQueueAt: item.idQueueAt?.toISOString() ?? null,
 
 
     eligibility: {

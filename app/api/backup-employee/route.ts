@@ -42,6 +42,11 @@ export async function GET(req: Request) {
           select: { type: true, occurredAt: true, deletedAt: true },
         },
       },
+      orderBy: [
+        { idQueueAt: "desc" },
+        { lastName: "asc" },
+        { firstName: "asc" },
+      ],
     });
 
     return NextResponse.json({

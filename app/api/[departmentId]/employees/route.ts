@@ -471,9 +471,10 @@ export async function GET(
         designation: { select: { id: true, name: true } },
 
       },
-      orderBy: {
-        updatedAt: "desc", // better for realtime UI
-      },
+      orderBy: [
+        { idQueueAt: "desc" },
+        { updatedAt: "desc" }, // keep recent edits next after ID queue
+      ],
     });
 
     return NextResponse.json(employees);

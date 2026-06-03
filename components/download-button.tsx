@@ -29,7 +29,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { Portal } from '@radix-ui/react-portal';
 import Modal from './ui/modal';
-import { generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, type HeadsMode } from '@/utils/download-excel';
+import { DEFAULT_EXPORT_SORT_LEVELS, generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, type HeadsMode } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -98,6 +98,8 @@ const EXPORT_TAB_DESCRIPTIONS: Record<ExportTabKey, string> = {
 const BIO_INDEX_EMPTY_KEY = '__NO_CODE__';
 
 const COLUMN_STORAGE_KEY = 'hrps-emp-export-columns';
+const EXPORT_SORT_LEVELS_KEY = 'export.sortLevels';
+const EXPORT_SORT_MIGRATION_KEY = 'export.sortLevels.idQueueDefaultMigrated';
 
 const COLUMN_HELP_TEXT: Record<string, string> = {
   middleName: "Middle initial (e.g., 'A.').",
@@ -201,17 +203,31 @@ export default function DownloadStyledExcel() {
   function readStoredSortLevels(): SortLevel[] {
     if (typeof window === 'undefined') return [];
     try {
-      const raw = localStorage.getItem('export.sortLevels');
+      const raw = localStorage.getItem(EXPORT_SORT_LEVELS_KEY);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
-      return parsed
-        .filter((item: any) => item && typeof item.field === 'string')
+      const levels: SortLevel[] = parsed
+        .filter((item: unknown): item is { field: string; dir?: unknown } => Boolean(item) && typeof (item as { field?: unknown }).field === 'string')
         .slice(0, 3)
-        .map((item: any) => ({
+        .map((item) => ({
           field: String(item.field),
           dir: item.dir === 'asc' ? 'asc' : 'desc',
         }));
+
+      const isOldUpdatedDateDefault =
+        levels.length === 1 &&
+        levels[0].field === 'updatedAt' &&
+        levels[0].dir === 'desc' &&
+        localStorage.getItem(EXPORT_SORT_MIGRATION_KEY) !== '1';
+
+      if (isOldUpdatedDateDefault) {
+        localStorage.setItem(EXPORT_SORT_MIGRATION_KEY, '1');
+        localStorage.setItem(EXPORT_SORT_LEVELS_KEY, JSON.stringify(DEFAULT_EXPORT_SORT_LEVELS));
+        return DEFAULT_EXPORT_SORT_LEVELS;
+      }
+
+      return levels;
     } catch (error) {
       console.warn('Failed to parse export.sortLevels', error);
       return [];
@@ -354,24 +370,16 @@ export default function DownloadStyledExcel() {
   const [sortBy, setSortBy] = useState<string>(() => {
     const stored = readStoredSortLevels();
     if (stored[0]?.field) return stored[0].field;
-    if (typeof window !== 'undefined') {
-      const legacy = localStorage.getItem('hrps_sort_by');
-      if (legacy) return legacy;
-    }
-    return 'updatedAt';
+    return DEFAULT_EXPORT_SORT_LEVELS[0].field;
   });
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => {
     const stored = readStoredSortLevels();
     if (stored[0]?.dir === 'asc' || stored[0]?.dir === 'desc') return stored[0].dir;
-    if (typeof window !== 'undefined') {
-      const legacy = localStorage.getItem('hrps_sort_dir');
-      if (legacy === 'asc' || legacy === 'desc') return legacy;
-    }
-    return 'desc';
+    return DEFAULT_EXPORT_SORT_LEVELS[0].dir;
   });
   const [additionalSortLevels, setAdditionalSortLevels] = useState<SortLevel[]>(() => {
     const stored = readStoredSortLevels();
-    return stored.slice(1);
+    return stored.length ? stored.slice(1) : DEFAULT_EXPORT_SORT_LEVELS.slice(1);
   });
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -399,7 +407,7 @@ export default function DownloadStyledExcel() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      localStorage.setItem('export.sortLevels', JSON.stringify(combinedSortLevels));
+      localStorage.setItem(EXPORT_SORT_LEVELS_KEY, JSON.stringify(combinedSortLevels));
     } catch (error) {
       console.warn('Failed to persist export.sortLevels', error);
     }

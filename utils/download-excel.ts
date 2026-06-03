@@ -28,6 +28,12 @@ export type HeadsMode = 'all' | 'headsOnly';
 
 export type SortLevel = ExportSortLevel;
 
+export const DEFAULT_EXPORT_SORT_LEVELS: SortLevel[] = [
+  { field: 'idQueueAt', dir: 'desc' },
+  { field: 'lastName', dir: 'asc' },
+  { field: 'firstName', dir: 'asc' },
+];
+
 
 const BIO_INDEX_GROUP_KEY = '__NO_CODE__';
 
@@ -410,7 +416,7 @@ export async function generateExcelFile({
 
   const headers = visibleColumns.map(col => col.name);
 
-  const legacySortField = sortBy ?? 'updatedAt';
+  const legacySortField = sortBy ?? '';
   const legacySortDir = (sortDir === 'asc' || sortDir === 'desc' ? sortDir : 'desc') as SortDir;
 
   const rawLevels: unknown[] = Array.isArray(sortLevels) ? (sortLevels as unknown[]) : [];
@@ -427,7 +433,9 @@ export async function generateExcelFile({
 
   const effectiveSortLevels: SortLevel[] = normalizedLevels.length
     ? normalizedLevels
-    : [{ field: legacySortField, dir: legacySortDir }];
+    : legacySortField
+      ? [{ field: legacySortField, dir: legacySortDir }]
+      : DEFAULT_EXPORT_SORT_LEVELS;
 
   const formatRow = (row: any) => {
     const newRow: Record<string, any> = {};

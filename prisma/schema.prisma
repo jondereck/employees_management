@@ -159,6 +159,7 @@ model Employee {
   isFeatured             Boolean                   @default(false)
   isArchived             Boolean                   @default(false)
   isHead                 Boolean                   @default(false)
+  idQueueAt              DateTime?
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
   emergencyContactName   String                    @default("")
@@ -197,6 +198,7 @@ model Employee {
   workSchedules          WorkSchedule[]
 
   @@index([departmentId])
+  @@index([departmentId, idQueueAt])
   @@index([officeId])
   @@index([employeeTypeId])
   @@index([eligibilityId])

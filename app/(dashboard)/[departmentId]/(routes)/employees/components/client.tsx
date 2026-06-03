@@ -132,6 +132,9 @@ export const EmployeesClient = ({
       displayBirthday: emp.birthday ? format(new Date(emp.birthday), "MMM d, yyyy") : "",
       displayHired: emp.dateHired ? format(new Date(emp.dateHired), "MMM d, yyyy") : "",
     })).sort((a: any, b: any) => {
+      const queueA = new Date(a.idQueueAt || 0).getTime();
+      const queueB = new Date(b.idQueueAt || 0).getTime();
+      if (queueA !== queueB) return queueB - queueA;
       const dateA = new Date(a.updatedAt || a.createdAt).getTime();
       const dateB = new Date(b.updatedAt || b.createdAt).getTime();
       return dateB - dateA;
@@ -443,6 +446,11 @@ export const EmployeesClient = ({
                           <span className={`h-1.5 w-1.5 rounded-full ${employee.isArchived ? "bg-rose-500" : "bg-emerald-500"}`} />
                           {statusText}
                         </span>
+                        {employee.idQueueAt ? (
+                          <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                            For ID
+                          </span>
+                        ) : null}
                         <span className="text-xs text-slate-400">{dateLabel}</span>
                       </div>
                     </div>

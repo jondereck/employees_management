@@ -5,6 +5,7 @@ export type SortFieldDefinition = {
 };
 
 export const SORT_FIELDS: readonly SortFieldDefinition[] = [
+  { key: 'idQueueAt', label: 'For ID queue date' },
   { key: 'status', label: 'Status' },
   { key: 'appointment', label: 'Appointment' },
   { key: 'eligibility', label: 'Eligibility' },
