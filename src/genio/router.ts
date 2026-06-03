@@ -113,6 +113,91 @@ function extractSalaryGrade(text: string) {
   return match ? Number(match[1]) : undefined;
 }
 
+function extractSalaryStep(text: string) {
+  const match = text.match(/\b(?:step|salary step)\s*(\d{1,2})\b/i);
+  return match ? Number(match[1]) : undefined;
+}
+
+function extractFormulaGroupBy(text: string) {
+  if (/\b(by office|per office|office breakdown|group by office)\b/i.test(text)) return "office";
+  if (/\b(by gender|per gender|male and female|babae at lalaki)\b/i.test(text)) return "gender";
+  if (/\b(by employee type|per employee type|employee type breakdown)\b/i.test(text)) return "employee_type";
+  if (/\b(by eligibility|per eligibility|eligibility breakdown)\b/i.test(text)) return "eligibility";
+  if (/\b(by salary grade|per salary grade|sg breakdown)\b/i.test(text)) return "salary_grade";
+  return undefined;
+}
+
+function extractFormulaSelection(message: string): GenioToolSelection | null {
+  const text = normalizeGenioMessage(message);
+  const hasFormulaKeyword =
+    /\b(oldest|youngest|pinakamatanda|pinaka matanda|pinakabata|pinaka bata|highest|lowest|average|avg|sum|minimum|maximum|min|max|top|newest hire|recent hire|longest tenure|longest service|pinakamataas|pinakamababa)\b/i.test(text);
+  if (!hasFormulaKeyword) return null;
+
+  const groupBy = extractFormulaGroupBy(text);
+  const filters: Record<string, unknown> = {};
+  const gender = extractGender(text);
+  const employeeType = extractEmployeeType(text);
+  const age = extractAge(text);
+  const salaryGrade = extractSalaryGrade(text);
+  const salaryStep = extractSalaryStep(text);
+  const officeFilterMentioned = !groupBy && /\b(?:in|sa|under|at|on)\s+\S+/i.test(text);
+
+  if (gender) filters.gender = gender;
+  if (employeeType) filters.employeeType = employeeType;
+  if (age) filters.age = age;
+  if (salaryGrade) filters.salaryGrade = salaryGrade;
+  if (salaryStep) filters.salaryStep = salaryStep;
+  if (officeFilterMentioned) filters.office = message;
+
+  const metric =
+    /\bsalary grade|sg\b/i.test(text)
+      ? "salary_grade"
+      : /\bsalary step|step\b/i.test(text)
+      ? "salary_step"
+      : /\bsalary|compensation|pay\b/i.test(text)
+      ? "salary"
+      : /\btenure|service\b/i.test(text)
+      ? "tenure"
+      : /\bdate hired|hire date|hired\b/i.test(text)
+      ? "date_hired"
+      : /\bbirthday|birth date\b/i.test(text)
+      ? "birthday"
+      : "age";
+
+  const operation =
+    /\b(oldest|pinakamatanda|pinaka matanda)\b/i.test(text)
+      ? "oldest"
+      : /\b(youngest|pinakabata|pinaka bata)\b/i.test(text)
+      ? "youngest"
+      : /\b(newest hire|recent hire|new hires?|bagong hire)\b/i.test(text)
+      ? "newest_hire"
+      : /\b(longest tenure|longest service|pinakamatagal)\b/i.test(text)
+      ? "longest_tenure"
+      : /\b(average|avg)\b/i.test(text)
+      ? "average"
+      : /\b(sum)\b/i.test(text)
+      ? "sum"
+      : /\b(minimum|min)\b/i.test(text)
+      ? "min"
+      : /\b(maximum|max)\b/i.test(text)
+      ? "max"
+      : /\b(lowest|pinakamababa)\b/i.test(text)
+      ? "lowest"
+      : /\b(top)\b/i.test(text)
+      ? "top"
+      : "highest";
+
+  return {
+    name: "formula_query",
+    args: {
+      operation,
+      metric,
+      filters: Object.keys(filters).length ? filters : undefined,
+      groupBy,
+    },
+  };
+}
+
 function extractEligibilityName(message: string) {
   return message
     .replace(/\b(ilan|how many|count|list|employees?|employee|ang|with|by|eligibility|eligible|sino|mga)\b/gi, " ")
@@ -190,6 +275,8 @@ export function deterministicGenioSelection(
       },
     };
   }
+  const formulaSelection = extractFormulaSelection(message);
+  if (formulaSelection) return formulaSelection;
   if (/\b(walang eligibility|without eligibility|missing eligibility|no eligibility)\b/i.test(text)) {
     return { name: "eligibility_query", args: { mode: "missing" } };
   }

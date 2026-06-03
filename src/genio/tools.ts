@@ -22,6 +22,7 @@ import { computeTenure } from "@/utils/tenure";
 type GenioToolName =
   | "lookup_employees"
   | "employee_extreme"
+  | "formula_query"
   | "count_employees"
   | "office_distribution"
   | "list_offices"
@@ -96,6 +97,8 @@ const employeeExtremeSchema = z
     metric: z.enum(["oldest", "youngest", "longest_tenure", "newest_hire"]),
   })
   .strip();
+
+type FormulaQueryArgs = z.infer<typeof genioToolArgumentSchemas.formula_query>;
 
 const countEmployeesSchema = z
   .object({
@@ -191,6 +194,62 @@ export const GENIO_OPENAI_TOOLS = [
           },
         },
         required: ["metric"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "formula_query",
+      description:
+        "Answer simple active-employee analytics by executing a validated formula plan. Use for oldest/youngest employee, highest/lowest salary or salary grade, newest hire, longest tenure, counts, averages, sums, min/max, top lists, and grouped analytics by office, gender, employee type, eligibility, or salary grade. Never use raw SQL or private identifiers.",
+      parameters: {
+        type: "object",
+        properties: {
+          operation: {
+            type: "string",
+            enum: ["oldest", "youngest", "highest", "lowest", "newest_hire", "longest_tenure", "count", "average", "sum", "min", "max", "top"],
+          },
+          metric: {
+            type: "string",
+            enum: ["age", "birthday", "date_hired", "tenure", "salary", "salary_grade", "salary_step", "count"],
+          },
+          filters: {
+            type: "object",
+            properties: {
+              office: { type: "string" },
+              gender: { type: "string", enum: ["Male", "Female"] },
+              employeeType: { type: "string" },
+              age: {
+                type: "object",
+                properties: {
+                  min: { type: "number" },
+                  max: { type: "number" },
+                  exact: { type: "number" },
+                },
+                additionalProperties: false,
+              },
+              tenure: {
+                type: "object",
+                properties: {
+                  min: { type: "number" },
+                  max: { type: "number" },
+                },
+                additionalProperties: false,
+              },
+              salaryGrade: { type: "number" },
+              salaryStep: { type: "number" },
+            },
+            additionalProperties: false,
+          },
+          groupBy: {
+            type: "string",
+            enum: ["office", "gender", "employee_type", "eligibility", "salary_grade"],
+          },
+          limit: { type: "number" },
+        },
+        required: ["operation", "metric"],
         additionalProperties: false,
       },
     },
@@ -469,6 +528,22 @@ function calculateAge(birthday: Date) {
     age--;
   }
   return age;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatDate(value: Date) {
+  return value.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function dateYearsAgo(years: number) {
@@ -989,6 +1064,424 @@ async function employeeExtreme(env: ToolEnvironment, args: unknown): Promise<Gen
       },
     },
     { viewProfileEmployeeId: employee.id, canExport: true }
+  );
+}
+
+type FormulaEmployee = {
+  id: string;
+  employeeNo: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  birthday: Date;
+  dateHired: Date;
+  gender: Gender;
+  position: string;
+  salary: number;
+  salaryGrade: number | null;
+  salaryStep: number | null;
+  officeId: string;
+  offices: { name: string } | null;
+  employeeType: { name: string } | null;
+  eligibility: { name: string } | null;
+};
+
+function formulaMetricLabel(metric: FormulaQueryArgs["metric"]) {
+  const labels: Record<FormulaQueryArgs["metric"], string> = {
+    age: "age",
+    birthday: "birthday",
+    date_hired: "hire date",
+    tenure: "tenure",
+    salary: "salary",
+    salary_grade: "salary grade",
+    salary_step: "salary step",
+    count: "employee count",
+  };
+  return labels[metric];
+}
+
+function formulaGroupLabel(groupBy: NonNullable<FormulaQueryArgs["groupBy"]>) {
+  const labels: Record<NonNullable<FormulaQueryArgs["groupBy"]>, string> = {
+    office: "office",
+    gender: "gender",
+    employee_type: "employee type",
+    eligibility: "eligibility",
+    salary_grade: "salary grade",
+  };
+  return labels[groupBy];
+}
+
+function formulaMetricValue(employee: FormulaEmployee, metric: FormulaQueryArgs["metric"]) {
+  switch (metric) {
+    case "age":
+      return calculateAge(employee.birthday);
+    case "birthday":
+      return employee.birthday.getTime();
+    case "date_hired":
+      return employee.dateHired.getTime();
+    case "tenure":
+      return calculateAge(employee.dateHired);
+    case "salary":
+      return employee.salary;
+    case "salary_grade":
+      return employee.salaryGrade;
+    case "salary_step":
+      return employee.salaryStep;
+    case "count":
+      return 1;
+  }
+}
+
+function formulaMetricDetail(employee: FormulaEmployee, metric: FormulaQueryArgs["metric"]) {
+  switch (metric) {
+    case "age":
+      return `Age: ${calculateAge(employee.birthday)}`;
+    case "birthday":
+      return `Birthday: ${formatDate(employee.birthday)}`;
+    case "date_hired":
+      return `Date hired: ${formatDate(employee.dateHired)}`;
+    case "tenure":
+      return `Years of service: ${calculateAge(employee.dateHired)}`;
+    case "salary":
+      return `Salary: ${formatCurrency(employee.salary)}`;
+    case "salary_grade":
+      return `Salary grade: ${employee.salaryGrade ?? "Missing SG"}`;
+    case "salary_step":
+      return `Salary step: ${employee.salaryStep ?? "Missing step"}`;
+    case "count":
+      return "Employee count: 1";
+  }
+}
+
+function formulaWhereForEmployeeMetric(
+  metric: FormulaQueryArgs["metric"],
+  employee: FormulaEmployee
+): Prisma.EmployeeWhereInput {
+  switch (metric) {
+    case "birthday":
+    case "age":
+      return { birthday: employee.birthday };
+    case "date_hired":
+    case "tenure":
+      return { dateHired: employee.dateHired };
+    case "salary":
+      return { salary: employee.salary };
+    case "salary_grade":
+      return employee.salaryGrade === null ? {} : { salaryGrade: employee.salaryGrade };
+    case "salary_step":
+      return employee.salaryStep === null ? {} : { salaryStep: employee.salaryStep };
+    case "count":
+      return {};
+  }
+}
+
+function formulaOrderBy(args: FormulaQueryArgs): Prisma.EmployeeOrderByWithRelationInput[] {
+  const metric = args.metric;
+  const ascending =
+    args.operation === "oldest" ||
+    args.operation === "lowest" ||
+    args.operation === "min" ||
+    args.operation === "longest_tenure";
+
+  if (args.operation === "newest_hire") {
+    return [{ dateHired: "desc" }, { lastName: "asc" }];
+  }
+  if (args.operation === "longest_tenure") {
+    return [{ dateHired: "asc" }, { lastName: "asc" }];
+  }
+  if (metric === "age") {
+    return [{ birthday: ascending ? "asc" : "desc" }, { lastName: "asc" }];
+  }
+  if (metric === "birthday") {
+    return [{ birthday: ascending ? "asc" : "desc" }, { lastName: "asc" }];
+  }
+  if (metric === "date_hired" || metric === "tenure") {
+    return [{ dateHired: ascending ? "asc" : "desc" }, { lastName: "asc" }];
+  }
+  if (metric === "salary") {
+    return [{ salary: ascending ? "asc" : "desc" }, { lastName: "asc" }];
+  }
+  if (metric === "salary_grade") {
+    return [{ salaryGrade: ascending ? "asc" : "desc" }, { lastName: "asc" }];
+  }
+  if (metric === "salary_step") {
+    return [{ salaryStep: ascending ? "asc" : "desc" }, { lastName: "asc" }];
+  }
+  return [{ lastName: "asc" }];
+}
+
+function applyFormulaMetricPresence(where: Prisma.EmployeeWhereInput, metric: FormulaQueryArgs["metric"]) {
+  if (metric === "salary_grade" && where.salaryGrade === undefined) {
+    where.salaryGrade = { not: null };
+  }
+  if (metric === "salary_step" && where.salaryStep === undefined) {
+    where.salaryStep = { not: null };
+  }
+}
+
+async function buildFormulaWhere(
+  env: ToolEnvironment,
+  args: FormulaQueryArgs
+): Promise<{ where: Prisma.EmployeeWhereInput; filters: GenioFilters }> {
+  let filters = genioFiltersSchema.parse({
+    office: args.filters?.office,
+    gender: args.filters?.gender,
+    employeeType: args.filters?.employeeType,
+    age: args.filters?.age,
+    tenure: args.filters?.tenure,
+  });
+  filters = await resolveEmployeeFilter(env.departmentId, filters, env.message);
+
+  const mentionsOffice = /office|department|division|unit|\bin\s+|\bsa\s+|\bon\s+|\bat\s+|\bunder\s+/i.test(env.message);
+  if (!filters.officeId && !args.filters?.office && mentionsOffice) {
+    const resolved = await resolveOfficeOrReply(env.departmentId, undefined, env.message, env.context);
+    if (resolved.result) throw resolved.result;
+    filters.officeId = resolved.office?.id;
+    filters.officeName = resolved.office?.name;
+  }
+
+  if (args.filters?.office && !filters.officeId) {
+    const resolved = await resolveOfficeOrReply(env.departmentId, args.filters.office, env.message, env.context);
+    if (resolved.result) throw resolved.result;
+  }
+
+  const where = await buildEmployeeWhere(env.departmentId, filters);
+  if (typeof args.filters?.salaryGrade === "number") {
+    where.salaryGrade = args.filters.salaryGrade;
+  }
+  if (typeof args.filters?.salaryStep === "number") {
+    where.salaryStep = args.filters.salaryStep;
+  }
+  if (args.filters?.tenure) {
+    const dateHired: Prisma.DateTimeFilter = {};
+    if (typeof args.filters.tenure.min === "number") {
+      dateHired.lte = dateYearsAgo(args.filters.tenure.min);
+    }
+    if (typeof args.filters.tenure.max === "number") {
+      dateHired.gte = dateYearsAgo(args.filters.tenure.max);
+    }
+    if (Object.keys(dateHired).length > 0) {
+      where.dateHired = dateHired;
+    }
+  }
+  applyFormulaMetricPresence(where, args.metric);
+
+  return { where, filters };
+}
+
+async function findFormulaEmployees(
+  where: Prisma.EmployeeWhereInput,
+  args: FormulaQueryArgs,
+  take: number
+): Promise<FormulaEmployee[]> {
+  return prisma.employee.findMany({
+    where,
+    include: {
+      offices: { select: { name: true } },
+      employeeType: { select: { name: true } },
+      eligibility: { select: { name: true } },
+    },
+    orderBy: formulaOrderBy(args),
+    take,
+  });
+}
+
+function formulaGroupValue(employee: FormulaEmployee, groupBy: NonNullable<FormulaQueryArgs["groupBy"]>) {
+  switch (groupBy) {
+    case "office":
+      return employee.offices?.name ?? "No office";
+    case "gender":
+      return String(employee.gender ?? "Unknown");
+    case "employee_type":
+      return employee.employeeType?.name ?? "No employee type";
+    case "eligibility":
+      return employee.eligibility?.name ?? "No eligibility";
+    case "salary_grade":
+      return employee.salaryGrade ? `SG ${employee.salaryGrade}` : "Missing SG";
+  }
+}
+
+function summarizeFormulaAggregate(values: number[], operation: FormulaQueryArgs["operation"]) {
+  if (!values.length) return null;
+  if (operation === "sum") return values.reduce((total, value) => total + value, 0);
+  if (operation === "average") return values.reduce((total, value) => total + value, 0) / values.length;
+  if (operation === "min" || operation === "lowest" || operation === "youngest") return Math.min(...values);
+  if (
+    operation === "max" ||
+    operation === "highest" ||
+    operation === "oldest" ||
+    operation === "newest_hire" ||
+    operation === "longest_tenure"
+  ) {
+    return Math.max(...values);
+  }
+  return values.length;
+}
+
+function sortFormulaAggregateRows(
+  rows: { label: string; count: number; aggregate: number }[],
+  operation: FormulaQueryArgs["operation"]
+) {
+  const ascending = operation === "lowest" || operation === "min" || operation === "youngest";
+  return rows.sort((a, b) => {
+    const delta = ascending ? a.aggregate - b.aggregate : b.aggregate - a.aggregate;
+    return delta || a.label.localeCompare(b.label);
+  });
+}
+
+function formatFormulaAggregate(value: number, metric: FormulaQueryArgs["metric"]) {
+  if (metric === "salary") return formatCurrency(value);
+  if (metric === "birthday" || metric === "date_hired") return formatDate(new Date(value));
+  if (metric === "age" || metric === "tenure") return `${Math.round(value * 10) / 10} years`;
+  if (metric === "salary_grade") return `SG ${Math.round(value * 10) / 10}`;
+  if (metric === "salary_step") return `Step ${Math.round(value * 10) / 10}`;
+  return String(Math.round(value * 10) / 10);
+}
+
+async function formulaQuery(env: ToolEnvironment, args: unknown): Promise<GenioTextResult> {
+  const parsed = genioToolArgumentSchemas.formula_query.safeParse(parseJsonObject(args));
+  if (!parsed.success) {
+    return textResult("I could not run that formula safely. Please ask using supported HRPS employee fields.", env.context);
+  }
+
+  const input = parsed.data;
+  let where: Prisma.EmployeeWhereInput;
+  let filters: GenioFilters;
+  try {
+    const built = await buildFormulaWhere(env, input);
+    where = built.where;
+    filters = built.filters;
+  } catch (result) {
+    return result as GenioTextResult;
+  }
+
+  const limit = input.limit ?? (input.operation === "top" ? 10 : 25);
+
+  if (input.groupBy) {
+    const employees = await findFormulaEmployees(where, input, 10000);
+    if (!employees.length) return textResult("No active employees matched that formula query.", env.context);
+
+    const groups = new Map<string, { count: number; values: number[] }>();
+    for (const employee of employees) {
+      const key = formulaGroupValue(employee, input.groupBy);
+      const group = groups.get(key) ?? { count: 0, values: [] };
+      group.count += 1;
+      const value = formulaMetricValue(employee, input.metric);
+      if (typeof value === "number" && Number.isFinite(value)) group.values.push(value);
+      groups.set(key, group);
+    }
+
+    const aggregateRows = [...groups.entries()]
+      .map(([label, group]) => {
+        const aggregate =
+          input.metric === "count" || input.operation === "count"
+            ? group.count
+            : summarizeFormulaAggregate(group.values, input.operation);
+        return { label, count: group.count, aggregate };
+      })
+      .filter((row): row is { label: string; count: number; aggregate: number } => typeof row.aggregate === "number");
+    const rows = sortFormulaAggregateRows(aggregateRows, input.operation).slice(0, limit);
+
+    if (!rows.length) return textResult("No numeric values matched that grouped formula query.", env.context);
+
+    const metricLabel = input.metric === "count" ? "count" : formulaMetricLabel(input.metric);
+    const lines = rows.map((row, index) => {
+      const value = input.metric === "count" || input.operation === "count"
+        ? `${row.aggregate} employees`
+        : `${formatFormulaAggregate(row.aggregate, input.metric)} (${row.count} employees)`;
+      return `${index + 1}. ${escapeMarkdown(row.label)}: ${value}`;
+    });
+
+    return textResult(
+      `${metricLabel} by ${formulaGroupLabel(input.groupBy)}:\n\n${lines.join("\n")}`,
+      {
+        ...env.context,
+        lastResult: {
+          type: "employee_filter",
+          filters,
+          label: `${metricLabel} by ${formulaGroupLabel(input.groupBy)}`,
+        },
+      }
+    );
+  }
+
+  if (input.operation === "count" || input.metric === "count") {
+    const count = await prisma.employee.count({ where });
+    return textResult(
+      `There are ${count} active employees${filters.officeName ? ` in ${filters.officeName}` : ""}.`,
+      {
+        ...env.context,
+        lastResult: { type: "employee_filter", filters, label: "formula count" },
+      }
+    );
+  }
+
+  if (["average", "sum", "min", "max"].includes(input.operation)) {
+    const employees = await findFormulaEmployees(where, input, 10000);
+    const values = employees
+      .map((employee) => formulaMetricValue(employee, input.metric))
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const aggregate = summarizeFormulaAggregate(values, input.operation);
+    if (aggregate === null) return textResult("No numeric values matched that formula query.", env.context);
+
+    return textResult(
+      `The ${input.operation} ${formulaMetricLabel(input.metric)}${filters.officeName ? ` in ${filters.officeName}` : ""} is ${formatFormulaAggregate(aggregate, input.metric)}.`,
+      env.context
+    );
+  }
+
+  const first = (await findFormulaEmployees(where, input, 1))[0];
+  if (!first) return textResult("No active employees matched that formula query.", env.context);
+
+  const tiedWhere = {
+    ...where,
+    ...formulaWhereForEmployeeMetric(input.metric, first),
+  };
+  const employees = await findFormulaEmployees(tiedWhere, input, limit);
+  const label =
+    input.operation === "oldest"
+      ? "oldest active employee"
+      : input.operation === "youngest"
+      ? "youngest active employee"
+      : input.operation === "newest_hire"
+      ? "newest active hire"
+      : input.operation === "longest_tenure"
+      ? "active employee with the longest service"
+      : `${input.operation} ${formulaMetricLabel(input.metric)} employee`;
+
+  const context: GenioContext = {
+    ...env.context,
+    lastEmployeeId: first.id,
+    lastOfficeId: first.officeId,
+    lastOfficeName: first.offices?.name,
+    lastResult: {
+      type: "employee_filter",
+      employeeIds: employees.map((employee) => employee.id),
+      filters,
+      label,
+    },
+  };
+
+  if (!employees.length) {
+    return textResult(
+      `The ${label} is ${employeeName(first)} (${first.employeeNo}) from ${first.offices?.name}.\n\n${formulaMetricDetail(first, input.metric)}\nPosition: ${first.position}`,
+      context,
+      { viewProfileEmployeeId: first.id, canExport: true }
+    );
+  }
+
+  if (employees.length === 1) {
+    return textResult(
+      `The ${label} is ${employeeName(first)} (${first.employeeNo}) from ${first.offices?.name}.\n\n${formulaMetricDetail(first, input.metric)}\nPosition: ${first.position}`,
+      context,
+      { viewProfileEmployeeId: first.id, canExport: true }
+    );
+  }
+
+  return textResult(
+    `The employees tied for ${label} are:\n\n${formatEmployeeList(employees, limit)}`,
+    context,
+    { canExport: true }
   );
 }
 
@@ -2619,6 +3112,8 @@ export async function executeGenioTool(
       return lookupEmployees(env, args);
     case "employee_extreme":
       return employeeExtreme(env, args);
+    case "formula_query":
+      return formulaQuery(env, args);
     case "count_employees":
       return countEmployees(env, args);
     case "office_distribution":

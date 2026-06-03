@@ -2,6 +2,22 @@ import { z } from "zod";
 
 const boundedString = (max = 200) => z.string().trim().min(1).max(max);
 const stringArraySchema = z.array(z.string().trim().min(1).max(200)).max(20);
+const formulaFilterSchema = z.object({
+  office: boundedString(200).optional(),
+  gender: z.enum(["Male", "Female"]).optional(),
+  employeeType: boundedString(120).optional(),
+  age: z.object({
+    min: z.number().int().min(0).max(120).optional(),
+    max: z.number().int().min(0).max(120).optional(),
+    exact: z.number().int().min(0).max(120).optional(),
+  }).strict().optional(),
+  tenure: z.object({
+    min: z.number().int().min(0).max(100).optional(),
+    max: z.number().int().min(0).max(100).optional(),
+  }).strict().optional(),
+  salaryGrade: z.number().int().min(1).max(40).optional(),
+  salaryStep: z.number().int().min(1).max(20).optional(),
+}).strict();
 
 export const emptyToolArgsSchema = z.object({}).strip();
 
@@ -27,6 +43,13 @@ export const genioToolArgumentSchemas = {
   employee_extreme: z.object({
     metric: z.enum(["oldest", "youngest", "longest_tenure", "newest_hire"]),
   }).strip(),
+  formula_query: z.object({
+    operation: z.enum(["oldest", "youngest", "highest", "lowest", "newest_hire", "longest_tenure", "count", "average", "sum", "min", "max", "top"]),
+    metric: z.enum(["age", "birthday", "date_hired", "tenure", "salary", "salary_grade", "salary_step", "count"]),
+    filters: formulaFilterSchema.optional(),
+    groupBy: z.enum(["office", "gender", "employee_type", "eligibility", "salary_grade"]).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }).strict(),
   count_employees: z.object({
     office: boundedString(200).optional(),
     gender: z.enum(["Male", "Female"]).optional(),

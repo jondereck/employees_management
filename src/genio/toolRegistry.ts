@@ -15,6 +15,7 @@ export function isGenioToolName(name: string): name is GenioToolName {
 export const GENIO_TOOL_REGISTRY = Object.freeze({
   lookup_employees: { selectedFields: GENIO_FIELD_ALLOWLIST.employee },
   employee_extreme: { selectedFields: GENIO_FIELD_ALLOWLIST.employee },
+  formula_query: { selectedFields: GENIO_FIELD_ALLOWLIST.employee },
   count_employees: { selectedFields: ["id"] },
   office_distribution: { selectedFields: ["officeId", "gender"] },
   list_offices: { selectedFields: GENIO_FIELD_ALLOWLIST.office },

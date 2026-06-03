@@ -11,6 +11,7 @@ test("Genio exposes the MVP semantic tools", () => {
   const toolNames = GENIO_OPENAI_TOOLS.map((tool) => tool.function.name);
 
   assert.ok(toolNames.includes("not_answerable"));
+  assert.ok(toolNames.includes("formula_query"));
   assert.ok(toolNames.includes("history_snapshot"));
   assert.ok(toolNames.includes("award_analytics"));
   assert.ok(toolNames.includes("employment_event_lookup"));
@@ -64,6 +65,7 @@ test("sensitive fields are not part of the normal employee allowlist", () => {
 test("tool registry recognizes only allowlisted tools", () => {
   assert.equal(isGenioToolName("count_employees"), true);
   assert.equal(isGenioToolName("salary_grade_query"), true);
+  assert.equal(isGenioToolName("formula_query"), true);
   assert.equal(isGenioToolName("not_answerable"), true);
   assert.equal(isGenioToolName("delete_employee"), false);
   assert.equal(isGenioToolName("raw_sql"), false);
@@ -72,7 +74,14 @@ test("tool registry recognizes only allowlisted tools", () => {
 test("tool validators reject invalid unsafe arguments", () => {
   assert.throws(() => validateGenioToolArgs("age_analysis", { age: { min: -1 } }));
   assert.throws(() => validateGenioToolArgs("schedule_metadata", { limit: 5000 }));
+  assert.throws(() => validateGenioToolArgs("formula_query", { operation: "average", metric: "tinNo" }));
+  assert.throws(() => validateGenioToolArgs("formula_query", { operation: "raw_sql", metric: "salary" }));
+  assert.throws(() => validateGenioToolArgs("formula_query", { operation: "average", metric: "salary", rawSql: "select * from employee" }));
+  assert.throws(() => validateGenioToolArgs("formula_query", { operation: "average", metric: "salary", filters: { contactNumber: "09" } }));
+  assert.throws(() => validateGenioToolArgs("formula_query", { operation: "average", metric: "salary", filters: { emergencyContactNumber: "09" } }));
+  assert.throws(() => validateGenioToolArgs("formula_query", { operation: "average", metric: "salary", filters: { address: "x" } }));
   assert.doesNotThrow(() => validateGenioToolArgs("count_employees", { gender: "Female" }));
+  assert.doesNotThrow(() => validateGenioToolArgs("formula_query", { operation: "average", metric: "salary", groupBy: "office" }));
 });
 
 test("capability map marks attendance analytics as unavailable", () => {

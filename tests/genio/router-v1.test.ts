@@ -89,6 +89,62 @@ test("classifyLocalGenioRoute keeps combined filters on count prompts", () => {
   });
 });
 
+test("classifyLocalGenioRoute maps formula-style employee analytics", () => {
+  const oldest = classifyLocalGenioRoute("who is the oldest employee?");
+  assert.equal(oldest.selectedTool, "formula_query");
+  assert.deepEqual(oldest.args, {
+    operation: "oldest",
+    metric: "age",
+    filters: undefined,
+    groupBy: undefined,
+  });
+
+  const youngest = classifyLocalGenioRoute("who is the youngest employee");
+  assert.equal(youngest.selectedTool, "formula_query");
+  assert.deepEqual(youngest.args, {
+    operation: "youngest",
+    metric: "age",
+    filters: undefined,
+    groupBy: undefined,
+  });
+
+  const youngestInHr = classifyLocalGenioRoute("who is the youngest employee in hr");
+  assert.equal(youngestInHr.selectedTool, "formula_query");
+  assert.deepEqual(youngestInHr.args, {
+    operation: "youngest",
+    metric: "age",
+    filters: { office: "who is the youngest employee in hr" },
+    groupBy: undefined,
+  });
+
+  const highestSalary = classifyLocalGenioRoute("highest salary employee");
+  assert.equal(highestSalary.selectedTool, "formula_query");
+  assert.deepEqual(highestSalary.args, {
+    operation: "highest",
+    metric: "salary",
+    filters: undefined,
+    groupBy: undefined,
+  });
+
+  const averageSalaryByOffice = classifyLocalGenioRoute("average salary by office");
+  assert.equal(averageSalaryByOffice.selectedTool, "formula_query");
+  assert.deepEqual(averageSalaryByOffice.args, {
+    operation: "average",
+    metric: "salary",
+    filters: undefined,
+    groupBy: "office",
+  });
+
+  const lowestSalaryGrade = classifyLocalGenioRoute("employees with lowest salary grade");
+  assert.equal(lowestSalaryGrade.selectedTool, "formula_query");
+  assert.deepEqual(lowestSalaryGrade.args, {
+    operation: "lowest",
+    metric: "salary_grade",
+    filters: undefined,
+    groupBy: undefined,
+  });
+});
+
 test("classifyLocalGenioRoute treats short HRIS count prompts as employee counts", () => {
   const route = classifyLocalGenioRoute("how many male casual");
   assert.equal(route.selectedTool, "count_employees");
