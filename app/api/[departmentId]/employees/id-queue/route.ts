@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { Prisma } from "@prisma/client";
 
 import prismadb from "@/lib/prismadb";
 
@@ -57,20 +58,19 @@ export async function PATCH(
       );
     }
 
-    const updated = await prismadb.employee.updateMany({
-      where: {
-        id: { in: uniqueEmployeeIds },
-        departmentId: params.departmentId,
-      },
-      data: {
-        idQueueAt: queued ? new Date() : null,
-      },
-    });
+    const idQueueAt: Date | null = queued ? new Date() : null;
+
+    const updatedCount = await prismadb.$executeRaw`
+      UPDATE "Employee"
+      SET "idQueueAt" = ${idQueueAt}
+      WHERE "departmentId" = ${params.departmentId}
+        AND "id" IN (${Prisma.join(uniqueEmployeeIds)})
+    `;
 
     return NextResponse.json({
       success: true,
       queued,
-      updatedCount: updated.count,
+      updatedCount,
     });
   } catch (error) {
     console.error("[EMPLOYEES_ID_QUEUE]", error);
