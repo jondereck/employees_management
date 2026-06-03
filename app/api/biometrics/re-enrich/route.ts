@@ -6,6 +6,7 @@ import {
   type EvaluationEntry,
   type ManualCarryoverOverride,
 } from "@/lib/attendance/evaluateEntries";
+import type { EvaluationOptions } from "@/types/attendance";
 import type { ManualExclusion } from "@/types/manual-exclusion";
 
 const hhmmRegex = /^\d{1,2}:\d{2}$/;
@@ -68,16 +69,50 @@ const ManualCarryoverSchema = z.object({
   sourceDateISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+const OvertimePolicySchema = z.object({
+  rounding: z.enum(["none", "nearest15", "nearest30"]).default("none"),
+  graceAfterEndMin: z.number().int().min(0).default(60),
+  overnightCarryoverCutoffMin: z.number().int().min(0).default(360),
+  countPreShift: z.boolean().default(false),
+  minBlockMin: z.number().int().min(0).default(120),
+  mealDeductMin: z.number().int().min(0).optional().nullable().default(60),
+  mealTriggerMin: z.number().int().min(0).optional().nullable().default(240),
+  nightDiffEnabled: z.boolean().default(false),
+  flexMode: z.enum(["strict", "soft"]).default("strict"),
+  overtimeOnExcused: z.boolean().default(true),
+});
+
+const WorkScheduleSchema = z.object({
+  startTime: z.string().regex(hhmmRegex),
+  endTime: z.string().regex(hhmmRegex),
+  workingDays: z.array(z.number().int().min(0).max(6)).optional(),
+  graceMinutes: z.number().int().min(0).max(180).default(0),
+});
+
+const EvaluationOptionsSchema = z
+  .object({
+    overtime: OvertimePolicySchema,
+    workSchedule: WorkScheduleSchema.optional(),
+  })
+  .optional();
+
 const Payload = z.object({
   entries: z.array(Row),
   manualExclusions: z.array(ManualExclusionSchema).optional(),
   manualCarryovers: z.array(ManualCarryoverSchema).optional(),
+  evaluationOptions: EvaluationOptionsSchema,
 });
+
+const toHHMM = (value: string): `${number}${number}:${number}${number}` | null => {
+  if (!hhmmRegex.test(value)) return null;
+  const [hours, minutes] = value.split(":");
+  return `${hours.padStart(2, "0")}:${minutes}` as `${number}${number}:${number}${number}`;
+};
 
 export async function POST(req: Request) {
   try {
     const json = await req.json();
-    const { entries, manualExclusions = [], manualCarryovers = [] } = Payload.parse(json);
+    const { entries, manualExclusions = [], manualCarryovers = [], evaluationOptions } = Payload.parse(json);
 
     const payloadEntries: EvaluationEntry[] = entries.map((entry) => ({
       employeeId: entry.employeeId,
@@ -96,9 +131,43 @@ export async function POST(req: Request) {
       composedFromDayOnly: entry.composedFromDayOnly ?? false,
     }));
 
+    const normalizedOvertime =
+      evaluationOptions?.overtime == null
+        ? undefined
+        : {
+            ...evaluationOptions.overtime,
+            mealDeductMin: evaluationOptions.overtime.mealDeductMin ?? undefined,
+            mealTriggerMin: evaluationOptions.overtime.mealTriggerMin ?? undefined,
+          };
+
+    const normalizedWorkSchedule = evaluationOptions?.workSchedule
+      ? (() => {
+          const startTime = toHHMM(evaluationOptions.workSchedule.startTime);
+          const endTime = toHHMM(evaluationOptions.workSchedule.endTime);
+          if (!startTime || !endTime) return undefined;
+          const normalizedWorkingDays = Array.from(new Set(evaluationOptions.workSchedule.workingDays ?? [1, 2, 3, 4, 5]))
+            .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+            .sort((a, b) => a - b);
+          return {
+            startTime,
+            endTime,
+            workingDays: normalizedWorkingDays.length ? normalizedWorkingDays : [1, 2, 3, 4, 5],
+            graceMinutes: evaluationOptions.workSchedule.graceMinutes,
+          };
+        })()
+      : undefined;
+
+    const normalizedOptions: EvaluationOptions | undefined = normalizedOvertime
+      ? {
+          overtime: normalizedOvertime,
+          ...(normalizedWorkSchedule ? { workSchedule: normalizedWorkSchedule } : {}),
+        }
+      : undefined;
+
     const result = await evaluateAttendanceEntries(payloadEntries, {
       manualExclusions: manualExclusions as ManualExclusion[],
       manualCarryovers: manualCarryovers as ManualCarryoverOverride[],
+      evaluationOptions: normalizedOptions,
     });
     return NextResponse.json(result);
   } catch (error) {

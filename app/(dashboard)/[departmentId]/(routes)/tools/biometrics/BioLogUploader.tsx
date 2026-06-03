@@ -21,8 +21,10 @@ import {
   Pencil,
   Plus,
   RotateCw,
+  Search,
   Trash2,
   UploadCloud,
+  User,
   X,
   XCircle,
 } from "lucide-react";
@@ -70,6 +72,8 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import usePreviewModal from "@/app/(dashboard)/[departmentId]/(routes)/(frontend)/view/hooks/use-preview-modal";
+import type { EmployeesColumn } from "@/app/(dashboard)/[departmentId]/(routes)/employees/components/columns";
 import { firstEmployeeNoToken } from "@/lib/employeeNo";
 import { cn } from "@/lib/utils";
 import SummaryFiltersBar from "@/components/tools/biometrics/SummaryFiltersBar";
@@ -183,6 +187,7 @@ type TimekeepingTemplate = {
     startTime: string;
     endTime: string;
     workingDays: number[];
+    graceMinutes: number;
   };
   searchQuery: string;
   filters: {
@@ -253,12 +258,14 @@ const LEGACY_DEFAULT_WORK_SCHEDULE: WorkSchedule = {
   startTime: "08:00",
   endTime: "17:00",
   workingDays: [...STANDARD_WORKING_DAYS],
+  graceMinutes: 0,
 };
 
 const DEFAULT_WORK_SCHEDULE: WorkSchedule = {
   startTime: "07:00",
   endTime: "18:00",
   workingDays: [...FOUR_DAY_WORKING_DAYS],
+  graceMinutes: 0,
 };
 
 const HOLIDAY_EXCLUSION_ID_PREFIX = "holiday:";
@@ -292,15 +299,21 @@ const sanitizeWorkingDays = (value: unknown): number[] => {
 };
 
 const sanitizeWorkSchedule = (
-  schedule: { startTime?: string | null; endTime?: string | null; workingDays?: unknown } | null | undefined
+  schedule:
+    | { startTime?: string | null; endTime?: string | null; workingDays?: unknown; graceMinutes?: unknown }
+    | null
+    | undefined
 ): WorkSchedule => {
   const hhmmPattern = /^(?:[01]?\d|2[0-3]):[0-5]\d$/;
   const startTime = (schedule?.startTime ?? "").trim();
   const endTime = (schedule?.endTime ?? "").trim();
+  const rawGrace = Number(schedule?.graceMinutes ?? DEFAULT_WORK_SCHEDULE.graceMinutes);
+  const graceMinutes = Number.isFinite(rawGrace) ? Math.min(180, Math.max(0, Math.round(rawGrace))) : 0;
   return {
     startTime: (hhmmPattern.test(startTime) ? startTime : DEFAULT_WORK_SCHEDULE.startTime) as WorkSchedule["startTime"],
     endTime: (hhmmPattern.test(endTime) ? endTime : DEFAULT_WORK_SCHEDULE.endTime) as WorkSchedule["endTime"],
     workingDays: sanitizeWorkingDays(schedule?.workingDays),
+    graceMinutes,
   };
 };
 
@@ -310,6 +323,7 @@ const areSameWorkingDays = (left: number[], right: number[]): boolean =>
 const isSameWorkSchedule = (left: WorkSchedule, right: WorkSchedule): boolean =>
   left.startTime === right.startTime &&
   left.endTime === right.endTime &&
+  left.graceMinutes === right.graceMinutes &&
   areSameWorkingDays(left.workingDays, right.workingDays);
 
 type SchedulePreset = "standard" | "fourDay" | "custom";
@@ -356,6 +370,7 @@ const migrateTemplate = (value: unknown): TimekeepingTemplate | null => {
           startTime: (candidate.schedule as Record<string, unknown>).startTime as string | undefined,
           endTime: (candidate.schedule as Record<string, unknown>).endTime as string | undefined,
           workingDays: (candidate.schedule as Record<string, unknown>).workingDays,
+          graceMinutes: (candidate.schedule as Record<string, unknown>).graceMinutes,
         }
       : legacySchedule
   );
@@ -1475,6 +1490,86 @@ const getCurrentManualPeriod = () => {
   };
 };
 
+const toPreviewEmployeeStub = (
+  row: Pick<
+    PerEmployeeRow,
+    "resolvedEmployeeId" | "employeeNo" | "employeeName" | "officeId" | "officeName" | "employeeType" | "isHead"
+  >,
+  departmentId: string
+): EmployeesColumn | null => {
+  const id = row.resolvedEmployeeId?.trim();
+  if (!id) return null;
+
+  const fullName = row.employeeName?.trim() ?? "";
+  const [lastNamePart = "", remainder = ""] = fullName.split(",", 2);
+  const nameParts = remainder.trim().split(/\s+/).filter(Boolean);
+  const suffixPattern = /^(JR\.?|SR\.?|I|II|III|IV|V)$/i;
+  const suffix = nameParts.length && suffixPattern.test(nameParts[nameParts.length - 1] ?? "")
+    ? nameParts.pop() ?? ""
+    : "";
+
+  return {
+    id,
+    department: departmentId,
+    employeeNo: row.employeeNo?.trim() || "",
+    offices: {
+      id: row.officeId?.trim() || "",
+      name: row.officeName?.trim() || "Not Assigned",
+    },
+    prefix: "",
+    firstName: nameParts[0] ?? "",
+    middleName: nameParts.slice(1).join(" "),
+    lastName: lastNamePart.trim(),
+    suffix,
+    gender: "",
+    contactNumber: "",
+    position: "",
+    birthday: "",
+    education: "",
+    gsisNo: "",
+    tinNo: "",
+    philHealthNo: "",
+    pagIbigNo: "",
+    salary: "",
+    salaryMode: "",
+    dateHired: "",
+    latestAppointment: "",
+    terminateDate: "",
+    isFeatured: false,
+    isHead: Boolean(row.isHead),
+    isArchived: false,
+    eligibility: { id: "", name: "", value: "" },
+    employeeType: {
+      id: "",
+      name: row.employeeType?.trim() || "Employee",
+      value: "#64748b",
+    },
+    images: [],
+    region: "",
+    province: "",
+    city: "",
+    barangay: "",
+    houseNo: "",
+    salaryGrade: "",
+    salaryStep: "",
+    memberPolicyNo: "",
+    age: "",
+    nickname: "",
+    emergencyContactName: "",
+    emergencyContactNumber: "",
+    employeeLink: "",
+    designation: null,
+    note: "",
+    publicId: "",
+    publicVersion: 0,
+    publicEnabled: false,
+    createdAt: null,
+    updatedAt: null,
+    legacyQrAllowed: false,
+    employmentEvents: [],
+  };
+};
+
 const manualPeriodFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   year: "numeric",
@@ -1555,7 +1650,7 @@ const makeEvaluationPayloadKey = (
         .join("|")
     : "none";
   const policyFragment = serializeOvertimePolicy(overtimePolicy);
-  const scheduleFragment = `${workSchedule.startTime}-${workSchedule.endTime}-${workSchedule.workingDays.join(",")}`;
+  const scheduleFragment = `${workSchedule.startTime}-${workSchedule.endTime}-${workSchedule.workingDays.join(",")}-${workSchedule.graceMinutes}`;
   return `${manualKey}:${rows.length}:${rowFragment}::${manualFragment}::${carryoverFragment}::${policyFragment}::${scheduleFragment}`;
 };
 
@@ -2195,6 +2290,7 @@ const detectPeriodFromMergeResult = (mergeResult: MergeResult | null): { month: 
 
 function BioLogUploaderContent() {
   const { toast } = useToast();
+  const previewModal = usePreviewModal();
   const params = useParams<{ departmentId?: string }>();
   const rawDepartmentId = params?.departmentId;
   const departmentId =
@@ -2431,6 +2527,7 @@ function BioLogUploaderContent() {
         startTime: workSchedule.startTime,
         endTime: workSchedule.endTime,
         workingDays: workSchedule.workingDays,
+        graceMinutes: workSchedule.graceMinutes,
       },
       searchQuery: employeeSearch,
       filters: {
@@ -2734,6 +2831,18 @@ function BioLogUploaderContent() {
     name: string | null;
   } | null>(null);
   const [resolveBusy, setResolveBusy] = useState(false);
+
+  const handleOpenEmployeePreview = useCallback(
+    (row: PerEmployeeRow) => {
+      const previewEmployee = toPreviewEmployeeStub(row, departmentId);
+      if (!previewEmployee) {
+        setDetailsEmployee(row);
+        return;
+      }
+      previewModal.onOpen(previewEmployee);
+    },
+    [departmentId, previewModal]
+  );
 
   useEffect(() => {
     if (!departmentId) {
@@ -4757,6 +4866,7 @@ const applyColumnFilters = useCallback(
             entries,
             manualExclusions: manualPayload,
             manualCarryovers,
+            evaluationOptions: { overtime: overtimePolicyPayload, workSchedule },
           }),
         }),
         15_000
@@ -4833,6 +4943,7 @@ const applyColumnFilters = useCallback(
       toast,
       useManualPeriod,
       overtimePolicyPayload,
+      workSchedule,
     ]
   );
 
@@ -5473,6 +5584,24 @@ const applyColumnFilters = useCallback(
                 value={workSchedule.endTime}
                 onChange={(event) => {
                   const next = sanitizeWorkSchedule({ ...workSchedule, endTime: event.target.value });
+                  setWorkSchedule(next);
+                }}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="work-schedule-grace" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                 Grace period (min)
+              </Label>
+              <Input
+                id="work-schedule-grace"
+                type="number"
+                min={0}
+                max={180}
+                step={1}
+                value={workSchedule.graceMinutes}
+                onChange={(event) => {
+                  const next = sanitizeWorkSchedule({ ...workSchedule, graceMinutes: event.target.value });
                   setWorkSchedule(next);
                 }}
                 className="h-9"
@@ -6824,7 +6953,7 @@ const applyColumnFilters = useCallback(
                         <div className="flex min-w-0 items-center gap-2">
                           <button
                             type="button"
-                            className="truncate text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="truncate text-left font-semibold text-sky-700 decoration-2 underline-offset-4 hover:text-sky-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             title={displayEmployeeName}
                             onClick={() => setDetailsEmployee(row)}
                           >
@@ -6937,20 +7066,43 @@ const applyColumnFilters = useCallback(
                         )}
                       </td>
                       <td className="p-2">
+                        {resolvedEmployeeId ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleOpenEmployeePreview(row)}
+                                aria-label="Open employee profile"
+                              >
+                                <User className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={6}>Profile</TooltipContent>
+                          </Tooltip>
+                        ) : null}
                         {canResolve ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              setResolveTarget({
-                                token: row.employeeToken!,
-                                name: row.employeeName ?? null,
-                              })
-                            }
-                            disabled={resolveBusy}
-                          >
-                            {resolveActionLabel}
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() =>
+                                  setResolveTarget({
+                                    token: row.employeeToken!,
+                                    name: row.employeeName ?? null,
+                                  })
+                                }
+                                disabled={resolveBusy}
+                                aria-label={resolveActionLabel}
+                              >
+                                <Search className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={6}>{resolveActionLabel}</TooltipContent>
+                          </Tooltip>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}

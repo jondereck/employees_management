@@ -113,7 +113,16 @@ const normalizeWorkSchedule = (schedule: WorkSchedule | undefined): WorkSchedule
     startTime: startTime as HHMM,
     endTime: endTime as HHMM,
     workingDays: validWorkingDays.length ? validWorkingDays : [1, 2, 3, 4, 5],
+    graceMinutes: Math.min(180, Math.max(0, Math.round(schedule.graceMinutes ?? 0))),
   };
+};
+
+export const applyGlobalScheduleGrace = <T extends { graceMinutes?: number }>(
+  schedule: T,
+  defaultWorkSchedule: WorkSchedule | null
+): T => {
+  if (!defaultWorkSchedule) return schedule;
+  return { ...schedule, graceMinutes: defaultWorkSchedule.graceMinutes };
 };
 
 const resolveCarryoverSchedule = (
@@ -123,7 +132,7 @@ const resolveCarryoverSchedule = (
   const normalizedBase = normalizeSchedule(scheduleRecord);
   const scheduleSource = normalizedBase.source ?? scheduleRecord.source ?? "DEFAULT";
   const isDefaultSchedule = scheduleSource === "DEFAULT" || scheduleSource === "NOMAPPING";
-  return isDefaultSchedule && normalizedBase.type === "FIXED" && defaultWorkSchedule
+  const schedule = isDefaultSchedule && normalizedBase.type === "FIXED" && defaultWorkSchedule
     ? {
         ...normalizedBase,
         startTime: defaultWorkSchedule.startTime,
@@ -131,6 +140,7 @@ const resolveCarryoverSchedule = (
         workingDays: defaultWorkSchedule.workingDays,
       }
     : normalizedBase;
+  return applyGlobalScheduleGrace(schedule, defaultWorkSchedule);
 };
 
 const getScheduleEndMinutes = (

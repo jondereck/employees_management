@@ -21,6 +21,7 @@ export interface WorkSchedule {
   startTime: HHMM;
   endTime: HHMM;
   workingDays: number[];
+  graceMinutes: number;
 }
 
 export interface EvaluationOptions {
