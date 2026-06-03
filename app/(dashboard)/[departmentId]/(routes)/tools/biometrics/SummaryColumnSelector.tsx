@@ -146,9 +146,9 @@ const SummaryColumnSelector = ({
                 Reset to default
               </Button>
             </div>
-            <Button variant="ghost" size="sm" disabled>
-              Save preset…
-            </Button>
+            <span className="text-xs text-muted-foreground">
+              Saved through Global template
+            </span>
           </div>
           <div className="max-h-[360px] overflow-y-auto rounded-md border">
             <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
