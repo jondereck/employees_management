@@ -6665,34 +6665,34 @@ const applyColumnFilters = useCallback(
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border">
-              <table className="w-full text-sm">
+              <table className="min-w-[96rem] table-fixed text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="p-2 text-left">
+                    <th className="w-[6.5rem] p-2 text-left">
                       <div className="flex items-center gap-1">
                         <span>Employee No</span>
                       <ColumnFilterControl columnKey="employeeId" {...columnFilterControlProps} />
                     </div>
                   </th>
-                  <th className="p-2 text-left">
+                  <th className="w-[14rem] p-2 text-left">
                     <div className="flex items-center gap-1">
                       <span>Name</span>
                       <ColumnFilterControl columnKey="employeeName" {...columnFilterControlProps} />
                     </div>
                   </th>
-                  <th className="p-2 text-left">
+                  <th className="w-[15rem] p-2 text-left">
                     <div className="flex items-center gap-1">
                       <span>Office</span>
                       <ColumnFilterControl columnKey="office" {...columnFilterControlProps} />
                     </div>
                   </th>
-                  <th className="p-2 text-left">
+                  <th className="w-[11rem] p-2 text-left">
                     <div className="flex items-center gap-1">
                       <span>Schedule</span>
                       <ColumnFilterControl columnKey="schedule" {...columnFilterControlProps} />
                     </div>
                   </th>
-                  <th className="p-2 text-center">
+                  <th className="w-[4.5rem] p-2 text-center">
                     <div className="inline-flex items-center justify-center gap-1">
                       <button
                         type="button"
@@ -6713,14 +6713,14 @@ const applyColumnFilters = useCallback(
                     </div>
                   </th>
                   {showNoPunchColumn ? (
-                    <th className="p-2 text-center">
+                    <th className="w-[5.5rem] p-2 text-center">
                       <div className="inline-flex items-center justify-center gap-1">
                         <span>No-punch</span>
                         <ColumnFilterControl columnKey="noPunchDays" {...columnFilterControlProps} />
                       </div>
                     </th>
                   ) : null}
-                  <th className="p-2 text-right">
+                  <th className="w-[5.5rem] p-2 text-right">
                     <div className="inline-flex items-center justify-end gap-1">
                       <button
                         type="button"
@@ -6740,7 +6740,7 @@ const applyColumnFilters = useCallback(
                       <ColumnFilterControl columnKey="absences" {...columnFilterControlProps} />
                     </div>
                   </th>
-                  <th className="p-2 text-center">
+                  <th className="w-[4.5rem] p-2 text-center">
                     <div className="inline-flex items-center justify-center gap-1">
                       <button
                         type="button"
@@ -6760,7 +6760,7 @@ const applyColumnFilters = useCallback(
                       <ColumnFilterControl columnKey="lateDays" {...columnFilterControlProps} />
                     </div>
                   </th>
-                  <th className="p-2 text-center">
+                  <th className="w-[5.5rem] p-2 text-center">
                     <div className="inline-flex items-center justify-center gap-1">
                       <button
                         type="button"
@@ -6780,7 +6780,7 @@ const applyColumnFilters = useCallback(
                       <ColumnFilterControl columnKey="undertimeDays" {...columnFilterControlProps} />
                     </div>
                   </th>
-                  <th className="p-2 text-center">
+                  <th className="w-[5.5rem] p-2 text-center">
                     <div className="inline-flex items-center justify-center gap-1">
                       <button
                         type="button"
@@ -6800,14 +6800,14 @@ const applyColumnFilters = useCallback(
                       <ColumnFilterControl columnKey="otTotalMinutes" {...columnFilterControlProps} />
                     </div>
                   </th>
-                  <th className="p-2 text-center">
+                  <th className="w-[7rem] p-2 text-center">
                     <div className="inline-flex items-center justify-center gap-1">
                       <span>Night diff (min)</span>
                       <ColumnFilterControl columnKey="nightDiffMinutes" {...columnFilterControlProps} />
                     </div>
                   </th>
                   <th
-                    className="p-2 text-center"
+                    className="w-[5.5rem] p-2 text-center"
                     aria-label={
                       metricMode === "minutes"
                         ? "Late (min): Sum of daily late minutes across the selected period."
@@ -6861,7 +6861,7 @@ const applyColumnFilters = useCallback(
                     </div>
                   </th>
                   <th
-                    className="p-2 text-center"
+                    className="w-[5.5rem] p-2 text-center"
                     aria-label={
                       metricMode === "minutes"
                         ? "UT (min): Sum of daily undertime minutes across the selected period."
@@ -6916,7 +6916,7 @@ const applyColumnFilters = useCallback(
                       ) : null}
                     </div>
                   </th>
-                  <th className="p-2 text-left">Actions</th>
+                  <th className="w-[5rem] p-2 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -7043,7 +7043,7 @@ const applyColumnFilters = useCallback(
                   const resolveActionLabel = isUnmatched ? "Resolve…" : "Re-resolve…";
                   return (
                     <tr key={key} className="odd:bg-muted/20">
-                      <td className="p-2">
+                      <td className="w-[6.5rem] p-2">
                         {showTokenTooltip ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -7059,7 +7059,7 @@ const applyColumnFilters = useCallback(
                           <span className="font-mono">{displayEmployeeNo}</span>
                         )}
                       </td>
-                      <td className="p-2 max-w-[16rem]">
+                      <td className="w-[14rem] p-2">
                         <div className="flex min-w-0 items-center gap-2">
                           <button
                             type="button"
@@ -7094,12 +7094,12 @@ const applyColumnFilters = useCallback(
                           ) : null}
                         </div>
                       </td>
-                      <td className="p-2 max-w-[14rem]">
+                      <td className="w-[15rem] p-2">
                         <span className="block truncate" title={displayOffice}>
                           {displayOffice}
                         </span>
                       </td>
-                      <td className="p-2">
+                      <td className="w-[11rem] p-2">
                         {types.length ? (
                           <div className="flex flex-wrap gap-1">
                             {types.map((type) => (
@@ -7115,14 +7115,14 @@ const applyColumnFilters = useCallback(
                           <p className="mt-1 text-xs text-muted-foreground">Source: {sourceLabel}</p>
                         ) : null}
                       </td>
-                  <td className="p-2 text-center">{row.daysWithLogs}</td>
+                  <td className="w-[4.5rem] p-2 text-center">{row.daysWithLogs}</td>
                   {showNoPunchColumn ? (
-                    <td className="p-2 text-center">{row.noPunchDays}</td>
+                    <td className="w-[5.5rem] p-2 text-center">{row.noPunchDays}</td>
                   ) : null}
-                  <td className="p-2 text-right font-medium">{row.absences}</td>
-                  <td className="p-2 text-center">{row.lateDays}</td>
-                  <td className="p-2 text-center">{row.undertimeDays}</td>
-                  <td className="p-2 text-center">
+                  <td className="w-[5.5rem] p-2 text-right font-medium">{row.absences}</td>
+                  <td className="w-[4.5rem] p-2 text-center">{row.lateDays}</td>
+                  <td className="w-[5.5rem] p-2 text-center">{row.undertimeDays}</td>
+                  <td className="w-[5.5rem] p-2 text-center">
                     {otTooltipLines.length ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -7138,12 +7138,12 @@ const applyColumnFilters = useCallback(
                       <span className="text-muted-foreground">{otMinutesLabel}</span>
                     )}
                   </td>
-                  <td className="p-2 text-center">
+                  <td className="w-[7rem] p-2 text-center">
                     {totalNightDiffMinutes > 0
                       ? totalNightDiffMinutes.toLocaleString()
                       : <span className="text-muted-foreground">—</span>}
                   </td>
-                  <td className="p-2 text-center">
+                  <td className="w-[5.5rem] p-2 text-center">
                     {lateTooltipLines.length ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -7159,7 +7159,7 @@ const applyColumnFilters = useCallback(
                           <span className="text-muted-foreground">{lateMetricLabel}</span>
                         )}
                       </td>
-                      <td className="p-2 text-center">
+                      <td className="w-[5.5rem] p-2 text-center">
                         {undertimeTooltipLines.length ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -7175,7 +7175,7 @@ const applyColumnFilters = useCallback(
                           <span className="text-muted-foreground">{undertimeMetricLabel}</span>
                         )}
                       </td>
-                      <td className="p-2">
+                      <td className="w-[5rem] p-2">
                         {resolvedEmployeeId ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
