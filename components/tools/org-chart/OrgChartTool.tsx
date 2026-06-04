@@ -700,9 +700,16 @@ type CanvasActions = {
 };
 
 const CanvasActionsContext = createContext<CanvasActions | null>(null);
-const CanvasSettingsContext = createContext<{ showPhotos: boolean; focusedOfficeId: string | null }>({
+const CanvasSettingsContext = createContext<{
+  showPhotos: boolean;
+  focusedOfficeId: string | null;
+  employeePhotosById: Map<string, string>;
+  employeePhotosByName: Map<string, string>;
+}>({
   showPhotos: false,
   focusedOfficeId: null,
+  employeePhotosById: new Map(),
+  employeePhotosByName: new Map(),
 });
 
 const useCanvasActions = () => {
@@ -714,6 +721,13 @@ const useCanvasActions = () => {
 };
 
 const useCanvasSettings = () => useContext(CanvasSettingsContext);
+
+const normalizePhotoLookupName = (value?: string | null) =>
+  (value ?? "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const OrgChartTool = ({ departmentId }: OrgChartToolProps) => (
   <ReactFlowProvider>
@@ -798,6 +812,38 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   const defaultEdgeOptions = useMemo(() => ({ type: "step" as Edge["type"] }), []);
   const clipboardAvailable = useMemo(() => clipboardVersion > 0 && clipboardRef.current !== null, [clipboardVersion]);
+  const employeePhotosById = useMemo(() => {
+    const photos = new Map<string, string>();
+    availableEmployees.forEach((employee) => {
+      const imageUrl = employee.imageUrl?.trim();
+      if (imageUrl) {
+        photos.set(employee.id, imageUrl);
+      }
+    });
+    return photos;
+  }, [availableEmployees]);
+  const employeePhotosByName = useMemo(() => {
+    const photos = new Map<string, string>();
+    const duplicateNames = new Set<string>();
+
+    availableEmployees.forEach((employee) => {
+      const imageUrl = employee.imageUrl?.trim();
+      const lookupName = normalizePhotoLookupName(employee.name);
+      if (!imageUrl || !lookupName) return;
+
+      if (photos.has(lookupName)) {
+        duplicateNames.add(lookupName);
+        photos.delete(lookupName);
+        return;
+      }
+
+      if (!duplicateNames.has(lookupName)) {
+        photos.set(lookupName, imageUrl);
+      }
+    });
+
+    return photos;
+  }, [availableEmployees]);
   const reactFlowInstance = useReactFlow<FlowNodeData, FlowEdgeData>();
   const { fitView, project, getNode, setViewport, getNodes, getViewport, setCenter } = reactFlowInstance;
 
@@ -2149,15 +2195,23 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       ]);
 
       latestDraftRef.current = latestDraft.document;
-      setDocument(latestDraft.document, true, true);
       setAvailableEmployees(latestDraft.employees);
-      applyCurrentVersionId(null);
 
       let versionList: OrgChartVersionSummary[] = [];
       if (versionsRes.ok) {
         versionList = (await versionsRes.json()) as OrgChartVersionSummary[];
       }
       setVersions(versionList);
+      const latestVersion = versionList[0];
+      if (latestVersion) {
+        const result = await loadVersionById(latestVersion.id);
+        if (result.status === "success") {
+          return;
+        }
+      }
+
+      setDocument(latestDraft.document, true, true);
+      applyCurrentVersionId(null);
     } catch (error) {
       toast({
         title: "Failed to load org chart",
@@ -2168,7 +2222,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       setLoading(false);
       setIsChartLoading(false);
     }
-  }, [applyCurrentVersionId, departmentId, fetchLatestDbDraft, setDocument, toast]);
+  }, [applyCurrentVersionId, departmentId, fetchLatestDbDraft, loadVersionById, setDocument, toast]);
 
   const handleBuildFromDb = useCallback(async () => {
     try {
@@ -2192,8 +2246,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           placeNewEmployeesNearOfficeCluster: true,
         }
       );
-      latestDraftRef.current = reconciledDocument;
-      applyCurrentVersionId(null);
+      latestDraftRef.current = latestDraft.document;
       setAvailableEmployees(latestDraft.employees);
       setDocument(reconciledDocument, false, true);
       toast({
@@ -2212,7 +2265,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       setIsChartLoading(false);
     }
   }, [
-    applyCurrentVersionId,
     edgeType,
     fetchLatestDbDraft,
     focusOfficeId,
@@ -3148,7 +3200,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         body: JSON.stringify({ label, data: latestDocument }),
       });
       if (!response.ok) {
-        applyCurrentVersionId(null);
         throw new Error(await response.text());
       }
       const record = (await response.json()) as OrgChartVersionSummary;
@@ -3160,7 +3211,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       lastSavedSnapshotRef.current = snapshot;
       toast({ title: "Version saved", description: record.label });
     } catch (error) {
-      applyCurrentVersionId(null);
       toast({
         title: "Failed to save",
         description: error instanceof Error ? error.message : "Unable to save version",
@@ -3180,6 +3230,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       if (!currentVersionId) return;
       setIsDeletingVersion(true);
       try {
+        const remainingVersions = versions.filter((item) => item.id !== currentVersionId);
         const response = await fetch(
           `/api/${departmentId}/org-chart/versions/${currentVersionId}`,
           { method: "DELETE" }
@@ -3188,8 +3239,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           throw new Error(await response.text());
         }
 
-        setVersions((prev) => prev.filter((item) => item.id !== currentVersionId));
-        applyCurrentVersionId(null);
+        setVersions(remainingVersions);
+        const nextVersion = remainingVersions[0];
+        if (nextVersion) {
+          await loadVersionById(nextVersion.id);
+        } else {
+          applyCurrentVersionId(null);
+          setDocument(latestDraftRef.current, true, true);
+        }
         toast({ title: "Version deleted" });
       } catch (error) {
         toast({
@@ -3201,14 +3258,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         setIsDeletingVersion(false);
         setIsDeleteVersionOpen(false);
       }
-    }, [applyCurrentVersionId, currentVersionId, departmentId, setVersions, toast]);
+    }, [applyCurrentVersionId, currentVersionId, departmentId, loadVersionById, setDocument, setVersions, toast, versions]);
 
   const handleVersionChange = useCallback(
     async (value: string) => {
       setIsChartLoading(true);
-      if (value === "__draft__") {
-        applyCurrentVersionId(null);
-        setDocument(latestDraftRef.current, false, true);
+      if (value === "__unsaved__") {
         setIsChartLoading(false);
         return;
       }
@@ -3240,7 +3295,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       }
       setIsChartLoading(false);
     },
-    [applyCurrentVersionId, loadVersionById, setDocument, toast]
+    [applyCurrentVersionId, loadVersionById, toast]
   );
 
   const handleExport = useCallback(
@@ -3276,6 +3331,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         const dataUrl = await htmlToImage.toPng(wrapper, {
           backgroundColor: "#ffffff",
           pixelRatio: 3,
+          filter: (node) =>
+            !(node instanceof HTMLElement && node.dataset.orgchartExportIgnore === "true"),
           width: exportWidth,
           height: exportHeight,
           canvasWidth: exportWidth * 3,
@@ -3469,7 +3526,9 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           display: none !important;
         }
       `}</style>
-      <CanvasSettingsContext.Provider value={{ showPhotos, focusedOfficeId: focusOfficeId }}>
+      <CanvasSettingsContext.Provider
+        value={{ showPhotos, focusedOfficeId: focusOfficeId, employeePhotosById, employeePhotosByName }}
+      >
         <CanvasActionsContext.Provider value={actionsContextValue}>
           <div
             className="relative flex h-[calc(100dvh-170px)] min-h-0 flex-col gap-3 overflow-hidden origin-top-left"
@@ -3497,12 +3556,16 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               <div className="flex flex-wrap items-center gap-3">
                 <div className="rounded-lg border bg-background px-3 py-1.5">
                   <p className="text-[11px] leading-none text-muted-foreground">Version</p>
-                  <Select value={currentVersionId ?? "__draft__"} onValueChange={handleVersionChange}>
+                  <Select value={currentVersionId ?? "__unsaved__"} onValueChange={handleVersionChange}>
                     <SelectTrigger className="h-7 w-[190px] border-0 p-0 shadow-none">
-                    <SelectValue placeholder="Current draft" />
+                    <SelectValue placeholder="Latest version" />
                     </SelectTrigger>
                     <SelectContent className="max-h-60">
-                      <SelectItem value="__draft__">Current draft</SelectItem>
+                      {!currentVersionId ? (
+                        <SelectItem value="__unsaved__" disabled>
+                          {versions.length ? "Unsaved changes" : "No saved version"}
+                        </SelectItem>
+                      ) : null}
                       {versions.map((version) => (
                         <SelectItem key={version.id} value={version.id}>
                           {version.label}
@@ -3838,7 +3901,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 <Controls showInteractive={false} position="bottom-right" />
 
               </ReactFlow>
-              <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full border bg-background/95 px-4 py-1.5 text-sm text-muted-foreground shadow-sm">
+              <div
+                data-orgchart-export-ignore="true"
+                className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full border bg-background/95 px-4 py-1.5 text-sm text-muted-foreground shadow-sm"
+              >
                 Drag to pan • Scroll to zoom • Click a node to edit
               </div>
               {isHand ? (
@@ -4432,7 +4498,7 @@ type FlowNodeCardProps = NodeProps<FlowNodeData> & { icon: ReactNode; showHeader
 function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }: FlowNodeCardProps) {
   const actions = useCanvasActions();
   const handles = getHandlesForType(type as OrgNodeType);
-  const { showPhotos, focusedOfficeId } = useCanvasSettings();
+  const { showPhotos, focusedOfficeId, employeePhotosById, employeePhotosByName } = useCanvasSettings();
   const outlineColor = normalizeColor(data.outlineColor) ?? NEUTRAL_OUTLINE_COLOR;
   const borderWidth = data.isHead ? 3 : 2;
   const glowSize = data.isHead ? 6 : 3;
@@ -4451,10 +4517,16 @@ function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }
       (data.officeId != null && data.officeId === focusedOfficeId) ||
       id === focusedOfficeId;
 
-    if (showPhotos && belongsToFocusedOffice && data.imageUrl) {
+    const latestImageUrl = data.employeeId ? employeePhotosById.get(data.employeeId) : undefined;
+    const matchedImageUrl = data.employeeId
+      ? undefined
+      : employeePhotosByName.get(normalizePhotoLookupName(data.name));
+    const imageUrl = latestImageUrl ?? data.imageUrl ?? matchedImageUrl;
+
+    if (showPhotos && belongsToFocusedOffice && imageUrl) {
       return (
         <Image
-          src={data.imageUrl}
+          src={imageUrl}
           alt={data.name}
           width={56}
           height={56}
