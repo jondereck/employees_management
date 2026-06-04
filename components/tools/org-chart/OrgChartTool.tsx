@@ -3547,8 +3547,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   <h2 className="text-4 font-semibold leading-tight">Org Chart Builder</h2>
                   <p className="text-sm text-muted-foreground">Build, edit, and export per-office organizational charts.</p>
                   {unsavedChanges ? (
-                    <Badge variant="secondary" className="mt-1 text-xs">
-                      Unsaved changes
+                    <Badge
+                      variant="outline"
+                      className="mt-2 border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800"
+                    >
+                      Unsaved - save to keep this version
                     </Badge>
                   ) : null}
                 </div>
@@ -3589,8 +3592,18 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                     <DropdownMenuItem onClick={() => void handleExport("pdf")}>Export PDF</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button onClick={handleSaveVersion} size="sm" disabled={isSaving} className="h-11 bg-indigo-600 px-5 hover:bg-indigo-500">
-                  <Plus className="mr-2 h-4 w-4" /> Save version
+                <Button
+                  onClick={handleSaveVersion}
+                  size="sm"
+                  disabled={isSaving}
+                  className={cn(
+                    "h-11 px-5",
+                    unsavedChanges
+                      ? "bg-amber-600 text-white hover:bg-amber-500"
+                      : "bg-indigo-600 text-white hover:bg-indigo-500"
+                  )}
+                >
+                  <Plus className="mr-2 h-4 w-4" /> {unsavedChanges ? "Save unsaved version" : "Save version"}
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
