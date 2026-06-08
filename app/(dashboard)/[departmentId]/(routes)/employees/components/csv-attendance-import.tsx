@@ -14,6 +14,8 @@ import { useParams } from "next/navigation";
 
 import { parseIdFromText } from "@/lib/parseEmployeeIdFromText";
 import { cn } from "@/lib/utils";
+import usePreviewModal from "../../(frontend)/view/hooks/use-preview-modal";
+import { EmployeesColumn } from "./columns";
 
 
 type MappingByFile = Record<string, Mapping>;
@@ -112,6 +114,76 @@ type AbsentEmployee = {
   position?: string;
 };
 
+function toEmployeePreviewStub(
+  data: { employeeId?: string | null; employeeNo?: string | null; name?: string | null; office?: string | null; employeeTypeName?: string | null },
+  departmentId: string
+): EmployeesColumn | null {
+  const id = data.employeeId?.trim();
+  if (!id) return null;
+
+  const fullName = data.name?.trim() ?? "";
+  const [lastNamePart = "", remainder = ""] = fullName.split(",", 2);
+  const nameParts = remainder.trim().split(/\s+/).filter(Boolean);
+  const suffixPattern = /^(JR\.?|SR\.?|I|II|III|IV|V)$/i;
+  const suffix = nameParts.length && suffixPattern.test(nameParts[nameParts.length - 1] ?? "")
+    ? nameParts.pop() ?? ""
+    : "";
+
+  return {
+    id,
+    department: departmentId,
+    employeeNo: data.employeeNo?.trim() || "",
+    offices: { id: "", name: data.office?.trim() || "Not Assigned" },
+    prefix: "",
+    firstName: nameParts[0] ?? "",
+    middleName: nameParts.slice(1).join(" "),
+    lastName: lastNamePart.trim(),
+    suffix,
+    gender: "",
+    contactNumber: "",
+    position: "",
+    birthday: "",
+    education: "",
+    gsisNo: "",
+    tinNo: "",
+    philHealthNo: "",
+    pagIbigNo: "",
+    salary: "",
+    salaryMode: "",
+    dateHired: "",
+    latestAppointment: "",
+    terminateDate: "",
+    isFeatured: false,
+    isHead: false,
+    isArchived: false,
+    eligibility: { id: "", name: "", value: "" },
+    employeeType: { id: "", name: data.employeeTypeName?.trim() || "Employee", value: "#64748b" },
+    images: [],
+    region: "",
+    province: "",
+    city: "",
+    barangay: "",
+    houseNo: "",
+    salaryGrade: "",
+    salaryStep: "",
+    memberPolicyNo: "",
+    age: "",
+    nickname: "",
+    emergencyContactName: "",
+    emergencyContactNumber: "",
+    employeeLink: "",
+    designation: null,
+    note: "",
+    publicId: "",
+    publicVersion: 0,
+    publicEnabled: false,
+    createdAt: null,
+    updatedAt: null,
+    legacyQrAllowed: false,
+    employmentEvents: [],
+  };
+}
+
 const createEmptyCounts = (): Record<CategoryKey, number> =>
   CATEGORY_ORDER.reduce(
     (acc, key) => {
@@ -148,6 +220,20 @@ export default function CsvAttendanceImport() {
   const params = useParams<{ departmentId: string }>();
   const departmentId =
     typeof params?.departmentId === "string" ? params.departmentId : "";
+
+  const previewModal = usePreviewModal();
+
+  const openEmployeePreview = (data: {
+    employeeId?: string | null;
+    employeeNo?: string | null;
+    name?: string | null;
+    office?: string | null;
+    employeeTypeName?: string | null;
+  }) => {
+    const stub = toEmployeePreviewStub(data, departmentId);
+    if (!stub) return;
+    previewModal.onOpen(stub);
+  };
 
   const summaryTotals = useMemo(() => {
     const totalCounts = createEmptyCounts();
@@ -1204,7 +1290,19 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
                                 <td className="px-4 py-2 font-medium">{r.date}</td>
                                 <td className="px-4 py-2 font-medium">{r.time}</td>
                                 <td className="px-4 py-2 font-mono text-indigo-600">{toDisplayEmployeeNo(r.employeeNo)}</td>
-                                <td className="px-4 py-2 font-bold text-slate-700">{r.name}</td>
+                                <td className="px-4 py-2 font-bold text-slate-700">
+                                    {r.idMatched && r.employeeId ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => openEmployeePreview(r)}
+                                            className="hover:text-indigo-600 hover:underline underline-offset-2 transition-colors text-left"
+                                        >
+                                            {r.name}
+                                        </button>
+                                    ) : (
+                                        r.name
+                                    )}
+                                </td>
                                 <td className="px-4 py-2 text-slate-500">{r.office}</td>
                                 <td className="px-4 py-2">
                                     <span className={cn(
@@ -1324,7 +1422,19 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
             {pendingAbsentees.map((emp) => (
               <tr key={getAbsentKey(emp)} className="group hover:bg-indigo-50/30 transition-colors">
                 <td className="px-4 py-3">
-                  <div className="font-black text-slate-900">{emp.name}</div>
+                  <div className="font-black text-slate-900">
+                    {emp.employeeId ? (
+                      <button
+                        type="button"
+                        onClick={() => openEmployeePreview(emp)}
+                        className="hover:text-indigo-600 hover:underline underline-offset-2 transition-colors text-left"
+                      >
+                        {emp.name}
+                      </button>
+                    ) : (
+                      emp.name
+                    )}
+                  </div>
                   <div className="text-[10px] font-mono text-slate-400">{toDisplayEmployeeNo(emp.employeeNo)}</div>
                 </td>
                 <td className="px-4 py-3 text-slate-500 font-bold uppercase tracking-tighter">
@@ -1355,7 +1465,19 @@ function buildDailySummary(rows: any[]) {           // <-- accept rows here
             <tbody className="divide-y divide-emerald-100/50">
               {manuallyMarkedAbsentees.map((emp) => (
                 <tr key={`marked-${getAbsentKey(emp)}`} className="bg-white/50">
-                  <td className="px-4 py-3 italic text-slate-500">{emp.name}</td>
+                  <td className="px-4 py-3 italic text-slate-500">
+                    {emp.employeeId ? (
+                      <button
+                        type="button"
+                        onClick={() => openEmployeePreview(emp)}
+                        className="hover:text-indigo-600 hover:underline underline-offset-2 transition-colors text-left"
+                      >
+                        {emp.name}
+                      </button>
+                    ) : (
+                      emp.name
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-[10px] font-mono text-slate-400">
                     {toDisplayEmployeeNo(emp.employeeNo)}
                   </td>
