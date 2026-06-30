@@ -65,6 +65,8 @@ const Info = ({ data }: InfoProps) => {
 
   // AUTO COMPUTATION
   const grade = Number(data?.salaryGrade ?? 0);
+  const supervisoryLevel =
+    grade > 0 ? (grade >= 10 ? "Supervisory (SG 10+)" : "Non-Supervisory (SG 1–9)") : null;
 
   const computedStep = computeStep({
     dateHired: data?.dateHired,
@@ -149,6 +151,7 @@ const Info = ({ data }: InfoProps) => {
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             {renderItem("Plantilla Designation", data.designation?.name || "Not Assigned")}
             {renderItem("Position", data.position)}
+            {supervisoryLevel && renderItem("Supervisory Level", supervisoryLevel)}
             {workforceIndicator && renderItem("Workforce Indicator", workforceIndicator.indicatorName)}
             {renderItem("Office", data.offices?.name)}
             {renderItem("Appointment", data.employeeType?.name)}

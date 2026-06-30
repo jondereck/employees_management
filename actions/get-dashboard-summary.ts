@@ -33,12 +33,6 @@ export type DashboardGenderCountRow = {
   total: number;
 };
 
-export type DashboardSupervisoryByEmployeeType = {
-  id: string;
-  name: string;
-  rows: DashboardGenderCountRow[];
-};
-
 export type DashboardSummary = {
   pendingApprovals: number;
   officeCount: number;
@@ -53,8 +47,6 @@ export type DashboardSummary = {
   genderCountsByEmployeeType: DashboardGenderCountRow[];
   genderCountsByEligibility: DashboardGenderCountRow[];
   genderCountsBySupervisory: DashboardGenderCountRow[];
-  supervisoryByEmployeeType: DashboardSupervisoryByEmployeeType[];
-  supervisoryByEligibility: DashboardSupervisoryByEmployeeType[];
 };
 
 const FALLBACK_COLORS = [
@@ -393,32 +385,6 @@ export const getDashboardSummary = async (
 
   const genderCountsBySupervisory = buildSupervisoryRows(activeEmployees);
 
-  const supervisoryByEmployeeType: DashboardSupervisoryByEmployeeType[] = [
-    { id: "all", name: "All Employee Types", rows: genderCountsBySupervisory },
-    ...employeeTypes
-      .map((type) => ({
-        id: type.id,
-        name: type.name.trim() || "Unassigned",
-        rows: buildSupervisoryRows(
-          activeEmployees.filter((employee) => employee.employeeTypeId === type.id),
-        ),
-      }))
-      .filter((entry) => entry.rows.length > 0),
-  ];
-
-  const supervisoryByEligibility: DashboardSupervisoryByEmployeeType[] = [
-    { id: "all", name: "All Eligibility Types", rows: genderCountsBySupervisory },
-    ...eligibilities
-      .map((eligibility) => ({
-        id: eligibility.id,
-        name: eligibility.name.trim() || "Unspecified",
-        rows: buildSupervisoryRows(
-          activeEmployees.filter((employee) => employee.eligibilityId === eligibility.id),
-        ),
-      }))
-      .filter((entry) => entry.rows.length > 0),
-  ];
-
   const rawEligibilitySlices = buildOtherLimitedSlices(
     eligibilities
       .map((eligibility, index) => ({
@@ -537,7 +503,5 @@ export const getDashboardSummary = async (
     genderCountsByEmployeeType,
     genderCountsByEligibility,
     genderCountsBySupervisory,
-    supervisoryByEmployeeType,
-    supervisoryByEligibility,
   };
 };
