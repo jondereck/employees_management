@@ -187,6 +187,9 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                 <DashboardGenderCounts
                   byEmployeeType={dashboardSummary.genderCountsByEmployeeType}
                   byEligibility={dashboardSummary.genderCountsByEligibility}
+                  bySupervisory={dashboardSummary.genderCountsBySupervisory}
+                  supervisoryByEmployeeType={dashboardSummary.supervisoryByEmployeeType}
+                  supervisoryByEligibility={dashboardSummary.supervisoryByEligibility}
                 />
               </CardContent>
             </Card>

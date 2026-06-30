@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   GitBranch,
   History,
+  LayoutGrid,
   MessageSquare,
 } from "lucide-react";
 import { cookies } from "next/headers";
@@ -69,6 +70,13 @@ const TOOL_CARD_CONFIG: Array<{
     description: "Yearly status reports by office group and employee profile fields.",
     slug: "tools/workforce-history",
     icon: History,
+  },
+  {
+    key: "workforce-pivot",
+    label: "Workforce Pivot Table",
+    description: "Cross-tab employee type, eligibility, supervisory level, and gender with multi-select filters.",
+    slug: "tools/workforce-pivot",
+    icon: LayoutGrid,
   },
   {
     key: "sms",

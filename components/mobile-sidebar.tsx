@@ -37,6 +37,7 @@ import {
   GitBranch,
   CheckSquare,
   History,
+  LayoutGrid,
   MessageSquare,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -91,6 +92,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     label: "Workforce History",
     path: "tools/workforce-history",
     icon: History,
+  },
+  "workforce-pivot": {
+    label: "Workforce Pivot Table",
+    path: "tools/workforce-pivot",
+    icon: LayoutGrid,
   },
   sms: {
     label: "Text Blast",

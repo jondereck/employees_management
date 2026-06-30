@@ -3,7 +3,10 @@
 import { useMemo, useState } from "react";
 import { Users } from "lucide-react";
 
-import type { DashboardGenderCountRow } from "@/actions/get-dashboard-summary";
+import type {
+  DashboardGenderCountRow,
+  DashboardSupervisoryByEmployeeType,
+} from "@/actions/get-dashboard-summary";
 import {
   Select,
   SelectContent,
@@ -15,17 +18,46 @@ import {
 type DashboardGenderCountsProps = {
   byEmployeeType: DashboardGenderCountRow[];
   byEligibility: DashboardGenderCountRow[];
+  bySupervisory: DashboardGenderCountRow[];
+  supervisoryByEmployeeType: DashboardSupervisoryByEmployeeType[];
+  supervisoryByEligibility: DashboardSupervisoryByEmployeeType[];
 };
 
-type GroupKey = "employeeType" | "eligibility";
+type GroupKey = "employeeType" | "eligibility" | "supervisory";
+type SupervisoryFilterDimension = "employeeType" | "eligibility";
+
+const GROUP_LABELS: Record<GroupKey, string> = {
+  employeeType: "Employee Type",
+  eligibility: "Eligibility Type",
+  supervisory: "Supervisory Level",
+};
 
 export function DashboardGenderCounts({
   byEmployeeType,
   byEligibility,
+  bySupervisory,
+  supervisoryByEmployeeType,
+  supervisoryByEligibility,
 }: DashboardGenderCountsProps) {
   const [groupBy, setGroupBy] = useState<GroupKey>("employeeType");
+  const [supervisoryFilterDimension, setSupervisoryFilterDimension] =
+    useState<SupervisoryFilterDimension>("employeeType");
+  const [supervisoryTypeFilter, setSupervisoryTypeFilter] = useState("all");
 
-  const rows = groupBy === "employeeType" ? byEmployeeType : byEligibility;
+  const supervisoryFilterOptions =
+    supervisoryFilterDimension === "employeeType"
+      ? supervisoryByEmployeeType
+      : supervisoryByEligibility;
+
+  const rows =
+    groupBy === "employeeType"
+      ? byEmployeeType
+      : groupBy === "eligibility"
+        ? byEligibility
+        : groupBy === "supervisory"
+          ? supervisoryFilterOptions.find((entry) => entry.id === supervisoryTypeFilter)?.rows ??
+            bySupervisory
+          : bySupervisory;
 
   const totals = useMemo(
     () =>
@@ -53,15 +85,57 @@ export function DashboardGenderCounts({
           </p>
         </div>
 
-        <Select value={groupBy} onValueChange={(value) => setGroupBy(value as GroupKey)}>
-          <SelectTrigger className="h-9 w-full bg-white/70 text-xs sm:w-[180px] dark:bg-white/10">
-            <SelectValue placeholder="Group by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="employeeType">Employee Type</SelectItem>
-            <SelectItem value="eligibility">Eligibility Type</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {groupBy === "supervisory" && (
+            <>
+              <Select
+                value={supervisoryFilterDimension}
+                onValueChange={(value) => {
+                  setSupervisoryFilterDimension(value as SupervisoryFilterDimension);
+                  setSupervisoryTypeFilter("all");
+                }}
+              >
+                <SelectTrigger className="h-9 w-full bg-white/70 text-xs sm:w-[150px] dark:bg-white/10">
+                  <SelectValue placeholder="Filter by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="employeeType">By Employee Type</SelectItem>
+                  <SelectItem value="eligibility">By Eligibility Type</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={supervisoryTypeFilter} onValueChange={setSupervisoryTypeFilter}>
+                <SelectTrigger className="h-9 w-full bg-white/70 text-xs sm:w-[170px] dark:bg-white/10">
+                  <SelectValue placeholder="Filter value" />
+                </SelectTrigger>
+                <SelectContent>
+                  {supervisoryFilterOptions.map((entry) => (
+                    <SelectItem key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
+          )}
+
+          <Select
+            value={groupBy}
+            onValueChange={(value) => {
+              setGroupBy(value as GroupKey);
+              setSupervisoryTypeFilter("all");
+            }}
+          >
+            <SelectTrigger className="h-9 w-full bg-white/70 text-xs sm:w-[180px] dark:bg-white/10">
+              <SelectValue placeholder="Group by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="employeeType">Employee Type</SelectItem>
+              <SelectItem value="eligibility">Eligibility Type</SelectItem>
+              <SelectItem value="supervisory">Supervisory Level</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="mt-4 overflow-hidden rounded-xl border border-white/30 dark:border-white/10">
@@ -69,7 +143,7 @@ export function DashboardGenderCounts({
           <thead>
             <tr className="bg-white/40 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">
               <th className="px-3 py-2 text-left font-semibold">
-                {groupBy === "employeeType" ? "Employee Type" : "Eligibility"}
+                {GROUP_LABELS[groupBy]}
               </th>
               <th className="px-3 py-2 text-right font-semibold text-blue-600 dark:text-blue-400">
                 Male

@@ -33,6 +33,12 @@ export type DashboardGenderCountRow = {
   total: number;
 };
 
+export type DashboardSupervisoryByEmployeeType = {
+  id: string;
+  name: string;
+  rows: DashboardGenderCountRow[];
+};
+
 export type DashboardSummary = {
   pendingApprovals: number;
   officeCount: number;
@@ -46,6 +52,9 @@ export type DashboardSummary = {
   eligibilitySlices: DashboardChartSlice[];
   genderCountsByEmployeeType: DashboardGenderCountRow[];
   genderCountsByEligibility: DashboardGenderCountRow[];
+  genderCountsBySupervisory: DashboardGenderCountRow[];
+  supervisoryByEmployeeType: DashboardSupervisoryByEmployeeType[];
+  supervisoryByEligibility: DashboardSupervisoryByEmployeeType[];
 };
 
 const FALLBACK_COLORS = [
@@ -261,6 +270,9 @@ export const getDashboardSummary = async (
         emergencyContactNumber: true,
         publicEnabled: true,
         salaryGrade: true,
+        gender: true,
+        employeeTypeId: true,
+        eligibilityId: true,
         offices: { select: { name: true } },
       },
     }),
@@ -337,6 +349,75 @@ export const getDashboardSummary = async (
       count: row._count._all,
     })),
   );
+
+  const SUPERVISORY_GRADE_CUTOFF = 10;
+
+  const buildSupervisoryRows = (
+    employees: Pick<(typeof activeEmployees)[number], "salaryGrade" | "gender">[],
+  ): DashboardGenderCountRow[] => {
+    const buckets: Record<
+      "supervisory" | "nonSupervisory" | "unspecified",
+      { name: string; male: number; female: number }
+    > = {
+      supervisory: { name: `Supervisory (SG ${SUPERVISORY_GRADE_CUTOFF}+)`, male: 0, female: 0 },
+      nonSupervisory: { name: "Non-Supervisory (SG 1–9)", male: 0, female: 0 },
+      unspecified: { name: "No Salary Grade", male: 0, female: 0 },
+    };
+
+    for (const employee of employees) {
+      const grade = employee.salaryGrade;
+      const bucketKey =
+        grade == null || grade <= 0
+          ? "unspecified"
+          : grade >= SUPERVISORY_GRADE_CUTOFF
+            ? "supervisory"
+            : "nonSupervisory";
+      const bucket = buckets[bucketKey];
+      if (employee.gender === "Female") bucket.female += 1;
+      else bucket.male += 1;
+    }
+
+    return (["supervisory", "nonSupervisory", "unspecified"] as const)
+      .map((key) => {
+        const bucket = buckets[key];
+        return {
+          id: key,
+          name: bucket.name,
+          male: bucket.male,
+          female: bucket.female,
+          total: bucket.male + bucket.female,
+        };
+      })
+      .filter((row) => row.total > 0);
+  };
+
+  const genderCountsBySupervisory = buildSupervisoryRows(activeEmployees);
+
+  const supervisoryByEmployeeType: DashboardSupervisoryByEmployeeType[] = [
+    { id: "all", name: "All Employee Types", rows: genderCountsBySupervisory },
+    ...employeeTypes
+      .map((type) => ({
+        id: type.id,
+        name: type.name.trim() || "Unassigned",
+        rows: buildSupervisoryRows(
+          activeEmployees.filter((employee) => employee.employeeTypeId === type.id),
+        ),
+      }))
+      .filter((entry) => entry.rows.length > 0),
+  ];
+
+  const supervisoryByEligibility: DashboardSupervisoryByEmployeeType[] = [
+    { id: "all", name: "All Eligibility Types", rows: genderCountsBySupervisory },
+    ...eligibilities
+      .map((eligibility) => ({
+        id: eligibility.id,
+        name: eligibility.name.trim() || "Unspecified",
+        rows: buildSupervisoryRows(
+          activeEmployees.filter((employee) => employee.eligibilityId === eligibility.id),
+        ),
+      }))
+      .filter((entry) => entry.rows.length > 0),
+  ];
 
   const rawEligibilitySlices = buildOtherLimitedSlices(
     eligibilities
@@ -455,5 +536,8 @@ export const getDashboardSummary = async (
     eligibilitySlices,
     genderCountsByEmployeeType,
     genderCountsByEligibility,
+    genderCountsBySupervisory,
+    supervisoryByEmployeeType,
+    supervisoryByEligibility,
   };
 };
