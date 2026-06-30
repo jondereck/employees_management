@@ -51,11 +51,13 @@ const Info = ({ data }: InfoProps) => {
 
   const formattedENumber = formatContactNumber(data.emergencyContactNumber)
   const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment)
-  const workforceIndicator = suggestWorkforceIndicator({
-    position: data.position,
-    officeName: data.offices?.name,
-    employeeTypeName: data.employeeType?.name,
-  });
+  const workforceIndicator = !data.isArchived
+    ? suggestWorkforceIndicator({
+        position: data.position,
+        officeName: data.offices?.name,
+        employeeTypeName: data.employeeType?.name,
+      })
+    : null;
 
 
   const savedSalary = Number(data?.salary ?? 0);
@@ -147,7 +149,7 @@ const Info = ({ data }: InfoProps) => {
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             {renderItem("Plantilla Designation", data.designation?.name || "Not Assigned")}
             {renderItem("Position", data.position)}
-            {renderItem("Workforce Indicator", workforceIndicator.indicatorName)}
+            {workforceIndicator && renderItem("Workforce Indicator", workforceIndicator.indicatorName)}
             {renderItem("Office", data.offices?.name)}
             {renderItem("Appointment", data.employeeType?.name)}
 

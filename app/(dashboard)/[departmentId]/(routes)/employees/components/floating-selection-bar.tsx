@@ -52,6 +52,16 @@ export function FloatingSelectionBar<TData>({ table, departmentId }: FloatingSel
 
   const [archiveSheetOpen, setArchiveSheetOpen] = useState(false);
 const [terminationDate, setTerminationDate] = useState<string | null>(null);
+const [adminNotes, setAdminNotes] = useState<string>("");
+const [customNoteMode, setCustomNoteMode] = useState(false);
+
+const PRESET_NOTES = [
+  { label: "AWOL", value: "Absence Without Official Leave (AWOL)" },
+  { label: "Resigned", value: "Employee voluntarily resigned from service" },
+  { label: "Forced Separation", value: "Employee was forcibly separated from service" },
+  { label: "Retirement", value: "Employee retired from service" },
+  { label: "End of Contract", value: "Contract of service ended" },
+];
 
   const handleBatchDownload = async () => {
     setLoading(true);
@@ -216,6 +226,7 @@ const [terminationDate, setTerminationDate] = useState<string | null>(null);
       terminationDate: terminationDate
         ? new Date(terminationDate).toISOString()
         : undefined,
+      adminNotes: adminNotes.trim() || undefined,
     });
 
     toast.success(`${ids.length} employees archived`);
@@ -224,6 +235,8 @@ const [terminationDate, setTerminationDate] = useState<string | null>(null);
     table.resetRowSelection();
     setArchiveSheetOpen(false);
     setTerminationDate(null);
+    setAdminNotes("");
+    setCustomNoteMode(false);
   } catch (error) {
     console.error(error);
     toast.error("Failed to archive employees.");
@@ -510,8 +523,8 @@ const handleBulkIdQueue = async (queued: boolean) => {
                       </Button>
 
                       <Button
-                        onClick={() => handleBulkArchive(true)}
-                        disabled={loading}
+                        onClick={() => setArchiveSheetOpen(true)}
+                        disabled={loading || eligibleForArchive.length === 0}
                         size="sm"
                         variant="destructive"
                         className="justify-start gap-2"
@@ -564,29 +577,101 @@ const handleBulkIdQueue = async (queued: boolean) => {
                   </SheetContent>
                 </Sheet>
               </div>
-              <Sheet open={archiveSheetOpen} onOpenChange={setArchiveSheetOpen}>
-  <SheetContent side="right" className="w-[400px]">
+              <Sheet open={archiveSheetOpen} onOpenChange={(open) => {
+  setArchiveSheetOpen(open);
+  if (!open) { setAdminNotes(""); setCustomNoteMode(false); setTerminationDate(null); }
+}}>
+  <SheetContent side="right" className="w-[420px] overflow-y-auto">
     <SheetHeader>
-      <SheetTitle>Archive Employees</SheetTitle>
+      <SheetTitle className="flex items-center gap-2">
+        <Archive className="h-4 w-4 text-destructive" />
+        Archive {eligibleForArchive.length} Employee{eligibleForArchive.length !== 1 ? "s" : ""}
+      </SheetTitle>
     </SheetHeader>
 
-    <div className="mt-6 space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Set termination date (optional). If not set, today will be used.
-      </p>
+    <div className="mt-6 space-y-6">
+      {/* Termination Date */}
+      <div className="space-y-2">
+        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Termination Date
+        </label>
+        <p className="text-xs text-muted-foreground">Leave blank to use today&apos;s date.</p>
+        <input
+          type="date"
+          className="w-full border rounded-md px-3 py-2 text-sm"
+          value={terminationDate ?? ""}
+          onChange={(e) => setTerminationDate(e.target.value || null)}
+        />
+      </div>
 
-      <input
-        type="date"
-        className="w-full border rounded-md px-3 py-2 text-sm"
-        onChange={(e) => setTerminationDate(e.target.value)}
-      />
+      {/* Admin Notes */}
+      <div className="space-y-2">
+        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Administrative Notes
+        </label>
+        <p className="text-xs text-muted-foreground">Select a reason or write a custom note.</p>
+
+        {/* Preset buttons */}
+        <div className="flex flex-wrap gap-2">
+          {PRESET_NOTES.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => {
+                setAdminNotes(preset.value);
+                setCustomNoteMode(false);
+              }}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                adminNotes === preset.value && !customNoteMode
+                  ? "bg-destructive text-white border-destructive"
+                  : "bg-muted text-muted-foreground border-border hover:border-destructive hover:text-destructive"
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setCustomNoteMode(true);
+              setAdminNotes("");
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+              customNoteMode
+                ? "bg-slate-800 text-white border-slate-800"
+                : "bg-muted text-muted-foreground border-border hover:border-slate-800 hover:text-slate-800"
+            }`}
+          >
+            Custom Note
+          </button>
+        </div>
+
+        {/* Preview or custom textarea */}
+        {(adminNotes || customNoteMode) && (
+          <div className="mt-2">
+            {customNoteMode ? (
+              <textarea
+                autoFocus
+                rows={3}
+                placeholder="Type a custom administrative note..."
+                className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+              />
+            ) : (
+              <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                {adminNotes}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <Button
         className="w-full"
+        variant="destructive"
         disabled={loading}
-        onClick={async () => {
-          await handleArchiveWithDate();
-        }}
+        onClick={handleArchiveWithDate}
       >
         Confirm Archive
       </Button>

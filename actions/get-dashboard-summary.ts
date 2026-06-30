@@ -25,6 +25,14 @@ export type DashboardIncompleteSummary = {
   employees: DashboardListItem[];
 };
 
+export type DashboardGenderCountRow = {
+  id: string;
+  name: string;
+  male: number;
+  female: number;
+  total: number;
+};
+
 export type DashboardSummary = {
   pendingApprovals: number;
   officeCount: number;
@@ -36,6 +44,8 @@ export type DashboardSummary = {
   appointmentSlices: DashboardChartSlice[];
   genderSlices: DashboardChartSlice[];
   eligibilitySlices: DashboardChartSlice[];
+  genderCountsByEmployeeType: DashboardGenderCountRow[];
+  genderCountsByEligibility: DashboardGenderCountRow[];
 };
 
 const FALLBACK_COLORS = [
@@ -188,6 +198,8 @@ export const getDashboardSummary = async (
     appointmentRows,
     genderRows,
     eligibilityRows,
+    employeeTypeGenderRows,
+    eligibilityGenderRows,
     employeeTypes,
     eligibilities,
     activeEmployees,
@@ -208,6 +220,16 @@ export const getDashboardSummary = async (
     }),
     prismadb.employee.groupBy({
       by: ["eligibilityId"],
+      where: { departmentId, isArchived: false },
+      _count: { _all: true },
+    }),
+    prismadb.employee.groupBy({
+      by: ["employeeTypeId", "gender"],
+      where: { departmentId, isArchived: false },
+      _count: { _all: true },
+    }),
+    prismadb.employee.groupBy({
+      by: ["eligibilityId", "gender"],
       where: { departmentId, isArchived: false },
       _count: { _all: true },
     }),
@@ -274,6 +296,47 @@ export const getDashboardSummary = async (
       color: row.gender === "Female" ? "#db2777" : "#2563eb",
     }))
     .filter((slice) => slice.value > 0);
+
+  const buildGenderCountRows = <T extends { id: string; name: string }>(
+    categories: T[],
+    genderRows: { id: string | null; gender: string; count: number }[],
+  ): DashboardGenderCountRow[] =>
+    categories
+      .map((category) => {
+        const male = genderRows
+          .filter((row) => row.id === category.id && row.gender === "Male")
+          .reduce((sum, row) => sum + row.count, 0);
+        const female = genderRows
+          .filter((row) => row.id === category.id && row.gender === "Female")
+          .reduce((sum, row) => sum + row.count, 0);
+        return {
+          id: category.id,
+          name: category.name.trim() || "Unassigned",
+          male,
+          female,
+          total: male + female,
+        };
+      })
+      .filter((row) => row.total > 0)
+      .sort((a, b) => b.total - a.total);
+
+  const genderCountsByEmployeeType = buildGenderCountRows(
+    employeeTypes,
+    employeeTypeGenderRows.map((row) => ({
+      id: row.employeeTypeId,
+      gender: row.gender,
+      count: row._count._all,
+    })),
+  );
+
+  const genderCountsByEligibility = buildGenderCountRows(
+    eligibilities,
+    eligibilityGenderRows.map((row) => ({
+      id: row.eligibilityId,
+      gender: row.gender,
+      count: row._count._all,
+    })),
+  );
 
   const rawEligibilitySlices = buildOtherLimitedSlices(
     eligibilities
@@ -390,5 +453,7 @@ export const getDashboardSummary = async (
     appointmentSlices,
     genderSlices,
     eligibilitySlices,
+    genderCountsByEmployeeType,
+    genderCountsByEligibility,
   };
 };

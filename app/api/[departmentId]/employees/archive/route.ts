@@ -27,10 +27,11 @@ export async function PATCH(
 
     const body = await req.json();
 
-    const { employeeIds, archived, terminationDate } = body as {
+    const { employeeIds, archived, terminationDate, adminNotes } = body as {
       employeeIds: string[];
       archived: boolean;
       terminationDate?: string;
+      adminNotes?: string;
     };
 
     if (!Array.isArray(employeeIds) || employeeIds.length === 0) {
@@ -178,6 +179,7 @@ if (archived) {
           type: "TERMINATED",
           occurredAt: parseTimelineDate(employee.terminateDate) ?? new Date(),
           title: "Terminated",
+          description: adminNotes ?? null,
         });
       }
     }

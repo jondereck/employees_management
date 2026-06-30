@@ -17,6 +17,7 @@ const EVENT_THEMES: Record<string, { color: string; bg: string }> = {
   TRANSFER: { color: "text-amber-600", bg: "bg-amber-500" },
   TRANSFERRED: { color: "text-amber-600", bg: "bg-amber-500" },
   REGULARIZATION: { color: "text-blue-600", bg: "bg-blue-500" },
+  TERMINATED: { color: "text-red-600", bg: "bg-red-500" },
   DEFAULT: { color: "text-slate-600", bg: "bg-slate-400" },
 };
 
@@ -67,11 +68,12 @@ const EmploymentEventPreview = ({ events }: Props) => {
           {sortedEvents.slice(0, 5).map((event, i) => {
             const theme = EVENT_THEMES[event.type?.toUpperCase()] || EVENT_THEMES.DEFAULT;
             
+            const isTerminated = event.type?.toUpperCase() === "TERMINATED";
             return (
-              <div key={event.id} className="relative pl-10 group">
+              <div key={event.id} className={cn("relative pl-10 group rounded-lg px-3 py-2 -mx-3", isTerminated && "bg-red-50/60")}>
                 {/* Timeline Dot with Outer Glow on Hover */}
                 <span className={cn(
-                  "absolute left-0 top-1 h-3 w-3 rounded-full border-2 border-white ring-4 ring-slate-50 z-10 transition-transform group-hover:scale-125",
+                  "absolute left-3 top-3 h-3 w-3 rounded-full border-2 border-white ring-4 ring-slate-50 z-10 transition-transform group-hover:scale-125",
                   theme.bg
                 )} />
 

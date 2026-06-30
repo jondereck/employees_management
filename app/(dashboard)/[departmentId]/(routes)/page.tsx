@@ -21,6 +21,7 @@ import { AnimatedNumber } from "@/components/animated-number";
 import { DashboardAnalyticsTabs } from "@/components/dashboard/dashboard-analytics-tabs";
 import { DashboardClock } from "@/components/dashboard/dashboard-clock";
 import { DashboardDonutChart } from "@/components/dashboard/dashboard-donut-chart";
+import { DashboardGenderCounts } from "@/components/dashboard/dashboard-gender-counts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { getCurrentMonthIndexInTimeZone } from "@/lib/birthday";
@@ -161,7 +162,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                   Appointment type, gender, and eligibility breakdown.
                 </p>
               </CardHeader>
-              <CardContent className="p-4 pt-8">
+              <CardContent className="space-y-4 p-4 pt-8">
                 <div className="mx-auto grid w-full gap-3 lg:grid-cols-3">
                   <DashboardDonutChart
                     title="Appointment Type"
@@ -182,6 +183,11 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                     compact
                   />
                 </div>
+
+                <DashboardGenderCounts
+                  byEmployeeType={dashboardSummary.genderCountsByEmployeeType}
+                  byEligibility={dashboardSummary.genderCountsByEligibility}
+                />
               </CardContent>
             </Card>
 
