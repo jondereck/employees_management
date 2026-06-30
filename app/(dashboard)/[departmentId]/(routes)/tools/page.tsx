@@ -74,7 +74,7 @@ const TOOL_CARD_CONFIG: Array<{
   {
     key: "workforce-pivot",
     label: "Workforce Pivot Table",
-    description: "Cross-tab employee type, eligibility, supervisory level, and gender with multi-select filters.",
+    description: "Use a flexible matrix pivot or a CSC-style workforce report with employee drilldown.",
     slug: "tools/workforce-pivot",
     icon: LayoutGrid,
   },
