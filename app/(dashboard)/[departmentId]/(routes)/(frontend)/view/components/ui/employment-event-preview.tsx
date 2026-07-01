@@ -37,16 +37,31 @@ const EmploymentEventPreview = ({ events }: Props) => {
   );
 
 
-  function getEventTitle(details?: string | null) {
-  if (!details) return "Status Update";
+  function parseEventDetails(details?: string | null) {
+    if (!details) {
+      return {
+        title: "Status Update",
+        description: null as string | null,
+      };
+    }
 
-  try {
-    const parsed = JSON.parse(details);
-    return parsed.title || parsed.description || "Status Update";
-  } catch {
-    return details;
+    try {
+      const parsed = JSON.parse(details);
+      return {
+        title: parsed.title || parsed.description || "Status Update",
+        description:
+          typeof parsed.description === "string" && parsed.description.trim().length > 0
+            ? parsed.description.trim()
+            : null,
+      };
+    } catch {
+      return {
+        title: details,
+        description: null,
+      };
+    }
   }
-}
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       {/* HEADER */}
@@ -67,10 +82,16 @@ const EmploymentEventPreview = ({ events }: Props) => {
         <div className="space-y-8 relative">
           {sortedEvents.slice(0, 5).map((event, i) => {
             const theme = EVENT_THEMES[event.type?.toUpperCase()] || EVENT_THEMES.DEFAULT;
-            
             const isTerminated = event.type?.toUpperCase() === "TERMINATED";
+            const parsedDetails = parseEventDetails(event.details);
             return (
-              <div key={event.id} className={cn("relative pl-10 group rounded-lg px-3 py-2 -mx-3", isTerminated && "bg-red-50/60")}>
+              <div
+                key={event.id}
+                className={cn(
+                  "relative -mx-3 rounded-lg px-3 py-2 pl-10 group",
+                  isTerminated && "border border-red-100 bg-red-50/80"
+                )}
+              >
                 {/* Timeline Dot with Outer Glow on Hover */}
                 <span className={cn(
                   "absolute left-3 top-3 h-3 w-3 rounded-full border-2 border-white ring-4 ring-slate-50 z-10 transition-transform group-hover:scale-125",
@@ -90,13 +111,13 @@ const EmploymentEventPreview = ({ events }: Props) => {
                       )}
                     </div>
                     
-        <h3 className="text-sm font-bold text-slate-900 leading-none">
-  {getEventTitle(event.details)}
-</h3>
+                    <h3 className={cn("text-sm font-bold leading-none", isTerminated ? "text-red-700" : "text-slate-900")}>
+                      {parsedDetails.title}
+                    </h3>
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-xs font-bold text-slate-400">
+                    <span className={cn("text-xs font-bold", isTerminated ? "text-red-500" : "text-slate-400")}>
                       {formatDate(String(event.occurredAt))}
                     </span>
                     <ChevronRight className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -104,9 +125,12 @@ const EmploymentEventPreview = ({ events }: Props) => {
                 </div>
 
                 {/* Optional: Add a subtle card background for the detail on hover */}
-                <div className="mt-2 text-xs text-slate-500 leading-relaxed max-w-prose">
-                  {/* If you have more metadata like 'department' or 'position' in details, it renders here */}
-                  History record created for this {event.type.toLowerCase()} event.
+                <div className={cn("mt-2 max-w-prose text-xs leading-relaxed", isTerminated ? "text-red-600" : "text-slate-500")}>
+                  {parsedDetails.description
+                    ? isTerminated
+                      ? `Reason: ${parsedDetails.description}`
+                      : parsedDetails.description
+                    : `History record created for this ${event.type.toLowerCase()} event.`}
                 </div>
               </div>
             );

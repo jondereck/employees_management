@@ -120,6 +120,11 @@ if (archived) {
 
     // -------- UPDATE --------
 
+    const normalizedAdminNotes =
+      typeof adminNotes === "string" && adminNotes.trim().length > 0
+        ? adminNotes.trim()
+        : null;
+
    const updated = await prismadb.employee.updateMany({
   where: {
     id: { in: toUpdateIds },
@@ -130,6 +135,7 @@ if (archived) {
         isArchived: true,
         terminateDate: finalTerminationDate ?? "", // ✅ use computed value
         employeeNo: "",
+        ...(normalizedAdminNotes ? { note: normalizedAdminNotes } : {}),
       }
     : {
         isArchived: false,
@@ -179,7 +185,7 @@ if (archived) {
           type: "TERMINATED",
           occurredAt: parseTimelineDate(employee.terminateDate) ?? new Date(),
           title: "Terminated",
-          description: adminNotes ?? null,
+          description: normalizedAdminNotes,
         });
       }
     }

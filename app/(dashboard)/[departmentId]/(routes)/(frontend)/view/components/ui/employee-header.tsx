@@ -11,7 +11,7 @@ import { format } from "date-fns";
 // Cleaned up imports
 import TogglePublicBadge from "../../../../settings/components/toggle-public-button";
 import { cn } from "@/lib/utils";
-import { suggestWorkforceIndicator } from "@/lib/workforce-indicators";
+import { getQ39ClassificationDisplay } from "@/lib/workforce-csc";
 
 interface Props {
   employee: Employees;
@@ -20,11 +20,30 @@ interface Props {
 const EmployeeHeader = ({ employee }: Props) => {
   const fullName = buildNameWithInitial(employee);
   const lastUpdated = employee.updatedAt ? format(new Date(employee.updatedAt), "MMMM do, yyyy") : "N/A";
-  const workforceIndicator = suggestWorkforceIndicator({
-    position: employee.position,
-    officeName: employee.offices?.name,
-    employeeTypeName: employee.employeeType?.name,
-  });
+  const classification = !employee.isArchived
+    ? getQ39ClassificationDisplay({
+        id: employee.id,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        middleName: employee.middleName,
+        suffix: employee.suffix,
+        gender: employee.gender,
+        position: employee.position,
+        salaryGrade: Number(employee.salaryGrade ?? 0) || null,
+        dateHired: employee.dateHired,
+        latestAppointment: employee.latestAppointment,
+        terminateDate: employee.terminateDate,
+        isArchived: employee.isArchived,
+        office: employee.offices ? { id: employee.offices.id, name: employee.offices.name } : null,
+        employeeType: employee.employeeType
+          ? { id: employee.employeeType.id, name: employee.employeeType.name }
+          : null,
+        eligibility: employee.eligibility
+          ? { id: employee.eligibility.id, name: employee.eligibility.name }
+          : null,
+        employmentEvents: employee.employmentEvents,
+      })
+    : null;
 
   return (
     <div className="relative flex flex-col lg:flex-row items-stretch justify-between gap-6 border-b border-slate-200 pb-8 pt-4">
@@ -89,24 +108,18 @@ const EmployeeHeader = ({ employee }: Props) => {
                     {employee.position}
                   </span>
 
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
-                      workforceIndicator.indicatorName === "Others"
-                        ? "bg-slate-100 text-slate-500 border-slate-200"
-                        : "bg-indigo-50 text-indigo-700 border-indigo-200"
-                    )}
-                    title={workforceIndicator.reason}
-                  >
-                    {workforceIndicator.indicatorName}
-                  </span>
-
                   {employee.salaryGrade && (
                     <span className="bg-indigo-100 text-indigo-700 px-2 py-[2px] rounded-full text-[10px] font-bold tracking-wide">
                       SG-{employee.salaryGrade}
                     </span>
                   )}
                 </div>
+
+                {classification ? (
+                  <span className="mt-1 text-xs text-slate-500">
+                    {classification.shortLabel}
+                  </span>
+                ) : null}
 
                 {employee.note && (
                   <span className="text-xs text-slate-400 mt-0.5 line-clamp-1 italic">

@@ -487,16 +487,23 @@ export const EmployeesForm = ({
   );
   const workforceIndicator = useMemo(
     () =>
-      suggestWorkforceIndicator({
-        position: selectedPosition,
-        officeName: selectedOffice?.name,
-        employeeTypeName: selectedEmployeeType?.name,
-      }),
-    [selectedEmployeeType?.name, selectedOffice?.name, selectedPosition]
+      isArchivedValue
+        ? null
+        : suggestWorkforceIndicator({
+            position: selectedPosition,
+            officeName: selectedOffice?.name,
+            employeeTypeName: selectedEmployeeType?.name,
+          }),
+    [isArchivedValue, selectedEmployeeType?.name, selectedOffice?.name, selectedPosition]
+  );
+  const hasTerminationState = useMemo(
+    () => isArchivedValue || Boolean(String(terminateDateValue ?? "").trim()),
+    [isArchivedValue, terminateDateValue]
   );
 
   const suggestBio = useCallback(async () => {
     if (suggesting) return;              // prevent double taps
+    if (hasTerminationState) return;
     if (!officeId) { toast.error("Select an Office first."); return; }
 
     setSuggesting(true);
@@ -542,17 +549,18 @@ export const EmployeesForm = ({
     } finally {
       setSuggesting(false);
     }
-  }, [officeId, params.departmentId, form, suggesting]);
+  }, [hasTerminationState, officeId, params.departmentId, form, suggesting]);
 
 
   useEffect(() => {
     setBioOptions([]);
     if (!officeId) return;
+    if (hasTerminationState) return;
     if (lastAutoBioOfficeId === officeId) return;
     const current = form.getValues("employeeNo").trim();
     if (current && current !== lastAutoBio) return;
     void suggestBio();
-  }, [form, lastAutoBio, lastAutoBioOfficeId, officeId, suggestBio]);
+  }, [form, hasTerminationState, lastAutoBio, lastAutoBioOfficeId, officeId, suggestBio]);
 
   useEffect(() => {
     if (previousArchivedRef.current === null) {
@@ -878,7 +886,11 @@ export const EmployeesForm = ({
                               </div>
                             </div>
                             <FormDescription className="text-[11px]">
-                              {suggesting ? "Finding next available BIO number..." : "Auto-suggests after selecting Department / Assignment."}
+                              {hasTerminationState
+                                ? "BIO auto-suggestion is disabled for archived or terminated employees."
+                                : suggesting
+                                  ? "Finding next available BIO number..."
+                                  : "Auto-suggests after selecting Department / Assignment."}
                             </FormDescription>
                             <FormMessage className="text-[11px]" />
                           </FormItem>
@@ -1164,9 +1176,11 @@ export const EmployeesForm = ({
                         formatModes={["none", "upper", "title", "sentence"]}
                         disabled={loading}
                       />
-                      <p className="text-[11px] font-medium text-muted-foreground">
-                        Indicator: <span className="text-foreground">{workforceIndicator.indicatorName}</span>
-                      </p>
+                      {workforceIndicator ? (
+                        <p className="text-[11px] font-medium text-muted-foreground">
+                          Indicator: <span className="text-foreground">{workforceIndicator.indicatorName}</span>
+                        </p>
+                      ) : null}
                     </div>
                   )} />
                   <FormField control={form.control} name="employeeTypeId" render={({ field }) => <AutoField

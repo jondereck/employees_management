@@ -46,10 +46,10 @@ const SearchFilter: FC<SearchFilterProps> = ({ searchTerm, setSearchTerm, isDebo
   }, []);
 
   return (
-    <div className="w-full max-w-auto mx-auto space-y-2">
+    <div className="relative w-full max-w-auto mx-auto">
       <div 
         className={clsx(
-          "relative flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-200 shadow-sm",
+          "relative flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-all duration-200 shadow-sm",
           isFocused ? "ring-2 ring-blue-500/20 border-blue-500 bg-white" : "bg-gray-50/50 border-gray-200"
         )}
       >
@@ -102,21 +102,32 @@ const SearchFilter: FC<SearchFilterProps> = ({ searchTerm, setSearchTerm, isDebo
         </div>
       </div>
 
-      {/* Suggestion Quick-Links (Only show if user types '?' or is focused and empty) */}
-      {isFocused && (searchTerm === "?" || searchTerm === "") && (
-        <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
-          {Object.entries(MODE_STYLES).map(([key, cfg]) => (
-            <button
-              key={key}
-              onClick={() => setSearchTerm(`?${key} `)}
-              className={clsx(
-                "text-[11px] px-2 py-1 rounded-lg border transition-all hover:scale-105",
-                cfg.bg, cfg.color, cfg.border
-              )}
-            >
-              <span className="opacity-60 font-mono">?</span>{key}
-            </button>
-          ))}
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-400">
+        <span className="font-medium text-gray-500">Hints:</span>
+        <span>`?pos` position</span>
+        <span>`?note` notes</span>
+        <span>`?off` office</span>
+        <span>`?nick` nickname</span>
+      </div>
+
+      {/* Suggestion Quick-Links (floating, so toolbar buttons do not shift) */}
+      {isFocused && searchTerm === "?" && (
+        <div className="absolute left-0 top-full z-30 mt-2 w-fit max-w-full animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white/95 p-2 shadow-lg backdrop-blur">
+            {Object.entries(MODE_STYLES).map(([key, cfg]) => (
+              <button
+                key={key}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setSearchTerm(`?${key} `)}
+                className={clsx(
+                  "rounded-lg border px-2 py-1 text-[11px] transition-all hover:scale-105",
+                  cfg.bg, cfg.color, cfg.border
+                )}
+              >
+                <span className="font-mono opacity-60">?</span>{key}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -103,6 +103,12 @@ export type WorkforceCscDrilldownEmployee = {
   serviceMonths: number;
 };
 
+export type WorkforceCscClassificationDisplay = {
+  rowKey: WorkforceCscQ39RowKey;
+  label: string;
+  shortLabel: string;
+};
+
 const SUPERVISORY_GRADE_CUTOFF = 10;
 const THIRD_LEVEL_GRADE_MIN = 25;
 const AVERAGE_MONTH_DAYS = 30.4375;
@@ -159,6 +165,18 @@ const Q38_TYPE_PATTERNS: Array<{ key: WorkforceCscQ38RowKey; patterns: string[] 
   { key: "casual", patterns: ["casual"] },
   { key: "provisional", patterns: ["provisional"] },
 ];
+
+const Q39_SHORT_LABELS: Record<WorkforceCscQ39RowKey, string> = {
+  career_first_non_supervisory: "Career service, first level, non-supervisory",
+  career_first_supervisory: "Career service, first level, supervisory",
+  career_second_non_supervisory: "Career service, second level, non-supervisory",
+  career_second_supervisory: "Career service, second level, supervisory",
+  career_third: "Career service, third level (SG 25+)",
+  noncareer_elective_confidential_contractual_specialized:
+    "Non-career service, elective/confidential/contractual specialized",
+  noncareer_emergency_seasonal: "Non-career service, emergency/seasonal",
+  others: "Others",
+};
 
 function normalizeText(value: string | null | undefined) {
   return ` ${String(value ?? "")
@@ -251,6 +269,21 @@ export function classifyQ38Row(employee: WorkforceCscEmployee): WorkforceCscQ38R
     }
   }
   return null;
+}
+
+export function getQ39ClassificationDisplay(
+  employee: WorkforceCscEmployee
+): WorkforceCscClassificationDisplay {
+  const rowKey = classifyQ39Row(employee);
+  const label =
+    WORKFORCE_CSC_Q39_ROWS.find((row) => row.key === rowKey)?.label ??
+    Q39_SHORT_LABELS[rowKey];
+
+  return {
+    rowKey,
+    label,
+    shortLabel: Q39_SHORT_LABELS[rowKey],
+  };
 }
 
 export function getEmployeeServiceMonths(employee: WorkforceCscEmployee, now: Date = new Date()) {

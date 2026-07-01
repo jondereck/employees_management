@@ -15,7 +15,7 @@ import {
 import { computeStep } from "@/utils/compute-step";
 import { salarySchedule } from "@/utils/salarySchedule";
 import { formatUpdatedAt } from "@/utils/date";
-import { suggestWorkforceIndicator } from "@/lib/workforce-indicators";
+import { getQ39ClassificationDisplay } from "@/lib/workforce-csc";
 import { computeTenure } from "@/utils/tenure";
 
 interface InfoProps {
@@ -32,7 +32,11 @@ const Info = ({ data }: InfoProps) => {
     employmentEvents: data.employmentEvents,
   });
 
-  const renderItem = (label: string, value: string | number | undefined | null) => (
+  const renderItem = (
+    label: string,
+    value: string | number | undefined | null,
+    subtle?: string | null
+  ) => (
     <div className="flex flex-col gap-1">
       <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">
         {label}
@@ -40,6 +44,7 @@ const Info = ({ data }: InfoProps) => {
       <dd className="text-sm font-semibold text-slate-900">
         {value || <span className="text-slate-300">—</span>}
       </dd>
+      {subtle ? <span className="text-xs text-slate-500">{subtle}</span> : null}
     </div>
   );
 
@@ -51,11 +56,28 @@ const Info = ({ data }: InfoProps) => {
 
   const formattedENumber = formatContactNumber(data.emergencyContactNumber)
   const formattedLatestAppointment = formatLatestAppointment(data.latestAppointment)
-  const workforceIndicator = !data.isArchived
-    ? suggestWorkforceIndicator({
+  const classification = !data.isArchived
+    ? getQ39ClassificationDisplay({
+        id: data.id,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        middleName: data.middleName,
+        suffix: data.suffix,
+        gender: data.gender,
         position: data.position,
-        officeName: data.offices?.name,
-        employeeTypeName: data.employeeType?.name,
+        salaryGrade: Number(data.salaryGrade ?? 0) || null,
+        dateHired: data.dateHired,
+        latestAppointment: data.latestAppointment,
+        terminateDate: data.terminateDate,
+        isArchived: data.isArchived,
+        office: data.offices ? { id: data.offices.id, name: data.offices.name } : null,
+        employeeType: data.employeeType
+          ? { id: data.employeeType.id, name: data.employeeType.name }
+          : null,
+        eligibility: data.eligibility
+          ? { id: data.eligibility.id, name: data.eligibility.name }
+          : null,
+        employmentEvents: data.employmentEvents,
       })
     : null;
 
@@ -150,9 +172,9 @@ const Info = ({ data }: InfoProps) => {
           </div>
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             {renderItem("Plantilla Designation", data.designation?.name || "Not Assigned")}
-            {renderItem("Position", data.position)}
+            {renderItem("Position", data.position, classification?.shortLabel ?? null)}
             {supervisoryLevel && renderItem("Supervisory Level", supervisoryLevel)}
-            {workforceIndicator && renderItem("Workforce Indicator", workforceIndicator.indicatorName)}
+            {classification && renderItem("CSC Classification", classification.shortLabel)}
             {renderItem("Office", data.offices?.name)}
             {renderItem("Appointment", data.employeeType?.name)}
 
