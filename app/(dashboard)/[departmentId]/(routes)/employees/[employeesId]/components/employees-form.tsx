@@ -2,7 +2,7 @@
 import * as z from "zod";
 import { mutate as globalMutate } from "swr";
 import { Eligibility, Employee, EmployeeType, Gender, Image, MaritalStatus, Offices } from "@prisma/client";
-import { Archive, CalendarIcon, CalendarX, Check, ChevronDown, FileText, HelpCircle, LinkIcon, ShieldCheck, Star, Trash } from "lucide-react";
+import { Archive, CalendarIcon, CalendarX, Check, ChevronDown, FileText, HelpCircle, LinkIcon, Lock, ShieldCheck, Star, Trash, Unlock } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -17,6 +17,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "
 import axios from "axios";
 import { useRouter, useParams } from "next/navigation";
 import { AlertModal } from "@/components/modals/alert-modal";
+import { BioPasswordModal } from "@/components/modals/bio-password-modal";
 import ImageUpload from "@/components/ui/image-upload";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -372,6 +373,8 @@ export const EmployeesForm = ({
 }: EmployeesFormProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [bioUnlocked, setBioUnlocked] = useState(false);
+  const [showBioModal, setShowBioModal] = useState(false);
   const [inputSearchOpen, setInputSearchOpen] = useState(false);
   const [timelineVersion, setTimelineVersion] = useState(0);
   const [awardsVersion, setAwardsVersion] = useState(0);
@@ -741,6 +744,12 @@ export const EmployeesForm = ({
         onConfirm={onDelete}
         loading={loading}
       />
+      <BioPasswordModal
+        isOpen={showBioModal}
+        onClose={() => setShowBioModal(false)}
+        onSuccess={() => setBioUnlocked(true)}
+        departmentId={params.departmentId}
+      />
       <div className="flex items-center justify-between">
         <Heading
           title={title}
@@ -871,7 +880,7 @@ export const EmployeesForm = ({
                             <FormLabel className="text-[13px] font-semibold text-foreground/80">
                               Biometric / ID Number
                             </FormLabel>
-                            <div className="relative flex items-center group">
+                            <div className="relative flex items-center gap-2">
                               <div className="flex-1">
                                 <AutoField
                                   kind="text"
@@ -882,15 +891,38 @@ export const EmployeesForm = ({
                                   }}
                                   placeholder="e.g. 8540005"
                                   className="h-10 bg-secondary/20 border-transparent focus:bg-background transition-all"
+                                  disabled={!!initialData && !bioUnlocked}
                                 />
                               </div>
+                              {initialData && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (bioUnlocked) {
+                                      setBioUnlocked(false);
+                                    } else {
+                                      setShowBioModal(true);
+                                    }
+                                  }}
+                                  className="shrink-0 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                                  title={bioUnlocked ? "Lock bio number" : "Unlock to edit bio number"}
+                                >
+                                  {bioUnlocked ? (
+                                    <Unlock className="h-4 w-4 text-green-600" />
+                                  ) : (
+                                    <Lock className="h-4 w-4" />
+                                  )}
+                                </button>
+                              )}
                             </div>
                             <FormDescription className="text-[11px]">
-                              {hasTerminationState
-                                ? "BIO auto-suggestion is disabled for archived or terminated employees."
-                                : suggesting
-                                  ? "Finding next available BIO number..."
-                                  : "Auto-suggests after selecting Department / Assignment."}
+                              {initialData && !bioUnlocked
+                                ? "Bio number is locked. Click the lock icon to edit."
+                                : hasTerminationState
+                                  ? "BIO auto-suggestion is disabled for archived or terminated employees."
+                                  : suggesting
+                                    ? "Finding next available BIO number..."
+                                    : "Auto-suggests after selecting Department / Assignment."}
                             </FormDescription>
                             <FormMessage className="text-[11px]" />
                           </FormItem>

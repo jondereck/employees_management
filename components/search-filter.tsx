@@ -73,16 +73,24 @@ const SearchFilter: FC<SearchFilterProps> = ({ searchTerm, setSearchTerm, isDebo
             </span>
           )}
           
-          <input
-            ref={inputRef}
-            type="text"
-            className="flex-1 bg-transparent outline-none text-sm text-gray-900 placeholder:text-gray-400 min-w-[50px]"
-            placeholder={mode ? "Type search query..." : 'Search... (try "?pos ")'}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-          />
+          <div className="relative flex-1 min-w-[50px]">
+            <input
+              ref={inputRef}
+              type="text"
+              className="w-full bg-transparent outline-none text-sm text-gray-900 placeholder:text-gray-400"
+              placeholder={mode ? "Type search query..." : "Search..."}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+            />
+
+            {!isFocused && !searchTerm && !mode && (
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-[74px] text-[11px] text-gray-400">
+                <span className="truncate">Try: `?pos` `?note` `?off` `?nick`</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Actions */}
@@ -100,14 +108,6 @@ const SearchFilter: FC<SearchFilterProps> = ({ searchTerm, setSearchTerm, isDebo
             <Command className="h-2.5 w-2.5" /> /
           </div>
         </div>
-      </div>
-
-      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-400">
-        <span className="font-medium text-gray-500">Hints:</span>
-        <span>`?pos` position</span>
-        <span>`?note` notes</span>
-        <span>`?off` office</span>
-        <span>`?nick` nickname</span>
       </div>
 
       {/* Suggestion Quick-Links (floating, so toolbar buttons do not shift) */}

@@ -133,8 +133,7 @@ if (archived) {
   data: archived
     ? {
         isArchived: true,
-        terminateDate: finalTerminationDate ?? "", // ✅ use computed value
-        employeeNo: "",
+        terminateDate: finalTerminationDate ?? "",
         ...(normalizedAdminNotes ? { note: normalizedAdminNotes } : {}),
       }
     : {

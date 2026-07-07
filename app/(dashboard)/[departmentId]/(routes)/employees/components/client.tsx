@@ -48,6 +48,7 @@ import usePreviewModal from "../../(frontend)/view/hooks/use-preview-modal";
 interface Option { id: string; name: string; }
 const STATUS_VALUES = ["all", "Active", "Inactive"] as const;
 type StatusValue = typeof STATUS_VALUES[number];
+type GenderValue = "all" | "Male" | "Female";
 
 interface EmployeesClientProps {
   departmentId: string;
@@ -106,6 +107,11 @@ export const EmployeesClient = ({
     employeeTypes: [] as string[],
     positions: [] as string[],
     status: "all" as StatusValue,
+    gender: "all" as GenderValue,
+    sgMin: null as number | null,
+    sgMax: null as number | null,
+    salaryMin: null as number | null,
+    salaryMax: null as number | null,
   });
 
   const { employees: swrEmployees = [], isLoading } = useEmployees(departmentId);
@@ -168,11 +174,18 @@ export const EmployeesClient = ({
       const eligMatch = filters.eligibilities.length === 0 || filters.eligibilities.includes(emp.eligibility.id);
       const typeMatch = filters.employeeTypes.length === 0 || filters.employeeTypes.includes(emp.employeeType.id);
       const statusMatch = filters.status === "all" || (filters.status === "Active" ? !emp.isArchived : emp.isArchived);
-      
-      const posFilterMatch = filters.positions.length === 0 || 
+      const posFilterMatch = filters.positions.length === 0 ||
         filters.positions.some(p => norm(emp.position).includes(norm(p)));
+      const genderMatch = filters.gender === "all" || emp.gender === filters.gender;
+      const sg = Number(emp.salaryGrade) || 0;
+      const sgMinMatch = filters.sgMin === null || sg >= filters.sgMin;
+      const sgMaxMatch = filters.sgMax === null || sg <= filters.sgMax;
+      const sal = Number(emp.salary) || 0;
+      const salMinMatch = filters.salaryMin === null || sal >= filters.salaryMin;
+      const salMaxMatch = filters.salaryMax === null || sal <= filters.salaryMax;
 
-      if (!officeMatch || !eligMatch || !typeMatch || !statusMatch || !posFilterMatch) return false;
+      if (!officeMatch || !eligMatch || !typeMatch || !statusMatch || !posFilterMatch ||
+          !genderMatch || !sgMinMatch || !sgMaxMatch || !salMinMatch || !salMaxMatch) return false;
 
       // 2. Search Commands (?pos, ?note) or General Search
       if (q.startsWith("?pos")) {
@@ -372,7 +385,7 @@ export const EmployeesClient = ({
               <Button 
                 variant="outline" 
                 className="mt-4"
-                onClick={() => { setSearchTerm(""); setFilters({ offices: [], eligibilities: [], employeeTypes: [], positions: [], status: "all" }); }}
+                onClick={() => { setSearchTerm(""); setFilters({ offices: [], eligibilities: [], employeeTypes: [], positions: [], status: "all", gender: "all", sgMin: null, sgMax: null, salaryMin: null, salaryMax: null }); }}
               >
                 Clear all filters
               </Button>
