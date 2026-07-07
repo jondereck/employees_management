@@ -6,6 +6,7 @@ const TOOL_KEYS = [
   "sg-range",
   "workforce-history",
   "workforce-pivot",
+  "training",
   "sms",
   "org-chart",
   "approvals",

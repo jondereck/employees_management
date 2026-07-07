@@ -38,6 +38,7 @@ import {
   CheckSquare,
   History,
   LayoutGrid,
+  GraduationCap,
   MessageSquare,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -97,6 +98,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     label: "Workforce Pivot Table",
     path: "tools/workforce-pivot",
     icon: LayoutGrid,
+  },
+  training: {
+    label: "Learning & Development",
+    path: "tools/training",
+    icon: GraduationCap,
   },
   sms: {
     label: "Text Blast",

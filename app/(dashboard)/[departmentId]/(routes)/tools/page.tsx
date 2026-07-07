@@ -7,6 +7,7 @@ import {
   Database,
   FileSpreadsheet,
   Fingerprint,
+  GraduationCap,
   Image as ImageIcon,
   GitBranch,
   History,
@@ -77,6 +78,13 @@ const TOOL_CARD_CONFIG: Array<{
     description: "Use a flexible matrix pivot or a CSC-style workforce report with employee drilldown.",
     slug: "tools/workforce-pivot",
     icon: LayoutGrid,
+  },
+  {
+    key: "training",
+    label: "Learning & Development",
+    description: "Import training records and generate the Annex 6-G registry and 6-H dashboard.",
+    slug: "tools/training",
+    icon: GraduationCap,
   },
   {
     key: "sms",
