@@ -5,6 +5,7 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-13 — fix: add attendance-exceptions to mobile sidebar TOOL_NAV_MAP (build type error)
 - 2026-07-13 — fix: remove CSC classification subtitle under Position in employee info
 - 2026-07-13 — fix: hide Tenure "current appt" row when latest appointment is empty
 - 2026-07-13 — fix: Tenure column uses dateHired vs latestAppointment separately (no shared fallback)

@@ -74,6 +74,11 @@ const TOOL_NAV_MAP: Record<ToolKey, NavItem> = {
     path: "tools/attendance-import",
     icon: FileSpreadsheet,
   },
+  "attendance-exceptions": {
+    label: "Attendance Exception Registry",
+    path: "tools/attendance-exceptions",
+    icon: CalendarDays,
+  },
   "copy-options": {
     label: "Copy Options",
     path: "tools/copy-options",
