@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from "lucide-react";
 
+import DataPager from "@/components/data-pager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePersistentPagination } from "@/hooks/use-persistent-paginaton";
 import type { TrainingRecord } from "@/lib/training-types";
 import { trainingEmployeeDisplayName } from "@/lib/training-types";
 import { cn } from "@/lib/utils";
@@ -120,6 +122,11 @@ export function TrainingRegistryTable({ trainings }: { trainings: TrainingRecord
   const [statusFilter, setStatusFilter] = useState(ALL);
   const [sortKey, setSortKey] = useState<SortKey | null>("dateStart");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const { pagination, setPagination } = usePersistentPagination({
+    storageKey: "ld-training-registry-pagination",
+    initial: { pageIndex: 0, pageSize: 10 },
+    syncToUrl: false,
+  });
 
   const rows = useMemo<RegistryRow[]>(
     () =>
@@ -177,6 +184,28 @@ export function TrainingRegistryTable({ trainings }: { trainings: TrainingRecord
     }
     return list;
   }, [rows, search, officeFilter, typeFilter, indicatorFilter, statusFilter, sortKey, sortDir]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pagination.pageSize) || 1);
+
+  useEffect(() => {
+    setPagination((p) => {
+      const max = Math.max(0, pageCount - 1);
+      if (p.pageIndex <= max) return p;
+      return { ...p, pageIndex: max };
+    });
+  }, [pageCount, setPagination]);
+
+  useEffect(() => {
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }));
+  }, [search, officeFilter, typeFilter, indicatorFilter, statusFilter, setPagination]);
+
+  const pagedRows = useMemo(() => {
+    const start = pagination.pageIndex * pagination.pageSize;
+    return filteredRows.slice(start, start + pagination.pageSize);
+  }, [filteredRows, pagination.pageIndex, pagination.pageSize]);
+
+  const rangeStart = filteredRows.length === 0 ? 0 : pagination.pageIndex * pagination.pageSize + 1;
+  const rangeEnd = Math.min(filteredRows.length, (pagination.pageIndex + 1) * pagination.pageSize);
 
   const hasFilters =
     search.trim() !== "" ||
@@ -277,7 +306,9 @@ export function TrainingRegistryTable({ trainings }: { trainings: TrainingRecord
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Showing {filteredRows.length} of {rows.length} record{rows.length === 1 ? "" : "s"}
+        Showing {rangeStart}–{rangeEnd} of {filteredRows.length} filtered
+        {filteredRows.length !== rows.length ? ` (${rows.length} total)` : ""} record
+        {filteredRows.length === 1 ? "" : "s"}
       </p>
 
       <div className="overflow-auto rounded-md border">
@@ -298,14 +329,14 @@ export function TrainingRegistryTable({ trainings }: { trainings: TrainingRecord
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredRows.length === 0 ? (
+            {pagedRows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
                   No records match the current search/filters.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredRows.map((r) => (
+              pagedRows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="whitespace-nowrap">{r.employee}</TableCell>
                   <TableCell>{r.position || "—"}</TableCell>
@@ -330,6 +361,16 @@ export function TrainingRegistryTable({ trainings }: { trainings: TrainingRecord
           </TableBody>
         </Table>
       </div>
+
+      {filteredRows.length > 0 ? (
+        <DataPager
+          pageIndex={pagination.pageIndex}
+          pageSize={pagination.pageSize}
+          pageCount={pageCount}
+          onPageChange={(nextIndex) => setPagination((p) => ({ ...p, pageIndex: nextIndex }))}
+          onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })}
+        />
+      ) : null}
     </div>
   );
 }

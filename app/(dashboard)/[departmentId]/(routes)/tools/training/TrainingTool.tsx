@@ -187,7 +187,7 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
   const [drilldown, setDrilldown] = useState<DrilldownKey | null>(null);
   const [indicatorDrilldown, setIndicatorDrilldown] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [summaryView, setSummaryView] = useState<"table" | "graphics">("table");
+  const [summaryView, setSummaryView] = useState<"table" | "graphics">("graphics");
 
   const matchedCount = useMemo(() => resolvedRows?.filter((r) => r.matchStatus === "matched").length ?? 0, [resolvedRows]);
   const matchedByNameCount = useMemo(() => resolvedRows?.filter((r) => r.matchedBy === "name").length ?? 0, [resolvedRows]);

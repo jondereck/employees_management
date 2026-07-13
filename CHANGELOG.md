@@ -11,6 +11,7 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 - 2026-07-13 — fix: Tenure column uses dateHired vs latestAppointment separately (no shared fallback)
 - 2026-07-13 — fix: Tenure column shows months when under 1 year and uses yr/yrs correctly
 - 2026-07-13 — fix: hide SG range on Supervisory Level in employee info; show on hover tooltip
+- 2026-07-13 — feat: L&D Training Registry uses DataPager pagination; Summary Monitoring defaults to Graphics
 - 2026-07-13 — feat: reorganize Tools page into category sections (Attendance, Workforce, L&D, Comms, Settings)
 - 2026-07-13 — fix: Annex 8-C export forces Letter landscape + Fit to 1 page wide (print-ready page setup)
 - 2026-07-13 — feat: Annex 8-C Excel export print-ready (bold headers, grid borders, landscape fit); shorten tool blurb
