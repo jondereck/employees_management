@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx-js-style";
 
+import type { MfRow, RetirementRow } from "@/lib/hr-planning";
 import type { TrainingRecord, TrainingSummaryResponse } from "@/lib/training-types";
 import { trainingEmployeeDisplayName } from "@/lib/training-types";
 
@@ -156,4 +157,36 @@ export function exportLearningDashboardExcel(summary: TrainingSummaryResponse, y
   );
 
   XLSX.writeFile(wb, `Annex_6-H_LD_Dashboard_${year}.xlsx`, { compression: true });
+}
+
+type HrPlanningExport = {
+  personnelComplement: MfRow[];
+  officeDistribution: MfRow[];
+  ageGroups: MfRow[];
+  educationDistribution: MfRow[];
+  retirementForecast: RetirementRow[];
+};
+
+export function exportHrPlanningExcel(data: HrPlanningExport, year: number) {
+  const wb = XLSX.utils.book_new();
+
+  const mfSheet = (rows: MfRow[], firstColumn: string) =>
+    buildSheet([firstColumn, "Male", "Female", "Total"], rows.map((r) => [r.label, r.male, r.female, r.total]), [40, 10, 10, 10]);
+
+  XLSX.utils.book_append_sheet(wb, mfSheet(data.personnelComplement, "Employment Status"), "A. Personnel Complement");
+  XLSX.utils.book_append_sheet(wb, mfSheet(data.officeDistribution, "Office-Department"), "B. By Office");
+  XLSX.utils.book_append_sheet(wb, mfSheet(data.ageGroups, "Age Group"), "C. By Age Group");
+  XLSX.utils.book_append_sheet(wb, mfSheet(data.educationDistribution, "Educational Attainment"), "D. By Education");
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    buildSheet(
+      ["Number of Employees Retiring Within", "Total Employees"],
+      data.retirementForecast.map((r) => [r.label, r.total]),
+      [36, 16]
+    ),
+    "III. Retirement Forecast"
+  );
+
+  XLSX.writeFile(wb, `Annex_3-E_HR_Planning_CY${year}.xlsx`, { compression: true });
 }
