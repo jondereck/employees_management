@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { ChevronDown, Loader2, Upload } from "lucide-react";
+import { BarChart3, ChevronDown, List, Loader2, Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,8 +30,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import type { TrainingImportRow, TrainingRecord, TrainingResolvedRow, TrainingSummaryResponse } from "@/lib/training-types";
 import { trainingEmployeeDisplayName } from "@/lib/training-types";
+import { cn } from "@/lib/utils";
 
 import { exportLearningDashboardExcel, exportTrainingRegistryExcel } from "./training-export";
+import HrPlanningTab from "./HrPlanningTab";
+import { SummaryMonitoringGraphics } from "./SummaryMonitoringGraphics";
+import { TrainingRegistryTable } from "./TrainingRegistryTable";
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const dateFormatter = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" });
@@ -135,7 +139,10 @@ type DrilldownKey =
   | "trainingsConducted"
   | "employeesTrained"
   | "mandatoryTrainings"
-  | "competencyGaps";
+  | "competencyGaps"
+  | "employeesWithTraining"
+  | "employeesWithNoTraining"
+  | "byIndicator";
 
 const DRILLDOWN_TITLES: Record<DrilldownKey, string> = {
   approvedPrograms: "Approved Training Programs",
@@ -143,6 +150,9 @@ const DRILLDOWN_TITLES: Record<DrilldownKey, string> = {
   employeesTrained: "Employees Trained",
   mandatoryTrainings: "Mandatory Trainings Completed",
   competencyGaps: "Competency Gaps Addressed",
+  employeesWithTraining: "Employees with at Least One Training",
+  employeesWithNoTraining: "Employees with No Training Intervention",
+  byIndicator: "Trainings by Indicator",
 };
 
 export default function TrainingTool({ departmentId }: { departmentId: string }) {
@@ -175,15 +185,25 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
   const [targetDraft, setTargetDraft] = useState<Record<string, number> | null>(null);
   const [isSavingTargets, setIsSavingTargets] = useState(false);
   const [drilldown, setDrilldown] = useState<DrilldownKey | null>(null);
+  const [indicatorDrilldown, setIndicatorDrilldown] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [summaryView, setSummaryView] = useState<"table" | "graphics">("table");
 
   const matchedCount = useMemo(() => resolvedRows?.filter((r) => r.matchStatus === "matched").length ?? 0, [resolvedRows]);
   const matchedByNameCount = useMemo(() => resolvedRows?.filter((r) => r.matchedBy === "name").length ?? 0, [resolvedRows]);
   const unmatchedRows = useMemo(() => resolvedRows?.filter((r) => r.matchStatus === "unmatched") ?? [], [resolvedRows]);
 
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const processTrainingFile = useCallback(
+    async (file: File) => {
+      const name = file.name.toLowerCase();
+      if (!name.endsWith(".xlsx") && !name.endsWith(".xls")) {
+        toast({
+          title: "Invalid file",
+          description: "Please upload an Excel file (.xlsx or .xls).",
+          variant: "destructive",
+        });
+        return;
+      }
 
       setIsParsing(true);
       setResolvedRows(null);
@@ -217,6 +237,15 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
       }
     },
     [departmentId, toast]
+  );
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      await processTrainingFile(file);
+    },
+    [processTrainingFile]
   );
 
   const handleImport = useCallback(async () => {
@@ -299,7 +328,11 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
         const res = await fetch(`/api/${departmentId}/employee_type`);
         if (!res.ok) return;
         const data = (await res.json()) as Option[];
-        if (!cancelled) setEmployeeTypeOptions(data);
+        if (!cancelled) {
+          setEmployeeTypeOptions(
+            [...data].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+          );
+        }
       } catch {
         // non-fatal: the filter just stays empty
       }
@@ -339,11 +372,16 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
   }, [departmentId, targetDraft, year, loadSummary, toast]);
 
   const openDrilldown = useCallback(
-    (key: DrilldownKey) => {
+    (key: DrilldownKey, indicator?: string) => {
       setDrilldown(key);
+      setIndicatorDrilldown(key === "byIndicator" ? indicator ?? null : null);
       // These breakdowns list individual training records, which live in the
       // registry dataset — fetch it lazily if the user hasn't opened that tab yet.
-      const needsTrainings = key === "trainingsConducted" || key === "employeesTrained" || key === "mandatoryTrainings";
+      const needsTrainings =
+        key === "trainingsConducted" ||
+        key === "employeesTrained" ||
+        key === "mandatoryTrainings" ||
+        key === "byIndicator";
       if (needsTrainings && trainings === null && !isLoadingRegistry) {
         loadRegistry();
       }
@@ -369,10 +407,23 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
     return Array.from(byEmployee.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [trainings]);
 
-  const mandatoryTrainingRows = useMemo(
-    () => (trainings ?? []).filter((t) => t.indicator === "Mandatory Training"),
-    [trainings]
-  );
+  const indicatorTrainingRows = useMemo(() => {
+    if (!trainings) return [];
+    if (drilldown === "mandatoryTrainings") {
+      return trainings.filter((t) => t.indicator === "Mandatory Training");
+    }
+    if (drilldown === "byIndicator" && indicatorDrilldown) {
+      return trainings.filter((t) => t.indicator === indicatorDrilldown);
+    }
+    return trainings;
+  }, [trainings, drilldown, indicatorDrilldown]);
+
+  const drilldownTitle =
+    drilldown === "byIndicator" && indicatorDrilldown
+      ? `${indicatorDrilldown}s`
+      : drilldown
+        ? DRILLDOWN_TITLES[drilldown]
+        : "";
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -381,6 +432,7 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
           <TabsTrigger value="import">Import</TabsTrigger>
           <TabsTrigger value="registry">Registry (Annex 6-G)</TabsTrigger>
           <TabsTrigger value="dashboard">Dashboard (Annex 6-H)</TabsTrigger>
+          <TabsTrigger value="hr-planning">HR Planning (Annex 3-E)</TabsTrigger>
         </TabsList>
         <div className="flex flex-wrap items-center gap-3">
           <Popover>
@@ -395,31 +447,67 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
                 <ChevronDown className="h-4 w-4 opacity-60" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-64 space-y-2">
+            <PopoverContent align="end" className="w-72 space-y-2">
               <p className="text-xs text-muted-foreground">
-                Employees with these types are excluded from the registry and all dashboard computations.
+                Checked types are removed from the registry and all dashboard counts. Scroll the list — there may be more types below.
               </p>
               {employeeTypeOptions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No employee types found.</p>
               ) : (
-                <div className="max-h-56 space-y-1 overflow-auto">
-                  {employeeTypeOptions.map((option) => {
-                    const checked = excludedTypeIds.includes(option.id);
+                <>
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 flex-1 text-xs"
+                      onClick={() => setExcludedTypeIds(employeeTypeOptions.map((o) => o.id))}
+                    >
+                      Exclude all
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 flex-1 text-xs"
+                      onClick={() =>
+                        setExcludedTypeIds((prev) => {
+                          const set = new Set(prev);
+                          return employeeTypeOptions.filter((o) => !set.has(o.id)).map((o) => o.id);
+                        })
+                      }
+                    >
+                      Invert
+                    </Button>
+                  </div>
+                  <div className="max-h-64 space-y-1 overflow-auto rounded border p-1">
+                    {employeeTypeOptions.map((option) => {
+                      const checked = excludedTypeIds.includes(option.id);
+                      return (
+                        <label key={option.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-secondary/50">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) =>
+                              setExcludedTypeIds((prev) =>
+                                value === true ? [...prev, option.id] : prev.filter((id) => id !== option.id)
+                              )
+                            }
+                          />
+                          <span className={checked ? "text-muted-foreground line-through" : "font-medium"}>{option.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {(() => {
+                    const included = employeeTypeOptions.filter((o) => !excludedTypeIds.includes(o.id));
                     return (
-                      <label key={option.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-secondary/50">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(value) =>
-                            setExcludedTypeIds((prev) =>
-                              value === true ? [...prev, option.id] : prev.filter((id) => id !== option.id)
-                            )
-                          }
-                        />
-                        {option.name}
-                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        Still included ({included.length}):{" "}
+                        {included.length === 0 ? "none" : included.map((o) => o.name).join(", ")}
+                      </p>
                     );
-                  })}
-                </div>
+                  })()}
+                </>
               )}
               {excludedTypeIds.length > 0 ? (
                 <Button variant="ghost" size="sm" className="w-full" onClick={() => setExcludedTypeIds([])}>
@@ -459,14 +547,73 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isParsing || isResolving}>
-                {isParsing || isResolving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+            <div
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  if (!isParsing && !isResolving) fileInputRef.current?.click();
+                }
+              }}
+              onClick={() => {
+                if (!isParsing && !isResolving) fileInputRef.current?.click();
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!isParsing && !isResolving) setIsDragOver(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!isParsing && !isResolving) setIsDragOver(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(false);
+                if (isParsing || isResolving) return;
+                const file = e.dataTransfer.files?.[0];
+                if (file) void processTrainingFile(file);
+              }}
+              className={cn(
+                "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-6 py-10 text-center transition-colors",
+                isDragOver ? "border-indigo-500 bg-indigo-50" : "border-muted-foreground/25 hover:border-muted-foreground/50 hover:bg-muted/30",
+                (isParsing || isResolving) && "pointer-events-none opacity-70"
+              )}
+            >
+              {isParsing || isResolving ? (
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              ) : (
+                <Upload className="h-8 w-8 text-muted-foreground" />
+              )}
+              <div className="space-y-1">
+                <p className="text-sm font-medium">
+                  {isParsing || isResolving ? "Processing file…" : isDragOver ? "Drop Excel file here" : "Drag & drop Excel file here"}
+                </p>
+                <p className="text-xs text-muted-foreground">or click to browse · .xlsx / .xls</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isParsing || isResolving}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
+              >
                 Choose file
               </Button>
               <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileChange} />
-              {parsedRows ? <span className="text-sm text-muted-foreground">{parsedRows.length} rows parsed</span> : null}
             </div>
+            {parsedRows ? <span className="text-sm text-muted-foreground">{parsedRows.length} rows parsed</span> : null}
 
             {resolvedRows ? (
               <div className="space-y-3">
@@ -522,52 +669,122 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
           <Button
             variant="outline"
             disabled={!trainings}
-            onClick={() => trainings && summary && exportTrainingRegistryExcel(trainings, summary.registry, year)}
+            onClick={() => trainings && summary && exportTrainingRegistryExcel(trainings, summary.registry, year, summary.totalActiveEmployees)}
           >
             Export to Excel
           </Button>
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Summary Monitoring</CardTitle>
-            <CardDescription>
-              {allYears ? "All years" : `Year ${year}`}
-              {excludedTypeIds.length > 0 ? ` · Excluding ${excludedTypeIds.length} employee type${excludedTypeIds.length === 1 ? "" : "s"}` : ""}
-            </CardDescription>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1.5">
+              <CardTitle>Summary Monitoring</CardTitle>
+              <CardDescription>
+                {allYears ? "All years" : `Year ${year}`}
+                {summary?.includedEmployeeTypes?.length
+                  ? ` · Including: ${summary.includedEmployeeTypes.join(", ")}`
+                  : excludedTypeIds.length > 0
+                    ? ` · Excluding ${excludedTypeIds.length} employee type${excludedTypeIds.length === 1 ? "" : "s"}`
+                    : ""}
+                {" · "}Eligible = not archived and not terminated
+              </CardDescription>
+            </div>
+            <div className="inline-flex shrink-0 rounded-md border p-0.5">
+              <Button
+                type="button"
+                variant={summaryView === "table" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => setSummaryView("table")}
+              >
+                <List className="h-4 w-4" />
+                Table
+              </Button>
+              <Button
+                type="button"
+                variant={summaryView === "graphics" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => setSummaryView("graphics")}
+              >
+                <BarChart3 className="h-4 w-4" />
+                Graphics
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {summary ? (
-              <Table>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>Total Trainings Conducted</TableCell>
-                    <TableCell className="text-right font-semibold">{numberFormatter.format(summary.registry.totalTrainingsConducted)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Total Employees Trained</TableCell>
-                    <TableCell className="text-right font-semibold">{numberFormatter.format(summary.registry.totalEmployeesTrained)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Total Training Hours Completed</TableCell>
-                    <TableCell className="text-right font-semibold">{numberFormatter.format(summary.registry.totalTrainingHoursCompleted)}</TableCell>
-                  </TableRow>
-                  {Object.entries(summary.registry.byIndicator).map(([indicator, count]) => (
-                    <TableRow key={indicator}>
-                      <TableCell>{indicator}s</TableCell>
-                      <TableCell className="text-right font-semibold">{numberFormatter.format(count)}</TableCell>
+              summaryView === "graphics" ? (
+                <SummaryMonitoringGraphics
+                  summary={summary}
+                  onIndicatorClick={(indicator) => openDrilldown("byIndicator", indicator)}
+                  onCoverageClick={(kind) =>
+                    openDrilldown(kind === "withTraining" ? "employeesWithTraining" : "employeesWithNoTraining")
+                  }
+                />
+              ) : (
+                <Table>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>Eligible Employees</TableCell>
+                      <TableCell className="text-right font-semibold">{numberFormatter.format(summary.totalActiveEmployees)}</TableCell>
                     </TableRow>
-                  ))}
-                  <TableRow>
-                    <TableCell>Employees with at Least One Training</TableCell>
-                    <TableCell className="text-right font-semibold">{numberFormatter.format(summary.registry.employeesWithAtLeastOneTraining)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Employees with No Training Intervention</TableCell>
-                    <TableCell className="text-right font-semibold">{numberFormatter.format(summary.registry.employeesWithNoTrainingIntervention)}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+                    <TableRow>
+                      <TableCell>Total Trainings Conducted</TableCell>
+                      <TableCell className="text-right font-semibold">{numberFormatter.format(summary.registry.totalTrainingsConducted)}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Total Employees Trained</TableCell>
+                      <TableCell className="text-right font-semibold">{numberFormatter.format(summary.registry.totalEmployeesTrained)}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Total Training Hours Completed</TableCell>
+                      <TableCell className="text-right font-semibold">{numberFormatter.format(summary.registry.totalTrainingHoursCompleted)}</TableCell>
+                    </TableRow>
+                    {Object.entries(summary.registry.byIndicator).map(([indicator, count]) => (
+                      <TableRow key={indicator}>
+                        <TableCell>{indicator}s</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          <button
+                            type="button"
+                            onClick={() => openDrilldown("byIndicator", indicator)}
+                            className="rounded px-2 py-1 font-semibold text-indigo-600 underline-offset-4 transition-colors hover:bg-indigo-50 hover:underline"
+                            title={`View ${indicator} records`}
+                          >
+                            {numberFormatter.format(count)}
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell>Employees with at Least One Training</TableCell>
+                      <TableCell className="text-right font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => openDrilldown("employeesWithTraining")}
+                          className="rounded px-2 py-1 font-semibold text-indigo-600 underline-offset-4 transition-colors hover:bg-indigo-50 hover:underline"
+                          title="View employees behind this number"
+                        >
+                          {numberFormatter.format(summary.registry.employeesWithAtLeastOneTraining)}
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Employees with No Training Intervention</TableCell>
+                      <TableCell className="text-right font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => openDrilldown("employeesWithNoTraining")}
+                          className="rounded px-2 py-1 font-semibold text-indigo-600 underline-offset-4 transition-colors hover:bg-indigo-50 hover:underline"
+                          title="View employees behind this number"
+                        >
+                          {numberFormatter.format(summary.registry.employeesWithNoTrainingIntervention)}
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              )
             ) : (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 {isLoadingSummary ? <Loader2 className="h-5 w-5 animate-spin" /> : "Open this tab to load the summary."}
@@ -579,6 +796,7 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
         <Card>
           <CardHeader>
             <CardTitle>Training Monitoring Registry</CardTitle>
+            <CardDescription>Search, filter, and sort like a spreadsheet. Click a column header to sort.</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingRegistry ? (
@@ -586,46 +804,7 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
             ) : trainings && trainings.length > 0 ? (
-              <div className="overflow-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Position</TableHead>
-                      <TableHead>Office</TableHead>
-                      <TableHead>Training Title</TableHead>
-                      <TableHead>Provider</TableHead>
-                      <TableHead>Date Conducted</TableHead>
-                      <TableHead className="text-right">Hours</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Competency Addressed</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {trainings.map((t) => (
-                      <TableRow key={t.id}>
-                        <TableCell>{trainingEmployeeDisplayName(t)}</TableCell>
-                        <TableCell>{t.employee?.position || t.positionRaw}</TableCell>
-                        <TableCell>{t.employee?.offices?.name || t.officeNameRaw}</TableCell>
-                        <TableCell className="max-w-xs truncate" title={t.certificateTitle}>
-                          {t.certificateTitle}
-                        </TableCell>
-                        <TableCell className="max-w-xs truncate" title={t.provider}>
-                          {t.provider}
-                        </TableCell>
-                        <TableCell>{formatDate(t.dateStart)}</TableCell>
-                        <TableCell className="text-right">{t.durationHours}</TableCell>
-                        <TableCell>{t.trainingType}</TableCell>
-                        <TableCell className="max-w-xs truncate" title={t.competencyAddressed}>
-                          {t.competencyAddressed}
-                        </TableCell>
-                        <TableCell>{t.status}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <TrainingRegistryTable trainings={trainings} />
             ) : (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 No training records {allYears ? "yet" : `for ${year} yet`}.
@@ -845,14 +1024,68 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
         )}
       </TabsContent>
 
-      <Dialog open={drilldown !== null} onOpenChange={(open) => !open && setDrilldown(null)}>
+      <TabsContent value="hr-planning" className="space-y-6">
+        <HrPlanningTab departmentId={departmentId} year={year} />
+      </TabsContent>
+
+      <Dialog
+        open={drilldown !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDrilldown(null);
+            setIndicatorDrilldown(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>{drilldown ? DRILLDOWN_TITLES[drilldown] : ""}</DialogTitle>
-            <DialogDescription>Records behind this number for {year}.</DialogDescription>
+            <DialogTitle>{drilldownTitle}</DialogTitle>
+            <DialogDescription>
+              {drilldown === "employeesWithTraining" || drilldown === "employeesWithNoTraining"
+                ? `Eligible employees behind this number${allYears ? " (all years)" : ` for ${year}`}.`
+                : `Records behind this number${allYears ? " (all years)" : ` for ${year}`}.`}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="max-h-[60vh] overflow-auto">
+            {(drilldown === "employeesWithTraining" || drilldown === "employeesWithNoTraining") && summary ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Office</TableHead>
+                    {drilldown === "employeesWithTraining" ? (
+                      <>
+                        <TableHead className="text-center">Trainings</TableHead>
+                        <TableHead className="text-center">Total Hours</TableHead>
+                      </>
+                    ) : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(drilldown === "employeesWithTraining"
+                    ? summary.employeesWithTraining ?? []
+                    : summary.employeesWithNoTraining ?? []
+                  ).map((row) => (
+                    <TableRow key={row.employeeId}>
+                      <TableCell className="whitespace-nowrap">{row.name}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.employeeTypeName || "—"}</TableCell>
+                      <TableCell>{row.position || "—"}</TableCell>
+                      <TableCell>{row.officeName}</TableCell>
+                      {drilldown === "employeesWithTraining" ? (
+                        <>
+                          <TableCell className="text-center">{row.trainingCount}</TableCell>
+                          <TableCell className="text-center">{row.totalHours}</TableCell>
+                        </>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : null}
+
             {drilldown === "approvedPrograms" && summary ? (
               <Table>
                 <TableHeader>
@@ -878,7 +1111,9 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
               </Table>
             ) : null}
 
-            {(drilldown === "trainingsConducted" || drilldown === "mandatoryTrainings") &&
+            {(drilldown === "trainingsConducted" ||
+              drilldown === "mandatoryTrainings" ||
+              drilldown === "byIndicator") &&
               (isLoadingRegistry || trainings === null ? (
                 <div className="flex items-center justify-center py-10">
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -895,7 +1130,7 @@ export default function TrainingTool({ departmentId }: { departmentId: string })
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(drilldown === "mandatoryTrainings" ? mandatoryTrainingRows : trainings).map((t) => (
+                    {(drilldown === "trainingsConducted" ? trainings : indicatorTrainingRows).map((t) => (
                       <TableRow key={t.id}>
                         <TableCell className="whitespace-nowrap">{trainingEmployeeDisplayName(t)}</TableCell>
                         <TableCell className="max-w-sm">{t.certificateTitle}</TableCell>

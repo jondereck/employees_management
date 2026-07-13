@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import prismadb from "@/lib/prismadb";
+import { resolveIncludedEmployeeTypeIds } from "@/lib/training-employee-type-filter";
 
 async function requireDepartmentOwner(departmentId: string) {
   const { userId } = auth();
@@ -32,6 +33,21 @@ export async function GET(req: Request, { params }: { params: { departmentId: st
       .map((s) => s.trim())
       .filter(Boolean);
 
+    const allTypes = await prismadb.employeeType.findMany({
+      where: { departmentId },
+      select: { id: true },
+    });
+    const includedTypeIds = resolveIncludedEmployeeTypeIds(
+      allTypes.map((t) => t.id),
+      excludeEmployeeTypeIds
+    );
+    const trainingEmployeeTypeFilter =
+      includedTypeIds === null
+        ? null
+        : {
+            OR: [{ employeeId: null }, { employee: { employeeTypeId: { in: includedTypeIds } } }],
+          };
+
     const trainings = await prismadb.training.findMany({
       where: {
         AND: [
@@ -49,9 +65,7 @@ export async function GET(req: Request, { params }: { params: { departmentId: st
               ]
             : []),
           // Unmatched rows (no employee) have no type to check, so keep them visible.
-          ...(excludeEmployeeTypeIds.length
-            ? [{ OR: [{ employeeId: null }, { employee: { employeeTypeId: { notIn: excludeEmployeeTypeIds } } }] }]
-            : []),
+          ...(trainingEmployeeTypeFilter ? [trainingEmployeeTypeFilter] : []),
         ],
       },
       include: {
@@ -64,6 +78,7 @@ export async function GET(req: Request, { params }: { params: { departmentId: st
             suffix: true,
             position: true,
             offices: { select: { id: true, name: true } },
+            employeeType: { select: { name: true } },
           },
         },
       },

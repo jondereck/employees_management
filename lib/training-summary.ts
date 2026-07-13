@@ -20,6 +20,16 @@ type EmployeeRow = {
   officeName: string;
 };
 
+export type CoverageEmployeeRow = {
+  employeeId: string;
+  name: string;
+  officeName: string;
+  position: string;
+  employeeTypeName: string;
+  trainingCount: number;
+  totalHours: number;
+};
+
 export type RegistrySummary = {
   totalTrainingsConducted: number;
   totalEmployeesTrained: number;
@@ -29,7 +39,70 @@ export type RegistrySummary = {
   employeesWithNoTrainingIntervention: number;
 };
 
-export function buildRegistrySummary(trainings: TrainingRow[], totalActiveEmployees: number): RegistrySummary {
+function formatEmployeeName(e: {
+  lastName: string;
+  firstName: string;
+  middleName?: string | null;
+  suffix?: string | null;
+}): string {
+  const mi = e.middleName?.trim() ? ` ${e.middleName.trim().charAt(0).toUpperCase()}.` : "";
+  const suffix = e.suffix?.trim() ? ` ${e.suffix.trim()}` : "";
+  return `${e.lastName}, ${e.firstName}${mi}${suffix}`;
+}
+
+/** Split eligible employees into trained vs no-training lists for summary drilldowns. */
+export function buildCoverageEmployeeLists(
+  employees: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    middleName?: string | null;
+    suffix?: string | null;
+    position: string;
+    officeName: string;
+    employeeTypeName: string;
+  }>,
+  trainings: TrainingRow[],
+  eligibleEmployeeIds: Set<string>
+): { withTraining: CoverageEmployeeRow[]; withNoTraining: CoverageEmployeeRow[] } {
+  const stats = new Map<string, { count: number; hours: number }>();
+  for (const t of trainings) {
+    if (!t.employeeId || !eligibleEmployeeIds.has(t.employeeId)) continue;
+    const entry = stats.get(t.employeeId) ?? { count: 0, hours: 0 };
+    entry.count += 1;
+    entry.hours += t.durationHours || 0;
+    stats.set(t.employeeId, entry);
+  }
+
+  const withTraining: CoverageEmployeeRow[] = [];
+  const withNoTraining: CoverageEmployeeRow[] = [];
+
+  for (const e of employees) {
+    if (!eligibleEmployeeIds.has(e.id)) continue;
+    const row: CoverageEmployeeRow = {
+      employeeId: e.id,
+      name: formatEmployeeName(e),
+      officeName: e.officeName,
+      position: e.position || "",
+      employeeTypeName: e.employeeTypeName || "Unassigned",
+      trainingCount: stats.get(e.id)?.count ?? 0,
+      totalHours: stats.get(e.id)?.hours ?? 0,
+    };
+    if (row.trainingCount > 0) withTraining.push(row);
+    else withNoTraining.push(row);
+  }
+
+  withTraining.sort((a, b) => a.name.localeCompare(b.name));
+  withNoTraining.sort((a, b) => a.name.localeCompare(b.name));
+  return { withTraining, withNoTraining };
+}
+
+export function buildRegistrySummary(
+  trainings: TrainingRow[],
+  totalActiveEmployees: number,
+  /** When set, coverage metrics only count trainings linked to these eligible employees. */
+  eligibleEmployeeIds?: Set<string>
+): RegistrySummary {
   const byIndicator: Record<string, number> = Object.fromEntries(TRAINING_INDICATORS.map((i) => [i, 0]));
   const trainedEmployeeIds = new Set<string>();
   let totalHours = 0;
@@ -37,7 +110,9 @@ export function buildRegistrySummary(trainings: TrainingRow[], totalActiveEmploy
   for (const t of trainings) {
     totalHours += t.durationHours || 0;
     if (t.indicator in byIndicator) byIndicator[t.indicator] += 1;
-    if (t.employeeId) trainedEmployeeIds.add(t.employeeId);
+    if (!t.employeeId) continue;
+    if (eligibleEmployeeIds && !eligibleEmployeeIds.has(t.employeeId)) continue;
+    trainedEmployeeIds.add(t.employeeId);
   }
 
   const employeesWithAtLeastOneTraining = trainedEmployeeIds.size;

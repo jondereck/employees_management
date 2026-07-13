@@ -65,7 +65,7 @@ export function ageAt(birthday: Date, asOf: Date): number {
 
 const AGE_GROUPS = ["Below 25", "25 - 34", "35 - 44", "45 - 54", "55 - 64", "65 and Above"];
 
-function ageGroupOf(age: number): string {
+export function getAgeGroupLabel(age: number): string {
   if (age < 25) return AGE_GROUPS[0];
   if (age <= 34) return AGE_GROUPS[1];
   if (age <= 44) return AGE_GROUPS[2];
@@ -76,7 +76,7 @@ function ageGroupOf(age: number): string {
 
 /** C. Distribution by Age Group. */
 export function buildAgeGroups(rows: HrPlanningEmployee[], asOf: Date): MfRow[] {
-  const body = tally(rows, (e) => ageGroupOf(ageAt(e.birthday, asOf)), AGE_GROUPS);
+  const body = tally(rows, (e) => getAgeGroupLabel(ageAt(e.birthday, asOf)), AGE_GROUPS);
   return withTotalRow(body);
 }
 
@@ -132,7 +132,27 @@ export function buildEducationDistribution(rows: HrPlanningEmployee[]): MfRow[] 
 
 export type RetirementRow = { label: string; total: number };
 
-const MANDATORY_RETIREMENT_AGE = 65;
+export const MANDATORY_RETIREMENT_AGE = 65;
+
+export const RETIREMENT_WINDOWS = [
+  { label: "1 Year", years: 1 },
+  { label: "3 Years", years: 3 },
+  { label: "5 Years", years: 5 },
+  { label: "10 Years", years: 10 },
+] as const;
+
+export function retirementDateOf(birthday: Date): Date {
+  const d = new Date(birthday);
+  d.setFullYear(d.getFullYear() + MANDATORY_RETIREMENT_AGE);
+  return d;
+}
+
+/** True when Permanent employee reaches age 65 on or before asOf + years. */
+export function isRetiringWithin(birthday: Date, asOf: Date, years: number): boolean {
+  const horizon = new Date(asOf);
+  horizon.setFullYear(horizon.getFullYear() + years);
+  return retirementDateOf(birthday) <= horizon;
+}
 
 /**
  * III. Retirement Forecast — Permanent employees only (plantilla positions are
@@ -140,23 +160,10 @@ const MANDATORY_RETIREMENT_AGE = 65;
  * employees reaching age 65 within each window.
  */
 export function buildRetirementForecast(rows: HrPlanningEmployee[], asOf: Date): RetirementRow[] {
-  const windows = [
-    { label: "1 Year", years: 1 },
-    { label: "3 Years", years: 3 },
-    { label: "5 Years", years: 5 },
-    { label: "10 Years", years: 10 },
-  ];
-
   const permanent = rows.filter((e) => e.employeeTypeName.trim().toLowerCase() === "permanent");
 
-  return windows.map(({ label, years }) => {
-    const horizon = new Date(asOf);
-    horizon.setFullYear(horizon.getFullYear() + years);
-    const total = permanent.filter((e) => {
-      const retirementDate = new Date(e.birthday);
-      retirementDate.setFullYear(retirementDate.getFullYear() + MANDATORY_RETIREMENT_AGE);
-      return retirementDate <= horizon;
-    }).length;
-    return { label, total };
-  });
+  return RETIREMENT_WINDOWS.map(({ label, years }) => ({
+    label,
+    total: permanent.filter((e) => isRetiringWithin(e.birthday, asOf, years)).length,
+  }));
 }

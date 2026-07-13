@@ -487,6 +487,13 @@ export function parseEmployeeTerminationDate(value?: string | null): Date | null
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/** True when terminateDate is empty or the termination is after `asOf`. */
+export function isEmployedAsOf(terminateDate: string | null | undefined, asOf: Date): boolean {
+  const termination = parseEmployeeTerminationDate(terminateDate);
+  if (!termination) return true;
+  return termination > asOf;
+}
+
 export function toSnapshotStatus(isArchived: boolean) {
   return isArchived ? WORKFORCE_INACTIVE_STATUS : WORKFORCE_ACTIVE_STATUS;
 }

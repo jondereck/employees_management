@@ -2,12 +2,15 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import prismadb from "@/lib/prismadb";
+import { resolveIncludedEmployeeTypeIds } from "@/lib/training-employee-type-filter";
 import {
   buildCompetencyGaps,
+  buildCoverageEmployeeLists,
   buildOfficeCoverage,
   buildRegistrySummary,
   buildTrainingImplementationStatus,
 } from "@/lib/training-summary";
+import { isEmployedAsOf } from "@/lib/workforce-history";
 
 async function requireDepartmentOwner(departmentId: string) {
   const { userId } = auth();
@@ -45,34 +48,95 @@ export async function GET(req: Request, { params }: { params: { departmentId: st
       .map((s) => s.trim())
       .filter(Boolean);
 
+    // Coverage / "no training" uses currently employed staff. For a single year,
+    // treat year-end as the cutoff; for all-years TNA views, use "as of today".
+    const employedAsOf = allYears ? new Date() : new Date(yearEnd.getTime() - 1);
+
+    const allTypes = await prismadb.employeeType.findMany({
+      where: { departmentId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    const includedTypeIds = resolveIncludedEmployeeTypeIds(
+      allTypes.map((t) => t.id),
+      excludeEmployeeTypeIds
+    );
+    // When every type is excluded, eligible pool is empty.
+    const employeeTypeFilter =
+      includedTypeIds === null
+        ? {}
+        : { employeeTypeId: { in: includedTypeIds } };
+    const trainingEmployeeTypeFilter =
+      includedTypeIds === null
+        ? null
+        : {
+            OR: [{ employeeId: null }, { employee: { employeeTypeId: { in: includedTypeIds } } }],
+          };
+
     const [trainings, employees, target] = await Promise.all([
       prismadb.training.findMany({
         where: {
           departmentId,
           ...(allYears ? {} : { dateStart: { gte: yearStart, lt: yearEnd } }),
-          // Unmatched rows (no employee) have no type to check, so keep them counted.
-          ...(excludeEmployeeTypeIds.length
-            ? { OR: [{ employeeId: null }, { employee: { employeeTypeId: { notIn: excludeEmployeeTypeIds } } }] }
-            : {}),
+          AND: [
+            // Unmatched rows (no employee) have no type to check, so keep them counted.
+            // Skip trainings linked to archived employees for cleaner conducted totals.
+            ...(trainingEmployeeTypeFilter ? [trainingEmployeeTypeFilter] : []),
+            { OR: [{ employeeId: null }, { employee: { isArchived: false } }] },
+          ],
         },
       }),
       prismadb.employee.findMany({
         where: {
           departmentId,
           isArchived: false,
-          ...(excludeEmployeeTypeIds.length ? { employeeTypeId: { notIn: excludeEmployeeTypeIds } } : {}),
+          ...employeeTypeFilter,
         },
-        select: { id: true, officeId: true, offices: { select: { name: true } } },
+        select: {
+          id: true,
+          officeId: true,
+          terminateDate: true,
+          firstName: true,
+          lastName: true,
+          middleName: true,
+          suffix: true,
+          position: true,
+          offices: { select: { name: true } },
+          employeeType: { select: { id: true, name: true } },
+        },
       }),
       prismadb.learningDevelopmentTarget.findUnique({
         where: { departmentId_year: { departmentId, year } },
       }),
     ]);
 
-    const employeeRows = employees.map((e) => ({ id: e.id, officeId: e.officeId, officeName: e.offices?.name ?? "Unassigned" }));
+    const eligibleEmployees = employees
+      .filter((e) => isEmployedAsOf(e.terminateDate, employedAsOf))
+      .map((e) => ({
+        id: e.id,
+        officeId: e.officeId,
+        officeName: e.offices?.name ?? "Unassigned",
+        firstName: e.firstName,
+        lastName: e.lastName,
+        middleName: e.middleName,
+        suffix: e.suffix,
+        position: e.position,
+        employeeTypeName: e.employeeType?.name ?? "Unassigned",
+      }));
+    const employeeRows = eligibleEmployees.map((e) => ({
+      id: e.id,
+      officeId: e.officeId,
+      officeName: e.officeName,
+    }));
     const totalActiveEmployees = employeeRows.length;
+    const eligibleEmployeeIds = new Set(employeeRows.map((e) => e.id));
 
-    const registry = buildRegistrySummary(trainings, totalActiveEmployees);
+    const registry = buildRegistrySummary(trainings, totalActiveEmployees, eligibleEmployeeIds);
+    const { withTraining: employeesWithTraining, withNoTraining: employeesWithNoTraining } = buildCoverageEmployeeLists(
+      eligibleEmployees,
+      trainings,
+      eligibleEmployeeIds
+    );
     const implementationStatus = buildTrainingImplementationStatus(trainings);
     const officeCoverage = buildOfficeCoverage(employeeRows, trainings);
     const competencyGaps = buildCompetencyGaps(trainings);
@@ -118,10 +182,18 @@ export async function GET(req: Request, { params }: { params: { departmentId: st
       indicatorRow("Utilization of Training Budget", t.targetTrainingBudget, t.actualTrainingBudgetUtilized),
     ];
 
+    const includedTypeNames =
+      includedTypeIds === null
+        ? allTypes.map((t) => t.name)
+        : allTypes.filter((t) => includedTypeIds.includes(t.id)).map((t) => t.name);
+
     return NextResponse.json({
       year,
       totalActiveEmployees,
+      includedEmployeeTypes: includedTypeNames,
       registry,
+      employeesWithTraining,
+      employeesWithNoTraining,
       implementationStatus,
       officeCoverage,
       competencyGaps,

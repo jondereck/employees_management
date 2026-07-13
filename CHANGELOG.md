@@ -1,10 +1,18 @@
 # Changelog
 
 Tracks changes made to this project. Newest entries go at the top of **Unreleased**.
-**Last updated: 2026-07-07**
+**Last updated: 2026-07-13**
 
 ## Unreleased
 
+- 2026-07-13 — feat: make Annex 3-E HR Planning counts clickable with employee list drilldowns
+- 2026-07-13 — feat: add Annex 3-E HR Planning tab (workforce profile + retirement forecast from employee DB; Excel export)
+- 2026-07-13 — feat: add Table/Graphics toggle to L&D Summary Monitoring (KPI cards, indicator donut, coverage bar)
+- 2026-07-13 — feat: L&D drag-and-drop training upload; registry search, column sort, and Excel-like filters
+- 2026-07-13 — feat: make L&D Technical / Core / Leadership / Mandatory training counts clickable with record list modals
+- 2026-07-13 — fix: L&D exclude-types filter now uses explicit include IDs, shows still-included types, and lists employee type in coverage modals
+- 2026-07-13 — feat: make L&D "with training" / "no training" counts clickable with employee list modals
+- 2026-07-13 — fix: L&D "No Training Intervention" uses eligible employees only (exclude terminated; skip archived on training links) and shows Eligible Employees in summary
 - 2026-07-07 — feat: add name-fallback matching for training import (rescues rows with blank/wrong bio numbers) and "All years" toggle for L&D reports
 - 2026-07-07 — feat: add exclude-employee-type filter, year refetch, drilldown modals, and centered numbers to Learning & Development tool
 - 2026-07-07 — feat: add Learning & Development tool (training import by BIO number, Annex 6-G registry, Annex 6-H dashboard, Excel exports)

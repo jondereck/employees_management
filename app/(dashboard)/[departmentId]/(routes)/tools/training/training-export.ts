@@ -64,7 +64,8 @@ function formatDate(value: string | Date | null | undefined) {
 export function exportTrainingRegistryExcel(
   trainings: TrainingRecord[],
   registrySummary: TrainingSummaryResponse["registry"],
-  year: number
+  year: number,
+  totalActiveEmployees?: number
 ) {
   const wb = XLSX.utils.book_new();
 
@@ -99,6 +100,7 @@ export function exportTrainingRegistryExcel(
   );
 
   const summaryRows: (string | number)[][] = [
+    ...(typeof totalActiveEmployees === "number" ? [["Eligible Employees", totalActiveEmployees] as (string | number)[]] : []),
     ["Total Trainings Conducted", registrySummary.totalTrainingsConducted],
     ["Total Employees Trained", registrySummary.totalEmployeesTrained],
     ["Total Training Hours Completed", registrySummary.totalTrainingHoursCompleted],

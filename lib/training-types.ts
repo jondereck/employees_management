@@ -82,6 +82,25 @@ export type TrainingSummaryResponse = {
     employeesWithAtLeastOneTraining: number;
     employeesWithNoTrainingIntervention: number;
   };
+  employeesWithTraining: Array<{
+    employeeId: string;
+    name: string;
+    officeName: string;
+    position: string;
+    employeeTypeName: string;
+    trainingCount: number;
+    totalHours: number;
+  }>;
+  employeesWithNoTraining: Array<{
+    employeeId: string;
+    name: string;
+    officeName: string;
+    position: string;
+    employeeTypeName: string;
+    trainingCount: number;
+    totalHours: number;
+  }>;
+  includedEmployeeTypes?: string[];
   implementationStatus: Array<{
     certificateTitle: string;
     provider: string;
