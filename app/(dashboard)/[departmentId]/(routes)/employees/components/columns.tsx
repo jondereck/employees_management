@@ -15,7 +15,7 @@ import { DataTableColumnHeader } from "@/components/ui/column-header"
 import { CellAction } from "./cell-actions"
 import { Eye } from "./eye"
 import AgeCell from "./age-cell"
-import { computeTenure } from "@/utils/tenure"
+import { formatTenureShort } from "@/utils/tenure"
 
 import { cn } from "@/lib/utils"
 import { salarySchedule } from "@/utils/salarySchedule"
@@ -23,6 +23,8 @@ import { computeStep } from "@/utils/compute-step"
 import {
   formatContactNumber,
   formatSalary,
+  calculateYearService,
+  calculateYearServiceLatestAppointment,
 } from "@/utils/utils"
 import { buildPreview, loadCopyOptions } from "@/utils/copy-utils"
 
@@ -303,20 +305,30 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
     id: "yearsOfService",
     header: "Tenure",
     cell: ({ row }) => {
-      const tenure = computeTenure({
-        dateHired: row.original.dateHired,
-        latestAppointment: row.original.latestAppointment,
-        terminateDate: row.original.terminateDate,
-        isArchived: row.original.isArchived,
-        employmentEvents: row.original.employmentEvents,
-      });
+      const terminateDate =
+        row.original.isArchived && row.original.terminateDate
+          ? String(row.original.terminateDate)
+          : undefined;
+      const fromHire = row.original.dateHired
+        ? calculateYearService(String(row.original.dateHired), terminateDate)
+        : null;
+      const fromLatestAppt = row.original.latestAppointment
+        ? calculateYearServiceLatestAppointment(
+            String(row.original.latestAppointment),
+            terminateDate
+          )
+        : null;
 
       return (
         <div className="flex flex-col text-[11px]">
-          <span className="font-medium text-slate-800">{tenure.totalService.years} yrs</span>
-          <span className="text-muted-foreground mt-0.5">
-            current appt: {tenure.currentAppointment.years} yrs
+          <span className="font-medium text-slate-800">
+            {fromHire ? formatTenureShort(fromHire) : "—"}
           </span>
+          {fromLatestAppt ? (
+            <span className="text-muted-foreground mt-0.5">
+              current appt: {formatTenureShort(fromLatestAppt)}
+            </span>
+          ) : null}
         </div>
       );
     },

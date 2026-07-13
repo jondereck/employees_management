@@ -167,14 +167,14 @@ const Q38_TYPE_PATTERNS: Array<{ key: WorkforceCscQ38RowKey; patterns: string[] 
 ];
 
 const Q39_SHORT_LABELS: Record<WorkforceCscQ39RowKey, string> = {
-  career_first_non_supervisory: "Career service, first level, non-supervisory",
-  career_first_supervisory: "Career service, first level, supervisory",
-  career_second_non_supervisory: "Career service, second level, non-supervisory",
-  career_second_supervisory: "Career service, second level, supervisory",
-  career_third: "Career service, third level (SG 25+)",
+  career_first_non_supervisory: "First Level, Non-Supervisory",
+  career_first_supervisory: "First Level, Supervisory",
+  career_second_non_supervisory: "Second Level, Non-Supervisory",
+  career_second_supervisory: "Second Level, Supervisory",
+  career_third: "Third Level",
   noncareer_elective_confidential_contractual_specialized:
-    "Non-career service, elective/confidential/contractual specialized",
-  noncareer_emergency_seasonal: "Non-career service, emergency/seasonal",
+    "Non-Career Service, Elective/Confidential/Contractual Specialized",
+  noncareer_emergency_seasonal: "Non-Career Service, Emergency/Seasonal",
   others: "Others",
 };
 

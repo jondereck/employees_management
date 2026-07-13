@@ -199,6 +199,18 @@ function computeCurrentAppointmentDuration(input: TenureComputationInput, endDat
   };
 }
 
+/** Compact tenure label for tables: years when ≥1, else months, else days. */
+export function formatTenureShort(duration: Pick<TenureDuration, "years" | "months" | "days">): string {
+  if (duration.years >= 1) {
+    return `${duration.years} ${duration.years === 1 ? "yr" : "yrs"}`;
+  }
+  if (duration.months >= 1) {
+    return `${duration.months} ${duration.months === 1 ? "mo" : "mos"}`;
+  }
+  const days = clampNonNegative(duration.days);
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
 export function computeTenure(
   input: TenureComputationInput,
   now: Date = new Date()

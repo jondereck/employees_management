@@ -17,6 +17,7 @@ import { salarySchedule } from "@/utils/salarySchedule";
 import { formatUpdatedAt } from "@/utils/date";
 import { getQ39ClassificationDisplay } from "@/lib/workforce-csc";
 import { computeTenure } from "@/utils/tenure";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 
 interface InfoProps {
   data: Employees;
@@ -88,7 +89,11 @@ const Info = ({ data }: InfoProps) => {
   // AUTO COMPUTATION
   const grade = Number(data?.salaryGrade ?? 0);
   const supervisoryLevel =
-    grade > 0 ? (grade >= 10 ? "Supervisory (SG 10+)" : "Non-Supervisory (SG 1–9)") : null;
+    grade > 0
+      ? grade >= 10
+        ? { label: "Supervisory", hint: "(SG 10+)" }
+        : { label: "Non-Supervisory", hint: "(SG 1–9)" }
+      : null;
 
   const computedStep = computeStep({
     dateHired: data?.dateHired,
@@ -172,8 +177,21 @@ const Info = ({ data }: InfoProps) => {
           </div>
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             {renderItem("Plantilla Designation", data.designation?.name || "Not Assigned")}
-            {renderItem("Position", data.position, classification?.shortLabel ?? null)}
-            {supervisoryLevel && renderItem("Supervisory Level", supervisoryLevel)}
+            {renderItem("Position", data.position)}
+            {supervisoryLevel && (
+              <div className="flex flex-col gap-1">
+                <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Supervisory Level
+                </dt>
+                <dd className="text-sm font-semibold text-slate-900">
+                  <ActionTooltip label={supervisoryLevel.hint}>
+                    <span className="cursor-help border-b border-dotted border-slate-400">
+                      {supervisoryLevel.label}
+                    </span>
+                  </ActionTooltip>
+                </dd>
+              </div>
+            )}
             {classification && renderItem("CSC Classification", classification.shortLabel)}
             {renderItem("Office", data.offices?.name)}
             {renderItem("Appointment", data.employeeType?.name)}

@@ -89,6 +89,10 @@ export const calculateYearService = (dateHired: string, terminateDate?: string):
   const hireDate = new Date(dateHired);
   const currentDate = terminateDate ? new Date(terminateDate) : new Date();
 
+  if (Number.isNaN(hireDate.getTime()) || Number.isNaN(currentDate.getTime())) {
+    return { years: 0, months: 0, days: 0 };
+  }
+
   let serviceYears = currentDate.getFullYear() - hireDate.getFullYear();
   let serviceMonths = currentDate.getMonth() - hireDate.getMonth();
   let serviceDays = currentDate.getDate() - hireDate.getDate();
@@ -108,15 +112,26 @@ export const calculateYearService = (dateHired: string, terminateDate?: string):
     serviceDays += new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   }
 
-  return { years: serviceYears, months: serviceMonths, days: serviceDays };
+  return {
+    years: Math.max(0, serviceYears),
+    months: Math.max(0, serviceMonths),
+    days: Math.max(0, serviceDays),
+  };
 };
 
 
 
 // Calculate the years, months, and days of service based on the latest appointment
-export const calculateYearServiceLatestAppointment = (latestAppointment: string): { years: number, months: number, days: number } => {
+export const calculateYearServiceLatestAppointment = (
+  latestAppointment: string,
+  terminateDate?: string
+): { years: number; months: number; days: number } => {
   const appointmentDate = new Date(latestAppointment);
-  const currentDate = new Date();
+  const currentDate = terminateDate ? new Date(terminateDate) : new Date();
+
+  if (Number.isNaN(appointmentDate.getTime()) || Number.isNaN(currentDate.getTime())) {
+    return { years: 0, months: 0, days: 0 };
+  }
 
   let serviceYears = currentDate.getFullYear() - appointmentDate.getFullYear();
   let serviceMonths = currentDate.getMonth() - appointmentDate.getMonth();
@@ -137,7 +152,11 @@ export const calculateYearServiceLatestAppointment = (latestAppointment: string)
     serviceDays += new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   }
 
-  return { years: serviceYears, months: serviceMonths, days: serviceDays };
+  return {
+    years: Math.max(0, serviceYears),
+    months: Math.max(0, serviceMonths),
+    days: Math.max(0, serviceDays),
+  };
 };
 
 
