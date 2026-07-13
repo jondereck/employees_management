@@ -43,6 +43,8 @@ export type HrPlanningEmployeeRow = {
   age: number;
   ageGroup: string;
   birthday: string;
+  terminateDate?: string;
+  isArchived?: boolean;
 };
 
 export type HrPlanningData = {
@@ -50,12 +52,15 @@ export type HrPlanningData = {
   generatedAt: string;
   asOf: string;
   totalActiveEmployees: number;
+  totalNotArchived: number;
   personnelComplement: MfRow[];
   officeDistribution: MfRow[];
   ageGroups: MfRow[];
   educationDistribution: MfRow[];
   retirementForecast: RetirementRow[];
   employees: HrPlanningEmployeeRow[];
+  archivedWithoutTerminateDate: HrPlanningEmployeeRow[];
+  notArchivedButTerminated: HrPlanningEmployeeRow[];
 };
 
 type GenderFilter = "Male" | "Female" | "all";
@@ -64,6 +69,7 @@ type DrilldownState = {
   title: string;
   description: string;
   employees: HrPlanningEmployeeRow[];
+  showTerminateDate?: boolean;
 };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
@@ -215,6 +221,25 @@ export default function HrPlanningTab({ departmentId, year }: { departmentId: st
     [data]
   );
 
+  const openAuditList = useCallback((kind: "archivedNoTerm" | "activeTerminated") => {
+    if (!data) return;
+    if (kind === "archivedNoTerm") {
+      setDrilldown({
+        title: "Archived without Terminate Date",
+        description: `${data.archivedWithoutTerminateDate?.length ?? 0} archived employee(s) with blank terminate date`,
+        employees: data.archivedWithoutTerminateDate ?? [],
+        showTerminateDate: true,
+      });
+      return;
+    }
+    setDrilldown({
+      title: "Not archived but terminated",
+      description: `${data.notArchivedButTerminated?.length ?? 0} employee(s) still active/unarchived but terminated as of CY ${year} (usually explains Eligible vs total headcount)`,
+      employees: data.notArchivedButTerminated ?? [],
+      showTerminateDate: true,
+    });
+  }, [data, year]);
+
   const openPersonnel = useCallback(
     (label: string, gender: GenderFilter) => {
       openFiltered(
@@ -304,6 +329,40 @@ export default function HrPlanningTab({ departmentId, year }: { departmentId: st
         </Button>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Headcount notes</CardTitle>
+          <CardDescription>
+            Eligible {numberFormatter.format(data.totalActiveEmployees)} vs not-archived{" "}
+            {numberFormatter.format(data.totalNotArchived ?? data.totalActiveEmployees)}. Click a count to see names.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableBody>
+              <TableRow>
+                <TableCell>Not archived, but terminated (as of CY {year})</TableCell>
+                <TableCell className="text-right">
+                  <ClickableCount
+                    value={data.notArchivedButTerminated?.length ?? 0}
+                    onClick={() => openAuditList("activeTerminated")}
+                  />
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell>Archived, without terminate date</TableCell>
+                <TableCell className="text-right">
+                  <ClickableCount
+                    value={data.archivedWithoutTerminateDate?.length ?? 0}
+                    onClick={() => openAuditList("archivedNoTerm")}
+                  />
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <div className="space-y-2">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">I. Workforce Profile</h3>
         <MfTable
@@ -389,12 +448,14 @@ export default function HrPlanningTab({ departmentId, year }: { departmentId: st
                   <TableHead>Position</TableHead>
                   <TableHead>Office</TableHead>
                   <TableHead className="text-center">Age</TableHead>
+                  {drilldown?.showTerminateDate ? <TableHead>Terminate Date</TableHead> : null}
+                  {drilldown?.showTerminateDate ? <TableHead>Archived</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(drilldown?.employees ?? []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={drilldown?.showTerminateDate ? 8 : 6} className="py-8 text-center text-sm text-muted-foreground">
                       No employees in this group.
                     </TableCell>
                   </TableRow>
@@ -407,6 +468,12 @@ export default function HrPlanningTab({ departmentId, year }: { departmentId: st
                       <TableCell>{e.position || "—"}</TableCell>
                       <TableCell>{e.officeName}</TableCell>
                       <TableCell className="text-center">{e.age}</TableCell>
+                      {drilldown?.showTerminateDate ? (
+                        <TableCell className="whitespace-nowrap">{e.terminateDate || "—"}</TableCell>
+                      ) : null}
+                      {drilldown?.showTerminateDate ? (
+                        <TableCell>{e.isArchived ? "Yes" : "No"}</TableCell>
+                      ) : null}
                     </TableRow>
                   ))
                 )}

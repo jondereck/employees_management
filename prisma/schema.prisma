@@ -34,6 +34,7 @@ model Department {
   genioResultContexts         GenioResultContext[]
   trainings                   Training[]
   learningDevelopmentTargets  LearningDevelopmentTarget[]
+  attendanceExceptions        AttendanceException[]
 }
 
 model DepartmentBackup {
@@ -190,6 +191,7 @@ model Employee {
   eligibility            Eligibility               @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
   employeeType           EmployeeType              @relation(fields: [employeeTypeId], references: [id], onUpdate: NoAction, map: "employee_employeetypeid_fkey")
   offices                Offices                   @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
+  trainings              Training[]
   historySnapshots       EmployeeHistorySnapshot[]
   employmentEvents       EmploymentEvent[]
   images                 Image[]
@@ -198,7 +200,7 @@ model Employee {
   smsLogs                SmsLog[]
   weeklyExclusions       WeeklyExclusion[]
   workSchedules          WorkSchedule[]
-  trainings              Training[]
+  attendanceExceptions   AttendanceException[]
 
   @@index([departmentId])
   @@index([departmentId, idQueueAt])
@@ -607,6 +609,59 @@ model LearningDevelopmentTarget {
 
   @@unique([departmentId, year])
   @@index([departmentId])
+}
+
+/// Annex 8-C Attendance Exception Registry rows (additive; does not alter existing tables).
+model AttendanceException {
+  id               String                   @id @default(cuid())
+  departmentId     String
+  employeeId       String?
+  employeeNo       String                   @default("")
+  employeeName     String
+  officeName       String                   @default("")
+  incidentDate     DateTime
+  /// Comma-separated YYYY-MM-DD list when multiple dates are grouped on one employee+type row
+  incidentDates    String                   @default("")
+  exceptionType    AttendanceExceptionType
+  occurrences      Int                      @default(1)
+  actionTaken      String                   @default("")
+  status           AttendanceExceptionStatus @default(Open)
+  remarks          String                   @default("")
+  reportingPeriod  String
+  source           AttendanceExceptionSource @default(manual)
+  /// Stable key for auto-import upsert: auto|period|type|employeeNo
+  importKey        String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  department       Department               @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  employee         Employee?                @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([departmentId, importKey])
+  @@index([departmentId, reportingPeriod])
+  @@index([departmentId, exceptionType])
+  @@index([employeeId])
+}
+
+enum AttendanceExceptionType {
+  T
+  U
+  MD
+  FD
+  UA
+  AWOL
+}
+
+enum AttendanceExceptionStatus {
+  Open
+  CounselingConducted
+  MemorandumIssued
+  Resolved
+  ForAdministrativeAction
+}
+
+enum AttendanceExceptionSource {
+  auto
+  manual
 }
 
 enum SalaryMode {

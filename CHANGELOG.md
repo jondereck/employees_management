@@ -5,6 +5,18 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-13 — feat: reorganize Tools page into category sections (Attendance, Workforce, L&D, Comms, Settings)
+- 2026-07-13 — fix: Annex 8-C export forces Letter landscape + Fit to 1 page wide (print-ready page setup)
+- 2026-07-13 — feat: Annex 8-C Excel export print-ready (bold headers, grid borders, landscape fit); shorten tool blurb
+- 2026-07-13 — feat: Annex 8-C import limits auto T/U to Summary-sheet employees (match by bio / Employee No)
+- 2026-07-13 — feat: Annex 8-C default setting hides T/U rows below Occ. ≥ 10 (toggle + threshold; MD/FD/UA/AWOL always shown)
+- 2026-07-13 — fix: Annex 8-C auto-regroups per-date T/U on load/import (no manual regroup button)
+- 2026-07-13 — fix: Annex 8-C server-side date regroup + "Regroup dates by employee" for legacy per-day rows
+- 2026-07-13 — feat: Annex 8-C groups auto T/U by employee (dates listed together; Occ. = day count)
+- 2026-07-13 — perf: batch Annex 8-C T/U import (createMany + concurrent updates) instead of per-row DB calls
+- 2026-07-13 — fix: Annex 8-C PerDay import finds header row below title preamble (matches monthly biometrics export)
+- 2026-07-13 — feat: add Annex 8-C Attendance Exception Registry (auto T/U from PerDay, manual MD/FD/UA/AWOL, additive Prisma table)
+- 2026-07-13 — feat: Annex 3-E headcount notes list archived-without-terminate-date and not-archived-but-terminated employees
 - 2026-07-13 — feat: make Annex 3-E HR Planning counts clickable with employee list drilldowns
 - 2026-07-13 — feat: add Annex 3-E HR Planning tab (workforce profile + retirement forecast from employee DB; Excel export)
 - 2026-07-13 — feat: add Table/Graphics toggle to L&D Summary Monitoring (KPI cards, indicator donut, coverage bar)

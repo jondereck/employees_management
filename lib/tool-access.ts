@@ -2,6 +2,7 @@ const TOOL_KEYS = [
   "biometrics",
   "covers",
   "attendance-import",
+  "attendance-exceptions",
   "copy-options",
   "sg-range",
   "workforce-history",
