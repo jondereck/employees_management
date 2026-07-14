@@ -2,11 +2,90 @@ import { NextResponse } from "next/server";
 
 import { requireOfficeInDepartment } from "@/lib/office-access";
 import {
+  buildPlantillaItemNumbers,
+  MAX_PLANTILLA_PASTE_ROWS,
+  normalizeCreateQuantity,
   normalizeOptionalId,
   normalizePlantillaInput,
   validateDivisionBelongsToOffice,
+  type NormalizedPlantilla,
 } from "@/lib/plantilla";
 import prismadb from "@/lib/prismadb";
+
+const plantillaInclude = {
+  officeDivision: { select: { id: true, name: true } },
+  employeeType: { select: { id: true, name: true } },
+  employee: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      employeeNo: true,
+    },
+  },
+} as const;
+
+async function assertDivisionOk(
+  departmentId: string,
+  officeId: string,
+  officeDivisionId: string | null
+) {
+  if (!officeDivisionId) return null;
+  const division = await prismadb.officeDivision.findFirst({
+    where: {
+      id: officeDivisionId,
+      departmentId,
+      officeId,
+    },
+    select: { id: true, officeId: true },
+  });
+  return validateDivisionBelongsToOffice({ division, officeId });
+}
+
+async function assertEmployeeTypeOk(
+  departmentId: string,
+  employeeTypeId: string | null
+) {
+  if (!employeeTypeId) return null;
+  const employeeType = await prismadb.employeeType.findFirst({
+    where: { id: employeeTypeId, departmentId },
+    select: { id: true },
+  });
+  if (!employeeType) {
+    return "Status (employee type) not found in this department";
+  }
+  return null;
+}
+
+function createPlantillaData(
+  departmentId: string,
+  officeId: string,
+  value: Pick<
+    NormalizedPlantilla,
+    | "itemNumber"
+    | "title"
+    | "salaryGrade"
+    | "officeDivisionId"
+    | "employeeTypeId"
+    | "isActive"
+  > & { itemNumber: string | null }
+) {
+  return {
+    department: { connect: { id: departmentId } },
+    office: { connect: { id: officeId } },
+    ...(value.officeDivisionId
+      ? { officeDivision: { connect: { id: value.officeDivisionId } } }
+      : {}),
+    ...(value.employeeTypeId
+      ? { employeeType: { connect: { id: value.employeeTypeId } } }
+      : {}),
+    itemNumber: value.itemNumber,
+    title: value.title,
+    salaryGrade: value.salaryGrade,
+    salaryStep: null,
+    isActive: value.isActive,
+  };
+}
 
 export async function GET(
   req: Request,
@@ -37,6 +116,7 @@ export async function GET(
       orderBy: [{ itemNumber: "asc" }, { title: "asc" }],
       include: {
         officeDivision: { select: { id: true, name: true } },
+        employeeType: { select: { id: true, name: true } },
         employee: {
           select: {
             id: true,
@@ -65,71 +145,201 @@ export async function POST(
     if (access.error) return access.error;
 
     const body = await req.json();
+
+    // Bulk paste create: { items: [...] }
+    if (Array.isArray(body.items)) {
+      if (body.items.length === 0) {
+        return NextResponse.json({ error: "Paste list is empty" }, { status: 400 });
+      }
+      if (body.items.length > MAX_PLANTILLA_PASTE_ROWS) {
+        return NextResponse.json(
+          { error: `Paste is limited to ${MAX_PLANTILLA_PASTE_ROWS} rows` },
+          { status: 400 }
+        );
+      }
+
+      const normalizedRows: NormalizedPlantilla[] = [];
+      for (let i = 0; i < body.items.length; i++) {
+        const row = body.items[i];
+        const normalized = normalizePlantillaInput({
+          itemNumber: row?.itemNumber ?? null,
+          title: row?.title,
+          salaryGrade: row?.salaryGrade,
+          salaryStep: null,
+          officeDivisionId: row?.officeDivisionId,
+          employeeTypeId: row?.employeeTypeId,
+          isActive: row?.isActive,
+        });
+        if (normalized.error || !normalized.value) {
+          return NextResponse.json(
+            { error: `Row ${i + 1}: ${normalized.error ?? "Invalid row"}` },
+            { status: 400 }
+          );
+        }
+        normalizedRows.push(normalized.value);
+      }
+
+      const pasteItemNumbers = normalizedRows
+        .map((r) => r.itemNumber)
+        .filter((n): n is string => Boolean(n));
+      const seenItemNumbers = new Set<string>();
+      for (const itemNumber of pasteItemNumbers) {
+        const key = itemNumber.toLowerCase();
+        if (seenItemNumbers.has(key)) {
+          return NextResponse.json(
+            { error: `Duplicate item number in paste: ${itemNumber}` },
+            { status: 400 }
+          );
+        }
+        seenItemNumbers.add(key);
+      }
+      if (pasteItemNumbers.length) {
+        const duplicateItem = await prismadb.plantillaPosition.findFirst({
+          where: {
+            departmentId: params.departmentId,
+            OR: pasteItemNumbers.map((itemNumber) => ({
+              itemNumber: { equals: itemNumber, mode: "insensitive" as const },
+            })),
+          },
+          select: { id: true, itemNumber: true },
+        });
+        if (duplicateItem) {
+          return NextResponse.json(
+            {
+              error: `Item number already exists in this department${
+                duplicateItem.itemNumber ? `: ${duplicateItem.itemNumber}` : ""
+              }`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      const divisionIds = [
+        ...new Set(
+          normalizedRows
+            .map((r) => r.officeDivisionId)
+            .filter((id): id is string => Boolean(id))
+        ),
+      ];
+      for (const divisionId of divisionIds) {
+        const divisionError = await assertDivisionOk(
+          params.departmentId,
+          params.officeId,
+          divisionId
+        );
+        if (divisionError) {
+          return NextResponse.json({ error: divisionError }, { status: 400 });
+        }
+      }
+
+      const typeIds = [
+        ...new Set(
+          normalizedRows
+            .map((r) => r.employeeTypeId)
+            .filter((id): id is string => Boolean(id))
+        ),
+      ];
+      for (const typeId of typeIds) {
+        const typeError = await assertEmployeeTypeOk(params.departmentId, typeId);
+        if (typeError) {
+          return NextResponse.json({ error: typeError }, { status: 400 });
+        }
+      }
+
+      const created = await prismadb.$transaction(
+        normalizedRows.map((value) =>
+          prismadb.plantillaPosition.create({
+            data: createPlantillaData(params.departmentId, params.officeId, value),
+            include: plantillaInclude,
+          })
+        )
+      );
+
+      return NextResponse.json(
+        { count: created.length, items: created },
+        { status: 201 }
+      );
+    }
+
     const normalized = normalizePlantillaInput(body);
     if (normalized.error || !normalized.value) {
       return NextResponse.json({ error: normalized.error }, { status: 400 });
     }
 
     const value = normalized.value;
-    if (value.officeDivisionId) {
-      const division = await prismadb.officeDivision.findFirst({
+    const divisionError = await assertDivisionOk(
+      params.departmentId,
+      params.officeId,
+      value.officeDivisionId
+    );
+    if (divisionError) {
+      return NextResponse.json({ error: divisionError }, { status: 400 });
+    }
+
+    const quantityResult = normalizeCreateQuantity(body.quantity);
+    if (quantityResult.error || !quantityResult.quantity) {
+      return NextResponse.json({ error: quantityResult.error }, { status: 400 });
+    }
+    const quantity = quantityResult.quantity;
+
+    const typeError = await assertEmployeeTypeOk(
+      params.departmentId,
+      value.employeeTypeId
+    );
+    if (typeError) {
+      return NextResponse.json({ error: typeError }, { status: 400 });
+    }
+
+    const itemNumbers = buildPlantillaItemNumbers(value.itemNumber, quantity);
+    const numbered = itemNumbers.filter((n): n is string => Boolean(n));
+    if (numbered.length) {
+      const duplicateItem = await prismadb.plantillaPosition.findFirst({
         where: {
-          id: value.officeDivisionId,
           departmentId: params.departmentId,
-          officeId: params.officeId,
+          OR: numbered.map((itemNumber) => ({
+            itemNumber: { equals: itemNumber, mode: "insensitive" as const },
+          })),
         },
-        select: { id: true, officeId: true },
+        select: { id: true, itemNumber: true },
       });
-      const divisionError = validateDivisionBelongsToOffice({
-        division,
-        officeId: params.officeId,
-      });
-      if (divisionError) {
-        return NextResponse.json({ error: divisionError }, { status: 400 });
+      if (duplicateItem) {
+        return NextResponse.json(
+          {
+            error: `Item number already exists in this department${
+              duplicateItem.itemNumber ? `: ${duplicateItem.itemNumber}` : ""
+            }`,
+          },
+          { status: 400 }
+        );
       }
     }
 
-    const duplicateItem = await prismadb.plantillaPosition.findFirst({
-      where: {
-        departmentId: params.departmentId,
-        itemNumber: { equals: value.itemNumber, mode: "insensitive" },
-      },
-      select: { id: true },
-    });
-    if (duplicateItem) {
-      return NextResponse.json(
-        { error: "Item number already exists in this department" },
-        { status: 400 }
-      );
-    }
+    const created = await prismadb.$transaction(
+      itemNumbers.map((itemNumber) =>
+        prismadb.plantillaPosition.create({
+          data: createPlantillaData(params.departmentId, params.officeId, {
+            ...value,
+            itemNumber,
+          }),
+          include: plantillaInclude,
+        })
+      )
+    );
 
-    const created = await prismadb.plantillaPosition.create({
-      data: {
-        departmentId: params.departmentId,
-        officeId: params.officeId,
-        officeDivisionId: value.officeDivisionId,
-        itemNumber: value.itemNumber,
-        title: value.title,
-        salaryGrade: value.salaryGrade,
-        salaryStep: value.salaryStep,
-        isActive: value.isActive,
-      },
-      include: {
-        officeDivision: { select: { id: true, name: true } },
-        employee: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            employeeNo: true,
-          },
-        },
-      },
-    });
-
-    return NextResponse.json(created, { status: 201 });
+    return NextResponse.json(
+      quantity === 1 ? created[0] : { count: created.length, items: created },
+      { status: 201 }
+    );
   } catch (error) {
     console.log("[OFFICE_PLANTILLA_POST]", error);
-    return new NextResponse("Internal Error", { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal Error";
+    const short =
+      typeof message === "string" && message.includes("Argument `")
+        ? "Could not create plantilla item. Check required fields and try again."
+        : message.length > 240
+          ? "Internal Error"
+          : message;
+    return NextResponse.json({ error: short }, { status: 500 });
   }
 }

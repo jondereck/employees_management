@@ -5,6 +5,16 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-14 — feat: plantilla select auto-updates BIO item-number suffix (keep prefix; bypass lock)
+- 2026-07-14 — feat: Plantilla Item dropdown prioritizes items from selected assignment office (list + search)
+- 2026-07-14 — feat: bulk-paste plantilla supports optional Item No. column (e.g. 12-1)
+- 2026-07-14 — fix: plantilla dropdown disambiguates duplicate titles (vacant slot / SG); cmdk unique item values
+- 2026-07-14 — feat: bulk-paste plantilla create (Title/SG/Status → preview → create)
+- 2026-07-14 — fix: plantilla create uses relation connect + regenerate client for nullable itemNumber; raise toast above modal; Qty above Item number
+- 2026-07-14 — ui: plantilla Qty as compact ± stepper chip in add dialog header
+- 2026-07-14 — ui: move plantilla create quantity to compact top-right field in add dialog
+- 2026-07-14 — feat: plantilla Item Number optional (nullable) for Casual / no-number slots
+- 2026-07-14 — feat: plantilla Status from employee types; drop Step field; cap SG; auto-fill employee type/BIO on select
 - 2026-07-14 — fix: show locked Bio number message as hover tooltip
 - 2026-07-14 — fix: when plantilla locks Position, hide frequently-used chips, clear X, and format switch
 - 2026-07-14 — fix: show plantilla Position/SG lock reason as hover tooltip only

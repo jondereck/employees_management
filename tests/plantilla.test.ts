@@ -2,14 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildPlantillaItemNumbers,
+  matchEmployeeTypeId,
+  normalizeCreateQuantity,
   normalizeDivisionInput,
   normalizeOptionalId,
   normalizePlantillaInput,
+  normalizeStatusKey,
+  parsePlantillaPaste,
   resolveDivisionLabel,
   resolvePlantillaLabel,
   resolvePositionLabel,
   validateDivisionBelongsToOffice,
   validatePlantillaAssignment,
+  buildPlantillaSelectOptions,
+  formatPlantillaSelectOptionLabel,
+  composeEmployeeBio,
+  splitEmployeeBio,
+  sortPlantillaByAssignmentOffice,
 } from "../lib/plantilla";
 
 test("normalizeDivisionInput requires a non-empty name", () => {
@@ -19,11 +29,12 @@ test("normalizeDivisionInput requires a non-empty name", () => {
   assert.deepEqual(ok.value, { name: "BAC", sortOrder: 2 });
 });
 
-test("normalizePlantillaInput validates item number, title, and salary bounds", () => {
-  assert.match(
-    normalizePlantillaInput({ itemNumber: "", title: "Aide" }).error ?? "",
-    /Item number/
-  );
+test("normalizePlantillaInput allows empty item number and validates salary bounds", () => {
+  const emptyItem = normalizePlantillaInput({ itemNumber: "", title: "Aide" });
+  assert.equal(emptyItem.error, undefined);
+  assert.equal(emptyItem.value?.itemNumber, null);
+  assert.equal(emptyItem.value?.title, "Aide");
+
   assert.match(
     normalizePlantillaInput({ itemNumber: "1", title: "Aide", salaryGrade: 99 }).error ?? "",
     /Salary grade/
@@ -43,7 +54,83 @@ test("normalizePlantillaInput validates item number, title, and salary bounds", 
   assert.equal(ok.value?.isActive, true);
 });
 
-test("normalizeOptionalId treats empty and none as null", () => {
+test("buildPlantillaItemNumbers supports multi-create suffixes and empty bases", () => {
+  assert.deepEqual(buildPlantillaItemNumbers("12", 1), ["12"]);
+  assert.deepEqual(buildPlantillaItemNumbers("12", 3), ["12-1", "12-2", "12-3"]);
+  assert.deepEqual(buildPlantillaItemNumbers(null, 3), [null, null, null]);
+});
+
+test("normalizeCreateQuantity caps multi-create to 1–10", () => {
+  assert.equal(normalizeCreateQuantity(undefined).quantity, 1);
+  assert.equal(normalizeCreateQuantity(3).quantity, 3);
+  assert.match(normalizeCreateQuantity(11).error ?? "", /Quantity/);
+  assert.match(normalizeCreateQuantity(0).error ?? "", /Quantity/);
+});
+
+test("parsePlantillaPaste detects Title/SG/Status rows and keeps plain titles plain", () => {
+  assert.equal(parsePlantillaPaste("Administrative Aide III").mode, "plain");
+
+  const sample = [
+    "Municipal Mayor\t27\tElected",
+    "Sr. Admin. Assistant III (Private Sec. II)\t15\tCo-Terminus",
+    "Administrative Aide IV (Clerk II)\t4\tCo-Terminus",
+  ].join("\n");
+  const bulk = parsePlantillaPaste(sample);
+  assert.equal(bulk.mode, "bulk");
+  assert.equal(bulk.rows.length, 3);
+  assert.deepEqual(bulk.rows[0], {
+    itemNumber: null,
+    title: "Municipal Mayor",
+    salaryGrade: 27,
+    statusLabel: "Elected",
+  });
+  assert.equal(bulk.rows[1].salaryGrade, 15);
+  assert.equal(bulk.rows[2].statusLabel, "Co-Terminus");
+  assert.equal(bulk.rows[2].itemNumber, null);
+
+  const spaced = parsePlantillaPaste("Aide IV  4  Casual");
+  assert.equal(spaced.mode, "bulk");
+  assert.equal(spaced.rows[0]?.title, "Aide IV");
+  assert.equal(spaced.rows[0]?.salaryGrade, 4);
+  assert.equal(spaced.rows[0]?.itemNumber, null);
+});
+
+test("parsePlantillaPaste supports optional ItemNo column including hyphenated numbers", () => {
+  const fourCol = parsePlantillaPaste(
+    "12-1\tMunicipal Mayor\t27\tElected\n12-2\tAdministrative Aide IV (Clerk II)\t4\tCo-Terminus"
+  );
+  assert.equal(fourCol.mode, "bulk");
+  assert.equal(fourCol.rows.length, 2);
+  assert.equal(fourCol.rows[0]?.itemNumber, "12-1");
+  assert.equal(fourCol.rows[0]?.title, "Municipal Mayor");
+  assert.equal(fourCol.rows[0]?.salaryGrade, 27);
+  assert.equal(fourCol.rows[0]?.statusLabel, "Elected");
+  assert.equal(fourCol.rows[1]?.itemNumber, "12-2");
+  assert.equal(fourCol.rows[1]?.salaryGrade, 4);
+
+  const threeColWithItem = parsePlantillaPaste("12-1\tAdministrative Aide IV\t4");
+  assert.equal(threeColWithItem.mode, "bulk");
+  assert.equal(threeColWithItem.rows[0]?.itemNumber, "12-1");
+  assert.equal(threeColWithItem.rows[0]?.title, "Administrative Aide IV");
+  assert.equal(threeColWithItem.rows[0]?.salaryGrade, 4);
+  assert.equal(threeColWithItem.rows[0]?.statusLabel, null);
+
+  const plainItem = parsePlantillaPaste("12\tMayor\t27\tElected");
+  assert.equal(plainItem.rows[0]?.itemNumber, "12");
+});
+
+test("matchEmployeeTypeId uses normalized name/value matching", () => {
+  assert.equal(normalizeStatusKey("Co-Terminus"), "coterminus");
+  const types = [
+    { id: "1", name: "Elected", value: "elected" },
+    { id: "2", name: "Co Terminus", value: "co_terminus" },
+  ];
+  assert.equal(matchEmployeeTypeId("Elected", types), "1");
+  assert.equal(matchEmployeeTypeId("Co-Terminus", types), "2");
+  assert.equal(matchEmployeeTypeId("Unknown Status", types), null);
+});
+
+test("normalizeOptionalId treats blank and none as null", () => {
   assert.equal(normalizeOptionalId(""), null);
   assert.equal(normalizeOptionalId("none"), null);
   assert.equal(normalizeOptionalId(" abc "), "abc");
@@ -159,4 +246,144 @@ test("dual-read label helpers prefer structured plantilla then legacy fallbacks"
 
   assert.equal(resolveDivisionLabel({ divisionName: " BAC " }), "BAC");
   assert.equal(resolveDivisionLabel({}), "");
+});
+
+test("sortPlantillaByAssignmentOffice prioritizes assignment office without reordering within groups", () => {
+  const items = [
+    { id: "a", officeId: "other", title: "B" },
+    { id: "b", officeId: "hrmo", title: "A" },
+    { id: "c", officeId: "other", title: "A" },
+    { id: "d", officeId: "hrmo", title: "B" },
+  ];
+
+  assert.deepEqual(
+    sortPlantillaByAssignmentOffice(items, "hrmo").map((i) => i.id),
+    ["b", "d", "a", "c"]
+  );
+  assert.deepEqual(sortPlantillaByAssignmentOffice(items, null), items);
+  assert.deepEqual(sortPlantillaByAssignmentOffice(items, ""), items);
+});
+
+test("plantilla select labels disambiguate duplicate vacant slots", () => {
+  const items = [
+    {
+      id: "aaa-111",
+      officeName: "HRMO",
+      officeDivisionName: null,
+      itemNumber: null,
+      title: "Administrative Aide IV",
+      salaryGrade: 4,
+    },
+    {
+      id: "bbb-222",
+      officeName: "HRMO",
+      officeDivisionName: null,
+      itemNumber: null,
+      title: "Administrative Aide IV",
+      salaryGrade: 4,
+    },
+    {
+      id: "ccc-333",
+      officeName: "HRMO",
+      officeDivisionName: null,
+      itemNumber: null,
+      title: "Administrative Aide IV",
+      salaryGrade: 4,
+    },
+  ];
+
+  const options = buildPlantillaSelectOptions(items);
+  assert.equal(options.length, 3);
+  assert.equal(
+    options.find((o) => o.value === "aaa-111")?.label,
+    "HRMO — Administrative Aide IV · SG 4 (vacant slot 1)"
+  );
+  assert.equal(
+    options.find((o) => o.value === "bbb-222")?.label,
+    "HRMO — Administrative Aide IV · SG 4 (vacant slot 2)"
+  );
+  assert.equal(
+    options.find((o) => o.value === "ccc-333")?.label,
+    "HRMO — Administrative Aide IV · SG 4 (vacant slot 3)"
+  );
+
+  assert.equal(
+    formatPlantillaSelectOptionLabel({
+      id: "x",
+      officeName: "HRMO",
+      itemNumber: "12-1",
+      title: "Admin Aide III",
+    }),
+    "HRMO — 12-1 — Admin Aide III"
+  );
+});
+
+test("composeEmployeeBio keeps prefix and updates item-number suffix", () => {
+  assert.deepEqual(splitEmployeeBio("8540005, Z-39"), {
+    prefix: "8540005",
+    suffix: "Z-39",
+  });
+  assert.deepEqual(splitEmployeeBio("8540005"), {
+    prefix: "8540005",
+    suffix: "",
+  });
+
+  assert.equal(
+    composeEmployeeBio({
+      currentEmployeeNo: "8540005, E-1",
+      itemNumber: "Z-39",
+    }),
+    "8540005, Z-39"
+  );
+
+  assert.equal(
+    composeEmployeeBio({
+      currentEmployeeNo: "8540005",
+      itemNumber: "Z-39",
+    }),
+    "8540005, Z-39"
+  );
+
+  assert.equal(
+    composeEmployeeBio({
+      currentEmployeeNo: "",
+      officeBioIndexCode: "8540005",
+      itemNumber: "Z-39",
+    }),
+    "8540005, Z-39"
+  );
+
+  assert.equal(
+    composeEmployeeBio({
+      currentEmployeeNo: "",
+      officeBioIndexCode: "8540005,8540006",
+      itemNumber: "12-1",
+    }),
+    "8540005, 12-1"
+  );
+
+  assert.equal(
+    composeEmployeeBio({
+      currentEmployeeNo: "8540005, Z-39",
+      itemNumber: null,
+    }),
+    "8540005"
+  );
+
+  assert.equal(
+    composeEmployeeBio({
+      currentEmployeeNo: "8540005, Z-39",
+      itemNumber: "  ",
+    }),
+    "8540005"
+  );
+
+  assert.equal(
+    composeEmployeeBio({
+      currentEmployeeNo: "",
+      officeBioIndexCode: null,
+      itemNumber: "Z-39",
+    }),
+    null
+  );
 });

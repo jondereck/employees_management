@@ -61,6 +61,22 @@ export async function PATCH(
       }
     }
 
+    if (value.employeeTypeId) {
+      const employeeType = await prismadb.employeeType.findFirst({
+        where: {
+          id: value.employeeTypeId,
+          departmentId: params.departmentId,
+        },
+        select: { id: true },
+      });
+      if (!employeeType) {
+        return NextResponse.json(
+          { error: "Status (employee type) not found in this department" },
+          { status: 400 }
+        );
+      }
+    }
+
     if (value.itemNumber) {
       const duplicateItem = await prismadb.plantillaPosition.findFirst({
         where: {
@@ -78,22 +94,24 @@ export async function PATCH(
       }
     }
 
-    // Moving division while occupied by an employee with mismatched division is blocked client-side;
-    // also clear employee.officeDivisionId inconsistency is avoided by requiring match on assign.
     const updated = await prismadb.plantillaPosition.update({
       where: { id: params.plantillaId },
       data: {
         ...(value.itemNumber !== undefined ? { itemNumber: value.itemNumber } : {}),
         ...(value.title !== undefined ? { title: value.title } : {}),
         ...(value.salaryGrade !== undefined ? { salaryGrade: value.salaryGrade } : {}),
-        ...(value.salaryStep !== undefined ? { salaryStep: value.salaryStep } : {}),
+        ...(value.salaryStep !== undefined ? { salaryStep: null } : {}),
         ...(value.officeDivisionId !== undefined
           ? { officeDivisionId: value.officeDivisionId }
+          : {}),
+        ...(value.employeeTypeId !== undefined
+          ? { employeeTypeId: value.employeeTypeId }
           : {}),
         ...(value.isActive !== undefined ? { isActive: value.isActive } : {}),
       },
       include: {
         officeDivision: { select: { id: true, name: true } },
+        employeeType: { select: { id: true, name: true } },
         employee: {
           select: {
             id: true,

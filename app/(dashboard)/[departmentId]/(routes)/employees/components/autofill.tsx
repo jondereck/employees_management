@@ -138,6 +138,8 @@ type SelectProps = BaseProps & SelectFetchProps & {
 
   searchable?: boolean;             // NEW
   searchPlaceholder?: string;       // NEW
+  /** Option values ranked first when searchable filter is active (e.g. current assignment office). */
+  boostValues?: string[];
 };
 
 type TextareaProps = BaseProps & {
@@ -798,6 +800,7 @@ function SelectField({
   // Searchable combobox
   searchable,
   searchPlaceholder,
+  boostValues,
 }: SelectProps) {
   type SelectOption = { value: string; label: string };
 
@@ -1001,6 +1004,25 @@ function SelectField({
     return m;
   }, [ordered]);
 
+  const boostSet = useMemo(
+    () => new Set((boostValues ?? []).map((v) => normalizeOpt(v).toLowerCase())),
+    [boostValues, normalizeOpt]
+  );
+
+  const commandFilter = useCallback(
+    (value: string, search: string) => {
+      const haystack = value.toLowerCase();
+      const needle = search.trim().toLowerCase();
+      if (needle && !haystack.includes(needle)) return 0;
+
+      for (const id of boostSet) {
+        if (haystack.endsWith(id)) return 2;
+      }
+      return 1;
+    },
+    [boostSet]
+  );
+
   const hasValue = Boolean(field.value);
   const currentValue = field.value == null ? "" : String(field.value).trim();
   // 👇 ADD THESE
@@ -1046,7 +1068,11 @@ function SelectField({
               className="w-[var(--radix-popover-trigger-width)] p-1 shadow-xl border-border/50 backdrop-blur-md" 
               align="start"
             >
-              <Command className="bg-transparent" shouldFilter>
+              <Command
+                className="bg-transparent"
+                shouldFilter
+                filter={boostSet.size > 0 ? commandFilter : undefined}
+              >
                 <CommandInput 
                   placeholder={searchPlaceholder ?? "Search..."} 
                   className="h-8 text-sm border-none focus:ring-0" 
@@ -1059,6 +1085,7 @@ function SelectField({
                     {ordered.map(opt => (
                       <CommandItem
                         key={opt.value}
+                        value={`${opt.label} ${opt.value}`}
                         className="rounded-sm text-sm py-1.5 px-2 cursor-pointer"
                         onSelect={() => {
                           field.onChange(String(opt.value).trim());

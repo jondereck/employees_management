@@ -3,7 +3,7 @@
 import * as React from "react";
 import axios from "axios";
 import { useParams } from "next/navigation";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Minus, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { AlertModal } from "@/components/modals/alert-modal";
 import { Badge } from "@/components/ui/badge";
@@ -26,19 +26,39 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 
 import type { OfficeDivisionDto } from "./office-divisions-section";
+import {
+  matchEmployeeTypeId,
+  MAX_PLANTILLA_CREATE_QUANTITY,
+  MAX_PLANTILLA_SALARY_GRADE,
+  parsePlantillaPaste,
+} from "@/lib/plantilla";
+
+type EmployeeTypeOption = { id: string; name: string; value?: string | null };
+
+type PastePreviewRow = {
+  itemNumber: string | null;
+  title: string;
+  salaryGrade: number | null;
+  statusLabel: string | null;
+  employeeTypeId: string | null;
+  statusMatched: boolean;
+  error?: string;
+};
 
 type PlantillaDto = {
   id: string;
   itemNumber: string;
   title: string;
   salaryGrade: number | null;
-  salaryStep: number | null;
   isActive: boolean;
   officeDivisionId: string | null;
+  employeeTypeId: string | null;
   officeDivision: { id: string; name: string } | null;
+  employeeType: { id: string; name: string } | null;
   employee: {
     id: string;
     firstName: string;
@@ -52,18 +72,20 @@ type FormState = {
   itemNumber: string;
   title: string;
   salaryGrade: string;
-  salaryStep: string;
   officeDivisionId: string;
+  employeeTypeId: string;
   isActive: boolean;
+  quantity: string;
 };
 
 const emptyForm = (): FormState => ({
   itemNumber: "",
   title: "",
   salaryGrade: "",
-  salaryStep: "",
   officeDivisionId: "none",
+  employeeTypeId: "none",
   isActive: true,
+  quantity: "1",
 });
 
 type Props = {
@@ -79,15 +101,20 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
   const [saving, setSaving] = React.useState(false);
   const [items, setItems] = React.useState<PlantillaDto[]>([]);
   const [divisions, setDivisions] = React.useState<OfficeDivisionDto[]>([]);
+  const [employeeTypes, setEmployeeTypes] = React.useState<EmployeeTypeOption[]>([]);
   const [filterDivision, setFilterDivision] = React.useState<string>("all");
   const [filterStatus, setFilterStatus] = React.useState<string>("all");
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<FormState>(emptyForm());
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
+  const [pastePreview, setPastePreview] = React.useState<PastePreviewRow[] | null>(
+    null
+  );
 
   const plantillaUrl = `/api/${departmentId}/offices/${officeId}/plantilla`;
   const divisionsUrl = `/api/${departmentId}/offices/${officeId}/divisions`;
+  const employeeTypesUrl = `/api/${departmentId}/employee_type`;
 
   const load = React.useCallback(async () => {
     try {
@@ -101,9 +128,10 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
         qs.set("status", filterStatus);
       }
 
-      const [plantillaRes, divisionsRes] = await Promise.all([
+      const [plantillaRes, divisionsRes, typesRes] = await Promise.all([
         axios.get<PlantillaDto[]>(`${plantillaUrl}?${qs.toString()}`),
         axios.get<OfficeDivisionDto[]>(divisionsUrl),
+        axios.get<EmployeeTypeOption[]>(employeeTypesUrl),
       ]);
 
       let data = plantillaRes.data;
@@ -112,6 +140,11 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
       }
       setItems(data);
       setDivisions(divisionsRes.data);
+      setEmployeeTypes(
+        Array.isArray(typesRes.data)
+          ? [...typesRes.data].sort((a, b) => a.name.localeCompare(b.name))
+          : []
+      );
     } catch {
       toast({
         variant: "destructive",
@@ -121,7 +154,7 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [plantillaUrl, divisionsUrl, filterDivision, filterStatus]);
+  }, [plantillaUrl, divisionsUrl, employeeTypesUrl, filterDivision, filterStatus]);
 
   React.useEffect(() => {
     void load();
@@ -130,39 +163,166 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
   const openCreate = () => {
     setEditingId(null);
     setForm(emptyForm());
+    setPastePreview(null);
     setDialogOpen(true);
   };
 
   const openEdit = (item: PlantillaDto) => {
     setEditingId(item.id);
+    setPastePreview(null);
     setForm({
-      itemNumber: item.itemNumber,
+      itemNumber: item.itemNumber ?? "",
       title: item.title,
       salaryGrade: item.salaryGrade?.toString() ?? "",
-      salaryStep: item.salaryStep?.toString() ?? "",
       officeDivisionId: item.officeDivisionId ?? "none",
+      employeeTypeId: item.employeeTypeId ?? item.employeeType?.id ?? "none",
       isActive: item.isActive,
+      quantity: "1",
     });
     setDialogOpen(true);
   };
 
-  const onSave = async () => {
-    if (!form.itemNumber.trim() || !form.title.trim()) {
+  const buildPastePreview = React.useCallback(
+    (rows: ReturnType<typeof parsePlantillaPaste>["rows"]): PastePreviewRow[] =>
+      rows.map((row) => {
+        const employeeTypeId = matchEmployeeTypeId(row.statusLabel, employeeTypes);
+        return {
+          itemNumber: row.itemNumber,
+          title: row.title,
+          salaryGrade: row.salaryGrade,
+          statusLabel: row.statusLabel,
+          employeeTypeId,
+          statusMatched: !row.statusLabel || Boolean(employeeTypeId),
+          error: row.error,
+        };
+      }),
+    [employeeTypes]
+  );
+
+  const tryEnterPastePreview = (text: string): boolean => {
+    const parsed = parsePlantillaPaste(text);
+    if (parsed.mode !== "bulk") return false;
+    if (parsed.error) {
       toast({
         variant: "destructive",
-        title: "Missing fields",
-        description: "Item number and title are required.",
+        title: "Paste too large",
+        description: parsed.error,
+      });
+      return true;
+    }
+    setPastePreview(buildPastePreview(parsed.rows));
+    setForm((f) => ({ ...f, title: "" }));
+    return true;
+  };
+
+  const onSavePaste = async () => {
+    if (!pastePreview?.length) return;
+    const invalid = pastePreview.find((row) => row.error);
+    if (invalid) {
+      toast({
+        variant: "destructive",
+        title: "Fix paste errors",
+        description: invalid.error ?? "One or more rows are invalid.",
       });
       return;
     }
 
+    const officeDivisionId =
+      form.officeDivisionId === "none" ? null : form.officeDivisionId;
+    const unmatched = pastePreview.filter(
+      (r) => r.statusLabel && !r.statusMatched
+    ).length;
+
+    try {
+      setSaving(true);
+      await axios.post(plantillaUrl, {
+        items: pastePreview.map((row) => ({
+          itemNumber: row.itemNumber,
+          title: row.title,
+          salaryGrade: row.salaryGrade,
+          employeeTypeId: row.employeeTypeId,
+          officeDivisionId,
+          isActive: form.isActive,
+        })),
+      });
+      toast({
+        title: `${pastePreview.length} plantilla items created`,
+        description:
+          unmatched > 0
+            ? `${unmatched} status unmatched (set to None)`
+            : undefined,
+      });
+      setPastePreview(null);
+      setDialogOpen(false);
+      await load();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Could not create plantilla items",
+        description: error?.response?.data?.error || "Request failed.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onSave = async () => {
+    if (!form.title.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Missing fields",
+        description: "Position title is required.",
+      });
+      return;
+    }
+
+    let salaryGrade: number | null = null;
+    if (form.salaryGrade.trim()) {
+      const n = Number(form.salaryGrade);
+      if (
+        !Number.isFinite(n) ||
+        !Number.isInteger(n) ||
+        n < 1 ||
+        n > MAX_PLANTILLA_SALARY_GRADE
+      ) {
+        toast({
+          variant: "destructive",
+          title: "Invalid salary grade",
+          description: `Salary grade must be between 1 and ${MAX_PLANTILLA_SALARY_GRADE}.`,
+        });
+        return;
+      }
+      salaryGrade = n;
+    }
+
+    let quantity = 1;
+    if (!editingId) {
+      const q = Number(form.quantity);
+      if (
+        !Number.isFinite(q) ||
+        !Number.isInteger(q) ||
+        q < 1 ||
+        q > MAX_PLANTILLA_CREATE_QUANTITY
+      ) {
+        toast({
+          variant: "destructive",
+          title: "Invalid quantity",
+          description: `Quantity must be between 1 and ${MAX_PLANTILLA_CREATE_QUANTITY}.`,
+        });
+        return;
+      }
+      quantity = q;
+    }
+
     const payload = {
-      itemNumber: form.itemNumber.trim(),
+      itemNumber: form.itemNumber.trim() || null,
       title: form.title.trim(),
-      salaryGrade: form.salaryGrade ? Number(form.salaryGrade) : null,
-      salaryStep: form.salaryStep ? Number(form.salaryStep) : null,
+      salaryGrade,
+      salaryStep: null,
       officeDivisionId: form.officeDivisionId === "none" ? null : form.officeDivisionId,
+      employeeTypeId: form.employeeTypeId === "none" ? null : form.employeeTypeId,
       isActive: form.isActive,
+      ...(editingId ? {} : { quantity }),
     };
 
     try {
@@ -172,7 +332,12 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
         toast({ title: "Plantilla item updated" });
       } else {
         await axios.post(plantillaUrl, payload);
-        toast({ title: "Plantilla item created" });
+        toast({
+          title:
+            quantity === 1
+              ? "Plantilla item created"
+              : `${quantity} plantilla items created`,
+        });
       }
       setDialogOpen(false);
       await load();
@@ -254,10 +419,10 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
           <SelectTrigger className="sm:w-44">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder="Occupancy" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="all">All occupancy</SelectItem>
             <SelectItem value="vacant">Vacant</SelectItem>
             <SelectItem value="filled">Filled</SelectItem>
           </SelectContent>
@@ -278,8 +443,9 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
                 <th className="p-3 font-medium">Item No.</th>
                 <th className="p-3 font-medium">Title</th>
                 <th className="p-3 font-medium">Division</th>
-                <th className="p-3 font-medium">SG/Step</th>
                 <th className="p-3 font-medium">Status</th>
+                <th className="p-3 font-medium">SG</th>
+                <th className="p-3 font-medium">Occupancy</th>
                 <th className="p-3 font-medium">Occupant</th>
                 <th className="p-3 font-medium text-right">Actions</th>
               </tr>
@@ -287,15 +453,16 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="border-t">
-                  <td className="p-3 font-mono text-xs">{item.itemNumber}</td>
+                  <td className="p-3 font-mono text-xs">{item.itemNumber?.trim() || "—"}</td>
                   <td className="p-3">{item.title}</td>
                   <td className="p-3 text-muted-foreground">
                     {item.officeDivision?.name ?? "—"}
                   </td>
                   <td className="p-3 text-muted-foreground">
-                    {item.salaryGrade != null
-                      ? `SG ${item.salaryGrade}${item.salaryStep != null ? ` / Step ${item.salaryStep}` : ""}`
-                      : "—"}
+                    {item.employeeType?.name ?? "—"}
+                  </td>
+                  <td className="p-3 text-muted-foreground">
+                    {item.salaryGrade != null ? `SG ${item.salaryGrade}` : "—"}
                   </td>
                   <td className="p-3">
                     <div className="flex flex-wrap gap-1">
@@ -348,96 +515,360 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setPastePreview(null);
+        }}
+      >
+        <DialogContent className={pastePreview ? "sm:max-w-2xl" : "sm:max-w-lg"}>
           <DialogHeader>
             <DialogTitle>
-              {editingId ? "Edit plantilla item" : "Add plantilla item"}
+              {editingId
+                ? "Edit plantilla item"
+                : pastePreview
+                  ? `Paste preview (${pastePreview.length})`
+                  : "Add plantilla item"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="itemNumber">Item number</Label>
-              <Input
-                id="itemNumber"
-                value={form.itemNumber}
-                onChange={(e) => setForm((f) => ({ ...f, itemNumber: e.target.value }))}
-                placeholder="e.g. 12-1"
-              />
+
+          {pastePreview ? (
+            <div className="grid gap-4 py-2">
+              <p className="text-sm text-muted-foreground">
+                Review rows below. Division and Active apply to all.
+              </p>
+              <div className="grid gap-2">
+                <Label>Division</Label>
+                <Select
+                  value={form.officeDivisionId}
+                  onValueChange={(v) => setForm((f) => ({ ...f, officeDivisionId: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="None (office-level)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (office-level)</SelectItem>
+                    {divisions.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <div className="text-sm font-medium">Active</div>
+                  <div className="text-xs text-muted-foreground">
+                    Inactive items cannot be newly assigned to employees.
+                  </div>
+                </div>
+                <Switch
+                  checked={form.isActive}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
+                />
+              </div>
+              <div className="max-h-72 overflow-auto rounded-md border">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-muted/80 text-left">
+                    <tr>
+                      <th className="p-2 font-medium">Item No.</th>
+                      <th className="p-2 font-medium">Title</th>
+                      <th className="p-2 font-medium">SG</th>
+                      <th className="p-2 font-medium">Status</th>
+                      <th className="p-2 font-medium">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pastePreview.map((row, index) => {
+                      const matchedName = row.employeeTypeId
+                        ? employeeTypes.find((t) => t.id === row.employeeTypeId)?.name
+                        : null;
+                      return (
+                        <tr key={`${row.itemNumber ?? ""}-${row.title}-${index}`} className="border-t">
+                          <td className="p-2 align-top font-mono text-xs">
+                            {row.itemNumber?.trim() || "—"}
+                          </td>
+                          <td className="p-2 align-top">{row.title}</td>
+                          <td className="p-2 align-top text-muted-foreground">
+                            {row.salaryGrade ?? "—"}
+                          </td>
+                          <td className="p-2 align-top">
+                            {matchedName ?? (
+                              <span className="text-muted-foreground">None</span>
+                            )}
+                          </td>
+                          <td className="p-2 align-top text-xs text-muted-foreground">
+                            {row.error
+                              ? row.error
+                              : row.statusLabel && !row.statusMatched
+                                ? `“${row.statusLabel}” not found → None`
+                                : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="title">Position title</Label>
-              <Input
-                id="title"
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                placeholder="e.g. Administrative Aide III"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Division (optional)</Label>
-              <Select
-                value={form.officeDivisionId}
-                onValueChange={(v) => setForm((f) => ({ ...f, officeDivisionId: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="None (office-level)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (office-level)</SelectItem>
-                  {divisions.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+          ) : (
+            <div className="grid gap-4 py-2">
+              {!editingId ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Label htmlFor="quantity">Quantity</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Create up to {MAX_PLANTILLA_CREATE_QUANTITY} identical slots.
+                    </p>
+                  </div>
+                  <div
+                    className="flex h-9 shrink-0 items-center gap-1 rounded-md border bg-muted/50 px-1.5"
+                    title={`Create up to ${MAX_PLANTILLA_CREATE_QUANTITY} identical slots`}
+                  >
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                      disabled={Number(form.quantity || 1) <= 1 || saving}
+                      aria-label="Decrease quantity"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          quantity: String(Math.max(1, Number(f.quantity || 1) - 1)),
+                        }))
+                      }
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </Button>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      min={1}
+                      max={MAX_PLANTILLA_CREATE_QUANTITY}
+                      value={form.quantity}
+                      aria-label="Quantity"
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, "");
+                        if (!digits) {
+                          setForm((f) => ({ ...f, quantity: "" }));
+                          return;
+                        }
+                        const capped = Math.min(
+                          Number(digits),
+                          MAX_PLANTILLA_CREATE_QUANTITY
+                        );
+                        setForm((f) => ({
+                          ...f,
+                          quantity: String(Math.max(1, capped)),
+                        }));
+                      }}
+                      placeholder="1"
+                      className="h-7 w-9 border-0 bg-transparent px-0 text-center text-sm font-medium shadow-none focus-visible:ring-0"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                      disabled={
+                        Number(form.quantity || 1) >= MAX_PLANTILLA_CREATE_QUANTITY ||
+                        saving
+                      }
+                      aria-label="Increase quantity"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          quantity: String(
+                            Math.min(
+                              MAX_PLANTILLA_CREATE_QUANTITY,
+                              Number(f.quantity || 1) + 1
+                            )
+                          ),
+                        }))
+                      }
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="grid gap-2">
+                <Label htmlFor="itemNumber">Item number</Label>
+                <Input
+                  id="itemNumber"
+                  value={form.itemNumber}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, itemNumber: e.target.value }))
+                  }
+                  placeholder="e.g. 12-1 (leave empty for Casual)"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Leave empty when there is no plantilla number (common for Casual).
+                  {!editingId && Number(form.quantity) > 1
+                    ? form.itemNumber.trim()
+                      ? ` With qty ${form.quantity}, numbers will be ${form.itemNumber.trim()}-1 … ${form.itemNumber.trim()}-${form.quantity}.`
+                      : " With qty > 1, item numbers stay empty on each slot."
+                    : ""}
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="title">Position title</Label>
+                {editingId ? (
+                  <Input
+                    id="title"
+                    value={form.title}
+                    onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                    placeholder="e.g. Administrative Aide III"
+                  />
+                ) : (
+                  <Textarea
+                    id="title"
+                    value={form.title}
+                    rows={3}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.includes("\n") || value.includes("\t")) {
+                        if (tryEnterPastePreview(value)) return;
+                      }
+                      setForm((f) => ({ ...f, title: value }));
+                    }}
+                    onPaste={(e) => {
+                      const text = e.clipboardData.getData("text");
+                      if (tryEnterPastePreview(text)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    placeholder={
+                      "e.g. Administrative Aide III\nOr paste: ItemNo  Title  SG  Status"
+                    }
+                  />
+                )}
+                {!editingId ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Paste from Excel/Word: Item No. (optional), Title, SG, Status
+                    (tab or spaces). Opens a preview before creating.
+                  </p>
+                ) : null}
+              </div>
+              <div className="grid gap-2">
+                <Label>Status</Label>
+                <Select
+                  value={form.employeeTypeId}
+                  onValueChange={(v) => setForm((f) => ({ ...f, employeeTypeId: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {employeeTypes.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  From Employee Type / Appointment Status. Auto-fills when linking an
+                  employee.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label>Division</Label>
+                <Select
+                  value={form.officeDivisionId}
+                  onValueChange={(v) => setForm((f) => ({ ...f, officeDivisionId: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="None (office-level)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (office-level)</SelectItem>
+                    {divisions.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="salaryGrade">Salary grade</Label>
                 <Input
                   id="salaryGrade"
                   type="number"
                   min={1}
-                  max={33}
+                  max={MAX_PLANTILLA_SALARY_GRADE}
                   value={form.salaryGrade}
-                  onChange={(e) => setForm((f) => ({ ...f, salaryGrade: e.target.value }))}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, "");
+                    if (!digits) {
+                      setForm((f) => ({ ...f, salaryGrade: "" }));
+                      return;
+                    }
+                    const capped = Math.min(Number(digits), MAX_PLANTILLA_SALARY_GRADE);
+                    setForm((f) => ({ ...f, salaryGrade: String(capped) }));
+                  }}
+                  placeholder={`1–${MAX_PLANTILLA_SALARY_GRADE}`}
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Max SG {MAX_PLANTILLA_SALARY_GRADE}.
+                </p>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="salaryStep">Salary step</Label>
-                <Input
-                  id="salaryStep"
-                  type="number"
-                  min={1}
-                  max={8}
-                  value={form.salaryStep}
-                  onChange={(e) => setForm((f) => ({ ...f, salaryStep: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div>
-                <div className="text-sm font-medium">Active</div>
-                <div className="text-xs text-muted-foreground">
-                  Inactive items cannot be newly assigned to employees.
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <div className="text-sm font-medium">Active</div>
+                  <div className="text-xs text-muted-foreground">
+                    Inactive items cannot be newly assigned to employees.
+                  </div>
                 </div>
+                <Switch
+                  checked={form.isActive}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
+                />
               </div>
-              <Switch
-                checked={form.isActive}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
-              />
             </div>
-          </div>
+          )}
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={onSave} disabled={saving}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {editingId ? "Save changes" : "Create"}
-            </Button>
+            {pastePreview ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPastePreview(null)}
+                  disabled={saving}
+                >
+                  Back
+                </Button>
+                <Button type="button" onClick={onSavePaste} disabled={saving}>
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Create {pastePreview.length}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDialogOpen(false)}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" onClick={onSave} disabled={saving}>
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {editingId
+                    ? "Save changes"
+                    : Number(form.quantity) > 1
+                      ? `Create ×${form.quantity}`
+                      : "Create"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

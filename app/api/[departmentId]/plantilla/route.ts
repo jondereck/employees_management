@@ -41,8 +41,9 @@ export async function GET(
         { title: "asc" },
       ],
       include: {
-        office: { select: { id: true, name: true } },
+        office: { select: { id: true, name: true, bioIndexCode: true } },
         officeDivision: { select: { id: true, name: true } },
+        employeeType: { select: { id: true, name: true } },
         employee: {
           select: {
             id: true,

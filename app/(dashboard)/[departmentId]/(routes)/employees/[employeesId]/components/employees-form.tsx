@@ -44,6 +44,7 @@ import type { WeeklyExclusionDTO } from "@/lib/weeklyExclusions";
 import { EmployeeScheduleManager } from "./employee-schedule-manager";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { suggestWorkforceIndicator } from "@/lib/workforce-indicators";
+import { buildPlantillaSelectOptions, composeEmployeeBio, sortPlantillaByAssignmentOffice } from "@/lib/plantilla";
 
 
 
@@ -499,14 +500,14 @@ export const EmployeesForm = ({
   type DivisionOption = { id: string; name: string };
   type PlantillaOption = {
     id: string;
-    itemNumber: string;
+    itemNumber: string | null;
     title: string;
     officeId: string;
     officeName: string;
     officeDivisionId: string | null;
     officeDivisionName: string | null;
+    employeeTypeId: string | null;
     salaryGrade: number | null;
-    salaryStep: number | null;
     employee: { id: string } | null;
   };
   const [divisionOptions, setDivisionOptions] = useState<DivisionOption[]>([]);
@@ -549,16 +550,18 @@ export const EmployeesForm = ({
           Array.isArray(plantilla)
             ? plantilla.map((p: any) => ({
                 id: p.id,
-                itemNumber: p.itemNumber,
+                itemNumber:
+                  typeof p.itemNumber === "string" && p.itemNumber.trim()
+                    ? p.itemNumber.trim()
+                    : null,
                 title: p.title,
                 officeId: p.officeId ?? p.office?.id ?? "",
                 officeName: p.office?.name ?? "Unknown office",
                 officeDivisionId: p.officeDivisionId ?? null,
                 officeDivisionName: p.officeDivision?.name ?? null,
+                employeeTypeId: p.employeeTypeId ?? p.employeeType?.id ?? null,
                 salaryGrade:
                   typeof p.salaryGrade === "number" ? p.salaryGrade : null,
-                salaryStep:
-                  typeof p.salaryStep === "number" ? p.salaryStep : null,
                 employee: p.employee ? { id: p.employee.id } : null,
               }))
             : []
@@ -593,18 +596,24 @@ export const EmployeesForm = ({
     [divisionOptions]
   );
 
+  const sortedPlantillaOptions = useMemo(
+    () => sortPlantillaByAssignmentOffice(availablePlantillaOptions, officeId),
+    [availablePlantillaOptions, officeId]
+  );
+
   const plantillaSelectOptions = useMemo(
+    () => buildPlantillaSelectOptions(sortedPlantillaOptions),
+    [sortedPlantillaOptions]
+  );
+
+  const plantillaBoostValues = useMemo(
     () =>
-      availablePlantillaOptions.map((p) => {
-        const where = p.officeDivisionName
-          ? `${p.officeName} / ${p.officeDivisionName}`
-          : p.officeName;
-        return {
-          value: p.id,
-          label: `${where} — ${p.itemNumber} ${p.title}`,
-        };
-      }),
-    [availablePlantillaOptions]
+      officeId
+        ? sortedPlantillaOptions
+            .filter((item) => item.officeId === officeId)
+            .map((item) => item.id)
+        : undefined,
+    [sortedPlantillaOptions, officeId]
   );
 
   // Clear assignment division when office changes. Keep plantilla if still valid
@@ -637,6 +646,15 @@ export const EmployeesForm = ({
         shouldValidate: true,
       });
     }
+    if (
+      selected.employeeTypeId &&
+      form.getValues("employeeTypeId") !== selected.employeeTypeId
+    ) {
+      form.setValue("employeeTypeId", selected.employeeTypeId, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
     // Only sync assignment division when plantilla is under the same office.
     if (
       selected.officeId === officeId &&
@@ -645,9 +663,29 @@ export const EmployeesForm = ({
     ) {
       form.setValue("officeDivisionId", selected.officeDivisionId, { shouldDirty: true });
     }
-  }, [plantillaPositionId, plantillaOptions, officeId, form]);
+    // Auto-update BIO item-number suffix (bypass lock; keep biometric prefix).
+    const officeBio =
+      offices.find((o) => o.id === officeId)?.bioIndexCode ?? null;
+    const nextBio = composeEmployeeBio({
+      currentEmployeeNo: form.getValues("employeeNo"),
+      officeBioIndexCode: officeBio,
+      itemNumber: selected.itemNumber,
+    });
+    if (nextBio != null && form.getValues("employeeNo") !== nextBio) {
+      form.setValue("employeeNo", nextBio, {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
+    }
+  }, [plantillaPositionId, plantillaOptions, officeId, offices, form]);
 
   const plantillaLocksCompensation = Boolean(plantillaPositionId);
+  const selectedPlantilla = useMemo(
+    () => plantillaOptions.find((p) => p.id === plantillaPositionId) ?? null,
+    [plantillaOptions, plantillaPositionId]
+  );
+  const plantillaLocksEmployeeType = Boolean(selectedPlantilla?.employeeTypeId);
 
   const workforceIndicator = useMemo(
     () =>
@@ -694,8 +732,19 @@ export const EmployeesForm = ({
 
       if (suggestions.length === 1) {
         const suggested = suggestions[0].candidate.toUpperCase();
+        const plantillaId = form.getValues("plantillaPositionId");
+        const selectedPlantillaForBio = plantillaId
+          ? plantillaOptions.find((p) => p.id === plantillaId)
+          : undefined;
         const { emp } = splitEmployeeNo(form.getValues("employeeNo"));
-        const nextEmployeeNo = joinEmployeeNo(suggested, emp);
+        const nextEmployeeNo =
+          composeEmployeeBio({
+            currentEmployeeNo: suggested,
+            officeBioIndexCode: suggested,
+            itemNumber: selectedPlantillaForBio
+              ? selectedPlantillaForBio.itemNumber
+              : emp || null,
+          }) ?? joinEmployeeNo(suggested, emp);
         form.setValue("employeeNo", nextEmployeeNo, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
         setLastAutoBio(nextEmployeeNo);
         setLastAutoBioOfficeId(officeId);
@@ -713,7 +762,7 @@ export const EmployeesForm = ({
     } finally {
       setSuggesting(false);
     }
-  }, [hasTerminationState, officeId, params.departmentId, form, suggesting]);
+  }, [hasTerminationState, officeId, params.departmentId, form, suggesting, plantillaOptions]);
 
 
   useEffect(() => {
@@ -1196,6 +1245,7 @@ export const EmployeesForm = ({
                                 : "Any office in department…"
                             }
                             options={plantillaSelectOptions}
+                            boostValues={plantillaBoostValues}
                             searchable
                             allowClear
                             disabled={loading || loadingOrgStructure}
@@ -1474,27 +1524,56 @@ export const EmployeesForm = ({
                       ) : null}
                     </div>
                   )} />
-                  <FormField control={form.control} name="employeeTypeId" render={({ field }) => <AutoField
-                    kind="select"
-                    label="Appointment Status"
-                    field={field}
-                    required
-                    disabled={loading}
-                    placeholder="Select Appointment"
-                    recentKey="employeeTypeId"
-                    recentMax={3}
-                    recentLabel="Recently used"
-
-                    pinSuggestions
-                    pinnedLabel="Suggestions"
-                    options={employeeType
-                      .slice()
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map(et => ({ value: et.id, label: et.name }))}
-
-                    searchable
-                    searchPlaceholder="Search appointment..."
-                  />} />
+                  <FormField control={form.control} name="employeeTypeId" render={({ field }) => (
+                    plantillaLocksEmployeeType ? (
+                      <ActionTooltip
+                        label="Locked from selected Plantilla Item"
+                        description="Clear the plantilla to edit Appointment Status."
+                      >
+                        <div>
+                          <AutoField
+                            kind="select"
+                            label="Appointment Status"
+                            field={field}
+                            required
+                            disabled={loading || plantillaLocksEmployeeType}
+                            placeholder="Select Appointment"
+                            recentKey="employeeTypeId"
+                            recentMax={3}
+                            recentLabel="Recently used"
+                            pinSuggestions
+                            pinnedLabel="Suggestions"
+                            options={employeeType
+                              .slice()
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map(et => ({ value: et.id, label: et.name }))}
+                            searchable
+                            searchPlaceholder="Search appointment..."
+                          />
+                        </div>
+                      </ActionTooltip>
+                    ) : (
+                      <AutoField
+                        kind="select"
+                        label="Appointment Status"
+                        field={field}
+                        required
+                        disabled={loading}
+                        placeholder="Select Appointment"
+                        recentKey="employeeTypeId"
+                        recentMax={3}
+                        recentLabel="Recently used"
+                        pinSuggestions
+                        pinnedLabel="Suggestions"
+                        options={employeeType
+                          .slice()
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(et => ({ value: et.id, label: et.name }))}
+                        searchable
+                        searchPlaceholder="Search appointment..."
+                      />
+                    )
+                  )} />
                   <FormField control={form.control} name="eligibilityId" render={({ field }) => <AutoField
                     kind="select"
                     label="Civil Service Eligibility"
