@@ -389,7 +389,7 @@ export default function HrPlanningTab({ departmentId, year }: { departmentId: st
 
       <PlaceholderSection
         title="II. Workforce Gap Analysis"
-        reason="Needs plantilla required-positions and vacancy tracking (Existing vs Required, Critical Vacancies). Not stored as structured fields yet."
+        reason="Structured plantilla items now exist under Offices (individual authorized slots with vacant/filled status). Aggregate Existing vs Required / Critical Vacancies reporting for this section is not wired yet."
       />
 
       <Card>

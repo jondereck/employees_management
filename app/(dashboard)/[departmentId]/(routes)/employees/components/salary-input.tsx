@@ -8,14 +8,22 @@ import { toast } from "sonner";
 import { computeStep } from "@/utils/compute-step";
 import { Switch } from "@/components/ui/switch"; // shadcn switch (or use Checkbox)
 import { cn } from "@/lib/utils";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 
 interface SalaryInputProps {
   form: any; // UseFormReturn<EmployeesFormValues>
   loading: boolean;
   maxStep?: number; // 8 or 32
+  /** When a structured plantilla item is linked, SG is driven by that item. */
+  lockGradeFromPlantilla?: boolean;
 }
 
-export function SalaryInput({ form, loading, maxStep = 8 }: SalaryInputProps) {
+export function SalaryInput({
+  form,
+  loading,
+  maxStep = 8,
+  lockGradeFromPlantilla = false,
+}: SalaryInputProps) {
   const sg = form.watch("salaryGrade");
   const dateHired = form.watch("dateHired");
   const latestAppointment = form.watch("latestAppointment");
@@ -196,30 +204,50 @@ useEffect(() => {
           Salary Grade {<span className="text-destructive/70">*</span>}
         </FormLabel>
         <FormControl>
-          <div className="relative group">
-  {/* LEFT PREFIX */}
-  <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2
-                  text-[10px] font-bold tracking-widest
-                  text-muted-foreground/40
-                  group-focus-within:text-primary/50
-                  transition-colors">
-    S.G.
-  </div>
-
-  <Input
-    className="h-9 pl-10 transition-all focus-visible:ring-1" // 👈 KEY CHANGE
-    disabled={loading}
-    inputMode="numeric"
-    placeholder="e.g. 15"
-    value={field.value ?? ""}
-    onChange={(e) => handleGradeChange(e.target.value, field.onChange)}
-  />
-</div>
-
+          {lockGradeFromPlantilla ? (
+            <ActionTooltip
+              label="Locked from selected Plantilla Item"
+              description="Clear the plantilla to edit SG."
+            >
+              <div className="relative group">
+                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2
+                                text-[10px] font-bold tracking-widest
+                                text-muted-foreground/40
+                                group-focus-within:text-primary/50
+                                transition-colors">
+                  S.G.
+                </div>
+                <Input
+                  className="h-9 pl-10 transition-all focus-visible:ring-1"
+                  disabled
+                  inputMode="numeric"
+                  placeholder="e.g. 15"
+                  value={field.value ?? ""}
+                  onChange={(e) => handleGradeChange(e.target.value, field.onChange)}
+                />
+              </div>
+            </ActionTooltip>
+          ) : (
+            <div className="relative group">
+              <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2
+                              text-[10px] font-bold tracking-widest
+                              text-muted-foreground/40
+                              group-focus-within:text-primary/50
+                              transition-colors">
+                S.G.
+              </div>
+              <Input
+                className="h-9 pl-10 transition-all focus-visible:ring-1"
+                disabled={loading}
+                inputMode="numeric"
+                placeholder="e.g. 15"
+                value={field.value ?? ""}
+                onChange={(e) => handleGradeChange(e.target.value, field.onChange)}
+              />
+            </div>
+          )}
         </FormControl>
-        <FormDescription className="text-[11px]">
-          Highest available: {maxGrade ? `SG ${maxGrade}` : "Loading..."}
-        </FormDescription>
+ 
         <FormMessage className="text-[11px]" />
       </FormItem>
     )}

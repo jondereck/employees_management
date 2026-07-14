@@ -19,6 +19,8 @@ import { useOrigin } from "@/hooks/use-origin";
 import ImageUpload from "@/components/ui/image-upload";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AutoField } from "../../../employees/components/autofill";
+import OfficeDivisionsSection from "./office-divisions-section";
+import OfficePlantillaSection from "./office-plantilla-section";
 import TimekeepingDefaultsSection from "./timekeeping-defaults";
 
 
@@ -46,6 +48,7 @@ export const OfficeForm = ({
 }: OfficeFormProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [plantillaRefreshKey, setPlantillaRefreshKey] = useState(0);
 
   const title = initialData ? "Edit Office" : "Create Office";
   const description = initialData ? "Edit a Office" : "Add new Office";
@@ -248,7 +251,11 @@ export const OfficeForm = ({
       </Form>
       <Separator />
       {initialData ? (
-        <div className="pt-6">
+        <div className="space-y-10 pt-6">
+          <OfficeDivisionsSection
+            onChanged={() => setPlantillaRefreshKey((k) => k + 1)}
+          />
+          <OfficePlantillaSection refreshKey={plantillaRefreshKey} />
           <TimekeepingDefaultsSection />
         </div>
       ) : null}

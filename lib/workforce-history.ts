@@ -47,6 +47,8 @@ export type WorkforceSnapshotEmployee = {
   id: string;
   departmentId: string;
   officeId: string;
+  officeDivisionId?: string | null;
+  plantillaPositionId?: string | null;
   employeeTypeId: string;
   eligibilityId: string;
   position: string;
@@ -502,6 +504,8 @@ export function snapshotFieldsChanged(
   before: Pick<
     WorkforceSnapshotEmployee,
     | "officeId"
+    | "officeDivisionId"
+    | "plantillaPositionId"
     | "employeeTypeId"
     | "eligibilityId"
     | "position"
@@ -514,6 +518,8 @@ export function snapshotFieldsChanged(
   after: Pick<
     WorkforceSnapshotEmployee,
     | "officeId"
+    | "officeDivisionId"
+    | "plantillaPositionId"
     | "employeeTypeId"
     | "eligibilityId"
     | "position"
@@ -526,6 +532,8 @@ export function snapshotFieldsChanged(
 ) {
   return (
     before.officeId !== after.officeId ||
+    (before.officeDivisionId ?? null) !== (after.officeDivisionId ?? null) ||
+    (before.plantillaPositionId ?? null) !== (after.plantillaPositionId ?? null) ||
     before.employeeTypeId !== after.employeeTypeId ||
     before.eligibilityId !== after.eligibilityId ||
     before.position !== after.position ||
@@ -577,6 +585,8 @@ export async function createEmployeeHistorySnapshot(
       employeeId: employee.id,
       effectiveAt,
       officeId: employee.officeId || null,
+      officeDivisionId: employee.officeDivisionId ?? null,
+      plantillaPositionId: employee.plantillaPositionId ?? null,
       employeeTypeId: employee.employeeTypeId || null,
       eligibilityId: employee.eligibilityId || null,
       position: employee.position ?? "",

@@ -303,12 +303,30 @@ export async function generateExcelFile({
     copy.comma = (hasText(copy.barangay) && hasText(copy.city)) ? "," : "";
 
 
-    // --- Plantilla: designation name or fallback to office name ---
-    if (copy.designationId && officeMapping[copy.designationId]) {
+    // --- Plantilla: structured item → legacy designation office → office ---
+    const structuredTitle =
+      copy.plantillaPosition?.title ||
+      copy.plantillaPositionTitle ||
+      null;
+    const structuredItem =
+      copy.plantillaPosition?.itemNumber ||
+      copy.plantillaItemNumber ||
+      null;
+    const divisionName =
+      copy.officeDivision?.name ||
+      copy.officeDivisionName ||
+      "";
+
+    if (structuredTitle) {
+      copy.plantilla = structuredItem
+        ? `${structuredItem} — ${structuredTitle}`
+        : structuredTitle;
+    } else if (copy.designationId && officeMapping[copy.designationId]) {
       copy.plantilla = officeMapping[copy.designationId];
     } else {
       copy.plantilla = copy.office || '';
     }
+    copy.division = divisionName;
 
     // --- Dates ---
     if (copy.birthday) {

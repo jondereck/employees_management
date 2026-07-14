@@ -5,6 +5,8 @@ export const BACKUP_MODEL_NAMES = [
   "Department",
   "Billboard",
   "Offices",
+  "OfficeDivision",
+  "PlantillaPosition",
   "EmployeeType",
   "Eligibility",
   "Employee",

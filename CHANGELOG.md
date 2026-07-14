@@ -5,6 +5,14 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-14 — fix: show locked Bio number message as hover tooltip
+- 2026-07-14 — fix: when plantilla locks Position, hide frequently-used chips, clear X, and format switch
+- 2026-07-14 — fix: show plantilla Position/SG lock reason as hover tooltip only
+- 2026-07-14 — fix: drop "(optional)" from Division/Plantilla labels; use field hints instead
+- 2026-07-14 — fix: lock Position and Salary Grade when a plantilla item is selected
+- 2026-07-14 — fix: allow plantilla items from a different office than employee assignment
+- 2026-07-14 — fix: employee Division/Plantilla dropdowns refresh after async options load
+- 2026-07-14 — feat: add optional Office Divisions and individual Plantilla items under Offices, with optional employee linking and no data reset
 - 2026-07-14 — feat: reusable annex row order (education highest→lowest; LGU office sequence) for Annex 3-E B/D and Training Coverage III
 - 2026-07-14 — fix: remove redundant Edit/Create Employee page subtitle
 - 2026-07-14 — fix: move AutoField select Clear outside trigger (no X/chevron overlap)

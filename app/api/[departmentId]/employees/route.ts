@@ -2,6 +2,7 @@
 
 import { findFirstFreeBioFlat } from "@/lib/bio-utils";
 import prismadb from "@/lib/prismadb";
+import { resolvePlantillaAssignment } from "@/lib/plantilla-assignment";
 import { createEmployeeHistorySnapshot, WORKFORCE_ACTIVE_STATUS } from "@/lib/workforce-history";
 import { auth } from "@clerk/nextjs/server"; // ⬅️ server import
 import { MaritalStatus, Prisma } from "@prisma/client";
@@ -77,6 +78,8 @@ export async function POST(
       employeeLink,
       note,
       designationId,
+      officeDivisionId,
+      plantillaPositionId,
       maritalStatus,
       email,
       philSysNumber,
@@ -246,6 +249,20 @@ export async function POST(
 
     // --- CREATE employee + default HIRED event atomically (with collision-safe BIO) ---
     const created = await prismadb.$transaction(async (tx) => {
+      const assignment = await resolvePlantillaAssignment(tx, {
+        departmentId: params.departmentId,
+        officeId,
+        officeDivisionId,
+        plantillaPositionId,
+      });
+      if (!assignment.ok) {
+        throw Object.assign(new Error(assignment.error), { status: 400 });
+      }
+
+      const positionFinal =
+        assignment.plantillaTitle?.trim() ||
+        (typeof position === "string" ? position : "");
+
       // 1) If employeeNo was not provided, try to auto-suggest from the office.bioIndexCode
       const office = await tx.offices.findUnique({
         where: { id: officeId },
@@ -294,7 +311,7 @@ export async function POST(
               },
               gender,
               contactNumber,
-              position,
+              position: positionFinal,
               birthday,
               education,
               region,
@@ -331,6 +348,8 @@ export async function POST(
               philSysNumber: normalizedPhilSysNumber,
               note: note ?? null,
               designationId: designationId ? designationId : null,
+              officeDivisionId: assignment.officeDivisionId,
+              plantillaPositionId: assignment.plantillaPositionId,
               publicEnabled: true,
             },
             include: employeeInclude,
@@ -381,7 +400,10 @@ export async function POST(
 
     return NextResponse.json(created);
 
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.status === 400 && typeof error?.message === "string") {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const target = (error.meta?.target as string[] | undefined) ?? [];
       if (target.includes("email")) {
@@ -389,6 +411,12 @@ export async function POST(
       }
       if (target.includes("philSysNumber")) {
         return new NextResponse(JSON.stringify({ error: "PhilSys Number already exists." }), { status: 400 });
+      }
+      if (target.includes("plantillaPositionId")) {
+        return NextResponse.json(
+          { error: "Plantilla position is already occupied by another employee" },
+          { status: 400 }
+        );
       }
     }
     console.log("[EMPLOYEE_POST]", error);

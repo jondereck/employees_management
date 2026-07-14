@@ -26,6 +26,8 @@ model Department {
   smsInboundMessages          SmsInboundMessage[]
   smsLogs                     SmsLog[]
   offices                     Offices[]                    @relation("DepartmentToOffices")
+  officeDivisions             OfficeDivision[]
+  plantillaPositions          PlantillaPosition[]
   orgChartVersions            OrgChartVersion[]
   officeWorkSchedules         OfficeWorkSchedule[]
   timekeepingAnalyzerSettings TimekeepingAnalyzerSetting[]
@@ -92,12 +94,62 @@ model Offices {
   employeeHistorySnapshots    EmployeeHistorySnapshot[]
   billboard                   Billboard                    @relation(fields: [billboardId], references: [id], onUpdate: NoAction, map: "offices_billboardid_fkey")
   department                  Department                   @relation("DepartmentToOffices", fields: [departmentId], references: [id], onUpdate: NoAction, map: "offices_departmentid_fkey")
+  officeDivisions             OfficeDivision[]
+  plantillaPositions          PlantillaPosition[]
   officeWorkSchedules         OfficeWorkSchedule[]
   workforceReportGroupOffices WorkforceReportGroupOffice[]
 
   @@index([departmentId])
   @@index([billboardId])
   @@index([bioIndexCode])
+}
+
+/// Additive org sub-unit under an office (e.g. BAC under Mayor's Office). Optional for plantilla items.
+model OfficeDivision {
+  id                 String              @id @default(uuid())
+  departmentId       String
+  officeId           String
+  name               String
+  sortOrder          Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  department         Department          @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  office             Offices             @relation(fields: [officeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plantillaPositions PlantillaPosition[]
+  employees          Employee[]
+  historySnapshots   EmployeeHistorySnapshot[]
+
+  @@unique([officeId, name])
+  @@index([departmentId])
+  @@index([officeId])
+  @@index([officeId, sortOrder])
+}
+
+/// Additive individual plantilla item (one authorized slot). Optional officeDivisionId allows office-level items.
+model PlantillaPosition {
+  id               String         @id @default(uuid())
+  departmentId     String
+  officeId         String
+  officeDivisionId String?
+  itemNumber       String
+  title            String
+  salaryGrade      Int?
+  salaryStep       Int?
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  department       Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  office           Offices        @relation(fields: [officeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  officeDivision   OfficeDivision? @relation(fields: [officeDivisionId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  /// At most one current employee occupies this item (unique on Employee.plantillaPositionId).
+  employee         Employee?
+  historySnapshots EmployeeHistorySnapshot[]
+
+  @@unique([departmentId, itemNumber])
+  @@index([departmentId])
+  @@index([officeId])
+  @@index([officeDivisionId])
+  @@index([departmentId, isActive])
 }
 
 model EmployeeType {
@@ -174,6 +226,8 @@ model Employee {
   salaryStep             Int?
   salaryGrade            Int?
   designationId          String?
+  officeDivisionId       String?
+  plantillaPositionId    String?                   @unique
   note                   String?
   publicId               String                    @unique @default(dbgenerated("gen_random_uuid()"))
   publicEnabled          Boolean                   @default(false)
@@ -191,6 +245,8 @@ model Employee {
   eligibility            Eligibility               @relation(fields: [eligibilityId], references: [id], onUpdate: NoAction, map: "employee_eligibilityid_fkey")
   employeeType           EmployeeType              @relation(fields: [employeeTypeId], references: [id], onUpdate: NoAction, map: "employee_employeetypeid_fkey")
   offices                Offices                   @relation("OfficesToEmployee", fields: [officeId], references: [id], onUpdate: NoAction, map: "employee_officeid_fkey")
+  officeDivision         OfficeDivision?           @relation(fields: [officeDivisionId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  plantillaPosition      PlantillaPosition?        @relation(fields: [plantillaPositionId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   trainings              Training[]
   historySnapshots       EmployeeHistorySnapshot[]
   employmentEvents       EmploymentEvent[]
@@ -208,37 +264,44 @@ model Employee {
   @@index([employeeTypeId])
   @@index([eligibilityId])
   @@index([designationId])
+  @@index([officeDivisionId])
 }
 
 model EmployeeHistorySnapshot {
-  id             String                @id @default(cuid())
-  departmentId   String
-  employeeId     String
-  effectiveAt    DateTime
-  officeId       String?
-  employeeTypeId String?
-  eligibilityId  String?
-  position       String                @default("")
-  gender         Gender?
-  maritalStatus  MaritalStatus?
-  isHead         Boolean               @default(false)
-  status         String                @default("ACTIVE")
-  indicatorId    String?
-  source         String                @default("MANUAL")
-  note           String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  department     Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  employee       Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  office         Offices?              @relation(fields: [officeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  employeeType   EmployeeType?         @relation(fields: [employeeTypeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  eligibility    Eligibility?          @relation(fields: [eligibilityId], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  indicator      WorkforceReportGroup? @relation(fields: [indicatorId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  id                  String                @id @default(cuid())
+  departmentId        String
+  employeeId          String
+  effectiveAt         DateTime
+  officeId            String?
+  officeDivisionId    String?
+  plantillaPositionId String?
+  employeeTypeId      String?
+  eligibilityId       String?
+  position            String                @default("")
+  gender              Gender?
+  maritalStatus       MaritalStatus?
+  isHead              Boolean               @default(false)
+  status              String                @default("ACTIVE")
+  indicatorId         String?
+  source              String                @default("MANUAL")
+  note                String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  department          Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  employee            Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  office              Offices?              @relation(fields: [officeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  officeDivision      OfficeDivision?       @relation(fields: [officeDivisionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  plantillaPosition   PlantillaPosition?    @relation(fields: [plantillaPositionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  employeeType        EmployeeType?         @relation(fields: [employeeTypeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  eligibility         Eligibility?          @relation(fields: [eligibilityId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  indicator           WorkforceReportGroup? @relation(fields: [indicatorId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([departmentId, effectiveAt])
   @@index([employeeId, effectiveAt])
   @@index([departmentId, employeeId, effectiveAt])
   @@index([officeId])
+  @@index([officeDivisionId])
+  @@index([plantillaPositionId])
   @@index([employeeTypeId])
   @@index([eligibilityId])
   @@index([indicatorId])

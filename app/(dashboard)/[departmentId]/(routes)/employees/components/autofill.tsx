@@ -673,7 +673,7 @@ function DatalistField({
       {label} {required && <span className="text-red-600 text-destructive ml-0.5">*</span>}
     </FormLabel>
 
-    {showFormatSwitch && (
+    {showFormatSwitch && !disabled && (
       <Select value={mode} onValueChange={(m: FormatMode) => setMode(m)}>
         <SelectTrigger className="h-6 w-fit border-none bg-transparent p-0 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary shadow-none focus:ring-0">
           <SelectValue placeholder="Format" />
@@ -715,7 +715,7 @@ function DatalistField({
       <div className="absolute right-1.5 flex items-center gap-1.5">
         {loading ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground/40" />
-        ) : value ? (
+        ) : value && !disabled ? (
           <button 
             type="button" 
             onClick={() => field.onChange("")}
@@ -735,7 +735,7 @@ function DatalistField({
   </FormControl>
 
   {/* Pinned Suggestions - Integrated seamlessly */}
-  {pinSuggestions && (priority.length > 0 || (priorityOptions?.length ?? 0) > 0) && (
+  {pinSuggestions && !disabled && (priority.length > 0 || (priorityOptions?.length ?? 0) > 0) && (
     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
       <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/40">
         {pinnedLabel || "Quick Select"}
@@ -821,10 +821,10 @@ function SelectField({
         if (!value) return null;
         return { value, label };
       }
-      // { id, name }
-      if (x && (x.id ?? x.name)) {
+      // { id, name } or { id, title }
+      if (x && (x.id ?? x.name ?? x.title)) {
         const value = normalizeOpt(x.id);
-        const label = normalizeLabel(x.name ?? x.id);
+        const label = normalizeLabel(x.name ?? x.title ?? x.id);
         if (!value) return null;
         return { value, label };
       }
@@ -856,6 +856,13 @@ function SelectField({
   const [loading, setLoading] = useState(false);
   const [pri, setPri] = useState<SelectOption[]>([]);
   const [recents, setRecents] = useState<SelectOption[]>([]);
+
+  // Keep static `options` in sync when parent loads them asynchronously.
+  // (Endpoint-driven selects own `opts` via the fetch effect below.)
+  useEffect(() => {
+    if (optionsEndpoint) return;
+    setOpts(options ?? []);
+  }, [options, optionsEndpoint]);
 
   // Fetch main options (if endpoint provided)
   useEffect(() => {
@@ -1118,7 +1125,7 @@ function SelectField({
   </FormControl>
 
   {/* Pinned & Recents: Refined Chips */}
-  {pinSuggestions && (recents.length > 0 || priFixed.length > 0 || propPriFixed.length > 0) && (
+  {pinSuggestions && !disabled && !loading && (recents.length > 0 || priFixed.length > 0 || propPriFixed.length > 0) && (
     <div className="flex flex-col gap-2 px-0.5 pt-1">
       {/* Grouping both Pinned and Recents in one row to save vertical space */}
       <div className="flex flex-wrap items-center gap-1.5">

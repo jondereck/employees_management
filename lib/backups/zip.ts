@@ -172,6 +172,8 @@ function validateConsistency(
   for (const modelName of [
     "Billboard",
     "Offices",
+    "OfficeDivision",
+    "PlantillaPosition",
     "EmployeeType",
     "Eligibility",
     "Employee",
@@ -183,6 +185,8 @@ function validateConsistency(
 
   const billboardIds = idsFrom(models.Billboard);
   const officeIds = idsFrom(models.Offices);
+  const divisionIds = idsFrom(models.OfficeDivision);
+  const plantillaIds = idsFrom(models.PlantillaPosition);
   const employeeTypeIds = idsFrom(models.EmployeeType);
   const eligibilityIds = idsFrom(models.Eligibility);
   const employeeIds = idsFrom(models.Employee);
@@ -190,6 +194,28 @@ function validateConsistency(
   for (const office of models.Offices) {
     if (typeof office.billboardId !== "string" || !billboardIds.has(office.billboardId)) {
       errors.push("Offices contains a billboardId outside the backup.");
+      break;
+    }
+  }
+
+  for (const division of models.OfficeDivision) {
+    if (typeof division.officeId !== "string" || !officeIds.has(division.officeId)) {
+      errors.push("OfficeDivision contains an officeId outside the backup.");
+      break;
+    }
+  }
+
+  for (const plantilla of models.PlantillaPosition) {
+    if (typeof plantilla.officeId !== "string" || !officeIds.has(plantilla.officeId)) {
+      errors.push("PlantillaPosition contains an officeId outside the backup.");
+      break;
+    }
+    if (
+      plantilla.officeDivisionId != null &&
+      (typeof plantilla.officeDivisionId !== "string" ||
+        !divisionIds.has(plantilla.officeDivisionId))
+    ) {
+      errors.push("PlantillaPosition contains an officeDivisionId outside the backup.");
       break;
     }
   }
@@ -218,6 +244,22 @@ function validateConsistency(
       (typeof employee.designationId !== "string" || !officeIds.has(employee.designationId))
     ) {
       errors.push("Employee contains a designationId outside the backup.");
+      break;
+    }
+    if (
+      employee.officeDivisionId != null &&
+      (typeof employee.officeDivisionId !== "string" ||
+        !divisionIds.has(employee.officeDivisionId))
+    ) {
+      errors.push("Employee contains an officeDivisionId outside the backup.");
+      break;
+    }
+    if (
+      employee.plantillaPositionId != null &&
+      (typeof employee.plantillaPositionId !== "string" ||
+        !plantillaIds.has(employee.plantillaPositionId))
+    ) {
+      errors.push("Employee contains a plantillaPositionId outside the backup.");
       break;
     }
   }
@@ -283,9 +325,19 @@ export async function parseBackupZip(
   );
 
   const models = createEmptyModelMap();
+  const optionalLegacyModels = new Set<BackupModelName>([
+    "OfficeDivision",
+    "PlantillaPosition",
+  ]);
+
   for (const modelName of BACKUP_MODEL_NAMES) {
     const file = zip.file(`models/${modelName}.json`);
     if (!file) {
+      // Older backups created before office divisions/plantilla remain restorable.
+      if (optionalLegacyModels.has(modelName)) {
+        models[modelName] = [];
+        continue;
+      }
       throw new BackupValidationError(`Backup is missing models/${modelName}.json.`);
     }
 

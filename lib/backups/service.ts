@@ -40,6 +40,8 @@ const DATE_FIELDS: Partial<Record<BackupModelName, string[]>> = {
   Department: ["createdAt", "updatedAt"],
   Billboard: ["createdAt", "updatedAt"],
   Offices: ["createdAt", "updatedAt"],
+  OfficeDivision: ["createdAt", "updatedAt"],
+  PlantillaPosition: ["createdAt", "updatedAt"],
   EmployeeType: ["createdAt", "updatedAt"],
   Eligibility: ["createdAt", "updatedAt"],
   Employee: ["birthday", "dateHired", "createdAt", "updatedAt"],
@@ -142,6 +144,14 @@ export async function collectDepartmentBackupData(departmentId: string) {
     orderBy: { id: "asc" },
   })) as unknown as Record<string, unknown>[];
   models.Offices = (await prismadb.offices.findMany({
+    where: { departmentId },
+    orderBy: { id: "asc" },
+  })) as unknown as Record<string, unknown>[];
+  models.OfficeDivision = (await prismadb.officeDivision.findMany({
+    where: { departmentId },
+    orderBy: { id: "asc" },
+  })) as unknown as Record<string, unknown>[];
+  models.PlantillaPosition = (await prismadb.plantillaPosition.findMany({
     where: { departmentId },
     orderBy: { id: "asc" },
   })) as unknown as Record<string, unknown>[];
@@ -309,6 +319,8 @@ async function deleteCurrentDepartmentData(tx: any, departmentId: string) {
   }
 
   await tx.employee.deleteMany({ where: { departmentId } });
+  await tx.plantillaPosition.deleteMany({ where: { departmentId } });
+  await tx.officeDivision.deleteMany({ where: { departmentId } });
   await tx.offices.deleteMany({ where: { departmentId } });
   await tx.billboard.deleteMany({ where: { departmentId } });
   await tx.employeeType.deleteMany({ where: { departmentId } });
@@ -351,6 +363,20 @@ async function restoreParsedBackup(
       await createMany(
         tx.offices,
         forceDepartmentId(restoreDateFields("Offices", models.Offices), departmentId)
+      );
+      await createMany(
+        tx.officeDivision,
+        forceDepartmentId(
+          restoreDateFields("OfficeDivision", models.OfficeDivision ?? []),
+          departmentId
+        )
+      );
+      await createMany(
+        tx.plantillaPosition,
+        forceDepartmentId(
+          restoreDateFields("PlantillaPosition", models.PlantillaPosition ?? []),
+          departmentId
+        )
       );
       await createMany(
         tx.employee,

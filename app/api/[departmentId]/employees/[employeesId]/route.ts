@@ -1,4 +1,5 @@
 import prismadb from "@/lib/prismadb";
+import { resolvePlantillaAssignment } from "@/lib/plantilla-assignment";
 import {
   createEmployeeHistorySnapshot,
   parseEmployeeTerminationDate,
@@ -100,6 +101,8 @@ export async function PATCH(
       employeeLink,
       note,
       designationId,
+      officeDivisionId,
+      plantillaPositionId,
       maritalStatus,
       email,
       philSysNumber,
@@ -270,6 +273,8 @@ const normalizedMemberPolicyNo =
         employeeLink: true,
         note: true,
         designationId: true,
+        officeDivisionId: true,
+        plantillaPositionId: true,
         maritalStatus: true,
         email: true,
         philSysNumber: true,
@@ -280,6 +285,27 @@ const normalizedMemberPolicyNo =
     if (!existing) {
       return new NextResponse("Employee not found", { status: 404 });
     }
+
+    const assignment = await prismadb.$transaction(async (tx) =>
+      resolvePlantillaAssignment(tx, {
+        departmentId: params.departmentId,
+        officeId,
+        officeDivisionId:
+          officeDivisionId === undefined ? existing.officeDivisionId : officeDivisionId,
+        plantillaPositionId:
+          plantillaPositionId === undefined
+            ? existing.plantillaPositionId
+            : plantillaPositionId,
+        employeeId: params.employeesId,
+      })
+    );
+    if (!assignment.ok) {
+      return NextResponse.json({ error: assignment.error }, { status: 400 });
+    }
+
+    const positionFinal =
+      assignment.plantillaTitle?.trim() ||
+      (typeof position === "string" ? position : existing.position);
 
     const hadTerminationDate = hasText(existing.terminateDate);
     const wasInactive = existing.isArchived || hadTerminationDate;
@@ -360,7 +386,7 @@ const normalizedMemberPolicyNo =
       suffix: normalizedText(suffix),
       gender,
       contactNumber: normalizedText(contactNumber),
-      position: normalizedText(position),
+      position: normalizedText(positionFinal),
       birthday: comparableDateValue(birthday) ?? comparableDateValue(existing.birthday),
       education: normalizedText(education),
       houseNo: normalizedText(houseNo),
@@ -393,6 +419,8 @@ const normalizedMemberPolicyNo =
       employeeLink: normalizedText(employeeLink),
       note: normalizedNullableText(note),
       designationId: normalizedNullableText(designationId),
+      officeDivisionId: assignment.officeDivisionId,
+      plantillaPositionId: assignment.plantillaPositionId,
       maritalStatus: maritalStatus === undefined ? existing.maritalStatus : normalizedMaritalStatus,
       email: email === undefined ? existing.email : normalizedEmail,
       philSysNumber: philSysNumber === undefined ? existing.philSysNumber : normalizedPhilSysNumber,
@@ -440,6 +468,8 @@ const normalizedMemberPolicyNo =
       employeeLink: normalizedText(existing.employeeLink),
       note: normalizedNullableText(existing.note),
       designationId: normalizedNullableText(existing.designationId),
+      officeDivisionId: existing.officeDivisionId ?? null,
+      plantillaPositionId: existing.plantillaPositionId ?? null,
       maritalStatus: existing.maritalStatus,
       email: existing.email,
       philSysNumber: existing.philSysNumber,
@@ -464,7 +494,7 @@ const normalizedMemberPolicyNo =
         suffix,
         gender,
         contactNumber,
-        position,
+        position: positionFinal,
         birthday,
         education,
         houseNo,
@@ -512,6 +542,8 @@ memberPolicyNo: normalizedMemberPolicyNo,
 
         note: note ?? null,
         designationId: normalizedNullableText(designationId),
+        officeDivisionId: assignment.officeDivisionId,
+        plantillaPositionId: assignment.plantillaPositionId,
       },
       include: {
         offices: { select: { name: true } },
@@ -529,7 +561,11 @@ memberPolicyNo: normalizedMemberPolicyNo,
       Number.isFinite(previousSalaryGrade) &&
       Number.isFinite(nextSalaryGrade) &&
       nextSalaryGrade > previousSalaryGrade;
-    const hasTransferSignal = changedFields.has("officeId") || changedFields.has("position");
+    const hasTransferSignal =
+      changedFields.has("officeId") ||
+      changedFields.has("position") ||
+      changedFields.has("plantillaPositionId") ||
+      changedFields.has("officeDivisionId");
 
     if (isRehire) {
       await createEmploymentTimelineEventOnce(prismadb, {
@@ -611,6 +647,12 @@ memberPolicyNo: normalizedMemberPolicyNo,
       if (target.includes("philSysNumber")) {
         return new NextResponse(JSON.stringify({ error: "PhilSys Number already exists." }), { status: 400 });
       }
+      if (target.includes("plantillaPositionId")) {
+        return NextResponse.json(
+          { error: "Plantilla position is already occupied by another employee" },
+          { status: 400 }
+        );
+      }
     }
     console.log("[EMPLOYEES_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -657,6 +699,10 @@ export async function GET(
         employeeType: true,
         eligibility: true,
         designation: true,
+        officeDivision: { select: { id: true, name: true } },
+        plantillaPosition: {
+          select: { id: true, itemNumber: true, title: true, officeDivisionId: true },
+        },
         workSchedules: true,
         awards: true,
         employmentEvents: true,

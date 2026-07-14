@@ -5,10 +5,8 @@ import { toWeeklyExclusionDto } from "@/lib/weeklyExclusions";
 import { EmployeesForm } from "./components/employees-form";
 
 type PageParams = {
+  departmentId: string;
   employeesId: string;
-  officeId: string;
-  eligibilityId: string;
-  employeeTypeId: string;
 };
 
 const EmployeesIdPage = async ({
@@ -22,6 +20,12 @@ const EmployeesIdPage = async ({
     },
     include: {
       images: true,
+      plantillaPosition: {
+        select: { id: true, title: true, itemNumber: true },
+      },
+      officeDivision: {
+        select: { id: true, name: true },
+      },
     },
   });
 
@@ -51,20 +55,23 @@ const EmployeesIdPage = async ({
 
   const offices = await prismadb.offices.findMany({
     where: {
-      id: params.officeId,
+      departmentId: params.departmentId,
     },
+    orderBy: { name: "asc" },
   });
 
   const employeeType = await prismadb.employeeType.findMany({
     where: {
-      id: params.employeeTypeId,
+      departmentId: params.departmentId,
     },
+    orderBy: { name: "asc" },
   });
 
   const eligibility = await prismadb.eligibility.findMany({
     where: {
-      id: params.eligibilityId,
+      departmentId: params.departmentId,
     },
+    orderBy: { name: "asc" },
   });
 
   return (

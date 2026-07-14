@@ -103,6 +103,8 @@ const formSchema = z.object({
   officeId: z.string().min(1, {
     message: "Office is required"
   }),
+  officeDivisionId: z.string().optional().nullable(),
+  plantillaPositionId: z.string().optional().nullable(),
   eligibilityId: z.string().min(1, {
     message: "Eligibility is required."
   }),
@@ -244,6 +246,8 @@ const EMPTY_DEFAULTS: EmployeesFormValues = {
   philSysNumber: "",
   employeeTypeId: "",
   officeId: "",
+  officeDivisionId: null,
+  plantillaPositionId: null,
   eligibilityId: "",
   suffix: "",
   images: [],
@@ -289,6 +293,8 @@ function mapToDefaults(src: any): EmployeesFormValues {
     // ids
     employeeTypeId: src.employeeTypeId ?? "",
     officeId: src.officeId ?? "",
+    officeDivisionId: src.officeDivisionId ?? null,
+    plantillaPositionId: src.plantillaPositionId ?? null,
     eligibilityId: src.eligibilityId ?? "",
 
     // names & address
@@ -475,6 +481,8 @@ export const EmployeesForm = ({
     return e ? `${b}, ${e}` : b;
   }
   const officeId = form.watch("officeId"); // keep
+  const officeDivisionId = form.watch("officeDivisionId");
+  const plantillaPositionId = form.watch("plantillaPositionId");
   const isArchivedValue = form.watch("isArchived");
   const terminateDateValue = form.watch("terminateDate");
   const selectedPosition = form.watch("position");
@@ -487,6 +495,160 @@ export const EmployeesForm = ({
     () => employeeType.find((type) => type.id === selectedEmployeeTypeId),
     [employeeType, selectedEmployeeTypeId]
   );
+
+  type DivisionOption = { id: string; name: string };
+  type PlantillaOption = {
+    id: string;
+    itemNumber: string;
+    title: string;
+    officeId: string;
+    officeName: string;
+    officeDivisionId: string | null;
+    officeDivisionName: string | null;
+    salaryGrade: number | null;
+    salaryStep: number | null;
+    employee: { id: string } | null;
+  };
+  const [divisionOptions, setDivisionOptions] = useState<DivisionOption[]>([]);
+  const [plantillaOptions, setPlantillaOptions] = useState<PlantillaOption[]>([]);
+  const [loadingOrgStructure, setLoadingOrgStructure] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOrgStructure() {
+      if (!params.departmentId) {
+        setDivisionOptions([]);
+        setPlantillaOptions([]);
+        return;
+      }
+      setLoadingOrgStructure(true);
+      try {
+        const plantillaUrl = `/api/${params.departmentId}/plantilla?activeOnly=true`;
+        const divisionUrl = officeId
+          ? `/api/${params.departmentId}/offices/${officeId}/divisions`
+          : null;
+
+        const [plantRes, divRes] = await Promise.all([
+          fetch(plantillaUrl, { cache: "no-store" }),
+          divisionUrl
+            ? fetch(divisionUrl, { cache: "no-store" })
+            : Promise.resolve(null),
+        ]);
+
+        const plantilla = plantRes.ok ? await plantRes.json() : [];
+        const divisions = divRes && divRes.ok ? await divRes.json() : [];
+
+        if (cancelled) return;
+
+        setDivisionOptions(
+          Array.isArray(divisions)
+            ? divisions.map((d: any) => ({ id: d.id, name: d.name }))
+            : []
+        );
+        setPlantillaOptions(
+          Array.isArray(plantilla)
+            ? plantilla.map((p: any) => ({
+                id: p.id,
+                itemNumber: p.itemNumber,
+                title: p.title,
+                officeId: p.officeId ?? p.office?.id ?? "",
+                officeName: p.office?.name ?? "Unknown office",
+                officeDivisionId: p.officeDivisionId ?? null,
+                officeDivisionName: p.officeDivision?.name ?? null,
+                salaryGrade:
+                  typeof p.salaryGrade === "number" ? p.salaryGrade : null,
+                salaryStep:
+                  typeof p.salaryStep === "number" ? p.salaryStep : null,
+                employee: p.employee ? { id: p.employee.id } : null,
+              }))
+            : []
+        );
+      } catch {
+        if (!cancelled) {
+          setDivisionOptions([]);
+          setPlantillaOptions([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingOrgStructure(false);
+      }
+    }
+    void loadOrgStructure();
+    return () => {
+      cancelled = true;
+    };
+  }, [officeId, params.departmentId]);
+
+  const availablePlantillaOptions = useMemo(() => {
+    const currentEmployeeId = initialData?.id;
+    return plantillaOptions.filter((item) => {
+      if (item.employee && item.employee.id !== currentEmployeeId) {
+        return false;
+      }
+      return true;
+    });
+  }, [plantillaOptions, initialData?.id]);
+
+  const divisionSelectOptions = useMemo(
+    () => divisionOptions.map((d) => ({ value: d.id, label: d.name })),
+    [divisionOptions]
+  );
+
+  const plantillaSelectOptions = useMemo(
+    () =>
+      availablePlantillaOptions.map((p) => {
+        const where = p.officeDivisionName
+          ? `${p.officeName} / ${p.officeDivisionName}`
+          : p.officeName;
+        return {
+          value: p.id,
+          label: `${where} — ${p.itemNumber} ${p.title}`,
+        };
+      }),
+    [availablePlantillaOptions]
+  );
+
+  // Clear assignment division when office changes. Keep plantilla if still valid
+  // department-wide (plantilla may intentionally be under another office).
+  const prevOfficeIdRef = useRef<string | null>(initialData?.officeId ?? null);
+  useEffect(() => {
+    if (prevOfficeIdRef.current === null) {
+      prevOfficeIdRef.current = officeId || null;
+      return;
+    }
+    if (prevOfficeIdRef.current !== officeId) {
+      prevOfficeIdRef.current = officeId || null;
+      form.setValue("officeDivisionId", null);
+    }
+  }, [officeId, form]);
+
+  useEffect(() => {
+    if (!plantillaPositionId) return;
+    const selected = plantillaOptions.find((p) => p.id === plantillaPositionId);
+    if (!selected) return;
+    if (selected.title && form.getValues("position") !== selected.title) {
+      form.setValue("position", selected.title, { shouldDirty: true });
+    }
+    if (
+      selected.salaryGrade != null &&
+      String(form.getValues("salaryGrade") ?? "") !== String(selected.salaryGrade)
+    ) {
+      form.setValue("salaryGrade", String(selected.salaryGrade), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+    // Only sync assignment division when plantilla is under the same office.
+    if (
+      selected.officeId === officeId &&
+      selected.officeDivisionId &&
+      form.getValues("officeDivisionId") !== selected.officeDivisionId
+    ) {
+      form.setValue("officeDivisionId", selected.officeDivisionId, { shouldDirty: true });
+    }
+  }, [plantillaPositionId, plantillaOptions, officeId, form]);
+
+  const plantillaLocksCompensation = Boolean(plantillaPositionId);
+
   const workforceIndicator = useMemo(
     () =>
       isArchivedValue
@@ -871,11 +1033,9 @@ export const EmployeesForm = ({
                       <FormField
                         control={form.control}
                         name="employeeNo"
-                        render={({ field }) => (
-                          <FormItem className="space-y-1.5">
-                            <FormLabel className="text-[13px] font-semibold text-foreground/80">
-                              Biometric / ID Number
-                            </FormLabel>
+                        render={({ field }) => {
+                          const bioLocked = !!initialData && !bioUnlocked;
+                          const bioControls = (
                             <div className="relative flex items-center gap-2">
                               <div className="flex-1">
                                 <AutoField
@@ -887,7 +1047,7 @@ export const EmployeesForm = ({
                                   }}
                                   placeholder="e.g. 8540005"
                                   className="h-10 bg-secondary/20 border-transparent focus:bg-background transition-all"
-                                  disabled={!!initialData && !bioUnlocked}
+                                  disabled={bioLocked}
                                 />
                               </div>
                               {initialData && (
@@ -911,18 +1071,35 @@ export const EmployeesForm = ({
                                 </button>
                               )}
                             </div>
-                            <FormDescription className="text-[11px]">
-                              {initialData && !bioUnlocked
-                                ? "Bio number is locked. Click the lock icon to edit."
-                                : hasTerminationState
+                          );
+                          return (
+                          <FormItem className="space-y-1.5">
+                            <FormLabel className="text-[13px] font-semibold text-foreground/80">
+                              Biometric / ID Number
+                            </FormLabel>
+                            {bioLocked ? (
+                              <ActionTooltip
+                                label="Bio number is locked"
+                                description="Click the lock icon to edit."
+                              >
+                                {bioControls}
+                              </ActionTooltip>
+                            ) : (
+                              bioControls
+                            )}
+                            {!bioLocked && (
+                              <FormDescription className="text-[11px]">
+                                {hasTerminationState
                                   ? "BIO auto-suggestion is disabled for archived or terminated employees."
                                   : suggesting
                                     ? "Finding next available BIO number..."
                                     : "Auto-suggests after selecting Department / Assignment."}
-                            </FormDescription>
+                              </FormDescription>
+                            )}
                             <FormMessage className="text-[11px]" />
                           </FormItem>
-                        )}
+                          );
+                        }}
                       />
 
                       {/* Plantilla Designation */}
@@ -967,6 +1144,66 @@ export const EmployeesForm = ({
                         </div>
                       )}
                     />
+
+                    <div className="grid gap-4 sm:grid-cols-2 pt-2">
+                      <FormField
+                        control={form.control}
+                        name="officeDivisionId"
+                        render={({ field }) => (
+                          <AutoField
+                            kind="select"
+                            label="Assignment Division"
+                            description="Under Department / Assignment only."
+                            field={{
+                              ...field,
+                              value: field.value ?? "",
+                              onChange: (v: string) => {
+                                field.onChange(v || null);
+                              },
+                            }}
+                            placeholder={
+                              loadingOrgStructure
+                                ? "Loading divisions…"
+                                : officeId
+                                  ? "None / office-level"
+                                  : "Select office first"
+                            }
+                            options={divisionSelectOptions}
+                            searchable
+                            allowClear
+                            disabled={loading || !officeId || loadingOrgStructure}
+                            className="h-10 bg-secondary/20 border-transparent focus:bg-background"
+                          />
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="plantillaPositionId"
+                        render={({ field }) => (
+                          <AutoField
+                            kind="select"
+                            label="Plantilla Item"
+                            description="May belong to a different office. Leave empty to use Position / Plantilla Designation."
+                            field={{
+                              ...field,
+                              value: field.value ?? "",
+                              onChange: (v: string) => field.onChange(v || null),
+                            }}
+                            placeholder={
+                              loadingOrgStructure
+                                ? "Loading plantilla…"
+                                : "Any office in department…"
+                            }
+                            options={plantillaSelectOptions}
+                            searchable
+                            allowClear
+                            disabled={loading || loadingOrgStructure}
+                            className="h-10 bg-secondary/20 border-transparent focus:bg-background"
+                          />
+                        )}
+                      />
+                    </div>
                   </div>
                 </div>
               </section>
@@ -1190,21 +1427,46 @@ export const EmployeesForm = ({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField control={form.control} name="position" render={({ field }) => (
                     <div className="space-y-1.5">
-                      <AutoField
-                        kind="datalist"
-                        label="Position Title"
-                        required
-                        field={field}
-                        endpoint="/api/autofill/positions" // full list (string[])
-                        priorityEndpoint={`/api/autofill/popular?field=position&limit=2`}
-                        pinSuggestions
-                        pinnedLabel="Frequently used"
-                        placeholder="Search or enter Position..."
-                        showFormatSwitch
-                        formatMode="none"
-                        formatModes={["none", "upper", "title", "sentence"]}
-                        disabled={loading}
-                      />
+                      {plantillaLocksCompensation ? (
+                        <ActionTooltip
+                          label="Locked from selected Plantilla Item"
+                          description="Clear the plantilla to edit Position manually."
+                        >
+                          <div>
+                            <AutoField
+                              kind="datalist"
+                              label="Position Title"
+                              required
+                              field={field}
+                              endpoint="/api/autofill/positions"
+                              priorityEndpoint={`/api/autofill/popular?field=position&limit=2`}
+                              pinSuggestions
+                              pinnedLabel="Frequently used"
+                              placeholder="Search or enter Position..."
+                              showFormatSwitch
+                              formatMode="none"
+                              formatModes={["none", "upper", "title", "sentence"]}
+                              disabled={loading || plantillaLocksCompensation}
+                            />
+                          </div>
+                        </ActionTooltip>
+                      ) : (
+                        <AutoField
+                          kind="datalist"
+                          label="Position Title"
+                          required
+                          field={field}
+                          endpoint="/api/autofill/positions"
+                          priorityEndpoint={`/api/autofill/popular?field=position&limit=2`}
+                          pinSuggestions
+                          pinnedLabel="Frequently used"
+                          placeholder="Search or enter Position..."
+                          showFormatSwitch
+                          formatMode="none"
+                          formatModes={["none", "upper", "title", "sentence"]}
+                          disabled={loading}
+                        />
+                      )}
                       {workforceIndicator ? (
                         <p className="text-[11px] font-medium text-muted-foreground">
                           Indicator: <span className="text-foreground">{workforceIndicator.indicatorName}</span>
@@ -1256,7 +1518,11 @@ export const EmployeesForm = ({
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                   <div className="p-6 border rounded-2xl bg-muted/20">
-                    <SalaryInput form={form} loading={loading} />
+                    <SalaryInput
+                      form={form}
+                      loading={loading}
+                      lockGradeFromPlantilla={plantillaLocksCompensation}
+                    />
                   </div>
 
                   {/* SEPARATE DATE FIELDS SECTION */}
