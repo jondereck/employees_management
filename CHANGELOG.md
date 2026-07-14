@@ -1,10 +1,14 @@
 # Changelog
 
 Tracks changes made to this project. Newest entries go at the top of **Unreleased**.
-**Last updated: 2026-07-13**
+**Last updated: 2026-07-14**
 
 ## Unreleased
 
+- 2026-07-14 — feat: reusable annex row order (education highest→lowest; LGU office sequence) for Annex 3-E B/D and Training Coverage III
+- 2026-07-14 — fix: remove redundant Edit/Create Employee page subtitle
+- 2026-07-14 — fix: move AutoField select Clear outside trigger (no X/chevron overlap)
+- 2026-07-14 — fix: Plantilla Designation clearable on Edit Employee; emergency contact name allows special chars (nameSafe off)
 - 2026-07-13 — fix: add attendance-exceptions to mobile sidebar TOOL_NAV_MAP (build type error)
 - 2026-07-13 — fix: remove CSC classification subtitle under Position in employee info
 - 2026-07-13 — fix: hide Tenure "current appt" row when latest appointment is empty

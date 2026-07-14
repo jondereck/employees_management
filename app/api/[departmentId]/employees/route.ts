@@ -330,7 +330,7 @@ export async function POST(
               email: normalizedEmail,
               philSysNumber: normalizedPhilSysNumber,
               note: note ?? null,
-              designationId: designationId ?? null,
+              designationId: designationId ? designationId : null,
               publicEnabled: true,
             },
             include: employeeInclude,

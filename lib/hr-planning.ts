@@ -2,6 +2,13 @@
 // Section II of the official form is not built yet — add it here when the
 // template for that section is provided.
 
+import {
+  ANNEX_EDUCATION_OFFICIAL,
+  ANNEX_EDUCATION_ORDER,
+  sortByAnnexOfficeOrder,
+  sortByLabelOrder,
+} from "@/lib/annex-order";
+
 export type HrPlanningEmployee = {
   gender: "Male" | "Female";
   birthday: Date;
@@ -50,9 +57,12 @@ export function buildPersonnelComplement(rows: HrPlanningEmployee[]): MfRow[] {
   return withTotalRow(body);
 }
 
-/** B. Distribution by Office. */
+/** B. Distribution by Office — LGU annex office order (reusable via annex-order). */
 export function buildOfficeDistribution(rows: HrPlanningEmployee[]): MfRow[] {
-  const body = tally(rows, (e) => e.officeName.trim() || "Unassigned").sort((a, b) => a.label.localeCompare(b.label));
+  const body = sortByAnnexOfficeOrder(
+    tally(rows, (e) => e.officeName.trim() || "Unassigned"),
+    (r) => r.label
+  );
   return withTotalRow(body);
 }
 
@@ -80,18 +90,8 @@ export function buildAgeGroups(rows: HrPlanningEmployee[], asOf: Date): MfRow[] 
   return withTotalRow(body);
 }
 
-export const EDUCATION_CATEGORIES = [
-  "High School Graduate",
-  "Vocational/Technical",
-  "College Graduate",
-  "Master's Degree",
-  "Doctorate Degree",
-  // Extra reconciliation rows (not on the official 5-row form; delete from the
-  // export if the submitted form must have exactly 5 rows):
-  "Elementary",
-  "College Undergraduate",
-  "Others/Unclassified",
-] as const;
+/** Highest → lowest (display/sort). Official 5 always shown via ANNEX_EDUCATION_OFFICIAL. */
+export const EDUCATION_CATEGORIES = ANNEX_EDUCATION_ORDER;
 
 /**
  * Classify the free-text `education` field into Annex 3-E categories.
@@ -121,13 +121,13 @@ export function classifyEducation(raw: string): (typeof EDUCATION_CATEGORIES)[nu
   return "Others/Unclassified";
 }
 
-/** D. Distribution by Educational Attainment. */
+/** D. Distribution by Educational Attainment — highest attainment first. */
 export function buildEducationDistribution(rows: HrPlanningEmployee[]): MfRow[] {
   const body = tally(rows, (e) => classifyEducation(e.education), [...EDUCATION_CATEGORIES]);
   // Hide extra rows that ended up empty; the official 5 always show.
-  const official = new Set(EDUCATION_CATEGORIES.slice(0, 5));
-  const filtered = body.filter((r) => official.has(r.label as any) || r.total > 0);
-  return withTotalRow(filtered);
+  const filtered = body.filter((r) => ANNEX_EDUCATION_OFFICIAL.has(r.label) || r.total > 0);
+  const ordered = sortByLabelOrder(filtered, (r) => r.label, EDUCATION_CATEGORIES);
+  return withTotalRow(ordered);
 }
 
 export type RetirementRow = { label: string; total: number };

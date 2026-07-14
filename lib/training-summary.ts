@@ -1,3 +1,4 @@
+import { sortByAnnexOfficeOrder } from "@/lib/annex-order";
 import { TRAINING_INDICATORS } from "@/lib/training-types";
 
 type TrainingRow = {
@@ -207,18 +208,19 @@ export function buildOfficeCoverage(employees: EmployeeRow[], trainings: Trainin
     officeTotals.set(e.officeId, entry);
   }
 
-  return Array.from(officeTotals.entries())
-    .map(([officeId, { officeName, total }]) => {
-      const trained = trainedByOffice.get(officeId)?.size ?? 0;
-      return {
-        officeId,
-        officeName,
-        totalPersonnel: total,
-        personnelTrained: trained,
-        coverageRate: total > 0 ? Math.round((trained / total) * 1000) / 10 : 0,
-      };
-    })
-    .sort((a, b) => a.officeName.localeCompare(b.officeName));
+  const rows = Array.from(officeTotals.entries()).map(([officeId, { officeName, total }]) => {
+    const trained = trainedByOffice.get(officeId)?.size ?? 0;
+    return {
+      officeId,
+      officeName,
+      totalPersonnel: total,
+      personnelTrained: trained,
+      coverageRate: total > 0 ? Math.round((trained / total) * 1000) / 10 : 0,
+    };
+  });
+
+  // Same LGU annex office sequence as Annex 3-E section B.
+  return sortByAnnexOfficeOrder(rows, (r) => r.officeName);
 }
 
 export type CompetencyGapRow = {

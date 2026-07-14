@@ -511,7 +511,7 @@ memberPolicyNo: normalizedMemberPolicyNo,
         },
 
         note: note ?? null,
-        designationId: designationId ?? null,
+        designationId: normalizedNullableText(designationId),
       },
       include: {
         offices: { select: { name: true } },

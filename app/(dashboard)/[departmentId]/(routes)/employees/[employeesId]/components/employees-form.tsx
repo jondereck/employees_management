@@ -401,7 +401,6 @@ export const EmployeesForm = ({
   // };
 
   const title = initialData ? "Edit Employee" : "Create Employee";
-  const description = initialData ? "Edit a Employee" : "Add new Employee";
   const toastMessage = initialData ? "Employee updated." : "Employee created.";
   const action = initialData ? "Save changes" : "Create";
 
@@ -751,10 +750,7 @@ export const EmployeesForm = ({
         departmentId={params.departmentId}
       />
       <div className="flex items-center justify-between">
-        <Heading
-          title={title}
-          description={description}
-        />
+        <Heading title={title} />
         {initialData && (
           <Button
             disabled={loading}
@@ -943,6 +939,7 @@ export const EmployeesForm = ({
                             className="h-10 bg-secondary/20 border-transparent focus:bg-background"
                             pinSuggestions
                             searchable
+                            allowClear
                             disabled={loading}
                           />
                         )}
@@ -1465,7 +1462,17 @@ export const EmployeesForm = ({
                     <Separator className="flex-1" />
                   </div>
                   <div className="p-4 border border-destructive/20 rounded-xl bg-destructive/5 space-y-4">
-                    <FormField control={form.control} name="emergencyContactName" render={({ field }) => <AutoField kind="text" label="Contact Person" field={field} />} />
+                    <FormField control={form.control} name="emergencyContactName" render={({ field }) => (
+                      <AutoField
+                        kind="text"
+                        label="Contact Person"
+                        field={field}
+                        nameSafe={false}
+                        formatMode="title"
+                        normalizeWhitespace
+                        autoFormatOnBlur
+                      />
+                    )} />
                     <FormField control={form.control} name="emergencyContactNumber" render={({ field }) => <AutoField kind="phone" label="Contact Number" field={field} />} />
                   </div>
 

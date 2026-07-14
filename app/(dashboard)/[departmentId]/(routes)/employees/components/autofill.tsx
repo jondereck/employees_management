@@ -133,7 +133,7 @@ type SelectProps = BaseProps & SelectFetchProps & {
   recentMax?: number;       // e.g. 3
   recentLabel?: string;     // e.g. "Recently used"
 
-  allowClear?: boolean;          // show small X when there is a value
+  allowClear?: boolean;          // show Clear control beside the select when valued
   clearLabel?: string;
 
   searchable?: boolean;             // NEW
@@ -1012,102 +1012,107 @@ function SelectField({
   </div>
 
   <FormControl>
-    <div className="relative group">
-      {searchable ? (
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              role="combobox"
-              disabled={disabled || loading}
-              className={cn(
-                "w-full justify-between h-9 px-3 font-normal transition-all",
-                "bg-background/50 hover:bg-background border-input hover:border-accent-foreground/20",
-                !hasValue && "text-muted-foreground/60",
-                allowClear && hasValue && "pr-10"
-              )}
+    <div className="flex items-center gap-1.5">
+      <div className="relative min-w-0 flex-1 group">
+        {searchable ? (
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                role="combobox"
+                disabled={disabled || loading}
+                className={cn(
+                  "w-full justify-between h-9 px-3 font-normal transition-all",
+                  "bg-background/50 hover:bg-background border-input hover:border-accent-foreground/20",
+                  !hasValue && "text-muted-foreground/60"
+                )}
+              >
+                <span className="truncate">
+                  {selected ? selected.label : (loading ? "Loading..." : placeholder)}
+                </span>
+                <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
+              </Button>
+            </PopoverTrigger>
+
+            <PopoverContent 
+              className="w-[var(--radix-popover-trigger-width)] p-1 shadow-xl border-border/50 backdrop-blur-md" 
+              align="start"
             >
-              <span className="truncate">
-                {selected ? selected.label : (loading ? "Loading..." : placeholder)}
-              </span>
-              <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
-            </Button>
-          </PopoverTrigger>
-
-          <PopoverContent 
-            className="w-[var(--radix-popover-trigger-width)] p-1 shadow-xl border-border/50 backdrop-blur-md" 
-            align="start"
+              <Command className="bg-transparent" shouldFilter>
+                <CommandInput 
+                  placeholder={searchPlaceholder ?? "Search..."} 
+                  className="h-8 text-sm border-none focus:ring-0" 
+                />
+                <CommandEmpty className="py-3 text-[11px] text-center text-muted-foreground">
+                  No results found.
+                </CommandEmpty>
+                <CommandList className="max-h-64 scrollbar-thin">
+                  <CommandGroup>
+                    {ordered.map(opt => (
+                      <CommandItem
+                        key={opt.value}
+                        className="rounded-sm text-sm py-1.5 px-2 cursor-pointer"
+                        onSelect={() => {
+                          field.onChange(String(opt.value).trim());
+                          pushRecent(opt);
+                          setOpen(false);
+                        }}
+                      >
+                        <Check className={cn(
+                          "mr-2 h-3.5 w-3.5 text-primary transition-all",
+                          currentValue.toLowerCase() === opt.value.toLowerCase() ? "scale-100 opacity-100" : "scale-50 opacity-0"
+                        )} />
+                        {opt.label}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        ) : (
+          /* FALLBACK: Minimal Select Styling */
+          <Select
+            disabled={disabled || loading}
+            value={currentValue}
+            onValueChange={(v) => {
+              field.onChange(v.trim());
+              const hit = byValue.get(v.toLowerCase());
+              if (hit) pushRecent(hit);
+            }}
           >
-            <Command className="bg-transparent" shouldFilter>
-              <CommandInput 
-                placeholder={searchPlaceholder ?? "Search..."} 
-                className="h-8 text-sm border-none focus:ring-0" 
-              />
-              <CommandEmpty className="py-3 text-[11px] text-center text-muted-foreground">
-                No results found.
-              </CommandEmpty>
-              <CommandList className="max-h-64 scrollbar-thin">
-                <CommandGroup>
-                  {ordered.map(opt => (
-                    <CommandItem
-                      key={opt.value}
-                      className="rounded-sm text-sm py-1.5 px-2 cursor-pointer"
-                      onSelect={() => {
-                        field.onChange(String(opt.value).trim());
-                        pushRecent(opt);
-                        setOpen(false);
-                      }}
-                    >
-                      <Check className={cn(
-                        "mr-2 h-3.5 w-3.5 text-primary transition-all",
-                        currentValue.toLowerCase() === opt.value.toLowerCase() ? "scale-100 opacity-100" : "scale-50 opacity-0"
-                      )} />
-                      {opt.label}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      ) : (
-        /* FALLBACK: Minimal Select Styling */
-        <Select
-          disabled={disabled || loading}
-          value={currentValue}
-          onValueChange={(v) => {
-            field.onChange(v.trim());
-            const hit = byValue.get(v.toLowerCase());
-            if (hit) pushRecent(hit);
-          }}
-        >
-          <SelectTrigger className="h-9 bg-background/50 hover:bg-background transition-all">
-            <SelectValue placeholder={loading ? "Loading..." : placeholder} />
-          </SelectTrigger>
-          <SelectContent className="max-h-52">
-            {ordered.map(opt => (
-              <SelectItem key={opt.value} value={opt.value} className="text-sm">
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+            <SelectTrigger className="h-9 bg-background/50 hover:bg-background transition-all">
+              <SelectValue placeholder={loading ? "Loading..." : placeholder} />
+            </SelectTrigger>
+            <SelectContent className="max-h-52">
+              {ordered.map(opt => (
+                <SelectItem key={opt.value} value={opt.value} className="text-sm">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
 
-      {/* Modern Clear Button: Inside the trigger area */}
+      {/* Clear sits outside the trigger so it never overlaps chevrons */}
       {allowClear && hasValue && !disabled && !loading && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            field.onChange("");
+            field.onChange(null);
           }}
-          className="absolute right-8 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/40 hover:bg-muted hover:text-foreground transition-all"
+          className="h-9 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+          aria-label={clearLabel}
+          title={clearLabel}
         >
-          <X className="h-3 w-3" />
-        </button>
+          Clear
+        </Button>
       )}
     </div>
   </FormControl>
