@@ -60,6 +60,7 @@ export const EXPORT_TEMPLATES: ExportTemplate[] = [];
 const USER_TPL_KEY = "hrps.userTemplates";
 const LAST_TPL_KEY = "hrps.export.template";
 const RECENT_TPL_KEY = "hrps.export.template.recent";
+const MIGRATED_KEY_PREFIX = "hrps.userTemplates.migrated.";
 
 function loadUserTemplates(): ExportTemplate[] {
   if (typeof window === "undefined") return [];
@@ -201,6 +202,50 @@ export function getUserTemplates(): ExportTemplate[] {
 }
 export function setUserTemplates(list: ExportTemplate[]) {
   saveUserTemplates(list);
+}
+
+export function isLocalTemplatesMigrated(departmentId: string): boolean {
+  if (typeof window === "undefined" || !departmentId) return false;
+  return localStorage.getItem(MIGRATED_KEY_PREFIX + departmentId) === "1";
+}
+
+export function markLocalTemplatesMigrated(departmentId: string): void {
+  if (typeof window === "undefined" || !departmentId) return;
+  localStorage.setItem(MIGRATED_KEY_PREFIX + departmentId, "1");
+}
+
+/** Removes the localStorage user-templates key entirely. */
+export function clearLocalUserTemplatesStorage(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(USER_TPL_KEY);
+}
+
+/**
+ * Remap last-used / recent template ids after a local→DB migrate
+ * (old local ids → new server-generated ids). Unmapped last-used is cleared.
+ */
+export function remapTemplateUsageIds(idMap: Record<string, string>): void {
+  if (typeof window === "undefined") return;
+
+  const last = localStorage.getItem(LAST_TPL_KEY);
+  if (last) {
+    const next = idMap[last];
+    if (next) {
+      localStorage.setItem(LAST_TPL_KEY, next);
+    } else {
+      localStorage.removeItem(LAST_TPL_KEY);
+    }
+  }
+
+  const remapped: string[] = [];
+  const seen = new Set<string>();
+  for (const id of getRecentTemplateIds()) {
+    const next = idMap[id];
+    if (!next || seen.has(next)) continue;
+    seen.add(next);
+    remapped.push(next);
+  }
+  saveRecentTemplateIds(remapped);
 }
 
 /** Very light guard so bad JSON files won't crash the app */
