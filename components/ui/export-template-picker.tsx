@@ -35,14 +35,15 @@ type Props = {
   className?: string;
   value: string | undefined;
   templates: Template[];
+  disabled?: boolean;
   onApply: (tpl: Template) => void;
   onChangeSelected?: (id: string | undefined) => void;
   clearLastUsedTemplate: () => void;
-  clearAllUserTemplates: () => void;
-  deleteUserTemplate: (id: string) => void;
-  refreshTemplates: () => void;
-  onRequestOverwrite?: (id: string) => void;
-  onRequestRename?: (id: string, newName: string) => void;
+  clearAllUserTemplates: () => void | Promise<void>;
+  deleteUserTemplate: (id: string) => void | Promise<void>;
+  refreshTemplates: () => void | Promise<void>;
+  onRequestOverwrite?: (id: string) => void | Promise<void>;
+  onRequestRename?: (id: string, newName: string) => void | Promise<void>;
   builtinIds?: string[];
 };
 
@@ -50,6 +51,7 @@ export default function TemplatePickerBar({
   className,
   value,
   templates,
+  disabled = false,
   onApply,
   onChangeSelected,
   clearLastUsedTemplate,
@@ -92,11 +94,11 @@ export default function TemplatePickerBar({
     setRenameOpen(true);
   };
 
-  const confirmRename = () => {
-    if (!value) return;
+  const confirmRename = async () => {
+    if (!value || disabled) return;
     const finalName = newName.trim();
     if (!finalName) return;
-    onRequestRename?.(value, finalName);
+    await onRequestRename?.(value, finalName);
     setRenameOpen(false);
   };
 
@@ -111,8 +113,8 @@ export default function TemplatePickerBar({
         <div className="flex items-center gap-2">
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-[280px] justify-between">
-                {selected ? selected.name : "Choose export template..."}
+              <Button variant="outline" className="w-[280px] justify-between" disabled={disabled}>
+                {selected ? selected.name : disabled ? "Loading templates..." : "Choose export template..."}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -149,9 +151,10 @@ export default function TemplatePickerBar({
                   size="icon"
                   variant="ghost"
                   className="h-8 w-8"
+                  disabled={disabled}
                   onClick={() => {
                     clearLastUsedTemplate();
-                    refreshTemplates();
+                    void Promise.resolve(refreshTemplates());
                     onChangeSelected?.(undefined);
                   }}
                   aria-label="Clear last used preset"
@@ -168,8 +171,8 @@ export default function TemplatePickerBar({
                   type="button"
                   size="icon"
                   variant="secondary"
-                  onClick={() => value && !isBuiltIn && onRequestOverwrite?.(value)}
-                  disabled={!value || isBuiltIn}
+                  onClick={() => value && !isBuiltIn && void onRequestOverwrite?.(value)}
+                  disabled={disabled || !value || isBuiltIn}
                   className="shrink-0"
                 >
                   <Save className="h-4 w-4" />
@@ -190,13 +193,13 @@ export default function TemplatePickerBar({
                   size="icon"
                   variant="ghost"
                   className="h-8 w-8"
-                  disabled={!isDeletable}
-                  onClick={() => {
-                    if (!selected) return;
+                  disabled={disabled || !isDeletable}
+                  onClick={async () => {
+                    if (!selected || disabled) return;
                     if (builtinIds.includes(selected.id)) return;
                     if (confirm(`Delete preset "${selected.name}"?`)) {
-                      deleteUserTemplate(selected.id);
-                      refreshTemplates();
+                      await deleteUserTemplate(selected.id);
+                      await refreshTemplates();
                       if (onChangeSelected && value === selected.id) onChangeSelected(undefined);
                     }
                   }}
@@ -216,7 +219,7 @@ export default function TemplatePickerBar({
                   size="icon"
                   variant="secondary"
                   onClick={openRename}
-                  disabled={!value || isBuiltIn}
+                  disabled={disabled || !value || isBuiltIn}
                   className="shrink-0"
                 >
                   <Pencil className="h-4 w-4" />

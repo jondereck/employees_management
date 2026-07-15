@@ -26,7 +26,7 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { Portal } from '@radix-ui/react-portal';
 import Modal from './ui/modal';
 import { DEFAULT_EXPORT_SORT_LEVELS, generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, type HeadsMode } from '@/utils/download-excel';
@@ -40,7 +40,25 @@ import { SORT_FIELDS } from '@/utils/sort-fields';
 
 import { CheckboxListPicker } from './checkbox-list-picker';
 import { ActionTooltip } from './ui/action-tooltip';
-import { clearAllUserTemplates, clearLastUsedTemplate, deleteUserTemplate, ExportTemplate, exportTemplatesToBlob, getAllTemplates, getLastUsedTemplateId, importTemplatesFromObject, isBuiltInTemplateId, overwriteUserTemplateById, rememberTemplateUsage, renameUserTemplateById, saveTemplateToLocalStorage } from '@/utils/export-templates';
+import {
+  clearAllUserTemplates,
+  clearLastUsedTemplate,
+  deleteUserTemplate as removeLocalTemplateUsage,
+  ExportTemplate,
+  getLastUsedTemplateId,
+  isBuiltInTemplateId,
+  rememberTemplateUsage,
+} from '@/utils/export-templates';
+import {
+  clearAllExportTemplates,
+  createExportTemplate,
+  deleteExportTemplate,
+  fetchExportTemplates,
+  importTemplatesViaApi,
+  migrateLocalTemplatesIfNeeded,
+  templatesToExportBlob,
+  updateExportTemplate,
+} from '@/utils/export-templates-api';
 import TemplatePickerBar from './ui/export-template-picker';
 import { EXPORT_TABS, ExportTabKey } from "./tabs.registry";
 import { COLUMN_GROUPS, ColumnGroupKey } from "./columns.groups";
@@ -57,13 +75,8 @@ type BioIndexGroup = {
   count: number;
 };
 
-type ModalSize = 'cozy' | 'roomy' | 'xl';
-
-const MODAL_WIDTH_CLASSES: Record<ModalSize, string> = {
-  cozy: 'w-[min(900px,calc(100vw-48px))]',
-  roomy: 'w-[min(1100px,calc(100vw-48px))] 2xl:w-[min(1200px,calc(100vw-64px))]',
-  xl: 'w-[min(1200px,calc(100vw-64px))]',
-};
+const EXPORT_MODAL_WIDTH_CLASS =
+  'w-[min(1100px,calc(100vw-48px))] 2xl:w-[min(1200px,calc(100vw-64px))]';
 
 type SheetMode = 'perOffice' | 'merged' | 'plain';
 
@@ -290,31 +303,6 @@ export default function DownloadStyledExcel() {
     return 'perOffice';
   });
 
-  const [modalSize, setModalSize] = useState<ModalSize>(() => {
-    if (typeof window === 'undefined') return 'roomy';
-    const stored = localStorage.getItem('export.modalSize');
-    return stored === 'cozy' || stored === 'xl' ? stored : 'roomy';
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem('export.modalSize', modalSize);
-    } catch (error) {
-      console.warn('Failed to persist export.modalSize', error);
-    }
-  }, [modalSize]);
-
-  const toggleModalSize = () => {
-    setModalSize((prev) => {
-      if (prev === 'cozy') return 'roomy';
-      if (prev === 'roomy') return 'xl';
-      return 'cozy';
-    });
-  };
-
-  const modalSizeLabel = modalSize === 'xl' ? 'Shrink' : 'Expand';
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -366,7 +354,9 @@ export default function DownloadStyledExcel() {
   const [globalTargets, setGlobalTargets] = useState<string[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(undefined);
 
-  const [templates, setTemplates] = useState(getAllTemplates());
+  const [templates, setTemplates] = useState<ExportTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesSaving, setTemplatesSaving] = useState(false);
   const [sortBy, setSortBy] = useState<string>(() => {
     const stored = readStoredSortLevels();
     if (stored[0]?.field) return stored[0].field;
@@ -414,10 +404,14 @@ export default function DownloadStyledExcel() {
   }, [combinedSortLevels]);
 
 
-  function refreshTemplates() {
-    // If you merge built-ins + user templates inside getAllTemplates, just call it again:
-    setTemplates(getAllTemplates());
-  }
+  const refreshTemplates = useCallback(async () => {
+    if (!departmentId) {
+      setTemplates([]);
+      return;
+    }
+    const items = await fetchExportTemplates(departmentId);
+    setTemplates(items);
+  }, [departmentId]);
 
 
   const normalizeTemplate = (tpl: ExportTemplate): ExportTemplateV2 => {
@@ -692,10 +686,37 @@ export default function DownloadStyledExcel() {
     }
   }, [positionReplaceRules]);
 
-  // Load unique positions when modal opens
+  // Load templates (migrate once) + unique positions when modal opens
   useEffect(() => {
     if (!modalOpen || !departmentId) return;
-    refreshTemplates();
+
+    let cancelled = false;
+    (async () => {
+      setTemplatesLoading(true);
+      try {
+        try {
+          const result = await migrateLocalTemplatesIfNeeded(departmentId);
+          if (!cancelled && result.migrated > 0) {
+            toast.success(`Migrated ${result.migrated} saved template(s) to your account.`);
+          }
+        } catch (error: unknown) {
+          if (!cancelled) {
+            const message = error instanceof Error ? error.message : 'Could not migrate local templates.';
+            toast.error(message);
+          }
+        }
+        if (cancelled) return;
+        await refreshTemplates();
+      } catch (error: unknown) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Could not load templates.';
+          toast.error(message);
+        }
+      } finally {
+        if (!cancelled) setTemplatesLoading(false);
+      }
+    })();
+
     (async () => {
       try {
         const res = await fetch(`/api/backup-employee?departmentId=${encodeURIComponent(departmentId)}&t=${Date.now()}`, { cache: 'no-store' });
@@ -730,7 +751,11 @@ export default function DownloadStyledExcel() {
         console.error('Failed to load positions', e);
       }
     })();
-  }, [modalOpen, departmentId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOpen, departmentId, refreshTemplates]);
 
 
   // filtered positions by search
@@ -851,7 +876,7 @@ export default function DownloadStyledExcel() {
   useEffect(() => {
     if (!mappings) return;
     const lastTplId = getLastUsedTemplateId();
-    const tpl = getAllTemplates().find(t => t.id === lastTplId);
+    const tpl = templates.find(t => t.id === lastTplId);
     if (!tpl?.appointmentFilters) return;
 
     if (tpl.appointmentFilters === "all") {
@@ -860,7 +885,7 @@ export default function DownloadStyledExcel() {
       const allowed = new Set(APPOINTMENT_OPTIONS);
       setAppointmentFilters(tpl.appointmentFilters.filter(x => allowed.has(x)));
     }
-  }, [mappings, APPOINTMENT_OPTIONS, appointmentOptionsKey]);
+  }, [mappings, APPOINTMENT_OPTIONS, appointmentOptionsKey, templates]);
 
 
   // Appointment filters state (default = all)
@@ -1260,8 +1285,8 @@ export default function DownloadStyledExcel() {
   );
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 4 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -1568,29 +1593,34 @@ export default function DownloadStyledExcel() {
     const file = e.target.files?.[0];
     e.target.value = ""; // let user choose same file again later
     if (!file) return;
+    if (!departmentId) {
+      toast.error('Department required to import templates.');
+      return;
+    }
 
+    setTemplatesSaving(true);
     try {
       const text = await file.text();
       const json = JSON.parse(text);
-      const { added, overwritten, skipped } = importTemplatesFromObject(json, {
-        overwriteOnIdConflict: false, // set true if you want overwrite behavior
-      });
-      refreshTemplates();
+      const { added, skipped } = await importTemplatesViaApi(departmentId, json);
+      await refreshTemplates();
       toast.success(
-        `Imported: +${added}${overwritten ? `, overwritten ${overwritten}` : ""}${skipped ? `, skipped ${skipped}` : ""
-        }`
+        `Imported: +${added}${skipped ? `, skipped ${skipped}` : ''}`
       );
     } catch (err) {
       console.error(err);
-      toast.error("Import failed: invalid or corrupted JSON.");
+      const message = err instanceof Error ? err.message : 'Import failed: invalid or corrupted JSON.';
+      toast.error(message);
+    } finally {
+      setTemplatesSaving(false);
     }
   };
 
-  const handleExport = (includeBuiltIns = false) => {
-    const blob = exportTemplatesToBlob({ includeBuiltIns });
+  const handleExport = () => {
+    const blob = templatesToExportBlob(templates);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = includeBuiltIns ? "hrps-templates-all.json" : "hrps-templates-user.json";
+    a.download = "hrps-templates-user.json";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1627,7 +1657,7 @@ export default function DownloadStyledExcel() {
     };
   };
 
-  const handleOverwriteTemplate = (id: string) => {
+  const handleOverwriteTemplate = async (id: string) => {
     if (!id) {
       toast.info('Select a template first.');
       return;
@@ -1636,19 +1666,26 @@ export default function DownloadStyledExcel() {
       toast.warning("Built-in templates can't be updated. Save as a new template instead.");
       return;
     }
+    if (!departmentId) {
+      toast.error('Department required to update templates.');
+      return;
+    }
 
-    const ok = overwriteUserTemplateById(id, buildTemplatePayload(id));
-
-    if (ok) {
+    setTemplatesSaving(true);
+    try {
+      await updateExportTemplate(departmentId, id, buildTemplatePayload(id));
       rememberTemplateUsage(id);
-      refreshTemplates();
+      await refreshTemplates();
       toast.success('Template updated.');
-    } else {
-      toast.error('Could not update template.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Could not update template.';
+      toast.error(message);
+    } finally {
+      setTemplatesSaving(false);
     }
   };
 
-  const handleRenameTemplate = (id: string, newName: string) => {
+  const handleRenameTemplate = async (id: string, newName: string) => {
     if (!id) {
       toast.info('Select a template first.');
       return;
@@ -1663,13 +1700,62 @@ export default function DownloadStyledExcel() {
       toast.error('Enter a template name.');
       return;
     }
+    if (!departmentId) {
+      toast.error('Department required to rename templates.');
+      return;
+    }
 
-    const ok = renameUserTemplateById(id, trimmed);
-    if (ok) {
-      refreshTemplates();
+    setTemplatesSaving(true);
+    try {
+      await updateExportTemplate(departmentId, id, { name: trimmed });
+      await refreshTemplates();
       toast.success('Template renamed.');
-    } else {
-      toast.error('Could not rename template.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Could not rename template.';
+      toast.error(message);
+    } finally {
+      setTemplatesSaving(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    if (!departmentId) {
+      toast.error('Department required to delete templates.');
+      return;
+    }
+    setTemplatesSaving(true);
+    try {
+      await deleteExportTemplate(departmentId, id);
+      removeLocalTemplateUsage(id);
+      await refreshTemplates();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Could not delete template.';
+      toast.error(message);
+      throw error;
+    } finally {
+      setTemplatesSaving(false);
+    }
+  };
+
+  const handleClearAllTemplates = async () => {
+    if (!departmentId) {
+      toast.error('Department required to clear templates.');
+      return;
+    }
+    setTemplatesSaving(true);
+    try {
+      await clearAllExportTemplates(
+        departmentId,
+        templates.map((tpl) => tpl.id)
+      );
+      clearAllUserTemplates();
+      await refreshTemplates();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Could not clear templates.';
+      toast.error(message);
+      throw error;
+    } finally {
+      setTemplatesSaving(false);
     }
   };
 
@@ -1701,7 +1787,7 @@ export default function DownloadStyledExcel() {
         hideDefaultHeader
         contentClassName={cn(
           'z-[160] flex max-h-[min(90vh,980px)] overflow-hidden rounded-[28px] border border-slate-200 bg-white p-0 shadow-[0_24px_80px_rgba(15,23,42,0.18)] sm:max-w-none flex-col',
-          MODAL_WIDTH_CLASSES[modalSize]
+          EXPORT_MODAL_WIDTH_CLASS
         )}
         bodyClassName="flex h-full min-h-0 flex-col overflow-hidden scrollbar-gutter-stable"
       >
@@ -1717,11 +1803,20 @@ export default function DownloadStyledExcel() {
               </div>
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-slate-500 lg:justify-end">
                 <button
-                  onClick={() => {
+                  type="button"
+                  disabled={templatesSaving || templatesLoading || !departmentId}
+                  onClick={async () => {
+                    if (!departmentId) {
+                      toast.error('Department required to save templates.');
+                      return;
+                    }
                     const name = prompt("Template name?");
                     if (!name) return;
 
-                      const newTpl = saveTemplateToLocalStorage(name, {
+                    setTemplatesSaving(true);
+                    try {
+                      const newTpl = await createExportTemplate(departmentId, {
+                        name,
                         templateVersion: 2,
                         selectedKeys: selectedColumnsRef.current,
                         statusFilter,
@@ -1736,19 +1831,27 @@ export default function DownloadStyledExcel() {
                         sheetName: "Sheet1",
                         paths: {
                           imageBaseDir,
-                        imageExt,
-                        qrBaseDir,
-                        qrExt,
-                        qrPrefix,
-                      },
-                    });
+                          imageExt,
+                          qrBaseDir,
+                          qrExt,
+                          qrPrefix,
+                        },
+                      });
 
-                    refreshTemplates();
-                    applyTemplate(newTpl);
-                    toast.success(`Saved template "${name}"`);
+                      rememberTemplateUsage(newTpl.id);
+                      await refreshTemplates();
+                      applyTemplate(newTpl);
+                      setSelectedTemplateId(newTpl.id);
+                      toast.success(`Saved template "${name}"`);
+                    } catch (error: unknown) {
+                      const message = error instanceof Error ? error.message : 'Could not save template.';
+                      toast.error(message);
+                    } finally {
+                      setTemplatesSaving(false);
+                    }
                   }}
                   aria-label="Save export template"
-                  className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                   title="Save current selections as a new template"
                 >
                   <Save className="h-4 w-4" />
@@ -1757,24 +1860,14 @@ export default function DownloadStyledExcel() {
 
                 <button
                   type="button"
-                  onClick={() => handleExport(false)}
+                  onClick={() => handleExport()}
+                  disabled={templatesLoading || templates.length === 0}
                   aria-label="Export user templates"
                   title="Export user templates (.json)"
-                  className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FileDown className="h-4 w-4" />
                   <span className="hidden sm:inline">Export Template</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleExport(true)}
-                  aria-label="Export all templates"
-                  title="Export all templates (.json)"
-                  className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                >
-                  <FileDown className="h-4 w-4" />
-                  <span className="hidden sm:inline">Export All</span>
                 </button>
 
                 <button
@@ -1787,17 +1880,6 @@ export default function DownloadStyledExcel() {
                   <FileUp className="h-4 w-4" />
                   <span className="hidden sm:inline">Import</span>
                 </button>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 rounded-lg px-3 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                  title="Toggle modal size"
-                  onClick={toggleModalSize}
-                >
-                  {modalSizeLabel}
-                </Button>
 
                 <input
                   ref={fileInputRef}
@@ -1827,14 +1909,15 @@ export default function DownloadStyledExcel() {
                 className="w-full"
                 value={selectedTemplateId}
                 templates={templates}
+                disabled={templatesLoading || templatesSaving}
                 onApply={(tpl) => {
                   applyTemplate(tpl);
                   setSelectedTemplateId(tpl.id);
                 }}
                 onChangeSelected={setSelectedTemplateId}
                 clearLastUsedTemplate={clearLastUsedTemplate}
-                clearAllUserTemplates={clearAllUserTemplates}
-                deleteUserTemplate={deleteUserTemplate}
+                clearAllUserTemplates={handleClearAllTemplates}
+                deleteUserTemplate={handleDeleteTemplate}
                 refreshTemplates={refreshTemplates}
                 onRequestOverwrite={(id) => handleOverwriteTemplate(id)}
                 onRequestRename={(id, newName) => handleRenameTemplate(id, newName)}
@@ -1872,36 +1955,36 @@ export default function DownloadStyledExcel() {
                           const Icon = tab.icon;
                           const isActive = activeTabKey === tab.key;
                           return (
-                            <Button
+                            <ActionTooltip
                               key={tab.key}
-                              variant={isActive ? 'secondary' : 'ghost'}
-                              size="sm"
-                              onClick={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
-                              aria-label={tab.label}
-                              title={tab.label}
-                              aria-selected={isActive}
-                              aria-current={isActive ? 'page' : undefined}
-                              aria-controls={`panel-${tab.key}`}
-                              className={cn(
-                                "h-auto min-h-12 shrink-0 items-start gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium",
-                                isActive
-                                  ? "bg-white text-slate-950 shadow-sm ring-1 ring-emerald-100 hover:bg-white"
-                                  : "text-slate-600 hover:bg-white/70 hover:text-slate-950"
-                              )}
+                              label={tab.label}
+                              description={EXPORT_TAB_DESCRIPTIONS[tab.key]}
+                              side="bottom"
                             >
-                              <Icon className="mt-0.5 size-4 shrink-0" />
-                              <span className="flex min-w-0 flex-col gap-0.5">
+                              <Button
+                                variant={isActive ? 'secondary' : 'ghost'}
+                                size="sm"
+                                onClick={() => handleAdvancedTabChange(TAB_KEY_TO_VALUE[tab.key])}
+                                aria-label={tab.label}
+                                aria-selected={isActive}
+                                aria-current={isActive ? 'page' : undefined}
+                                aria-controls={`panel-${tab.key}`}
+                                className={cn(
+                                  "h-10 shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium",
+                                  isActive
+                                    ? "bg-white text-slate-950 shadow-sm ring-1 ring-emerald-100 hover:bg-white"
+                                    : "text-slate-600 hover:bg-white/70 hover:text-slate-950"
+                                )}
+                              >
+                                <Icon className="size-4 shrink-0" />
                                 <span className="flex items-center gap-2 whitespace-nowrap">
                                   {tab.label}
                                   <span className="rounded-full bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-slate-600">
                                     {tabMeta[tab.key]}
                                   </span>
                                 </span>
-                                <span className="hidden max-w-48 text-xs font-normal leading-4 text-slate-500 sm:block">
-                                  {EXPORT_TAB_DESCRIPTIONS[tab.key]}
-                                </span>
-                              </span>
-                            </Button>
+                              </Button>
+                            </ActionTooltip>
                           );
                         })}
                         </div>
@@ -2276,11 +2359,11 @@ export default function DownloadStyledExcel() {
                               onDragStart={handleSelectedColumnDragStart}
                               onDragEnd={handleSelectedColumnDragEnd}
                               onDragCancel={handleSelectedColumnDragCancel}
-                              modifiers={[restrictToVerticalAxis]}
-                              autoScroll={{ enabled: true, threshold: { x: 0, y: 16 } }}
+                              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+                              autoScroll={false}
                             >
                               <SortableContext items={selectedColumns} strategy={verticalListSortingStrategy}>
-                                <div className="max-h-[70vh] space-y-2 overflow-y-auto overscroll-contain pr-1 pb-2">
+                                <div className="max-h-[min(50vh,420px)] space-y-2 overflow-y-auto overscroll-contain pr-1 pb-2">
                                   {selectedColumnItems.map((column) => (
                                     <SelectedColumnDraggable
                                       key={column.key}
