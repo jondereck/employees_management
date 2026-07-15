@@ -5,6 +5,7 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-16 — feat: EmployeeExportTemplate Prisma model for saved export layouts
 - 2026-07-16 — docs: Employee Export Builder fixes design (DB templates CRUD + UI polish)
 - 2026-07-15 — ui: Plantilla Positions table sortable by Item No./Title/etc (natural Item No. default)
 - 2026-07-15 — feat: swap navbar profile to Clerk UserButton (built-in Sign out)

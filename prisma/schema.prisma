@@ -37,6 +37,7 @@ model Department {
   trainings                   Training[]
   learningDevelopmentTargets  LearningDevelopmentTarget[]
   attendanceExceptions        AttendanceException[]
+  employeeExportTemplates     EmployeeExportTemplate[]
 }
 
 model DepartmentBackup {
@@ -378,6 +379,21 @@ model GenioResultContext {
   @@index([departmentId, userId, createdAt])
   @@index([expiresAt])
   @@index([departmentId, userId, expiresAt])
+}
+
+model EmployeeExportTemplate {
+  id           String     @id @default(cuid())
+  departmentId String
+  userId       String
+  name         String
+  description  String?
+  config       Json
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([departmentId, userId])
+  @@index([departmentId, userId, updatedAt])
 }
 
 model Image {
