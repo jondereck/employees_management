@@ -197,6 +197,137 @@ describe("migrateLocalTemplatesIfNeeded", () => {
     assert.equal(isLocalTemplatesMigrated(DEPT), true);
     assert.equal(getUserTemplates().length, 1);
   });
+
+  it("sets flag and skips when LS is empty", async () => {
+    mock.method(globalThis, "fetch", async () => {
+      return new Response(JSON.stringify({ items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const result = await migrateLocalTemplatesIfNeeded(DEPT);
+    assert.deepEqual(result, { migrated: 0, skipped: true });
+    assert.equal(isLocalTemplatesMigrated(DEPT), true);
+    assert.deepEqual(getUserTemplates(), []);
+  });
+
+  it("throws on mid-batch POST failure without setting flag or clearing LS", async () => {
+    const localTemplates = [
+      { id: "local-1", name: "First", selectedKeys: ["employeeNo"] },
+      { id: "local-2", name: "Second", selectedKeys: ["fullName"] },
+    ];
+    setUserTemplates(localTemplates);
+
+    let postCount = 0;
+    mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!init?.method || init.method === "GET") {
+        return new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (init.method === "POST" && url.includes("/export-templates")) {
+        postCount += 1;
+        if (postCount === 1) {
+          const body = JSON.parse(String(init.body));
+          return new Response(
+            JSON.stringify({
+              id: "db-1",
+              name: body.name,
+              description: body.description ?? null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              ...body.config,
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(JSON.stringify({ error: "Server error" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected fetch ${init.method} ${url}`);
+    });
+
+    await assert.rejects(
+      () => migrateLocalTemplatesIfNeeded(DEPT),
+      /Server error/
+    );
+    assert.equal(isLocalTemplatesMigrated(DEPT), false);
+    assert.deepEqual(getUserTemplates(), localTemplates);
+    assert.equal(postCount, 2);
+  });
+
+  it("sets flag on follow-up when DB non-empty after partial failure", async () => {
+    const localTemplates = [
+      { id: "local-1", name: "First", selectedKeys: ["employeeNo"] },
+      { id: "local-2", name: "Second", selectedKeys: ["fullName"] },
+    ];
+    setUserTemplates(localTemplates);
+
+    let postCount = 0;
+    let dbHasItems = false;
+    mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!init?.method || init.method === "GET") {
+        return new Response(
+          JSON.stringify({
+            items: dbHasItems
+              ? [
+                  {
+                    id: "db-1",
+                    name: "First",
+                    description: null,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    selectedKeys: ["employeeNo"],
+                  },
+                ]
+              : [],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (init.method === "POST" && url.includes("/export-templates")) {
+        postCount += 1;
+        if (postCount === 1) {
+          const body = JSON.parse(String(init.body));
+          dbHasItems = true;
+          return new Response(
+            JSON.stringify({
+              id: "db-1",
+              name: body.name,
+              description: body.description ?? null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              ...body.config,
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(JSON.stringify({ error: "Server error" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected fetch ${init.method} ${url}`);
+    });
+
+    await assert.rejects(
+      () => migrateLocalTemplatesIfNeeded(DEPT),
+      /Server error/
+    );
+    assert.equal(isLocalTemplatesMigrated(DEPT), false);
+
+    const followUp = await migrateLocalTemplatesIfNeeded(DEPT);
+    assert.deepEqual(followUp, { migrated: 0, skipped: true });
+    assert.equal(isLocalTemplatesMigrated(DEPT), true);
+    assert.deepEqual(getUserTemplates(), localTemplates);
+    assert.equal(postCount, 2);
+  });
 });
 
 describe("importTemplatesViaApi", () => {
