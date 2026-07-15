@@ -47,6 +47,92 @@ export type ParsedPlantillaPasteRow = {
   error?: string;
 };
 
+/** Natural compare for plantilla item numbers (A-1 before A-10; empty last). */
+export function comparePlantillaItemNumbers(
+  a: string | null | undefined,
+  b: string | null | undefined
+): number {
+  const left = (a ?? "").trim();
+  const right = (b ?? "").trim();
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return left.localeCompare(right, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+export type PlantillaSortKey =
+  | "itemNumber"
+  | "title"
+  | "division"
+  | "status"
+  | "salaryGrade"
+  | "occupancy";
+
+export function sortPlantillaPositions<
+  T extends {
+    itemNumber?: string | null;
+    title: string;
+    salaryGrade?: number | null;
+    officeDivision?: { name: string } | null;
+    employeeType?: { name: string } | null;
+    employee?: unknown | null;
+  },
+>(
+  items: T[],
+  key: PlantillaSortKey = "itemNumber",
+  direction: "asc" | "desc" = "asc"
+): T[] {
+  const dir = direction === "asc" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    let cmp = 0;
+    switch (key) {
+      case "itemNumber":
+        cmp = comparePlantillaItemNumbers(a.itemNumber, b.itemNumber);
+        if (cmp === 0) cmp = a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
+        break;
+      case "title":
+        cmp = a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
+        break;
+      case "division":
+        cmp = (a.officeDivision?.name ?? "").localeCompare(
+          b.officeDivision?.name ?? "",
+          undefined,
+          { sensitivity: "base" }
+        );
+        break;
+      case "status":
+        cmp = (a.employeeType?.name ?? "").localeCompare(
+          b.employeeType?.name ?? "",
+          undefined,
+          { sensitivity: "base" }
+        );
+        break;
+      case "salaryGrade": {
+        const ag = a.salaryGrade ?? Number.POSITIVE_INFINITY;
+        const bg = b.salaryGrade ?? Number.POSITIVE_INFINITY;
+        cmp = ag - bg;
+        break;
+      }
+      case "occupancy": {
+        const af = a.employee ? 1 : 0;
+        const bf = b.employee ? 1 : 0;
+        cmp = af - bf;
+        break;
+      }
+      default:
+        cmp = 0;
+    }
+    if (cmp === 0 && key !== "itemNumber") {
+      cmp = comparePlantillaItemNumbers(a.itemNumber, b.itemNumber);
+    }
+    return cmp * dir;
+  });
+}
+
+
 /** Normalize appointment-status labels for loose equality matching. */
 export function normalizeStatusKey(label: string): string {
   return label.trim().toLowerCase().replace(/[\s\-_./]+/g, "");

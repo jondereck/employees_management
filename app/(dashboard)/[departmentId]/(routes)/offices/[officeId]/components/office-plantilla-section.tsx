@@ -3,7 +3,7 @@
 import * as React from "react";
 import axios from "axios";
 import { useParams } from "next/navigation";
-import { Loader2, Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Minus, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { AlertModal } from "@/components/modals/alert-modal";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,8 @@ import {
   MAX_PLANTILLA_CREATE_QUANTITY,
   MAX_PLANTILLA_SALARY_GRADE,
   parsePlantillaPaste,
+  sortPlantillaPositions,
+  type PlantillaSortKey,
 } from "@/lib/plantilla";
 
 type EmployeeTypeOption = { id: string; name: string; value?: string | null };
@@ -107,6 +109,8 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
   const [employeeTypes, setEmployeeTypes] = React.useState<EmployeeTypeOption[]>([]);
   const [filterDivision, setFilterDivision] = React.useState<string>("all");
   const [filterStatus, setFilterStatus] = React.useState<string>("all");
+  const [sortKey, setSortKey] = React.useState<PlantillaSortKey>("itemNumber");
+  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<FormState>(emptyForm());
@@ -449,6 +453,45 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
     return `${item.employee.lastName}, ${item.employee.firstName}${mid}`;
   };
 
+  const sortedItems = React.useMemo(
+    () => sortPlantillaPositions(items, sortKey, sortDir),
+    [items, sortKey, sortDir]
+  );
+
+  const toggleSort = (key: PlantillaSortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir("asc");
+  };
+
+  const SortHeader = ({
+    label,
+    column,
+    className,
+  }: {
+    label: string;
+    column: PlantillaSortKey;
+    className?: string;
+  }) => {
+    const active = sortKey === column;
+    const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+    return (
+      <th className={className ?? "p-3 font-medium"}>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 hover:text-foreground"
+          onClick={() => toggleSort(column)}
+        >
+          {label}
+          <Icon className={`h-3.5 w-3.5 ${active ? "opacity-100" : "opacity-40"}`} />
+        </button>
+      </th>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <AlertModal
@@ -510,18 +553,18 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left">
               <tr>
-                <th className="p-3 font-medium">Item No.</th>
-                <th className="p-3 font-medium">Title</th>
-                <th className="p-3 font-medium">Division</th>
-                <th className="p-3 font-medium">Status</th>
-                <th className="p-3 font-medium">SG</th>
-                <th className="p-3 font-medium">Occupancy</th>
+                <SortHeader label="Item No." column="itemNumber" />
+                <SortHeader label="Title" column="title" />
+                <SortHeader label="Division" column="division" />
+                <SortHeader label="Status" column="status" />
+                <SortHeader label="SG" column="salaryGrade" />
+                <SortHeader label="Occupancy" column="occupancy" />
                 <th className="p-3 font-medium">Occupant</th>
                 <th className="p-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {sortedItems.map((item) => (
                 <tr key={item.id} className="border-t">
                   <td className="p-3 font-mono text-xs">{item.itemNumber?.trim() || "—"}</td>
                   <td className="p-3">{item.title}</td>

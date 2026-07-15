@@ -68,13 +68,6 @@ export const Navbar = async ({ departmentId }: NavbarProps) => {
     [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
     primaryEmail ||
     "User";
-  const initials = username
-    .split(/\s+/)
-    .map((part: string) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-  const imageUrl = user?.imageUrl ?? null;
 
   return (
     <header className="sticky top-0 z-[120] w-full rounded-b-2xl border-b border-slate-200 bg-white shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
@@ -114,8 +107,8 @@ export const Navbar = async ({ departmentId }: NavbarProps) => {
           >
             <Settings className="h-4 w-4" aria-hidden="true" />
           </Link>
-          <NavbarProfile username={username} role={role} initials={initials} imageUrl={imageUrl} />
-          <NavbarProfile username={username} role={role} initials={initials} imageUrl={imageUrl} compact />
+          <NavbarProfile username={username} role={role} />
+          <NavbarProfile username={username} role={role} compact />
         </div>
       </nav>
     </header>

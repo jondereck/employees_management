@@ -5,6 +5,8 @@ import {
   buildEmployeePlantillaLinkUpdate,
   buildPlantillaItemNumbers,
   buildPlantillaSelectOptions,
+  canonicalizeStatusKey,
+  comparePlantillaItemNumbers,
   composeEmployeeBio,
   findBioSuffixMatchForItemNumber,
   formatPlantillaSelectOptionLabel,
@@ -14,17 +16,38 @@ import {
   normalizeOptionalId,
   normalizePlantillaInput,
   normalizeStatusKey,
-  canonicalizeStatusKey,
   parsePlantillaPaste,
   previewBioSuffixLinks,
   resolveDivisionLabel,
   resolvePlantillaLabel,
   resolvePositionLabel,
   sortPlantillaByAssignmentOffice,
+  sortPlantillaPositions,
   splitEmployeeBio,
   validateDivisionBelongsToOffice,
   validatePlantillaAssignment,
 } from "../lib/plantilla";
+
+test("sortPlantillaPositions defaults to natural Item No. order", () => {
+  assert.ok(comparePlantillaItemNumbers("A-1", "A-10") < 0);
+  assert.ok(comparePlantillaItemNumbers("A-2", "A-10") < 0);
+  assert.ok(comparePlantillaItemNumbers(null, "A-1") > 0);
+
+  const sorted = sortPlantillaPositions(
+    [
+      { itemNumber: "A-10", title: "Later" },
+      { itemNumber: null, title: "No number" },
+      { itemNumber: "A-2", title: "Second" },
+      { itemNumber: "A-1", title: "First" },
+    ],
+    "itemNumber",
+    "asc"
+  );
+  assert.deepEqual(
+    sorted.map((r) => r.itemNumber ?? "EMPTY"),
+    ["A-1", "A-2", "A-10", "EMPTY"]
+  );
+});
 
 test("normalizeDivisionInput requires a non-empty name", () => {
   assert.equal(normalizeDivisionInput({ name: "  " }).error, "Division name is required");
