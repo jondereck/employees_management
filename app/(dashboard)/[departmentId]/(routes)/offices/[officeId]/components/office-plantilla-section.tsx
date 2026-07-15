@@ -47,6 +47,9 @@ type PastePreviewRow = {
   employeeTypeId: string | null;
   statusMatched: boolean;
   error?: string;
+  /** Emp No suffix auto-link preview */
+  linkKind?: "unique" | "ambiguous" | "none";
+  linkEmployeeLabel?: string | null;
 };
 
 type PlantillaDto = {
@@ -199,6 +202,55 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
     [employeeTypes]
   );
 
+  const enrichPastePreviewLinks = React.useCallback(
+    async (rows: PastePreviewRow[]) => {
+      const itemNumbers = rows
+        .map((r) => r.itemNumber?.trim())
+        .filter((n): n is string => Boolean(n));
+      if (!itemNumbers.length) return rows;
+
+      try {
+        const res = await axios.get<{
+          matches: Array<{
+            itemNumber: string;
+            kind: "unique" | "ambiguous" | "none";
+            employee?: {
+              id: string;
+              employeeNo: string;
+              firstName: string;
+              lastName: string;
+            };
+          }>;
+        }>(`${plantillaUrl}/bio-link-preview`, {
+          params: { itemNumbers: itemNumbers.join(",") },
+        });
+
+        const byItem = new Map(
+          (res.data.matches ?? []).map((m) => [m.itemNumber.toLowerCase(), m])
+        );
+
+        return rows.map((row) => {
+          const key = row.itemNumber?.trim().toLowerCase();
+          if (!key) return row;
+          const match = byItem.get(key);
+          if (!match) return { ...row, linkKind: "none" as const };
+          const emp = match.employee;
+          const linkEmployeeLabel = emp
+            ? `${emp.lastName}, ${emp.firstName} (${emp.employeeNo})`
+            : null;
+          return {
+            ...row,
+            linkKind: match.kind,
+            linkEmployeeLabel,
+          };
+        });
+      } catch {
+        return rows;
+      }
+    },
+    [plantillaUrl]
+  );
+
   const tryEnterPastePreview = (text: string): boolean => {
     const parsed = parsePlantillaPaste(text);
     if (parsed.mode !== "bulk") return false;
@@ -210,9 +262,29 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
       });
       return true;
     }
-    setPastePreview(buildPastePreview(parsed.rows));
+    const base = buildPastePreview(parsed.rows);
+    setPastePreview(base);
     setForm((f) => ({ ...f, title: "" }));
+    void enrichPastePreviewLinks(base).then((enriched) => {
+      setPastePreview(enriched);
+    });
     return true;
+  };
+
+  const toastCreateResult = (
+    title: string,
+    data: { linked?: number; warnings?: string[] } | undefined,
+    extraParts: string[] = []
+  ) => {
+    const linked = typeof data?.linked === "number" ? data.linked : 0;
+    const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+    const parts = [...extraParts];
+    if (linked > 0) parts.push(`Linked ${linked} employee${linked === 1 ? "" : "s"}`);
+    if (warnings.length) parts.push(warnings.join("; "));
+    toast({
+      title,
+      description: parts.length ? parts.join(" · ") : undefined,
+    });
   };
 
   const onSavePaste = async () => {
@@ -235,7 +307,7 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
 
     try {
       setSaving(true);
-      await axios.post(plantillaUrl, {
+      const res = await axios.post(plantillaUrl, {
         items: pastePreview.map((row) => ({
           itemNumber: row.itemNumber,
           title: row.title,
@@ -245,13 +317,11 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
           isActive: form.isActive,
         })),
       });
-      toast({
-        title: `${pastePreview.length} plantilla items created`,
-        description:
-          unmatched > 0
-            ? `${unmatched} status unmatched (set to None)`
-            : undefined,
-      });
+      toastCreateResult(
+        `${pastePreview.length} plantilla items created`,
+        res.data,
+        unmatched > 0 ? [`${unmatched} status unmatched (set to None)`] : []
+      );
       setPastePreview(null);
       setDialogOpen(false);
       await load();
@@ -331,13 +401,13 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
         await axios.patch(`${plantillaUrl}/${editingId}`, payload);
         toast({ title: "Plantilla item updated" });
       } else {
-        await axios.post(plantillaUrl, payload);
-        toast({
-          title:
-            quantity === 1
-              ? "Plantilla item created"
-              : `${quantity} plantilla items created`,
-        });
+        const res = await axios.post(plantillaUrl, payload);
+        toastCreateResult(
+          quantity === 1
+            ? "Plantilla item created"
+            : `${quantity} plantilla items created`,
+          res.data
+        );
       }
       setDialogOpen(false);
       await load();
@@ -536,7 +606,10 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
           {pastePreview ? (
             <div className="grid gap-4 py-2">
               <p className="text-sm text-muted-foreground">
-                Review rows below. Division and Active apply to all.
+                Review rows below. Division and Active apply to all. After Create,
+                employees whose Emp No ends with a matching item number (e.g.{" "}
+                <span className="font-mono text-xs">1200040, A-1</span>) are
+                auto-linked when unique.
               </p>
               <div className="grid gap-2">
                 <Label>Division</Label>
@@ -600,11 +673,37 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
                             )}
                           </td>
                           <td className="p-2 align-top text-xs text-muted-foreground">
-                            {row.error
-                              ? row.error
-                              : row.statusLabel && !row.statusMatched
-                                ? `“${row.statusLabel}” not found → None`
-                                : "—"}
+                            {(() => {
+                              const notes: string[] = [];
+                              if (row.error) notes.push(row.error);
+                              if (row.statusLabel && !row.statusMatched) {
+                                notes.push(
+                                  `Status “${row.statusLabel}” not found → None`
+                                );
+                              }
+                              if (row.itemNumber?.trim()) {
+                                if (row.linkKind === "unique" && row.linkEmployeeLabel) {
+                                  notes.push(`Will link: ${row.linkEmployeeLabel}`);
+                                } else if (row.linkKind === "ambiguous") {
+                                  notes.push(
+                                    `Emp No suffix ${row.itemNumber} matches 2+ employees — skip`
+                                  );
+                                } else if (row.linkKind === "none") {
+                                  notes.push(
+                                    `No unassigned Emp No ending with “${row.itemNumber.trim()}”`
+                                  );
+                                }
+                              }
+                              return notes.length ? (
+                                <div className="space-y-0.5">
+                                  {notes.map((n) => (
+                                    <div key={n}>{n}</div>
+                                  ))}
+                                </div>
+                              ) : (
+                                "—"
+                              );
+                            })()}
                           </td>
                         </tr>
                       );

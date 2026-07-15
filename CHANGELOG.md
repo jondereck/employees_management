@@ -1,10 +1,16 @@
 # Changelog
 
 Tracks changes made to this project. Newest entries go at the top of **Unreleased**.
-**Last updated: 2026-07-14**
+**Last updated: 2026-07-15**
 
 ## Unreleased
 
+- 2026-07-15 — feat: swap navbar profile to Clerk UserButton (built-in Sign out)
+- 2026-07-15 — fix: NavbarProfile use lucide `User` instead of missing `UserRound`
+- 2026-07-15 — feat: navbar profile dropdown with Manage account and Sign out (Clerk)
+- 2026-07-15 — fix: Status paste match Co-Terminus ↔ Coterminus / Coterminous (and first-token fallback)
+- 2026-07-15 — fix: show Emp No suffix auto-link match in plantilla paste preview Notes
+- 2026-07-15 — feat: auto-link employees to new plantilla items by Emp No item-number suffix (sync position/SG/status)
 - 2026-07-14 — feat: plantilla select auto-updates BIO item-number suffix (keep prefix; bypass lock)
 - 2026-07-14 — feat: Plantilla Item dropdown prioritizes items from selected assignment office (list + search)
 - 2026-07-14 — feat: bulk-paste plantilla supports optional Item No. column (e.g. 12-1)

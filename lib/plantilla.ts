@@ -49,23 +49,45 @@ export type ParsedPlantillaPasteRow = {
 
 /** Normalize appointment-status labels for loose equality matching. */
 export function normalizeStatusKey(label: string): string {
-  return label.trim().toLowerCase().replace(/[\s\-_]+/g, "");
+  return label.trim().toLowerCase().replace(/[\s\-_./]+/g, "");
+}
+
+/** Collapse common spelling variants onto one canonical key. */
+export function canonicalizeStatusKey(label: string): string {
+  const key = normalizeStatusKey(label);
+  if (!key) return "";
+  // Co-Terminus / Coterminus / Coterminous → coterminus
+  if (key === "coterminous" || key === "coterminuos") return "coterminus";
+  return key;
 }
 
 /**
  * Match a pasted status label to an EmployeeType id (name, then value).
- * Returns null when unmatched (caller may set Status to None).
+ * Hyphens/spaces ignored: "Co-Terminus" matches DB "Coterminus".
+ * Also tries the first token so "Elected Jose…" can match "Elected".
  */
 export function matchEmployeeTypeId(
   label: string | null | undefined,
   types: EmployeeTypeMatchOption[]
 ): string | null {
   if (!label?.trim()) return null;
-  const key = normalizeStatusKey(label);
-  if (!key) return null;
+
+  const keys = new Set<string>();
+  const full = canonicalizeStatusKey(label);
+  if (full) keys.add(full);
+  const firstToken = label.trim().split(/[\s,]+/)[0] ?? "";
+  const firstKey = canonicalizeStatusKey(firstToken);
+  if (firstKey) keys.add(firstKey);
+
+  if (keys.size === 0) return null;
+
   for (const t of types) {
-    if (normalizeStatusKey(t.name) === key) return t.id;
-    if (t.value && normalizeStatusKey(t.value) === key) return t.id;
+    const nameKey = canonicalizeStatusKey(t.name);
+    const valueKey = t.value ? canonicalizeStatusKey(t.value) : "";
+    for (const key of keys) {
+      if (nameKey && nameKey === key) return t.id;
+      if (valueKey && valueKey === key) return t.id;
+    }
   }
   return null;
 }
@@ -450,6 +472,149 @@ export function composeEmployeeBio(args: {
   const p = prefix.toUpperCase();
   if (!item) return p;
   return `${p}, ${item.toUpperCase()}`;
+}
+
+export type BioSuffixMatchCandidate = {
+  id: string;
+  employeeNo?: string | null;
+};
+
+export type BioSuffixMatchResult =
+  | { kind: "unique"; matchId: string }
+  | { kind: "ambiguous" }
+  | { kind: "none" };
+
+/**
+ * Find unassigned employees whose Emp No suffix matches a plantilla item number
+ * (e.g. "1200040, A-1" → "A-1"). Caller should pass only candidates with
+ * plantillaPositionId null. Exactly one match → unique; 2+ → ambiguous.
+ */
+export function findBioSuffixMatchForItemNumber(
+  employees: BioSuffixMatchCandidate[],
+  itemNumber: string | null | undefined
+): BioSuffixMatchResult {
+  const target = (itemNumber ?? "").trim().toLowerCase();
+  if (!target) return { kind: "none" };
+
+  const matches = employees.filter((emp) => {
+    const suffix = splitEmployeeBio(emp.employeeNo).suffix.toLowerCase();
+    return Boolean(suffix) && suffix === target;
+  });
+
+  if (matches.length === 0) return { kind: "none" };
+  if (matches.length > 1) return { kind: "ambiguous" };
+  return { kind: "unique", matchId: matches[0].id };
+}
+
+export type BioLinkPreviewEmployee = {
+  id: string;
+  employeeNo: string;
+  firstName: string;
+  lastName: string;
+};
+
+export type BioLinkPreviewRow = {
+  itemNumber: string;
+  kind: "unique" | "ambiguous" | "none";
+  employee?: BioLinkPreviewEmployee;
+};
+
+/**
+ * Preview Emp No suffix links for a list of item numbers.
+ * One employee is claimed by at most one item number (first wins).
+ */
+export function previewBioSuffixLinks(
+  itemNumbers: Array<string | null | undefined>,
+  employees: Array<
+    BioSuffixMatchCandidate & {
+      employeeNo?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+    }
+  >
+): BioLinkPreviewRow[] {
+  const claimed = new Set<string>();
+  const rows: BioLinkPreviewRow[] = [];
+
+  for (const raw of itemNumbers) {
+    const itemNumber = (raw ?? "").trim();
+    if (!itemNumber) continue;
+
+    const available = employees.filter((e) => !claimed.has(e.id));
+    const result = findBioSuffixMatchForItemNumber(available, itemNumber);
+
+    if (result.kind === "unique") {
+      const emp = available.find((e) => e.id === result.matchId);
+      if (emp) claimed.add(emp.id);
+      rows.push({
+        itemNumber,
+        kind: "unique",
+        employee: emp
+          ? {
+              id: emp.id,
+              employeeNo: emp.employeeNo ?? "",
+              firstName: emp.firstName ?? "",
+              lastName: emp.lastName ?? "",
+            }
+          : undefined,
+      });
+      continue;
+    }
+
+    rows.push({ itemNumber, kind: result.kind });
+  }
+
+  return rows;
+}
+
+export type PlantillaLinkSyncSource = {
+  id: string;
+  officeId: string;
+  itemNumber: string | null;
+  title: string;
+  salaryGrade: number | null;
+  employeeTypeId: string | null;
+  officeDivisionId: string | null;
+};
+
+export type EmployeeLinkSyncTarget = {
+  id: string;
+  officeId: string;
+  employeeNo?: string | null;
+};
+
+/**
+ * Fields to set on an employee when auto-linking to a plantilla item
+ * (mirrors employees-form plantilla select effect). Does not change officeId.
+ */
+export function buildEmployeePlantillaLinkUpdate(
+  plantilla: PlantillaLinkSyncSource,
+  employee: EmployeeLinkSyncTarget
+): {
+  plantillaPositionId: string;
+  position: string;
+  salaryGrade?: number;
+  employeeTypeId?: string;
+  officeDivisionId?: string | null;
+  employeeNo?: string;
+} {
+  const nextBio = composeEmployeeBio({
+    currentEmployeeNo: employee.employeeNo,
+    itemNumber: plantilla.itemNumber,
+  });
+
+  return {
+    plantillaPositionId: plantilla.id,
+    position: plantilla.title,
+    ...(plantilla.salaryGrade != null ? { salaryGrade: plantilla.salaryGrade } : {}),
+    ...(plantilla.employeeTypeId
+      ? { employeeTypeId: plantilla.employeeTypeId }
+      : {}),
+    ...(plantilla.officeId === employee.officeId
+      ? { officeDivisionId: plantilla.officeDivisionId }
+      : {}),
+    ...(nextBio != null ? { employeeNo: nextBio } : {}),
+  };
 }
 
 export function resolvePlantillaLabel(args: {

@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 
 import { requireOfficeInDepartment } from "@/lib/office-access";
 import {
+  buildEmployeePlantillaLinkUpdate,
   buildPlantillaItemNumbers,
+  findBioSuffixMatchForItemNumber,
   MAX_PLANTILLA_PASTE_ROWS,
   normalizeCreateQuantity,
   normalizeOptionalId,
@@ -24,6 +26,16 @@ const plantillaInclude = {
     },
   },
 } as const;
+
+type CreatedPlantilla = {
+  id: string;
+  officeId: string;
+  itemNumber: string | null;
+  title: string;
+  salaryGrade: number | null;
+  employeeTypeId: string | null;
+  officeDivisionId: string | null;
+};
 
 async function assertDivisionOk(
   departmentId: string,
@@ -85,6 +97,77 @@ function createPlantillaData(
     salaryStep: null,
     isActive: value.isActive,
   };
+}
+
+/**
+ * After plantilla rows are created, link unassigned employees whose Emp No
+ * suffix matches each item number (exactly one match). Syncs position/SG/type/BIO.
+ */
+async function autoLinkEmployeesByBioSuffix(args: {
+  departmentId: string;
+  created: CreatedPlantilla[];
+}): Promise<{ linked: number; warnings: string[] }> {
+  const withItem = args.created.filter((p) => Boolean(p.itemNumber?.trim()));
+  if (withItem.length === 0) {
+    return { linked: 0, warnings: [] };
+  }
+
+  const candidates = await prismadb.employee.findMany({
+    where: {
+      departmentId: args.departmentId,
+      plantillaPositionId: null,
+      employeeNo: { contains: "," },
+    },
+    select: {
+      id: true,
+      officeId: true,
+      employeeNo: true,
+      firstName: true,
+      lastName: true,
+    },
+  });
+
+  let linked = 0;
+  const warnings: string[] = [];
+  const claimedEmployeeIds = new Set<string>();
+
+  for (const plantilla of withItem) {
+    const available = candidates.filter((c) => !claimedEmployeeIds.has(c.id));
+    const result = findBioSuffixMatchForItemNumber(
+      available,
+      plantilla.itemNumber
+    );
+
+    if (result.kind === "none") continue;
+
+    if (result.kind === "ambiguous") {
+      warnings.push(
+        `${plantilla.itemNumber}: 2+ employees match Emp No suffix — skipped`
+      );
+      continue;
+    }
+
+    const employee = available.find((c) => c.id === result.matchId);
+    if (!employee) continue;
+
+    const data = buildEmployeePlantillaLinkUpdate(plantilla, employee);
+    await prismadb.employee.update({
+      where: { id: employee.id },
+      data,
+    });
+    claimedEmployeeIds.add(employee.id);
+    linked += 1;
+  }
+
+  return { linked, warnings };
+}
+
+async function reloadPlantillaItems(ids: string[]) {
+  return prismadb.plantillaPosition.findMany({
+    where: { id: { in: ids } },
+    include: plantillaInclude,
+    orderBy: [{ itemNumber: "asc" }, { title: "asc" }],
+  });
 }
 
 export async function GET(
@@ -251,13 +334,28 @@ export async function POST(
         normalizedRows.map((value) =>
           prismadb.plantillaPosition.create({
             data: createPlantillaData(params.departmentId, params.officeId, value),
-            include: plantillaInclude,
+            select: {
+              id: true,
+              officeId: true,
+              itemNumber: true,
+              title: true,
+              salaryGrade: true,
+              employeeTypeId: true,
+              officeDivisionId: true,
+            },
           })
         )
       );
 
+      const { linked, warnings } = await autoLinkEmployeesByBioSuffix({
+        departmentId: params.departmentId,
+        created,
+      });
+
+      const items = await reloadPlantillaItems(created.map((c) => c.id));
+
       return NextResponse.json(
-        { count: created.length, items: created },
+        { count: items.length, items, linked, warnings },
         { status: 201 }
       );
     }
@@ -322,13 +420,37 @@ export async function POST(
             ...value,
             itemNumber,
           }),
-          include: plantillaInclude,
+          select: {
+            id: true,
+            officeId: true,
+            itemNumber: true,
+            title: true,
+            salaryGrade: true,
+            employeeTypeId: true,
+            officeDivisionId: true,
+          },
         })
       )
     );
 
+    const { linked, warnings } = await autoLinkEmployeesByBioSuffix({
+      departmentId: params.departmentId,
+      created,
+    });
+
+    const items = await reloadPlantillaItems(created.map((c) => c.id));
+
+    if (quantity === 1) {
+      return NextResponse.json(
+        linked > 0 || warnings.length
+          ? { ...items[0], linked, warnings }
+          : items[0],
+        { status: 201 }
+      );
+    }
+
     return NextResponse.json(
-      quantity === 1 ? created[0] : { count: created.length, items: created },
+      { count: items.length, items, linked, warnings },
       { status: 201 }
     );
   } catch (error) {

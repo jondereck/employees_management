@@ -2,24 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildEmployeePlantillaLinkUpdate,
   buildPlantillaItemNumbers,
+  buildPlantillaSelectOptions,
+  composeEmployeeBio,
+  findBioSuffixMatchForItemNumber,
+  formatPlantillaSelectOptionLabel,
   matchEmployeeTypeId,
   normalizeCreateQuantity,
   normalizeDivisionInput,
   normalizeOptionalId,
   normalizePlantillaInput,
   normalizeStatusKey,
+  canonicalizeStatusKey,
   parsePlantillaPaste,
+  previewBioSuffixLinks,
   resolveDivisionLabel,
   resolvePlantillaLabel,
   resolvePositionLabel,
+  sortPlantillaByAssignmentOffice,
+  splitEmployeeBio,
   validateDivisionBelongsToOffice,
   validatePlantillaAssignment,
-  buildPlantillaSelectOptions,
-  formatPlantillaSelectOptionLabel,
-  composeEmployeeBio,
-  splitEmployeeBio,
-  sortPlantillaByAssignmentOffice,
 } from "../lib/plantilla";
 
 test("normalizeDivisionInput requires a non-empty name", () => {
@@ -121,12 +125,16 @@ test("parsePlantillaPaste supports optional ItemNo column including hyphenated n
 
 test("matchEmployeeTypeId uses normalized name/value matching", () => {
   assert.equal(normalizeStatusKey("Co-Terminus"), "coterminus");
+  assert.equal(canonicalizeStatusKey("Coterminous"), "coterminus");
   const types = [
     { id: "1", name: "Elected", value: "elected" },
-    { id: "2", name: "Co Terminus", value: "co_terminus" },
+    { id: "2", name: "Coterminus", value: "coterminus" },
   ];
   assert.equal(matchEmployeeTypeId("Elected", types), "1");
   assert.equal(matchEmployeeTypeId("Co-Terminus", types), "2");
+  assert.equal(matchEmployeeTypeId("Co Terminus", types), "2");
+  assert.equal(matchEmployeeTypeId("Coterminous", types), "2");
+  assert.equal(matchEmployeeTypeId("Elected Josefina V. Castañeda", types), "1");
   assert.equal(matchEmployeeTypeId("Unknown Status", types), null);
 });
 
@@ -386,4 +394,89 @@ test("composeEmployeeBio keeps prefix and updates item-number suffix", () => {
     }),
     null
   );
+});
+
+test("findBioSuffixMatchForItemNumber matches Emp No suffix uniquely", () => {
+  const employees = [
+    { id: "e1", employeeNo: "1200040, A-1" },
+    { id: "e2", employeeNo: "1200041, B-2" },
+    { id: "e3", employeeNo: "1200042" },
+  ];
+
+  assert.deepEqual(findBioSuffixMatchForItemNumber(employees, "A-1"), {
+    kind: "unique",
+    matchId: "e1",
+  });
+  assert.deepEqual(findBioSuffixMatchForItemNumber(employees, "a-1"), {
+    kind: "unique",
+    matchId: "e1",
+  });
+  assert.deepEqual(findBioSuffixMatchForItemNumber(employees, "Z-9"), {
+    kind: "none",
+  });
+  assert.deepEqual(findBioSuffixMatchForItemNumber(employees, ""), {
+    kind: "none",
+  });
+  assert.deepEqual(findBioSuffixMatchForItemNumber(employees, null), {
+    kind: "none",
+  });
+
+  assert.deepEqual(
+    findBioSuffixMatchForItemNumber(
+      [
+        { id: "a", employeeNo: "1, A-1" },
+        { id: "b", employeeNo: "2, A-1" },
+      ],
+      "A-1"
+    ),
+    { kind: "ambiguous" }
+  );
+});
+
+test("previewBioSuffixLinks shows will-link and claims one employee", () => {
+  const employees = [
+    {
+      id: "e1",
+      employeeNo: "1200040, A-1",
+      firstName: "JOSEFINA",
+      lastName: "CASTAÑEDA",
+    },
+  ];
+  const rows = previewBioSuffixLinks(["A-1", "B-2"], employees);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].kind, "unique");
+  assert.equal(rows[0].employee?.id, "e1");
+  assert.equal(rows[1].kind, "none");
+});
+
+test("buildEmployeePlantillaLinkUpdate syncs plantilla fields without changing office", () => {
+  const plantilla = {
+    id: "p1",
+    officeId: "office-a",
+    itemNumber: "A-1",
+    title: "Administrative Aide IV",
+    salaryGrade: 4,
+    employeeTypeId: "type-1",
+    officeDivisionId: "div-1",
+  };
+
+  const sameOffice = buildEmployeePlantillaLinkUpdate(plantilla, {
+    id: "e1",
+    officeId: "office-a",
+    employeeNo: "1200040, X-9",
+  });
+  assert.equal(sameOffice.plantillaPositionId, "p1");
+  assert.equal(sameOffice.position, "Administrative Aide IV");
+  assert.equal(sameOffice.salaryGrade, 4);
+  assert.equal(sameOffice.employeeTypeId, "type-1");
+  assert.equal(sameOffice.officeDivisionId, "div-1");
+  assert.equal(sameOffice.employeeNo, "1200040, A-1");
+
+  const crossOffice = buildEmployeePlantillaLinkUpdate(plantilla, {
+    id: "e2",
+    officeId: "office-b",
+    employeeNo: "1200040, A-1",
+  });
+  assert.equal(crossOffice.officeDivisionId, undefined);
+  assert.equal(crossOffice.employeeNo, "1200040, A-1");
 });
