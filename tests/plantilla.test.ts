@@ -9,15 +9,19 @@ import {
   comparePlantillaItemNumbers,
   composeEmployeeBio,
   findBioSuffixMatchForItemNumber,
+  findEmployeeNameMatch,
   formatPlantillaSelectOptionLabel,
   matchEmployeeTypeId,
   normalizeCreateQuantity,
   normalizeDivisionInput,
   normalizeOptionalId,
+  normalizePersonNameKey,
   normalizePlantillaInput,
   normalizeStatusKey,
+  parseOccupantName,
   parsePlantillaPaste,
   previewBioSuffixLinks,
+  previewPlantillaAutoLinks,
   resolveDivisionLabel,
   resolvePlantillaLabel,
   resolvePositionLabel,
@@ -110,10 +114,12 @@ test("parsePlantillaPaste detects Title/SG/Status rows and keeps plain titles pl
     title: "Municipal Mayor",
     salaryGrade: 27,
     statusLabel: "Elected",
+    occupantName: null,
   });
   assert.equal(bulk.rows[1].salaryGrade, 15);
   assert.equal(bulk.rows[2].statusLabel, "Co-Terminus");
   assert.equal(bulk.rows[2].itemNumber, null);
+  assert.equal(bulk.rows[2].occupantName, null);
 
   const spaced = parsePlantillaPaste("Aide IV  4  Casual");
   assert.equal(spaced.mode, "bulk");
@@ -470,6 +476,78 @@ test("previewBioSuffixLinks shows will-link and claims one employee", () => {
   assert.equal(rows[0].kind, "unique");
   assert.equal(rows[0].employee?.id, "e1");
   assert.equal(rows[1].kind, "none");
+});
+
+test("parseOccupantName extracts first + last from First M. Last or Last, First", () => {
+  assert.deepEqual(parseOccupantName("Randy A. Wapson"), {
+    firstName: "Randy",
+    lastName: "Wapson",
+  });
+  assert.deepEqual(parseOccupantName("Wapson, Randy A."), {
+    firstName: "Randy",
+    lastName: "Wapson",
+  });
+  assert.equal(parseOccupantName("Randy"), null);
+  assert.equal(normalizePersonNameKey("CASTAÑEDA"), normalizePersonNameKey("Castaneda"));
+});
+
+test("parsePlantillaPaste supports optional occupant name column", () => {
+  const named = parsePlantillaPaste(
+    "Administrative Aide IV\t4\tCasual\tRandy A. Wapson"
+  );
+  assert.equal(named.mode, "bulk");
+  assert.equal(named.rows[0]?.title, "Administrative Aide IV");
+  assert.equal(named.rows[0]?.salaryGrade, 4);
+  assert.equal(named.rows[0]?.statusLabel, "Casual");
+  assert.equal(named.rows[0]?.occupantName, "Randy A. Wapson");
+
+  const withItem = parsePlantillaPaste(
+    "12-1\tAdministrative Aide IV\t4\tCasual\tRandy A. Wapson"
+  );
+  assert.equal(withItem.rows[0]?.itemNumber, "12-1");
+  assert.equal(withItem.rows[0]?.occupantName, "Randy A. Wapson");
+  assert.equal(withItem.rows[0]?.statusLabel, "Casual");
+});
+
+test("findEmployeeNameMatch and previewPlantillaAutoLinks link by name", () => {
+  const employees = [
+    {
+      id: "e1",
+      employeeNo: "1200040",
+      firstName: "Randy",
+      lastName: "Wapson",
+    },
+    {
+      id: "e2",
+      employeeNo: "1200041, A-1",
+      firstName: "Ana",
+      lastName: "Cruz",
+    },
+  ];
+
+  assert.deepEqual(findEmployeeNameMatch(employees, "Randy", "Wapson"), {
+    kind: "unique",
+    matchId: "e1",
+  });
+  assert.deepEqual(findEmployeeNameMatch(employees, "Unknown", "Person"), {
+    kind: "none",
+  });
+
+  const preview = previewPlantillaAutoLinks(
+    [
+      { itemNumber: null, occupantName: "Randy A. Wapson" },
+      { itemNumber: "A-1", occupantName: null },
+      { itemNumber: null, occupantName: "Nobody Here" },
+    ],
+    employees
+  );
+  assert.equal(preview[0].kind, "unique");
+  assert.equal(preview[0].linkBy, "name");
+  assert.equal(preview[0].employee?.id, "e1");
+  assert.equal(preview[1].kind, "unique");
+  assert.equal(preview[1].linkBy, "bio");
+  assert.equal(preview[1].employee?.id, "e2");
+  assert.equal(preview[2].kind, "none");
 });
 
 test("buildEmployeePlantillaLinkUpdate syncs plantilla fields without changing office", () => {

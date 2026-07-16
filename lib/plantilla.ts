@@ -43,6 +43,8 @@ export type ParsedPlantillaPasteRow = {
   title: string;
   salaryGrade: number | null;
   statusLabel: string | null;
+  /** Optional occupant from paste, e.g. "Randy A. Wapson". */
+  occupantName: string | null;
   /** Set when salary grade token is present but invalid. */
   error?: string;
 };
@@ -223,7 +225,9 @@ function parseSgToken(token: string): {
  * Parse one paste line.
  * Supported shapes (tab or 2+ spaces):
  * - Title | SG | Status
+ * - Title | SG | Status | OccupantName
  * - ItemNo | Title | SG | Status
+ * - ItemNo | Title | SG | Status | OccupantName
  * - ItemNo | Title | SG
  * - Title | Status (no SG)
  */
@@ -235,16 +239,22 @@ function parsePasteLine(line: string): ParsedPlantillaPasteRow | null {
   let title = "";
   let salaryGrade: number | null = null;
   let statusLabel: string | null = null;
+  let occupantName: string | null = null;
   let error: string | undefined;
 
-  // ItemNo | Title | SG | Status…
+  // ItemNo | Title | SG | Status [| Occupant…]
   if (parts.length >= 4 && /^\d+$/.test(parts[2])) {
     itemNumber = parts[0];
     title = parts[1];
     const sg = parseSgToken(parts[2]);
     salaryGrade = sg.salaryGrade;
     error = sg.error;
-    statusLabel = parts.slice(3).join(" ").trim() || null;
+    if (parts.length >= 5) {
+      statusLabel = parts[3].trim() || null;
+      occupantName = parts.slice(4).join(" ").trim() || null;
+    } else {
+      statusLabel = parts[3].trim() || null;
+    }
   }
   // ItemNo | Title | SG (no status) — title must not look like a plain SG token
   else if (
@@ -258,13 +268,18 @@ function parsePasteLine(line: string): ParsedPlantillaPasteRow | null {
     salaryGrade = sg.salaryGrade;
     error = sg.error;
   }
-  // Title | SG | Status…
+  // Title | SG | Status [| Occupant…]
   else if (/^\d+$/.test(parts[1])) {
     title = parts[0];
     const sg = parseSgToken(parts[1]);
     salaryGrade = sg.salaryGrade;
     error = sg.error;
-    statusLabel = parts.slice(2).join(" ").trim() || null;
+    if (parts.length >= 4) {
+      statusLabel = parts[2].trim() || null;
+      occupantName = parts.slice(3).join(" ").trim() || null;
+    } else {
+      statusLabel = parts.slice(2).join(" ").trim() || null;
+    }
   }
   // Title | Status (no SG)
   else {
@@ -284,6 +299,7 @@ function parsePasteLine(line: string): ParsedPlantillaPasteRow | null {
     title: title.trim(),
     salaryGrade,
     statusLabel,
+    occupantName,
     ...(error ? { error } : {}),
   };
 }
@@ -651,6 +667,189 @@ export function previewBioSuffixLinks(
   }
 
   return rows;
+}
+
+/** Normalize a name token for equality (case/punctuation-insensitive). */
+export function normalizePersonNameKey(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+export type ParsedOccupantName = {
+  firstName: string;
+  lastName: string;
+};
+
+/**
+ * Parse "Randy A. Wapson" or "Wapson, Randy A." into first + last
+ * (middle initial/name ignored).
+ */
+export function parseOccupantName(
+  raw: string | null | undefined
+): ParsedOccupantName | null {
+  const text = (raw ?? "").trim().replace(/\s+/g, " ");
+  if (!text) return null;
+
+  if (text.includes(",")) {
+    const [lastPart, rest = ""] = text.split(",", 2);
+    const lastName = lastPart.trim();
+    const firstName = rest.trim().split(/\s+/)[0] ?? "";
+    if (!firstName || !lastName) return null;
+    return { firstName, lastName };
+  }
+
+  const tokens = text.split(/\s+/).filter(Boolean);
+  if (tokens.length < 2) return null;
+  return {
+    firstName: tokens[0],
+    lastName: tokens[tokens.length - 1],
+  };
+}
+
+export type NameMatchCandidate = {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  employeeNo?: string | null;
+};
+
+export type NameMatchResult =
+  | { kind: "unique"; matchId: string }
+  | { kind: "ambiguous" }
+  | { kind: "none" };
+
+/** Match unassigned employees by first + last name (middle ignored). */
+export function findEmployeeNameMatch(
+  employees: NameMatchCandidate[],
+  firstName: string | null | undefined,
+  lastName: string | null | undefined
+): NameMatchResult {
+  const firstKey = normalizePersonNameKey(firstName ?? "");
+  const lastKey = normalizePersonNameKey(lastName ?? "");
+  if (!firstKey || !lastKey) return { kind: "none" };
+
+  const matches = employees.filter((emp) => {
+    return (
+      normalizePersonNameKey(emp.firstName ?? "") === firstKey &&
+      normalizePersonNameKey(emp.lastName ?? "") === lastKey
+    );
+  });
+
+  if (matches.length === 0) return { kind: "none" };
+  if (matches.length > 1) return { kind: "ambiguous" };
+  return { kind: "unique", matchId: matches[0].id };
+}
+
+export type PlantillaAutoLinkPreviewInput = {
+  itemNumber?: string | null;
+  occupantName?: string | null;
+};
+
+export type PlantillaAutoLinkPreviewRow = {
+  index: number;
+  itemNumber: string | null;
+  occupantName: string | null;
+  kind: "unique" | "ambiguous" | "none";
+  linkBy: "bio" | "name" | null;
+  employee?: BioLinkPreviewEmployee;
+};
+
+/**
+ * Preview auto-links for paste rows.
+ * Prefer Emp No suffix when item number is present; if none, try occupant name
+ * (first + last). One employee claimed at most once.
+ */
+export function previewPlantillaAutoLinks(
+  rows: PlantillaAutoLinkPreviewInput[],
+  employees: Array<
+    BioSuffixMatchCandidate &
+      NameMatchCandidate & {
+        employeeNo?: string | null;
+        firstName?: string | null;
+        lastName?: string | null;
+      }
+  >
+): PlantillaAutoLinkPreviewRow[] {
+  const claimed = new Set<string>();
+  const out: PlantillaAutoLinkPreviewRow[] = [];
+
+  rows.forEach((row, index) => {
+    const itemNumber = (row.itemNumber ?? "").trim() || null;
+    const occupantName = (row.occupantName ?? "").trim() || null;
+    const available = () => employees.filter((e) => !claimed.has(e.id));
+
+    const toEmployee = (
+      emp:
+        | (BioSuffixMatchCandidate &
+            NameMatchCandidate & {
+              employeeNo?: string | null;
+              firstName?: string | null;
+              lastName?: string | null;
+            })
+        | undefined
+    ): BioLinkPreviewEmployee | undefined =>
+      emp
+        ? {
+            id: emp.id,
+            employeeNo: emp.employeeNo ?? "",
+            firstName: emp.firstName ?? "",
+            lastName: emp.lastName ?? "",
+          }
+        : undefined;
+
+    let kind: "unique" | "ambiguous" | "none" = "none";
+    let linkBy: "bio" | "name" | null = null;
+    let employee: BioLinkPreviewEmployee | undefined;
+
+    if (itemNumber) {
+      const bio = findBioSuffixMatchForItemNumber(available(), itemNumber);
+      if (bio.kind === "unique") {
+        const emp = available().find((e) => e.id === bio.matchId);
+        if (emp) claimed.add(emp.id);
+        kind = "unique";
+        linkBy = "bio";
+        employee = toEmployee(emp);
+      } else if (bio.kind === "ambiguous") {
+        kind = "ambiguous";
+        linkBy = "bio";
+      }
+    }
+
+    if (kind === "none" && occupantName) {
+      const parsed = parseOccupantName(occupantName);
+      if (parsed) {
+        const name = findEmployeeNameMatch(
+          available(),
+          parsed.firstName,
+          parsed.lastName
+        );
+        if (name.kind === "unique") {
+          const emp = available().find((e) => e.id === name.matchId);
+          if (emp) claimed.add(emp.id);
+          kind = "unique";
+          linkBy = "name";
+          employee = toEmployee(emp);
+        } else if (name.kind === "ambiguous") {
+          kind = "ambiguous";
+          linkBy = "name";
+        }
+      }
+    }
+
+    out.push({
+      index,
+      itemNumber,
+      occupantName,
+      kind,
+      linkBy,
+      ...(employee ? { employee } : {}),
+    });
+  });
+
+  return out;
 }
 
 export type PlantillaLinkSyncSource = {

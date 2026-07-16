@@ -5,6 +5,7 @@ import axios from "axios";
 import { useParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Minus, Pencil, Plus, Trash2 } from "lucide-react";
 
+import LoadingWithProgress from "@/components/loading-with-progress";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,11 +47,13 @@ type PastePreviewRow = {
   title: string;
   salaryGrade: number | null;
   statusLabel: string | null;
+  occupantName: string | null;
   employeeTypeId: string | null;
   statusMatched: boolean;
   error?: string;
-  /** Emp No suffix auto-link preview */
+  /** Auto-link preview (Emp No suffix or name) */
   linkKind?: "unique" | "ambiguous" | "none";
+  linkBy?: "bio" | "name" | null;
   linkEmployeeLabel?: string | null;
 };
 
@@ -198,6 +201,7 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
           title: row.title,
           salaryGrade: row.salaryGrade,
           statusLabel: row.statusLabel,
+          occupantName: row.occupantName,
           employeeTypeId,
           statusMatched: !row.statusLabel || Boolean(employeeTypeId),
           error: row.error,
@@ -208,16 +212,17 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
 
   const enrichPastePreviewLinks = React.useCallback(
     async (rows: PastePreviewRow[]) => {
-      const itemNumbers = rows
-        .map((r) => r.itemNumber?.trim())
-        .filter((n): n is string => Boolean(n));
-      if (!itemNumbers.length) return rows;
+      const needsPreview = rows.some(
+        (r) => r.itemNumber?.trim() || r.occupantName?.trim()
+      );
+      if (!needsPreview) return rows;
 
       try {
-        const res = await axios.get<{
+        const res = await axios.post<{
           matches: Array<{
-            itemNumber: string;
+            index: number;
             kind: "unique" | "ambiguous" | "none";
+            linkBy: "bio" | "name" | null;
             employee?: {
               id: string;
               employeeNo: string;
@@ -226,25 +231,29 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
             };
           }>;
         }>(`${plantillaUrl}/bio-link-preview`, {
-          params: { itemNumbers: itemNumbers.join(",") },
+          rows: rows.map((r) => ({
+            itemNumber: r.itemNumber,
+            occupantName: r.occupantName,
+          })),
         });
 
-        const byItem = new Map(
-          (res.data.matches ?? []).map((m) => [m.itemNumber.toLowerCase(), m])
+        const byIndex = new Map(
+          (res.data.matches ?? []).map((m) => [m.index, m])
         );
 
-        return rows.map((row) => {
-          const key = row.itemNumber?.trim().toLowerCase();
-          if (!key) return row;
-          const match = byItem.get(key);
-          if (!match) return { ...row, linkKind: "none" as const };
+        return rows.map((row, index) => {
+          const match = byIndex.get(index);
+          if (!match) return row;
           const emp = match.employee;
           const linkEmployeeLabel = emp
-            ? `${emp.lastName}, ${emp.firstName} (${emp.employeeNo})`
+            ? `${emp.lastName}, ${emp.firstName}${
+                emp.employeeNo ? ` (${emp.employeeNo})` : ""
+              }`
             : null;
           return {
             ...row,
             linkKind: match.kind,
+            linkBy: match.linkBy,
             linkEmployeeLabel,
           };
         });
@@ -319,6 +328,7 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
           employeeTypeId: row.employeeTypeId,
           officeDivisionId,
           isActive: form.isActive,
+          occupantName: row.occupantName,
         })),
       });
       toastCreateResult(
@@ -543,9 +553,7 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading plantilla…
-        </div>
+        <LoadingWithProgress active={loading} className="min-h-[220px] rounded-md border bg-white" />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No plantilla items yet.</p>
       ) : (
@@ -650,9 +658,10 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
             <div className="grid gap-4 py-2">
               <p className="text-sm text-muted-foreground">
                 Review rows below. Division and Active apply to all. After Create,
-                employees whose Emp No ends with a matching item number (e.g.{" "}
-                <span className="font-mono text-xs">1200040, A-1</span>) are
-                auto-linked when unique.
+                employees are auto-linked when unique by Emp No item-number suffix
+                (e.g. <span className="font-mono text-xs">1200040, A-1</span>) or
+                by occupant name (first + last, e.g.{" "}
+                <span className="font-mono text-xs">Randy A. Wapson</span>).
               </p>
               <div className="grid gap-2">
                 <Label>Division</Label>
@@ -693,6 +702,7 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
                       <th className="p-2 font-medium">Title</th>
                       <th className="p-2 font-medium">SG</th>
                       <th className="p-2 font-medium">Status</th>
+                      <th className="p-2 font-medium">Occupant</th>
                       <th className="p-2 font-medium">Notes</th>
                     </tr>
                   </thead>
@@ -715,6 +725,11 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
                               <span className="text-muted-foreground">None</span>
                             )}
                           </td>
+                          <td className="p-2 align-top text-xs">
+                            {row.occupantName?.trim() || (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
                           <td className="p-2 align-top text-xs text-muted-foreground">
                             {(() => {
                               const notes: string[] = [];
@@ -724,17 +739,36 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
                                   `Status “${row.statusLabel}” not found → None`
                                 );
                               }
-                              if (row.itemNumber?.trim()) {
+                              const hasLinkHint =
+                                Boolean(row.itemNumber?.trim()) ||
+                                Boolean(row.occupantName?.trim());
+                              if (hasLinkHint) {
                                 if (row.linkKind === "unique" && row.linkEmployeeLabel) {
-                                  notes.push(`Will link: ${row.linkEmployeeLabel}`);
+                                  const via =
+                                    row.linkBy === "name"
+                                      ? "name"
+                                      : row.linkBy === "bio"
+                                        ? "Emp No"
+                                        : "match";
+                                  notes.push(
+                                    `Will link (${via}): ${row.linkEmployeeLabel}`
+                                  );
                                 } else if (row.linkKind === "ambiguous") {
                                   notes.push(
-                                    `Emp No suffix ${row.itemNumber} matches 2+ employees — skip`
+                                    row.linkBy === "name"
+                                      ? `Name matches 2+ employees — skip`
+                                      : `Emp No suffix ${row.itemNumber} matches 2+ employees — skip`
                                   );
                                 } else if (row.linkKind === "none") {
-                                  notes.push(
-                                    `No unassigned Emp No ending with “${row.itemNumber.trim()}”`
-                                  );
+                                  if (row.occupantName?.trim()) {
+                                    notes.push(
+                                      `No unassigned employee named “${row.occupantName.trim()}”`
+                                    );
+                                  } else if (row.itemNumber?.trim()) {
+                                    notes.push(
+                                      `No unassigned Emp No ending with “${row.itemNumber.trim()}”`
+                                    );
+                                  }
                                 }
                               }
                               return notes.length ? (

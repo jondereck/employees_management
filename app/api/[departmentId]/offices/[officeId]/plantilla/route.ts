@@ -5,10 +5,12 @@ import {
   buildEmployeePlantillaLinkUpdate,
   buildPlantillaItemNumbers,
   findBioSuffixMatchForItemNumber,
+  findEmployeeNameMatch,
   MAX_PLANTILLA_PASTE_ROWS,
   normalizeCreateQuantity,
   normalizeOptionalId,
   normalizePlantillaInput,
+  parseOccupantName,
   validateDivisionBelongsToOffice,
   type NormalizedPlantilla,
 } from "@/lib/plantilla";
@@ -100,15 +102,16 @@ function createPlantillaData(
 }
 
 /**
- * After plantilla rows are created, link unassigned employees whose Emp No
- * suffix matches each item number (exactly one match). Syncs position/SG/type/BIO.
+ * After plantilla rows are created, link unassigned employees by:
+ * 1) Emp No suffix matching item number (when present)
+ * 2) Else first+last name from optional occupantName on the paste row
  */
-async function autoLinkEmployeesByBioSuffix(args: {
+async function autoLinkEmployeesAfterCreate(args: {
   departmentId: string;
   created: CreatedPlantilla[];
+  occupantNames?: Array<string | null | undefined>;
 }): Promise<{ linked: number; warnings: string[] }> {
-  const withItem = args.created.filter((p) => Boolean(p.itemNumber?.trim()));
-  if (withItem.length === 0) {
+  if (args.created.length === 0) {
     return { linked: 0, warnings: [] };
   }
 
@@ -116,7 +119,6 @@ async function autoLinkEmployeesByBioSuffix(args: {
     where: {
       departmentId: args.departmentId,
       plantillaPositionId: null,
-      employeeNo: { contains: "," },
     },
     select: {
       id: true,
@@ -131,23 +133,53 @@ async function autoLinkEmployeesByBioSuffix(args: {
   const warnings: string[] = [];
   const claimedEmployeeIds = new Set<string>();
 
-  for (const plantilla of withItem) {
+  for (let i = 0; i < args.created.length; i++) {
+    const plantilla = args.created[i];
     const available = candidates.filter((c) => !claimedEmployeeIds.has(c.id));
-    const result = findBioSuffixMatchForItemNumber(
-      available,
-      plantilla.itemNumber
-    );
+    let matchId: string | null = null;
+    let linkLabel = "";
 
-    if (result.kind === "none") continue;
-
-    if (result.kind === "ambiguous") {
-      warnings.push(
-        `${plantilla.itemNumber}: 2+ employees match Emp No suffix — skipped`
+    const itemNumber = plantilla.itemNumber?.trim() || null;
+    if (itemNumber) {
+      const bioCandidates = available.filter((c) =>
+        Boolean(c.employeeNo?.includes(","))
       );
-      continue;
+      const bio = findBioSuffixMatchForItemNumber(bioCandidates, itemNumber);
+      if (bio.kind === "unique") {
+        matchId = bio.matchId;
+        linkLabel = `Emp No suffix ${itemNumber}`;
+      } else if (bio.kind === "ambiguous") {
+        warnings.push(
+          `${itemNumber}: 2+ employees match Emp No suffix — skipped`
+        );
+      }
     }
 
-    const employee = available.find((c) => c.id === result.matchId);
+    const occupantName = args.occupantNames?.[i]?.trim() || null;
+    if (!matchId && occupantName) {
+      const parsed = parseOccupantName(occupantName);
+      if (!parsed) {
+        warnings.push(`Could not parse name “${occupantName}” — skipped`);
+      } else {
+        const name = findEmployeeNameMatch(
+          available,
+          parsed.firstName,
+          parsed.lastName
+        );
+        if (name.kind === "unique") {
+          matchId = name.matchId;
+          linkLabel = `${parsed.lastName}, ${parsed.firstName}`;
+        } else if (name.kind === "ambiguous") {
+          warnings.push(
+            `${parsed.lastName}, ${parsed.firstName}: 2+ employees match name — skipped`
+          );
+        }
+      }
+    }
+
+    if (!matchId) continue;
+
+    const employee = available.find((c) => c.id === matchId);
     if (!employee) continue;
 
     const data = buildEmployeePlantillaLinkUpdate(plantilla, employee);
@@ -157,6 +189,7 @@ async function autoLinkEmployeesByBioSuffix(args: {
     });
     claimedEmployeeIds.add(employee.id);
     linked += 1;
+    void linkLabel;
   }
 
   return { linked, warnings };
@@ -347,9 +380,15 @@ export async function POST(
         )
       );
 
-      const { linked, warnings } = await autoLinkEmployeesByBioSuffix({
+      const occupantNames = body.items.map(
+        (row: { occupantName?: string | null }) =>
+          typeof row?.occupantName === "string" ? row.occupantName : null
+      );
+
+      const { linked, warnings } = await autoLinkEmployeesAfterCreate({
         departmentId: params.departmentId,
         created,
+        occupantNames,
       });
 
       const items = await reloadPlantillaItems(created.map((c) => c.id));
@@ -433,7 +472,7 @@ export async function POST(
       )
     );
 
-    const { linked, warnings } = await autoLinkEmployeesByBioSuffix({
+    const { linked, warnings } = await autoLinkEmployeesAfterCreate({
       departmentId: params.departmentId,
       created,
     });

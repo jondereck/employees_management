@@ -5,6 +5,8 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-16 — feat: plantilla bulk paste can auto-link by occupant first+last name
+- 2026-07-16 — ui: L&D Summary Monitoring defaults to Graphics; office pages use universal loader
 - 2026-07-16 — ui: remove Excel export / Save layout badges from Export Builder
 - 2026-07-16 — fix: keep Export Builder modal open after Export Excel
 - 2026-07-16 — ui: replace browser prompt with Save Template dialog (name + description)

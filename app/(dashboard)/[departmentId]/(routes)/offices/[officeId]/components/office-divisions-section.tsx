@@ -5,6 +5,7 @@ import axios from "axios";
 import { useParams } from "next/navigation";
 import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 
+import LoadingWithProgress from "@/components/loading-with-progress";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -166,9 +167,7 @@ export default function OfficeDivisionsSection({ onChanged }: Props) {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading divisions…
-        </div>
+        <LoadingWithProgress active={loading} className="min-h-[160px] rounded-md border bg-white" />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No divisions yet. Plantilla items can still sit directly under the office.</p>
       ) : (
