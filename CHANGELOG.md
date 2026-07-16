@@ -5,6 +5,9 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-16 — ui: remove Excel export / Save layout badges from Export Builder
+- 2026-07-16 — fix: keep Export Builder modal open after Export Excel
+- 2026-07-16 — ui: replace browser prompt with Save Template dialog (name + description)
 - 2026-07-16 — ui: Export Builder hover tab hints, fixed modal size, stabler column order drag
 - 2026-07-16 — feat: Employee Export Builder saves templates to DB
 - 2026-07-16 — test: cover export template migrate failure and empty LS paths

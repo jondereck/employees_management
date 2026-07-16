@@ -32,6 +32,17 @@ import Modal from './ui/modal';
 import { DEFAULT_EXPORT_SORT_LEVELS, generateExcelFile, getActiveExportTab, Mappings, PositionReplaceRule, setActiveExportTab, type HeadsMode } from '@/utils/download-excel';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useParams } from 'next/navigation';
 import type { ExportTemplateV2, SortLevel } from '@/types/export';
@@ -357,6 +368,9 @@ export default function DownloadStyledExcel() {
   const [templates, setTemplates] = useState<ExportTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templatesSaving, setTemplatesSaving] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [saveTemplateDescription, setSaveTemplateDescription] = useState('');
   const [sortBy, setSortBy] = useState<string>(() => {
     const stored = readStoredSortLevels();
     if (stored[0]?.field) return stored[0].field;
@@ -1759,6 +1773,62 @@ export default function DownloadStyledExcel() {
     }
   };
 
+  const handleConfirmSaveTemplate = async () => {
+    if (!departmentId) {
+      toast.error('Department required to save templates.');
+      return;
+    }
+
+    const name = saveTemplateName.trim();
+    if (!name) {
+      toast.error('Enter a template name.');
+      return;
+    }
+
+    const description = saveTemplateDescription.trim();
+
+    setTemplatesSaving(true);
+    try {
+      const newTpl = await createExportTemplate(departmentId, {
+        name,
+        ...(description ? { description } : { description: null }),
+        templateVersion: 2,
+        selectedKeys: selectedColumnsRef.current,
+        statusFilter,
+        idColumnSource,
+        appointmentFilters,
+        positionReplaceRules,
+        officesSelection: selectedOffices.map((id) => String(id)),
+        sheetMode,
+        sortLevels: combinedSortLevels,
+        filterGroupMode,
+        headsMode,
+        sheetName: 'Sheet1',
+        paths: {
+          imageBaseDir,
+          imageExt,
+          qrBaseDir,
+          qrExt,
+          qrPrefix,
+        },
+      });
+
+      rememberTemplateUsage(newTpl.id);
+      await refreshTemplates();
+      applyTemplate(newTpl);
+      setSelectedTemplateId(newTpl.id);
+      setSaveTemplateOpen(false);
+      setSaveTemplateName('');
+      setSaveTemplateDescription('');
+      toast.success(`Saved template "${name}"`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Could not save template.';
+      toast.error(message);
+    } finally {
+      setTemplatesSaving(false);
+    }
+  };
+
 
 
   return (
@@ -1795,9 +1865,6 @@ export default function DownloadStyledExcel() {
           <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-5 py-5 backdrop-blur supports-[backdrop-filter]:bg-white/85 sm:px-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-1">
-                <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                  Excel export
-                </div>
                 <h2 className="text-xl font-semibold leading-tight text-slate-950">Employee Export Builder</h2>
                 <p className="text-sm leading-6 text-slate-500">Choose template, columns, filters, then export.</p>
               </div>
@@ -1805,50 +1872,14 @@ export default function DownloadStyledExcel() {
                 <button
                   type="button"
                   disabled={templatesSaving || templatesLoading || !departmentId}
-                  onClick={async () => {
+                  onClick={() => {
                     if (!departmentId) {
                       toast.error('Department required to save templates.');
                       return;
                     }
-                    const name = prompt("Template name?");
-                    if (!name) return;
-
-                    setTemplatesSaving(true);
-                    try {
-                      const newTpl = await createExportTemplate(departmentId, {
-                        name,
-                        templateVersion: 2,
-                        selectedKeys: selectedColumnsRef.current,
-                        statusFilter,
-                        idColumnSource,
-                        appointmentFilters,
-                        positionReplaceRules,
-                        officesSelection: selectedOffices.map((id) => String(id)),
-                        sheetMode,
-                        sortLevels: combinedSortLevels,
-                        filterGroupMode,
-                        headsMode,
-                        sheetName: "Sheet1",
-                        paths: {
-                          imageBaseDir,
-                          imageExt,
-                          qrBaseDir,
-                          qrExt,
-                          qrPrefix,
-                        },
-                      });
-
-                      rememberTemplateUsage(newTpl.id);
-                      await refreshTemplates();
-                      applyTemplate(newTpl);
-                      setSelectedTemplateId(newTpl.id);
-                      toast.success(`Saved template "${name}"`);
-                    } catch (error: unknown) {
-                      const message = error instanceof Error ? error.message : 'Could not save template.';
-                      toast.error(message);
-                    } finally {
-                      setTemplatesSaving(false);
-                    }
+                    setSaveTemplateName('');
+                    setSaveTemplateDescription('');
+                    setSaveTemplateOpen(true);
                   }}
                   aria-label="Save export template"
                   className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1891,6 +1922,91 @@ export default function DownloadStyledExcel() {
               </div>
             </div>
           </div>
+
+          <Dialog
+            open={saveTemplateOpen}
+            onOpenChange={(open) => {
+              if (templatesSaving) return;
+              setSaveTemplateOpen(open);
+              if (!open) {
+                setSaveTemplateName('');
+                setSaveTemplateDescription('');
+              }
+            }}
+          >
+            <DialogContent
+              className="gap-0 overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-[0_24px_80px_rgba(15,23,42,0.18)] sm:max-w-md"
+              style={{ zIndex: 240 }}
+            >
+              <DialogHeader className="space-y-2 border-b border-slate-200 bg-white px-5 py-4 text-left">
+                <DialogTitle className="text-lg font-semibold text-slate-950">
+                  Save export template
+                </DialogTitle>
+                <DialogDescription className="text-sm text-slate-500">
+                  Store the current columns, filters, and order so you can reuse them later.
+                </DialogDescription>
+              </DialogHeader>
+
+              <form
+                className="space-y-4 bg-slate-50/60 px-5 py-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleConfirmSaveTemplate();
+                }}
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="export-template-name" className="text-sm font-medium text-slate-800">
+                    Template name
+                  </Label>
+                  <Input
+                    id="export-template-name"
+                    value={saveTemplateName}
+                    onChange={(event) => setSaveTemplateName(event.target.value)}
+                    placeholder="e.g. Active permanent staff"
+                    maxLength={120}
+                    autoFocus
+                    disabled={templatesSaving}
+                    className="h-10 rounded-lg border-slate-200 bg-white"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="export-template-description" className="text-sm font-medium text-slate-800">
+                    Description <span className="font-normal text-slate-400">(optional)</span>
+                  </Label>
+                  <Textarea
+                    id="export-template-description"
+                    value={saveTemplateDescription}
+                    onChange={(event) => setSaveTemplateDescription(event.target.value)}
+                    placeholder="Short note about when to use this layout"
+                    maxLength={500}
+                    rows={3}
+                    disabled={templatesSaving}
+                    className="resize-none rounded-lg border-slate-200 bg-white"
+                  />
+                </div>
+
+                <DialogFooter className="gap-2 border-t border-slate-200 bg-white px-0 pb-0 pt-4 sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={templatesSaving}
+                    onClick={() => setSaveTemplateOpen(false)}
+                    className="rounded-lg"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={templatesSaving || !saveTemplateName.trim()}
+                    className="rounded-lg bg-emerald-700 text-white hover:bg-emerald-800"
+                  >
+                    {templatesSaving ? 'Saving…' : 'Save template'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
 
           <div className="flex w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-slate-50/60 px-5 py-4 pb-6 sm:px-6">
             <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -2829,14 +2945,14 @@ export default function DownloadStyledExcel() {
                 </button>
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => {
-                    setModalOpen(false);
-                    handleDownload(selectedColumnsRef.current);
+                    void handleDownload(selectedColumnsRef.current);
                   }}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FaFileExcel className="text-base" />
-                  Export Excel
+                  {loading ? 'Generating…' : 'Export Excel'}
                 </button>
               </div>
             </div>
