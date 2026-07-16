@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireSmsAdmin, smsAuthErrorResponse } from "@/lib/auth/require-sms-admin";
 import { normalizePhilippineMobileNumber } from "@/lib/phone";
 import prismadb from "@/lib/prismadb";
-import { sendSmsViaProviders } from "@/lib/sms/providers";
+import { SMS_PROVIDER_NAMES, sendSmsViaProviders } from "@/lib/sms/providers";
 import { getTwilioWebhookBaseUrl } from "@/lib/sms/twilio";
 
 const MAX_SMS_LENGTH = 1600;
@@ -23,6 +23,7 @@ const sendSmsSchema = z
       .optional()
       .transform((value) => value?.trim() || undefined)
       .pipe(z.string().max(50).optional()),
+    provider: z.enum(SMS_PROVIDER_NAMES).default("smsgate"),
   })
   .superRefine((value, ctx) => {
     if (!value.phoneNumber && (!value.employeeIds || value.employeeIds.length === 0)) {
@@ -113,7 +114,9 @@ function buildStatusCallbackUrl(request: Request) {
 
 function statusForProviderResult(result: { provider: string; ok: boolean; queued: boolean }) {
   if (!result.ok) return SmsLogStatus.FAILED;
-  if (result.provider === "twilio" && result.queued) return SmsLogStatus.QUEUED;
+  // UniSMS acknowledges immediately; Twilio/SMSGate are queued for delivery.
+  if (result.provider === "unisms") return SmsLogStatus.SENT;
+  if (result.queued) return SmsLogStatus.QUEUED;
   return SmsLogStatus.SENT;
 }
 
@@ -213,32 +216,37 @@ export async function POST(
       }
       seenNumbers.add(normalized.value);
 
-      const providerResult = await sendSmsViaProviders({
-        recipient: normalized.value,
-        content: body.message,
-        senderId: body.senderId,
-        statusCallbackUrl: buildStatusCallbackUrl(req),
-        metadata: {
-          departmentId: params.departmentId,
-          employeeId: target.employeeId,
-          source: target.source,
-          createdByUserId: access.userId,
+      const providerResult = await sendSmsViaProviders(
+        {
+          recipient: normalized.value,
+          content: body.message,
+          senderId: body.senderId,
+          statusCallbackUrl: body.provider === "twilio" ? buildStatusCallbackUrl(req) : null,
+          metadata: {
+            departmentId: params.departmentId,
+            employeeId: target.employeeId,
+            source: target.source,
+            createdByUserId: access.userId,
+          },
         },
-      });
+        body.provider
+      );
 
+      const logStatus = statusForProviderResult(providerResult);
       await writeSmsLog({
         departmentId: params.departmentId,
         employeeId: target.employeeId,
         phoneNumber: normalized.value,
         message: body.message,
         senderId: body.senderId,
-        status: statusForProviderResult(providerResult),
+        status: logStatus,
         provider: providerResult.provider,
         errorMessage: providerResult.errorMessage,
         providerMessageId: providerResult.providerMessageId,
         requestMeta: {
           source: target.source,
           rawPhoneNumber: target.phoneNumber,
+          selectedProvider: body.provider,
           attempts: providerResult.attempts,
         },
         responseBody: providerResult.responseBody,
@@ -250,7 +258,11 @@ export async function POST(
         employeeName: target.employeeName,
         phoneNumber: target.phoneNumber,
         normalizedPhoneNumber: normalized.value,
-        status: providerResult.ok ? (providerResult.provider === "twilio" ? "QUEUED" : "SENT") : "FAILED",
+        status: providerResult.ok
+          ? logStatus === SmsLogStatus.QUEUED
+            ? "QUEUED"
+            : "SENT"
+          : "FAILED",
         provider: providerResult.provider,
         errorMessage: providerResult.errorMessage,
         providerMessageId: providerResult.providerMessageId,

@@ -20,7 +20,7 @@ export default async function SmsToolPage({
     <ToolsLayout
       params={params}
       title="Text Blast"
-      description="Send Twilio SMS messages, review logs, and manage replies."
+      description="Send SMS via SMSGate (default), Twilio, or UniSMS. Inbox and replies are Twilio-only."
       breadcrumbs={[{ label: "Text Blast" }]}
       contentClassName="space-y-6"
     >

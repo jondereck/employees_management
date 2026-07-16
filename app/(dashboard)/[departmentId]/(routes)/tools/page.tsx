@@ -98,7 +98,7 @@ const TOOL_CARD_CONFIG: ToolCardConfig[] = [
   {
     key: "sms",
     label: "Text Blast",
-    description: "Send UniSMS messages to selected employee contact numbers.",
+    description: "Send SMS via SMSGate, Twilio, or UniSMS to selected employee contact numbers.",
     slug: "tools/sms",
     icon: MessageSquare,
   },

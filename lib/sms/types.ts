@@ -1,4 +1,4 @@
-export type SmsProviderName = "twilio" | "unisms";
+export type SmsProviderName = "smsgate" | "twilio" | "unisms";
 
 export type SmsProviderResult = {
   ok: boolean;

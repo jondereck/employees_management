@@ -18,6 +18,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -29,12 +30,25 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  formatPhilippineMobileLocalInput,
+  isValidPhilippineMobileLocal,
+  toE164FromPhilippineLocal,
+} from "@/lib/phone";
 import { cn } from "@/lib/utils";
 
 const MAX_SMS_LENGTH = 1600;
+const UNISMS_MAX_SMS_LENGTH = 160;
 
+type SmsProviderChoice = "smsgate" | "twilio" | "unisms";
 type RecipientMode = "direct" | "employees";
 type SmsStatus = "QUEUED" | "SENT" | "DELIVERED" | "FAILED" | "UNDELIVERED" | "RECEIVED";
+
+const PROVIDER_OPTIONS: Array<{ value: SmsProviderChoice; label: string; hint: string }> = [
+  { value: "smsgate", label: "SMSGate", hint: "Free Android SMS gateway (default). Dual SIM via SMSGATE_SIM_NUMBER." },
+  { value: "twilio", label: "Twilio", hint: "Supports replies and delivery status" },
+  { value: "unisms", label: "UniSMS", hint: "160-character messages" },
+];
 
 type SmsTarget = {
   id: string;
@@ -139,6 +153,7 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
   const [message, setMessage] = useState("");
   const [replyMessage, setReplyMessage] = useState("");
   const [senderId, setSenderId] = useState(defaultSenderId);
+  const [provider, setProvider] = useState<SmsProviderChoice>("smsgate");
   const [loadingTargets, setLoadingTargets] = useState(true);
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [loadingInbox, setLoadingInbox] = useState(true);
@@ -225,6 +240,7 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
   const selectedCount = selectedIds.length;
   const messageLength = message.trim().length;
   const replyLength = replyMessage.trim().length;
+  const providerMaxLength = provider === "unisms" ? UNISMS_MAX_SMS_LENGTH : MAX_SMS_LENGTH;
   const segmentCount = estimateSegments(message);
   const replySegmentCount = estimateSegments(replyMessage);
   const recipientCount = mode === "direct" ? 1 : selectedCount;
@@ -232,8 +248,8 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
   const canSend =
     !sending &&
     messageLength > 0 &&
-    messageLength <= MAX_SMS_LENGTH &&
-    (mode === "direct" ? phoneNumber.trim().length > 0 : selectedCount > 0);
+    messageLength <= providerMaxLength &&
+    (mode === "direct" ? isValidPhilippineMobileLocal(phoneNumber) : selectedCount > 0);
   const canReply = !sendingReply && !!selectedThread && replyLength > 0 && replyLength <= MAX_SMS_LENGTH;
 
   const toggleSelected = (employeeId: string) => {
@@ -254,13 +270,22 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
     setSending(true);
     setSummary(null);
     try {
+      const directPhone =
+        mode === "direct" ? toE164FromPhilippineLocal(phoneNumber) : null;
+      if (mode === "direct" && (!directPhone || !directPhone.ok)) {
+        throw new Error(directPhone && !directPhone.ok ? directPhone.error : "Invalid phone number.");
+      }
+
       const response = await fetch(`/api/${departmentId}/sms/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
-          senderId,
-          ...(mode === "direct" ? { phoneNumber } : { employeeIds: selectedIds }),
+          provider,
+          ...(provider === "unisms" ? { senderId } : {}),
+          ...(mode === "direct" && directPhone?.ok
+            ? { phoneNumber: directPhone.value }
+            : { employeeIds: selectedIds }),
         }),
       });
 
@@ -329,10 +354,32 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
                   Compose SMS
                 </CardTitle>
                 <CardDescription>
-                  Twilio sends first. UniSMS is used only if Twilio fails before queueing.
+                  Choose a provider per blast. Default is SMSGate (free Android gateway). Inbox and replies remain Twilio-only.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="sms-provider">SMS provider</Label>
+                  <Select
+                    value={provider}
+                    onValueChange={(value) => setProvider(value as SmsProviderChoice)}
+                  >
+                    <SelectTrigger id="sms-provider">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROVIDER_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">
+                    {PROVIDER_OPTIONS.find((option) => option.value === provider)?.hint}
+                  </p>
+                </div>
+
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Button type="button" variant={mode === "direct" ? "default" : "outline"} className="justify-start" onClick={() => setMode("direct")}>
                     Direct number
@@ -346,7 +393,42 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
                 {mode === "direct" ? (
                   <div className="space-y-2">
                     <Label htmlFor="sms-phone">Phone number</Label>
-                    <Input id="sms-phone" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} placeholder="09171234567 or +639171234567" />
+                    <div className="flex overflow-hidden rounded-md border border-input bg-white shadow-sm focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                      <span className="inline-flex select-none items-center border-r bg-slate-50 px-3 text-sm font-medium text-slate-600">
+                        +63
+                      </span>
+                      <Input
+                        id="sms-phone"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        value={phoneNumber}
+                        onChange={(event) =>
+                          setPhoneNumber(formatPhilippineMobileLocalInput(event.target.value))
+                        }
+                        onPaste={(event) => {
+                          event.preventDefault();
+                          const pasted = event.clipboardData.getData("text");
+                          setPhoneNumber(formatPhilippineMobileLocalInput(pasted));
+                        }}
+                        className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                        placeholder=""
+                        maxLength={10}
+                        aria-invalid={phoneNumber.length > 0 && !isValidPhilippineMobileLocal(phoneNumber)}
+                      />
+                    </div>
+                    <p
+                      className={cn(
+                        "text-xs",
+                        phoneNumber.length > 0 && !isValidPhilippineMobileLocal(phoneNumber)
+                          ? "text-red-600"
+                          : "text-slate-500"
+                      )}
+                    >
+                      {phoneNumber.length > 0 && !isValidPhilippineMobileLocal(phoneNumber)
+                        ? "Enter 10 digits starting with 9"
+                        : "PH mobile only."}
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -389,21 +471,26 @@ export default function SmsTool({ departmentId, defaultSenderId }: SmsToolProps)
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="sms-sender">UniSMS fallback Sender ID</Label>
-                  <Input id="sms-sender" value={senderId} onChange={(event) => setSenderId(event.target.value)} placeholder="Optional; Twilio uses TWILIO_FROM_NUMBER" />
-                </div>
+                {provider === "unisms" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="sms-sender">UniSMS Sender ID</Label>
+                    <Input id="sms-sender" value={senderId} onChange={(event) => setSenderId(event.target.value)} placeholder="Optional sender ID" />
+                  </div>
+                ) : null}
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <Label htmlFor="sms-message">Message</Label>
-                    <span className={cn("text-xs font-medium", messageLength > MAX_SMS_LENGTH ? "text-red-600" : "text-slate-500")}>
-                      {messageLength}/{MAX_SMS_LENGTH}
+                    <span className={cn("text-xs font-medium", messageLength > providerMaxLength ? "text-red-600" : "text-slate-500")}>
+                      {messageLength}/{providerMaxLength}
                     </span>
                   </div>
                   <Textarea id="sms-message" rows={7} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Type the SMS content..." />
                   <p className="text-xs text-slate-500">
                     Estimated {segmentCount || 0} SMS segment{segmentCount === 1 ? "" : "s"} per recipient. Estimated total: {estimatedCredits || 0}.
+                    {provider === "unisms"
+                      ? ` UniSMS allows up to ${providerMaxLength} characters.`
+                      : null}
                   </p>
                 </div>
 

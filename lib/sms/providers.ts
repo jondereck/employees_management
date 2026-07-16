@@ -1,17 +1,20 @@
+import { isSmsGateConfigured, sendSmsGateSms } from "@/lib/sms/smsgate";
 import { sendTwilioSms } from "@/lib/sms/twilio";
 import { sendUniSms } from "@/lib/sms/unisms";
-import type { SmsProviderResult, SmsSendInput } from "@/lib/sms/types";
+import type { SmsProviderName, SmsProviderResult, SmsSendInput } from "@/lib/sms/types";
 
 const UNISMS_MAX_CONTENT_LENGTH = 160;
+
+export const SMS_PROVIDER_NAMES = ["smsgate", "twilio", "unisms"] as const satisfies readonly SmsProviderName[];
 
 export type SmsProviderSendResult = SmsProviderResult & {
   attempts: SmsProviderResult[];
 };
 
-function fallbackSkippedResult(reason: string): SmsProviderResult {
+function skippedResult(provider: SmsProviderName, reason: string): SmsProviderResult {
   return {
     ok: false,
-    provider: "unisms",
+    provider,
     status: null,
     providerMessageId: null,
     responseBody: null,
@@ -20,19 +23,62 @@ function fallbackSkippedResult(reason: string): SmsProviderResult {
   };
 }
 
-export async function sendSmsViaProviders(input: SmsSendInput): Promise<SmsProviderSendResult> {
-  const twilioResult = await sendTwilioSms(input);
-  if (twilioResult.queued) {
-    return { ...twilioResult, attempts: [twilioResult] };
+export function isSmsProviderConfigured(provider: SmsProviderName): boolean {
+  switch (provider) {
+    case "smsgate":
+      return isSmsGateConfigured();
+    case "twilio":
+      return Boolean(
+        process.env.TWILIO_ACCOUNT_SID?.trim() &&
+          process.env.TWILIO_AUTH_TOKEN?.trim() &&
+          process.env.TWILIO_FROM_NUMBER?.trim()
+      );
+    case "unisms":
+      return Boolean(process.env.UNISMS_API_KEY?.trim());
+    default:
+      return false;
   }
+}
 
-  if (input.content.length > UNISMS_MAX_CONTENT_LENGTH) {
-    const skipped = fallbackSkippedResult(
-      "Twilio failed before queueing. UniSMS fallback was skipped because UniSMS content limit is 160 characters."
+async function sendWithProvider(
+  provider: SmsProviderName,
+  input: SmsSendInput
+): Promise<SmsProviderResult> {
+  switch (provider) {
+    case "smsgate":
+      return sendSmsGateSms(input);
+    case "twilio":
+      return sendTwilioSms(input);
+    case "unisms":
+      if (input.content.length > UNISMS_MAX_CONTENT_LENGTH) {
+        return skippedResult(
+          "unisms",
+          `UniSMS content limit is ${UNISMS_MAX_CONTENT_LENGTH} characters.`
+        );
+      }
+      return sendUniSms(input);
+    default: {
+      const exhaustive: never = provider;
+      return skippedResult(exhaustive, `Unknown SMS provider: ${String(provider)}`);
+    }
+  }
+}
+
+/**
+ * Send via exactly one selected provider (no silent fallback chain).
+ */
+export async function sendSmsViaProviders(
+  input: SmsSendInput,
+  provider: SmsProviderName = "smsgate"
+): Promise<SmsProviderSendResult> {
+  if (!isSmsProviderConfigured(provider)) {
+    const result = skippedResult(
+      provider,
+      `${provider} SMS credentials are not configured.`
     );
-    return { ...twilioResult, attempts: [twilioResult, skipped] };
+    return { ...result, attempts: [result] };
   }
 
-  const unismsResult = await sendUniSms(input);
-  return { ...unismsResult, attempts: [twilioResult, unismsResult] };
+  const result = await sendWithProvider(provider, input);
+  return { ...result, attempts: [result] };
 }
