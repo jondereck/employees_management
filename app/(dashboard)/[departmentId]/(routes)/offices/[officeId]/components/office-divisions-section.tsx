@@ -5,11 +5,11 @@ import axios from "axios";
 import { useParams } from "next/navigation";
 import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 
-import LoadingWithProgress from "@/components/loading-with-progress";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { SimpleTablePagination } from "@/components/ui/simple-table-pagination";
 import { toast } from "@/components/ui/use-toast";
 
 export type OfficeDivisionDto = {
@@ -38,8 +38,21 @@ export default function OfficeDivisionsSection({ onChanged }: Props) {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editName, setEditName] = React.useState("");
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
+  const [pageIndex, setPageIndex] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(10);
 
   const baseUrl = `/api/${departmentId}/offices/${officeId}/divisions`;
+
+  const pageCount = pageSize > 0 ? Math.max(1, Math.ceil(items.length / pageSize)) : 1;
+  const safePageIndex = Math.min(pageIndex, pageCount - 1);
+  const pagedItems = React.useMemo(() => {
+    const start = safePageIndex * pageSize;
+    return items.slice(start, start + pageSize);
+  }, [items, safePageIndex, pageSize]);
+
+  React.useEffect(() => {
+    setPageIndex(0);
+  }, [items.length]);
 
   const load = React.useCallback(async () => {
     try {
@@ -167,12 +180,14 @@ export default function OfficeDivisionsSection({ onChanged }: Props) {
       </div>
 
       {loading ? (
-        <LoadingWithProgress active={loading} className="min-h-[160px] rounded-md border bg-white" />
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading divisions…
+        </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No divisions yet. Plantilla items can still sit directly under the office.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((item) => {
+          {pagedItems.map((item) => {
             const inUse =
               (item._count?.plantillaPositions ?? 0) + (item._count?.employees ?? 0) > 0;
             const isEditing = editingId === item.id;
@@ -245,6 +260,14 @@ export default function OfficeDivisionsSection({ onChanged }: Props) {
               </div>
             );
           })}
+          <SimpleTablePagination
+            pageIndex={safePageIndex}
+            pageSize={pageSize}
+            totalCount={items.length}
+            onPageIndexChange={setPageIndex}
+            onPageSizeChange={setPageSize}
+            label={`${items.length} division${items.length === 1 ? "" : "s"}`}
+          />
         </div>
       )}
     </div>

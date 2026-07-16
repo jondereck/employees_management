@@ -5,6 +5,8 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-16 — fix: plantilla employee link search (wrong Prisma relation broke results)
+- 2026-07-16 — ui: plantilla/divisions simple loader + pagination; manual employee link on edit
 - 2026-07-16 — ui: Text Blast direct number uses +63 prefix with PH-only auto-format
 - 2026-07-16 — feat: replace Neilian with free SMSGate Android gateway (default; dual SIM via env)
 - 2026-07-16 — feat: Text Blast provider picker (Neilian default; Twilio and UniSMS retained)

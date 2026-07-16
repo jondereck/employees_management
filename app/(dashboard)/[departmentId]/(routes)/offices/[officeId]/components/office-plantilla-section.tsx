@@ -3,9 +3,8 @@
 import * as React from "react";
 import axios from "axios";
 import { useParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Minus, Pencil, Plus, Search, Trash2, Unlink } from "lucide-react";
 
-import LoadingWithProgress from "@/components/loading-with-progress";
 import { AlertModal } from "@/components/modals/alert-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,9 +25,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { SimpleTablePagination } from "@/components/ui/simple-table-pagination";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
+import { useDebounce } from "@/hooks/use-debounce";
 
 import type { OfficeDivisionDto } from "./office-divisions-section";
 import {
@@ -114,8 +115,29 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
   const [filterStatus, setFilterStatus] = React.useState<string>("all");
   const [sortKey, setSortKey] = React.useState<PlantillaSortKey>("itemNumber");
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
+  const [pageIndex, setPageIndex] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(10);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editingOccupant, setEditingOccupant] = React.useState<PlantillaDto["employee"]>(null);
+  const [linkQuery, setLinkQuery] = React.useState("");
+  const debouncedLinkQuery = useDebounce(linkQuery, 300);
+  const [linkResults, setLinkResults] = React.useState<
+    Array<{
+      id: string;
+      employeeNo: string;
+      firstName: string;
+      lastName: string;
+      middleName?: string | null;
+      position?: string | null;
+      officeName?: string | null;
+      linkable?: boolean;
+      linkedPlantilla?: { id: string; itemNumber: string | null; title: string } | null;
+    }>
+  >([]);
+  const [linkSearching, setLinkSearching] = React.useState(false);
+  const [linkSearchError, setLinkSearchError] = React.useState<string | null>(null);
+  const [linking, setLinking] = React.useState(false);
   const [form, setForm] = React.useState<FormState>(emptyForm());
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
   const [pastePreview, setPastePreview] = React.useState<PastePreviewRow[] | null>(
@@ -172,6 +194,9 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
 
   const openCreate = () => {
     setEditingId(null);
+    setEditingOccupant(null);
+    setLinkQuery("");
+    setLinkResults([]);
     setForm(emptyForm());
     setPastePreview(null);
     setDialogOpen(true);
@@ -179,6 +204,9 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
 
   const openEdit = (item: PlantillaDto) => {
     setEditingId(item.id);
+    setEditingOccupant(item.employee);
+    setLinkQuery("");
+    setLinkResults([]);
     setPastePreview(null);
     setForm({
       itemNumber: item.itemNumber ?? "",
@@ -468,6 +496,110 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
     [items, sortKey, sortDir]
   );
 
+  const pageCount = pageSize > 0 ? Math.max(1, Math.ceil(sortedItems.length / pageSize)) : 1;
+  const safePageIndex = Math.min(pageIndex, pageCount - 1);
+  const pagedItems = React.useMemo(() => {
+    const start = safePageIndex * pageSize;
+    return sortedItems.slice(start, start + pageSize);
+  }, [sortedItems, safePageIndex, pageSize]);
+
+  React.useEffect(() => {
+    setPageIndex(0);
+  }, [filterDivision, filterStatus, sortKey, sortDir]);
+
+  React.useEffect(() => {
+    if (!editingId || editingOccupant || !debouncedLinkQuery.trim()) {
+      setLinkResults([]);
+      setLinkSearching(false);
+      setLinkSearchError(null);
+      return;
+    }
+    let cancelled = false;
+    setLinkSearching(true);
+    setLinkSearchError(null);
+    void axios
+      .get<{
+        results: Array<{
+          id: string;
+          employeeNo: string;
+          firstName: string;
+          lastName: string;
+          middleName?: string | null;
+          position?: string | null;
+          officeName?: string | null;
+          linkable?: boolean;
+          linkedPlantilla?: {
+            id: string;
+            itemNumber: string | null;
+            title: string;
+          } | null;
+        }>;
+      }>(`${plantillaUrl}/link-candidates`, {
+        params: { q: debouncedLinkQuery.trim(), limit: 20 },
+      })
+      .then((res) => {
+        if (!cancelled) setLinkResults(res.data.results ?? []);
+      })
+      .catch((error: any) => {
+        if (!cancelled) {
+          setLinkResults([]);
+          setLinkSearchError(
+            error?.response?.data?.error ||
+              error?.message ||
+              "Search failed"
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLinkSearching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedLinkQuery, editingId, editingOccupant, plantillaUrl]);
+
+  const onLinkEmployee = async (employeeId: string) => {
+    if (!editingId) return;
+    try {
+      setLinking(true);
+      const res = await axios.post(`${plantillaUrl}/${editingId}/link`, {
+        employeeId,
+      });
+      setEditingOccupant(res.data?.employee ?? null);
+      setLinkQuery("");
+      setLinkResults([]);
+      toast({ title: "Employee linked" });
+      await load();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Could not link employee",
+        description: error?.response?.data?.error || "Request failed.",
+      });
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const onUnlinkEmployee = async () => {
+    if (!editingId) return;
+    try {
+      setLinking(true);
+      await axios.delete(`${plantillaUrl}/${editingId}/link`);
+      setEditingOccupant(null);
+      toast({ title: "Occupant unlinked" });
+      await load();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Could not unlink",
+        description: error?.response?.data?.error || "Request failed.",
+      });
+    } finally {
+      setLinking(false);
+    }
+  };
+
   const toggleSort = (key: PlantillaSortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -553,10 +685,13 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
       </div>
 
       {loading ? (
-        <LoadingWithProgress active={loading} className="min-h-[220px] rounded-md border bg-white" />
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading plantilla…
+        </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No plantilla items yet.</p>
       ) : (
+        <div className="space-y-2">
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left">
@@ -572,7 +707,7 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
               </tr>
             </thead>
             <tbody>
-              {sortedItems.map((item) => (
+              {pagedItems.map((item) => (
                 <tr key={item.id} className="border-t">
                   <td className="p-3 font-mono text-xs">{item.itemNumber?.trim() || "—"}</td>
                   <td className="p-3">{item.title}</td>
@@ -634,13 +769,27 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
             </tbody>
           </table>
         </div>
+        <SimpleTablePagination
+          pageIndex={safePageIndex}
+          pageSize={pageSize}
+          totalCount={sortedItems.length}
+          onPageIndexChange={setPageIndex}
+          onPageSizeChange={setPageSize}
+          label={`${sortedItems.length} plantilla item${sortedItems.length === 1 ? "" : "s"}`}
+        />
+        </div>
       )}
 
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
           setDialogOpen(open);
-          if (!open) setPastePreview(null);
+          if (!open) {
+            setPastePreview(null);
+            setLinkQuery("");
+            setLinkResults([]);
+            setEditingOccupant(null);
+          }
         }}
       >
         <DialogContent className={pastePreview ? "sm:max-w-2xl" : "sm:max-w-lg"}>
@@ -1006,6 +1155,115 @@ export default function OfficePlantillaSection({ refreshKey = 0 }: Props) {
                   onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
                 />
               </div>
+
+              {editingId ? (
+                <div className="grid gap-3 rounded-md border p-3">
+                  <div>
+                    <div className="text-sm font-medium">Linked employee</div>
+                    <p className="text-xs text-muted-foreground">
+                      Search and link an unassigned employee from this department.
+                    </p>
+                  </div>
+
+                  {editingOccupant ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2">
+                      <div className="min-w-0 text-sm">
+                        <div className="font-medium">
+                          {editingOccupant.lastName}, {editingOccupant.firstName}
+                          {editingOccupant.middleName?.trim()
+                            ? ` ${editingOccupant.middleName.trim()[0]}.`
+                            : ""}
+                        </div>
+                        {editingOccupant.employeeNo ? (
+                          <div className="text-xs text-muted-foreground">
+                            BIO {editingOccupant.employeeNo}
+                          </div>
+                        ) : null}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={linking || saving}
+                        onClick={() => void onUnlinkEmployee()}
+                      >
+                        {linking ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Unlink className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        Unlink
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          value={linkQuery}
+                          onChange={(e) => setLinkQuery(e.target.value)}
+                          placeholder="Search name or Emp No…"
+                          className="pl-8"
+                          disabled={linking || saving}
+                        />
+                      </div>
+                      {linkSearching ? (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching…
+                        </div>
+                      ) : linkSearchError ? (
+                        <p className="text-xs text-destructive">{linkSearchError}</p>
+                      ) : linkQuery.trim() && linkResults.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          No employees matched “{linkQuery.trim()}”.
+                        </p>
+                      ) : linkResults.length > 0 ? (
+                        <div className="max-h-40 overflow-y-auto rounded-md border">
+                          {linkResults.map((emp) => {
+                            const canLink = emp.linkable !== false;
+                            const linkedLabel = emp.linkedPlantilla
+                              ? `Already linked${
+                                  emp.linkedPlantilla.itemNumber
+                                    ? ` · ${emp.linkedPlantilla.itemNumber}`
+                                    : ""
+                                }`
+                              : "Already linked";
+                            return (
+                              <button
+                                key={emp.id}
+                                type="button"
+                                disabled={linking || saving || !canLink}
+                                className="flex w-full flex-col gap-0.5 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
+                                onClick={() => {
+                                  if (!canLink) return;
+                                  void onLinkEmployee(emp.id);
+                                }}
+                              >
+                                <span className="font-medium">
+                                  {emp.lastName}, {emp.firstName}
+                                  {emp.middleName?.trim()
+                                    ? ` ${emp.middleName.trim()[0]}.`
+                                    : ""}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {[
+                                    emp.employeeNo ? `BIO ${emp.employeeNo}` : null,
+                                    emp.officeName,
+                                    emp.position,
+                                    canLink ? null : linkedLabel,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           )}
 

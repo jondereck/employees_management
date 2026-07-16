@@ -9,7 +9,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 
-import LoadingWithProgress from "@/components/loading-with-progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -266,8 +265,10 @@ export default function TimekeepingDefaultsSection() {
           <tbody>
             {listLoading ? (
               <tr>
-                <td className="p-6" colSpan={4}>
-                  <LoadingWithProgress active={listLoading} className="py-6" />
+                <td className="p-3 text-center text-muted-foreground" colSpan={4}>
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading schedules…
+                  </span>
                 </td>
               </tr>
             ) : items.length === 0 ? (
