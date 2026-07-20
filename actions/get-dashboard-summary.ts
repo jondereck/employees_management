@@ -31,6 +31,36 @@ export type DashboardGenderCountRow = {
   male: number;
   female: number;
   total: number;
+  children?: DashboardGenderCountRow[];
+};
+
+export type DashboardGenderGroupKey =
+  | "employeeType"
+  | "eligibility"
+  | "supervisory"
+  | "office";
+
+export type DashboardGenderCountsNested = {
+  employeeType: {
+    byEligibility: DashboardGenderCountRow[];
+    bySupervisory: DashboardGenderCountRow[];
+    byOffice: DashboardGenderCountRow[];
+  };
+  eligibility: {
+    byEmployeeType: DashboardGenderCountRow[];
+    bySupervisory: DashboardGenderCountRow[];
+    byOffice: DashboardGenderCountRow[];
+  };
+  supervisory: {
+    byEmployeeType: DashboardGenderCountRow[];
+    byEligibility: DashboardGenderCountRow[];
+    byOffice: DashboardGenderCountRow[];
+  };
+  office: {
+    byEmployeeType: DashboardGenderCountRow[];
+    byEligibility: DashboardGenderCountRow[];
+    bySupervisory: DashboardGenderCountRow[];
+  };
 };
 
 export type DashboardSummary = {
@@ -47,6 +77,8 @@ export type DashboardSummary = {
   genderCountsByEmployeeType: DashboardGenderCountRow[];
   genderCountsByEligibility: DashboardGenderCountRow[];
   genderCountsBySupervisory: DashboardGenderCountRow[];
+  genderCountsByOffice: DashboardGenderCountRow[];
+  genderCountsNested: DashboardGenderCountsNested;
 };
 
 const FALLBACK_COLORS = [
@@ -265,7 +297,7 @@ export const getDashboardSummary = async (
         gender: true,
         employeeTypeId: true,
         eligibilityId: true,
-        offices: { select: { name: true } },
+        offices: { select: { id: true, name: true } },
       },
     }),
   ]);
@@ -385,6 +417,174 @@ export const getDashboardSummary = async (
 
   const genderCountsBySupervisory = buildSupervisoryRows(activeEmployees);
 
+  const SUPERVISORY_BUCKET_NAMES: Record<string, string> = {
+    supervisory: `Supervisory (SG ${SUPERVISORY_GRADE_CUTOFF}+)`,
+    nonSupervisory: "Non-Supervisory (SG 1–9)",
+    unspecified: "No Salary Grade",
+  };
+
+  type GenderDimension = DashboardGenderGroupKey;
+
+  type GenderEmployee = Pick<
+    (typeof activeEmployees)[number],
+    "salaryGrade" | "gender" | "employeeTypeId" | "eligibilityId" | "offices"
+  >;
+
+  const employeeTypeNameById = new Map(
+    employeeTypes.map((type) => [type.id, type.name.trim() || "Unassigned"]),
+  );
+  const eligibilityNameById = new Map(
+    eligibilities.map((item) => [item.id, item.name.trim() || "Unassigned"]),
+  );
+
+  const genderKey = (gender: string) => (gender === "Female" ? "female" : "male") as "male" | "female";
+
+  const supervisoryBucketId = (grade: number | null) => {
+    if (grade == null || grade <= 0) return "unspecified";
+    if (grade >= SUPERVISORY_GRADE_CUTOFF) return "supervisory";
+    return "nonSupervisory";
+  };
+
+  const dimensionOf = (
+    employee: GenderEmployee,
+    dimension: GenderDimension,
+  ): { id: string; name: string } => {
+    if (dimension === "employeeType") {
+      return {
+        id: employee.employeeTypeId,
+        name: employeeTypeNameById.get(employee.employeeTypeId) ?? "Unassigned",
+      };
+    }
+    if (dimension === "eligibility") {
+      return {
+        id: employee.eligibilityId,
+        name: eligibilityNameById.get(employee.eligibilityId) ?? "Unassigned",
+      };
+    }
+    if (dimension === "office") {
+      const officeId = employee.offices?.id?.trim() || "unassigned-office";
+      const officeName = employee.offices?.name?.trim() || "Unassigned Office";
+      return { id: officeId, name: officeName };
+    }
+    const id = supervisoryBucketId(employee.salaryGrade);
+    return { id, name: SUPERVISORY_BUCKET_NAMES[id] ?? id };
+  };
+
+  const buildOfficeRows = (employees: GenderEmployee[]): DashboardGenderCountRow[] => {
+    const buckets = new Map<string, { name: string; male: number; female: number }>();
+    for (const employee of employees) {
+      const { id, name } = dimensionOf(employee, "office");
+      let bucket = buckets.get(id);
+      if (!bucket) {
+        bucket = { name, male: 0, female: 0 };
+        buckets.set(id, bucket);
+      }
+      if (employee.gender === "Female") bucket.female += 1;
+      else bucket.male += 1;
+    }
+    return Array.from(buckets.entries())
+      .map(([id, bucket]) => ({
+        id,
+        name: bucket.name,
+        male: bucket.male,
+        female: bucket.female,
+        total: bucket.male + bucket.female,
+      }))
+      .filter((row) => row.total > 0)
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  };
+
+  const genderCountsByOffice = buildOfficeRows(activeEmployees);
+
+  const buildNestedRows = (
+    employees: GenderEmployee[],
+    primary: GenderDimension,
+    nested: GenderDimension,
+  ): DashboardGenderCountRow[] => {
+    type Acc = {
+      name: string;
+      male: number;
+      female: number;
+      children: Map<string, { name: string; male: number; female: number }>;
+    };
+    const primaryMap = new Map<string, Acc>();
+
+    const ensurePrimary = (id: string, name: string) => {
+      let entry = primaryMap.get(id);
+      if (!entry) {
+        entry = { name, male: 0, female: 0, children: new Map() };
+        primaryMap.set(id, entry);
+      }
+      return entry;
+    };
+
+    const ensureChild = (entry: Acc, id: string, name: string) => {
+      let child = entry.children.get(id);
+      if (!child) {
+        child = { name, male: 0, female: 0 };
+        entry.children.set(id, child);
+      }
+      return child;
+    };
+
+    for (const employee of employees) {
+      const primaryDim = dimensionOf(employee, primary);
+      const nestedDim = dimensionOf(employee, nested);
+      const entry = ensurePrimary(primaryDim.id, primaryDim.name);
+      const child = ensureChild(entry, nestedDim.id, nestedDim.name);
+      const key = genderKey(employee.gender);
+      entry[key] += 1;
+      child[key] += 1;
+    }
+
+    const toSortedChildren = (children: Acc["children"]): DashboardGenderCountRow[] =>
+      Array.from(children.entries())
+        .map(([id, child]) => ({
+          id,
+          name: child.name,
+          male: child.male,
+          female: child.female,
+          total: child.male + child.female,
+        }))
+        .filter((row) => row.total > 0)
+        .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+    return Array.from(primaryMap.entries())
+      .map(([id, entry]) => ({
+        id,
+        name: entry.name,
+        male: entry.male,
+        female: entry.female,
+        total: entry.male + entry.female,
+        children: toSortedChildren(entry.children),
+      }))
+      .filter((row) => row.total > 0)
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  };
+
+  const genderCountsNested: DashboardGenderCountsNested = {
+    employeeType: {
+      byEligibility: buildNestedRows(activeEmployees, "employeeType", "eligibility"),
+      bySupervisory: buildNestedRows(activeEmployees, "employeeType", "supervisory"),
+      byOffice: buildNestedRows(activeEmployees, "employeeType", "office"),
+    },
+    eligibility: {
+      byEmployeeType: buildNestedRows(activeEmployees, "eligibility", "employeeType"),
+      bySupervisory: buildNestedRows(activeEmployees, "eligibility", "supervisory"),
+      byOffice: buildNestedRows(activeEmployees, "eligibility", "office"),
+    },
+    supervisory: {
+      byEmployeeType: buildNestedRows(activeEmployees, "supervisory", "employeeType"),
+      byEligibility: buildNestedRows(activeEmployees, "supervisory", "eligibility"),
+      byOffice: buildNestedRows(activeEmployees, "supervisory", "office"),
+    },
+    office: {
+      byEmployeeType: buildNestedRows(activeEmployees, "office", "employeeType"),
+      byEligibility: buildNestedRows(activeEmployees, "office", "eligibility"),
+      bySupervisory: buildNestedRows(activeEmployees, "office", "supervisory"),
+    },
+  };
+
   const rawEligibilitySlices = buildOtherLimitedSlices(
     eligibilities
       .map((eligibility, index) => ({
@@ -503,5 +703,7 @@ export const getDashboardSummary = async (
     genderCountsByEmployeeType,
     genderCountsByEligibility,
     genderCountsBySupervisory,
+    genderCountsByOffice,
+    genderCountsNested,
   };
 };

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   AlertCircle,
   Bell,
@@ -13,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { getDashboardSummary } from "@/actions/get-dashboard-summary";
+import { getDepartmentDataLastActivity } from "@/actions/get-department-data-last-activity";
 import { getGraph } from "@/actions/get-graph";
 import { getHeadcountTrend } from "@/actions/get-headcount-trend";
 import { getMonthlyEmployeeActivity } from "@/actions/get-monthly-employee-activity";
@@ -20,8 +20,13 @@ import { getTotalEmployees } from "@/actions/get-total-employee";
 import { AnimatedNumber } from "@/components/animated-number";
 import { DashboardAnalyticsTabs } from "@/components/dashboard/dashboard-analytics-tabs";
 import { DashboardClock } from "@/components/dashboard/dashboard-clock";
+import { DashboardDataFreshness } from "@/components/dashboard/dashboard-data-freshness";
 import { DashboardDonutChart } from "@/components/dashboard/dashboard-donut-chart";
 import { DashboardGenderCounts } from "@/components/dashboard/dashboard-gender-counts";
+import {
+  DashboardNavLink,
+  DashboardNavProvider,
+} from "@/components/dashboard/dashboard-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { getCurrentMonthIndexInTimeZone } from "@/lib/birthday";
@@ -43,12 +48,14 @@ const DashboardPage = async ({ params }: DashboardProps) => {
     monthlyActivity,
     headcountTrend,
     dashboardSummary,
+    dataLastActivityAt,
   ] = await Promise.all([
     getTotalEmployees(departmentId),
     getGraph(departmentId),
     getMonthlyEmployeeActivity(departmentId),
     getHeadcountTrend(departmentId),
     getDashboardSummary(departmentId),
+    getDepartmentDataLastActivity(departmentId),
   ]);
 
   const attentionItems = [
@@ -90,17 +97,19 @@ const DashboardPage = async ({ params }: DashboardProps) => {
   ];
 
   return (
+    <DashboardNavProvider>
     <div className="flex-col">
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 p-4 pt-6 dark:from-slate-950 dark:to-slate-900 lg:p-6">
         <div className="mx-auto max-w-[1600px] space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
               <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                 Dashboard
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 Compact overview of employees, approvals, and HR reminders
               </p>
+              <DashboardDataFreshness updatedAt={dataLastActivityAt} />
             </div>
             <DashboardClock />
           </div>
@@ -188,6 +197,8 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                   byEmployeeType={dashboardSummary.genderCountsByEmployeeType}
                   byEligibility={dashboardSummary.genderCountsByEligibility}
                   bySupervisory={dashboardSummary.genderCountsBySupervisory}
+                  byOffice={dashboardSummary.genderCountsByOffice}
+                  nested={dashboardSummary.genderCountsNested}
                 />
               </CardContent>
             </Card>
@@ -205,10 +216,10 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                 {attentionItems.map((item) => {
                   const Icon = item.icon;
                   return (
-                    <Link
+                    <DashboardNavLink
                       key={item.label}
                       href={item.href}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-white/30 bg-white/35 px-3 py-2.5 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/30 bg-white/35 px-3 py-2.5 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${item.tone}`}>
@@ -221,7 +232,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                       <span className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
                         {item.value}
                       </span>
-                    </Link>
+                    </DashboardNavLink>
                   );
                 })}
               </CardContent>
@@ -246,9 +257,9 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                 </div>
               </CardHeader>
               <CardContent className="p-4 pt-0">
-                <Link
+                <DashboardNavLink
                   href={`/${departmentId}/employees`}
-                  className="block rounded-xl border border-white/30 bg-white/35 p-3 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
+                  className="block w-full rounded-xl border border-white/30 bg-white/35 p-3 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
                     <div className="min-w-0">
@@ -263,7 +274,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                       Review
                     </span>
                   </div>
-                </Link>
+                </DashboardNavLink>
                 <div className="mt-3 space-y-2">
                   {dashboardSummary.incompleteRecords.fields.length ? (
                     dashboardSummary.incompleteRecords.fields.map((field) => (
@@ -301,10 +312,10 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                 {dashboardSummary.incompleteRecords.employees.length ? (
                   <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1 sm:pr-2">
                     {dashboardSummary.incompleteRecords.employees.map((employee) => (
-                      <Link
+                      <DashboardNavLink
                         key={employee.id}
                         href={employee.href}
-                        className="flex flex-col gap-2 rounded-xl border border-white/30 bg-white/35 px-3 py-2.5 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:flex-row sm:items-center sm:justify-between sm:gap-3 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
+                        className="flex w-full flex-col gap-2 rounded-xl border border-white/30 bg-white/35 px-3 py-2.5 transition hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:flex-row sm:items-center sm:justify-between sm:gap-3 dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.07]"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -319,7 +330,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                             {employee.meta}
                           </span>
                         ) : null}
-                      </Link>
+                      </DashboardNavLink>
                     ))}
                   </div>
                 ) : (
@@ -343,6 +354,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
         </div>
       </div>
     </div>
+    </DashboardNavProvider>
   );
 };
 
@@ -386,9 +398,12 @@ function MetricCard({
   if (!href) return content;
 
   return (
-    <Link href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+    <DashboardNavLink
+      href={href}
+      className="block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+    >
       {content}
-    </Link>
+    </DashboardNavLink>
   );
 }
 

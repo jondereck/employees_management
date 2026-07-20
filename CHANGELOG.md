@@ -5,6 +5,11 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-20 — fix: Overview last updated shows latest DB record change not page load time
+- 2026-07-20 — ui: Overview shows visible Data last updated badge (Asia/Manila)
+- 2026-07-20 — feat: Overview Male/Female Counts Group by / Break down by Office
+- 2026-07-20 — feat: Overview Male/Female Counts adds Break down by + expandable nested rows
+- 2026-07-20 — feat: Overview Needs Attention / Incomplete Records use universal loader on navigate
 - 2026-07-20 — chore: remove unused duplicate employee Info component (dfasf.tsx)
 - 2026-07-20 — fix: tenure short-format test drops unused totalDays property
 - 2026-07-20 — fix: plantillaOffice typing for preview, anniversaries, retirements, biometrics stub
