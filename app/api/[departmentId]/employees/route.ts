@@ -497,6 +497,12 @@ export async function GET(
         employeeType: true,
         eligibility: true,
         designation: { select: { id: true, name: true } },
+        plantillaPosition: {
+          select: {
+            id: true,
+            office: { select: { id: true, name: true } },
+          },
+        },
 
       },
       orderBy: [

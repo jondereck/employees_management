@@ -134,6 +134,14 @@ export const EmployeesClient = ({
     const source = swrEmployees.length > 0 ? swrEmployees : data;
     return source.map((emp: any) => ({
       ...emp,
+      plantillaOffice:
+        emp.plantillaOffice ??
+        (emp.plantillaPosition?.office
+          ? {
+              id: emp.plantillaPosition.office.id,
+              name: emp.plantillaPosition.office.name,
+            }
+          : null),
       // Normalize dates for display if they exist
       displayBirthday: emp.birthday ? format(new Date(emp.birthday), "MMM d, yyyy") : "",
       displayHired: emp.dateHired ? format(new Date(emp.dateHired), "MMM d, yyyy") : "",
@@ -526,6 +534,11 @@ export const EmployeesClient = ({
                   enableColumnReorder
                   hideInternalViewOptions
                   onViewOptionsReady={handleViewOptionsReady}
+                  getRowClassName={(row) =>
+                    row.original.isArchived
+                      ? "bg-rose-50/80 hover:bg-rose-100/70 data-[state=selected]:bg-rose-100"
+                      : undefined
+                  }
                   renderExtra={(table) => (
                     <FloatingSelectionBar table={table} departmentId={departmentId} />
                   )}

@@ -11,6 +11,7 @@ import {
   ColumnDef,
   ColumnFiltersState,
   Header,
+  Row,
   SortingState,
   VisibilityState,
   flexRender,
@@ -107,6 +108,8 @@ interface DataTableProps<TData, TValue> {
     onResetColumns: () => void
     canReset: boolean
   }) => void
+  /** Optional per-row className (e.g. status tint). Composed with hover/selected styles. */
+  getRowClassName?: (row: Row<TData>) => string | undefined
 }
 
 export function DataTable<TData, TValue>({
@@ -119,6 +122,7 @@ export function DataTable<TData, TValue>({
   columnOrderStorageKey,
   hideInternalViewOptions = false,
   onViewOptionsReady,
+  getRowClassName,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -478,7 +482,11 @@ export function DataTable<TData, TValue>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                  className={getRowClassName?.(row)}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}

@@ -79,6 +79,8 @@ export type EmployeesColumn = {
   emergencyContactNumber: string;
   employeeLink: string;
   designation: { id: string; name: string } | null;
+  /** Office that owns the linked plantilla item (preferred badge under Position). */
+  plantillaOffice: { id: string; name: string } | null;
   note: string;
   publicId: string;
   publicVersion: number;
@@ -194,21 +196,33 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
   {
     accessorKey: "position",
     header: ({ column }) => <DataTableColumnHeader column={column} title="Position" />,
-    cell: ({ row }) => (
-      <div className="flex flex-col min-w-[140px]">
-        <span className="text-sm font-medium leading-none mb-1">{row.original.position}</span>
-        {row.original.designation && (
-          <span className="text-[11px] text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded w-fit">
-            {row.original.designation.name}
-          </span>
-        )}
-      </div>
-    )
+    cell: ({ row }) => {
+      const plantillaOfficeName =
+        row.original.plantillaOffice?.name?.trim() ||
+        row.original.designation?.name?.trim() ||
+        "";
+      const assignmentOfficeName = (row.original.offices?.name ?? "").trim();
+      const showPlantillaOfficeBadge =
+        Boolean(plantillaOfficeName) &&
+        plantillaOfficeName.toLowerCase() !== assignmentOfficeName.toLowerCase();
+      return (
+        <div className="flex flex-col min-w-[140px] gap-1">
+          <span className="text-sm font-medium leading-none">{row.original.position}</span>
+          {showPlantillaOfficeBadge ? (
+            <span className="text-[11px] text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded w-fit max-w-[220px] truncate">
+              {plantillaOfficeName}
+            </span>
+          ) : null}
+        </div>
+      );
+    },
   },
   {
     accessorKey: "officeName",
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Department" />,
-    accessorFn: row => row.offices?.name ?? "",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Office Designation" />
+    ),
+    accessorFn: (row) => row.offices?.name ?? "",
     cell: ({ row }) => (
       <span className="text-xs font-semibold text-slate-600">
         {row.original.offices?.name ?? "N/A"}
@@ -269,11 +283,11 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       return (
         <Badge className={cn(
           "rounded-full px-2.5 py-0.5 border-none",
-          isArchived ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"
+          isArchived ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"
         )}>
           <span className={cn(
             "h-1.5 w-1.5 rounded-full mr-1.5",
-            isArchived ? "bg-slate-400" : "bg-emerald-500"
+            isArchived ? "bg-rose-500" : "bg-emerald-500"
           )} />
           {isArchived ? "Inactive" : "Active"}
         </Badge>

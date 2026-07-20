@@ -326,8 +326,16 @@ const Info = ({
       {/* Cards */}
       <CardSection title="Personal Details">
         <DetailItem label="Bio/Employee No." value={data?.employeeNo || "—"} />
-        {data?.designation?.name?.trim() && (
-          <DetailItem label="Plantilla Office" value={data.designation!.name} />
+        {(data?.plantillaPosition?.office?.name?.trim() ||
+          data?.designation?.name?.trim()) && (
+          <DetailItem
+            label="Plantilla Office"
+            value={
+              data?.plantillaPosition?.office?.name?.trim() ||
+              data?.designation?.name ||
+              "—"
+            }
+          />
         )}
         <DetailItem label="Gender" value={data?.gender || "—"} />
         <DetailItem label="Birthday" value={formattedBirthday || "—"} />

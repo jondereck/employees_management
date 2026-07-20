@@ -878,6 +878,7 @@ export function buildEmployeePlantillaLinkUpdate(
 ): {
   plantillaPositionId: string;
   position: string;
+  designationId?: string;
   salaryGrade?: number;
   employeeTypeId?: string;
   officeDivisionId?: string | null;
@@ -891,6 +892,8 @@ export function buildEmployeePlantillaLinkUpdate(
   return {
     plantillaPositionId: plantilla.id,
     position: plantilla.title,
+    // Legacy Plantilla Designation = office that owns the plantilla item.
+    ...(plantilla.officeId ? { designationId: plantilla.officeId } : {}),
     ...(plantilla.salaryGrade != null ? { salaryGrade: plantilla.salaryGrade } : {}),
     ...(plantilla.employeeTypeId
       ? { employeeTypeId: plantilla.employeeTypeId }
@@ -916,6 +919,19 @@ export function resolvePlantillaLabel(args: {
   const designation = args.designationName?.trim();
   if (designation) return designation;
   return args.officeName?.trim() || "";
+}
+
+/**
+ * Display label for "Plantilla Designation" on employee info.
+ * Prefer the office that owns the linked plantilla item; fall back to legacy designation.
+ */
+export function resolvePlantillaDesignationLabel(args: {
+  plantillaOfficeName?: string | null;
+  designationName?: string | null;
+}): string {
+  const fromPlantilla = args.plantillaOfficeName?.trim();
+  if (fromPlantilla) return fromPlantilla;
+  return args.designationName?.trim() || "";
 }
 
 export type PlantillaSelectOptionInput = {

@@ -701,7 +701,13 @@ export async function GET(
         designation: true,
         officeDivision: { select: { id: true, name: true } },
         plantillaPosition: {
-          select: { id: true, itemNumber: true, title: true, officeDivisionId: true },
+          select: {
+            id: true,
+            itemNumber: true,
+            title: true,
+            officeDivisionId: true,
+            office: { select: { id: true, name: true } },
+          },
         },
         workSchedules: true,
         awards: true,

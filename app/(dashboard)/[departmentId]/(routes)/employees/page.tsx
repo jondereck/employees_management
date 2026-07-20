@@ -69,6 +69,12 @@ const EmployeesPage = async ({
         select: { id: true, url: true, createdAt: true, updatedAt: true }, // optional trim
       },
       designation: { select: { id: true, name: true } },
+      plantillaPosition: {
+        select: {
+          id: true,
+          office: { select: { id: true, name: true } },
+        },
+      },
       employmentEvents: {
         where: { deletedAt: null },
         select: { type: true, occurredAt: true, deletedAt: true },
@@ -144,6 +150,9 @@ const EmployeesPage = async ({
     employeeLink: item.employeeLink,
     note: item.note ?? "",
     designation: item.designation ? { id: item.designation.id, name: item.designation.name } : null,
+    plantillaOffice: item.plantillaPosition?.office
+      ? { id: item.plantillaPosition.office.id, name: item.plantillaPosition.office.name }
+      : null,
     publicEnabled: Boolean(item.publicEnabled),
     publicId: item.publicId ?? "",
     publicVersion: Number(item.publicVersion ?? 0),

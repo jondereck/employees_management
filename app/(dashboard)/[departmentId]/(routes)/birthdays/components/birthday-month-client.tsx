@@ -53,6 +53,7 @@ type Person = {
 const SHOW_DATES_STORAGE_KEY = "birthdays.showDates";
 const THEME_MODE_STORAGE_KEY = "birthdays.themeMode";
 const EXPORT_SAFE_STORAGE_KEY = "birthdays.exportSafe";
+const DENSITY_STORAGE_KEY = "birthdays.density";
 const FACEBOOK_BUSINESS_POSTS_URL = "https://business.facebook.com/latest/posts/";
 const BOLD_UPPER_START = 0x1d400;
 const BOLD_LOWER_START = 0x1d41a;
@@ -449,7 +450,14 @@ export default function BirthdayMonthClient({
   const [showDates, setShowDates] = useState<boolean>(false);
   const [showHeader, setShowHeader] = useState<boolean>(true);
   const [showWatermark, setShowWatermark] = useState<boolean>(true);
-  const [density, setDensity] = useState<number>(3); // 1..5 -> bigger..smaller cards
+  const [density, setDensity] = useState<number>(() => {
+    if (typeof window === "undefined") return 3;
+    const stored = window.localStorage.getItem(DENSITY_STORAGE_KEY);
+    if (stored === null) return 3;
+    const parsed = Number.parseInt(stored, 10);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 5) return 3;
+    return parsed;
+  }); // 1..5 -> bigger..smaller cards
   const [exporting, setExporting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [monthlyPostOpen, setMonthlyPostOpen] = useState(false);
@@ -624,6 +632,14 @@ export default function BirthdayMonthClient({
     setShowDates(value);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(SHOW_DATES_STORAGE_KEY, value ? "true" : "false");
+    }
+  }, []);
+
+  const handleDensityChange = useCallback((value: number) => {
+    const next = Math.min(5, Math.max(1, value));
+    setDensity(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(DENSITY_STORAGE_KEY, String(next));
     }
   }, []);
 
@@ -1015,183 +1031,175 @@ export default function BirthdayMonthClient({
   // --------------------------------------------------------------------------
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-3">
+    <div className="mx-auto w-full max-w-[1880px] space-y-3">
       {/* Sticky Controls */}
       <div
         className={cn(
           "bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-          "border-b px-3 py-2 sm:px-4"
+          "border-b px-2 py-1.5 sm:px-3"
         )}
       >
-      <div className="bg-card p-4 rounded-2xl border shadow-sm">
-  {/* Left Section: Context & Core Filters */}
-  <div className="grid grid-cols-2 gap-2 sm:gap-3">
-    <div className="flex items-center gap-2 rounded-xl border bg-muted/30 px-3 py-2">
-      <Calendar className="h-4 w-4 text-indigo-500" />
-      <Select value={String(month)} onValueChange={onChangeMonth}>
-        <SelectTrigger className="h-8 w-full border-none bg-transparent focus:ring-0 shadow-none p-0">
-          <SelectValue placeholder="Select month" />
-        </SelectTrigger>
-        <SelectContent>
-          {Array.from({ length: 12 }, (_, i) => (
-            <SelectItem key={i} value={String(i)}>{monthName(i)}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+        <div className="bg-card p-2 sm:p-3 rounded-xl border shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-1 sm:items-center sm:gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 rounded-lg border bg-muted/30 px-2 h-8 min-w-0 sm:max-w-[11rem]">
+                <Calendar className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                <Select value={String(month)} onValueChange={onChangeMonth}>
+                  <SelectTrigger className="h-7 w-full border-none bg-transparent focus:ring-0 shadow-none p-0 text-sm">
+                    <SelectValue placeholder="Select month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <SelectItem key={i} value={String(i)}>{monthName(i)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-    <div className="flex items-center gap-2 rounded-xl border bg-muted/30 px-3 py-2">
-      <Share2 className="h-4 w-4 text-slate-500" />
-      <span className="text-sm font-semibold text-slate-700">
-        {celebrants.length} {celebrants.length === 1 ? "Celebrant" : "Celebrants"}
-      </span>
-    </div>
-  </div>
+              <div className="flex items-center gap-1.5 rounded-lg border bg-muted/30 px-2 h-8 sm:w-auto">
+                <Share2 className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                <span className="text-xs sm:text-sm font-semibold text-slate-700 whitespace-nowrap">
+                  {celebrants.length} {celebrants.length === 1 ? "Celebrant" : "Celebrants"}
+                </span>
+              </div>
+            </div>
 
-  {/* Right Section: Actions & Settings */}
-  <div className="mt-3 grid grid-cols-1 gap-3" data-hide-in-export>
-    {/* Filter Group */}
-    <div className="grid grid-cols-2 rounded-xl border bg-muted/30 p-1">
-      <Button 
-        variant={headsFilter === 'all' ? 'secondary' : 'ghost'} 
-        size="sm" 
-        className="h-10 rounded-lg text-sm"
-        onClick={() => onHeadsFilterChange('all')}
-      >
-        All
-      </Button>
-      <Button 
-        variant={headsFilter === 'heads-only' ? 'secondary' : 'ghost'} 
-        size="sm" 
-        className="h-10 rounded-lg text-sm"
-        onClick={() => onHeadsFilterChange('heads-only')}
-      >
-        Special
-      </Button>
-    </div>
+            <div className="flex flex-wrap items-center gap-2" data-hide-in-export>
+              <div className="grid grid-cols-2 rounded-lg border bg-muted/30 p-0.5 flex-1 sm:flex-none sm:w-[9.5rem]">
+                <Button
+                  variant={headsFilter === "all" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 rounded-md text-xs px-2"
+                  onClick={() => onHeadsFilterChange("all")}
+                >
+                  All
+                </Button>
+                <Button
+                  variant={headsFilter === "heads-only" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 rounded-md text-xs px-2"
+                  onClick={() => onHeadsFilterChange("heads-only")}
+                >
+                  Special
+                </Button>
+              </div>
 
-    <div className="grid grid-cols-2 gap-2">
-    {/* Configuration Popover */}
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="h-11 rounded-xl shadow-sm">
-          <Settings2 className="mr-2 h-4 w-4 text-muted-foreground" />
-          Customize
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0 shadow-xl border-muted">
-        <div className="p-4 border-b bg-muted/30">
-          <h4 className="font-semibold text-sm">Board Settings</h4>
-          <p className="text-xs text-muted-foreground">Adjust the look and feel of the birthday board.</p>
-        </div>
-        
-        <div className="p-4 space-y-6 max-h-[60vh] overflow-y-auto">
-          {/* Theme Grid */}
-          <div>
-            <label className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground mb-3 block">Visual Theme</label>
-            <div className="grid grid-cols-1 gap-2">
-              {themeOptions.map((option) => {
-                const isActive = themeMode === option.id;
-                return (
-                  <button
-                    key={option.id}
-                    onClick={() => setThemeModePersist(option.id as BirthdayThemeMode)}
-                    className={cn(
-                      "group relative flex items-center gap-3 p-2 rounded-lg border transition-all text-left",
-                      isActive ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-500/10" : "hover:border-muted-foreground/30"
-                    )}
-                  >
-                    <div 
-                      className="h-8 w-8 rounded-md border shadow-sm flex-shrink-0" 
-                      style={{ background: option.preview || 'var(--muted)', backgroundSize: 'cover' }}
-                    />
-                    <div className="flex-1 overflow-hidden">
-                      <div className="text-sm font-medium leading-none mb-1">{option.label}</div>
-                      <div className="text-xs text-muted-foreground truncate">{option.description}</div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 rounded-lg shadow-sm flex-1 sm:flex-none">
+                    <Settings2 className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                    Customize
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0 shadow-xl border-muted">
+                  <div className="p-4 border-b bg-muted/30">
+                    <h4 className="font-semibold text-sm">Board Settings</h4>
+                    <p className="text-xs text-muted-foreground">Adjust the look and feel of the birthday board.</p>
+                  </div>
+
+                  <div className="p-4 space-y-6 max-h-[60vh] overflow-y-auto">
+                    <div>
+                      <label className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground mb-3 block">Visual Theme</label>
+                      <div className="grid grid-cols-1 gap-2">
+                        {themeOptions.map((option) => {
+                          const isActive = themeMode === option.id;
+                          return (
+                            <button
+                              key={option.id}
+                              onClick={() => setThemeModePersist(option.id as BirthdayThemeMode)}
+                              className={cn(
+                                "group relative flex items-center gap-3 p-2 rounded-lg border transition-all text-left",
+                                isActive ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-500/10" : "hover:border-muted-foreground/30"
+                              )}
+                            >
+                              <div
+                                className="h-8 w-8 rounded-md border shadow-sm flex-shrink-0"
+                                style={{ background: option.preview || "var(--muted)", backgroundSize: "cover" }}
+                              />
+                              <div className="flex-1 overflow-hidden">
+                                <div className="text-sm font-medium leading-none mb-1">{option.label}</div>
+                                <div className="text-xs text-muted-foreground truncate">{option.description}</div>
+                              </div>
+                              {isActive && <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" />}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    {isActive && <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
-          {/* Toggles */}
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Export-safe (Print)</label>
-              <Switch checked={exportSafe} onCheckedChange={setExportSafe} />
-            </div>
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Display Dates</label>
-              <Switch checked={showDates} onCheckedChange={handleToggleShowDates} />
-            </div>
-          </div>
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">Export-safe (Print)</label>
+                        <Switch checked={exportSafe} onCheckedChange={setExportSafe} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">Display Dates</label>
+                        <Switch checked={showDates} onCheckedChange={handleToggleShowDates} />
+                      </div>
+                    </div>
 
-          {/* Density Slider */}
-          <div className="pt-2">
-            <div className="flex justify-between mb-2">
-              <label className="text-sm font-medium">Grid Density</label>
-              <span className="text-xs text-indigo-600 font-bold uppercase">
-                {density === 1 ? "Large" : density === 5 ? "Compact" : "Standard"}
-              </span>
+                    <div className="pt-2">
+                      <div className="flex justify-between mb-2">
+                        <label className="text-sm font-medium">Grid Density</label>
+                        <span className="text-xs text-indigo-600 font-bold uppercase">
+                          {density === 1 ? "Large" : density === 5 ? "Compact" : "Standard"}
+                        </span>
+                      </div>
+                      <Slider
+                        value={[density]}
+                        onValueChange={(v) => handleDensityChange(v[0] ?? 3)}
+                        min={1}
+                        max={5}
+                        step={1}
+                        className="py-2"
+                      />
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="default" size="sm" className="h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 shadow-sm flex-1 sm:flex-none">
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => doExport("fast-jpeg")} disabled={exporting}>
+                    <ImageIcon className="mr-2 h-4 w-4" /> Fast JPEG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => doExport("high-png")} disabled={exporting}>
+                    <FileImage className="mr-2 h-4 w-4" /> High-Res PNG
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleShareToFacebook} disabled={visibleCelebrants.length === 0}>
+                    <Share2 className="mr-2 h-4 w-4" /> Monthly Facebook Caption
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {excludedPeople.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowExcluded(true)}
+                  className="h-8 w-fit text-xs text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+                  Excluded ({excludedPeople.length})
+                </Button>
+              )}
             </div>
-            <Slider
-              value={[density]}
-              onValueChange={(v) => setDensity(v[0] ?? 3)}
-              min={1}
-              max={5}
-              step={1}
-              className="py-2"
-            />
           </div>
         </div>
-      </PopoverContent>
-    </Popover>
-
-    {/* Export Actions */}
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="default" size="sm" className="h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 shadow-md">
-          <Download className="h-4 w-4 mr-2" />
-          Export
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={() => doExport("fast-jpeg")} disabled={exporting}>
-          <ImageIcon className="mr-2 h-4 w-4" /> Fast JPEG
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => doExport("high-png")} disabled={exporting}>
-          <FileImage className="mr-2 h-4 w-4" /> High-Res PNG
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleShareToFacebook} disabled={visibleCelebrants.length === 0}>
-          <Share2 className="mr-2 h-4 w-4" /> Monthly Facebook Caption
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-    </div>
-
-    {excludedPeople.length > 0 && (
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => setShowExcluded(true)}
-        className="w-fit text-xs text-muted-foreground hover:text-destructive transition-colors"
-      >
-        <EyeOff className="h-3.5 w-3.5 mr-1.5" />
-        Excluded ({excludedPeople.length})
-      </Button>
-    )}
-  </div>
-</div>
       </div>
 
       {/* Board */}
       <div
         ref={boardRef}
         className={cn(
-          "relative rounded-2xl border shadow-lg p-3 sm:p-5 overflow-hidden transition-all",
+          "relative rounded-2xl border shadow-lg p-2 sm:p-4 overflow-hidden transition-all",
           exportSafe ? "bg-white/95" : "bg-white/20"
         )}
         style={{
@@ -1295,8 +1303,8 @@ export default function BirthdayMonthClient({
                             excluded.has(p.id)
                               ? undefined
                               : {
-                                  color: resolvedTheme?.cssVars["--bday-accent"] ?? "#047857",
-                                  borderColor: resolvedTheme?.cssVars["--bday-card-border"] ?? "rgba(16, 185, 129, 0.35)",
+                                  color: resolvedTheme?.cssVars["--bday-chip-fg"] ?? resolvedTheme?.cssVars["--bday-accent"] ?? "#047857",
+                                  borderColor: resolvedTheme?.cssVars["--bday-chip-border"] ?? resolvedTheme?.cssVars["--bday-card-border"] ?? "rgba(16, 185, 129, 0.35)",
                                 }
                           }
                           title={excluded.has(p.id) ? "Excluded (click to include)" : "Included (click to exclude)"}
@@ -1334,8 +1342,8 @@ export default function BirthdayMonthClient({
                             className="rounded-md border px-2 py-0.5 text-xs font-extrabold shadow-sm"
                             style={{
                               backgroundColor: exportSafe ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.85)",
-                              color: resolvedTheme?.cssVars["--bday-accent-2"] ?? "#be185d",
-                              borderColor: resolvedTheme?.cssVars["--bday-card-border"] ?? "rgba(244,114,182,0.35)",
+                              color: resolvedTheme?.cssVars["--bday-chip-fg"] ?? resolvedTheme?.cssVars["--bday-accent-2"] ?? "#be185d",
+                              borderColor: resolvedTheme?.cssVars["--bday-chip-border"] ?? resolvedTheme?.cssVars["--bday-card-border"] ?? "rgba(244,114,182,0.35)",
                             }}
                           >
                             {fmtMonthDay(d)}

@@ -16,6 +16,7 @@ import { computeStep } from "@/utils/compute-step";
 import { salarySchedule } from "@/utils/salarySchedule";
 import { formatUpdatedAt } from "@/utils/date";
 import { getQ39ClassificationDisplay } from "@/lib/workforce-csc";
+import { resolvePlantillaDesignationLabel } from "@/lib/plantilla";
 import { computeTenure } from "@/utils/tenure";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 
@@ -176,7 +177,13 @@ const Info = ({ data }: InfoProps) => {
             <h2 className="text-lg font-bold text-slate-800">Employment Information</h2>
           </div>
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {renderItem("Plantilla Designation", data.designation?.name || "Not Assigned")}
+            {renderItem(
+              "Plantilla Designation",
+              resolvePlantillaDesignationLabel({
+                plantillaOfficeName: data.plantillaPosition?.office?.name,
+                designationName: data.designation?.name,
+              }) || "Not Assigned"
+            )}
             {renderItem("Position", data.position)}
             {supervisoryLevel && (
               <div className="flex flex-col gap-1">

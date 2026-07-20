@@ -637,6 +637,13 @@ export const EmployeesForm = ({
     if (selected.title && form.getValues("position") !== selected.title) {
       form.setValue("position", selected.title, { shouldDirty: true });
     }
+    // Plantilla Designation = office that owns the plantilla item.
+    if (
+      selected.officeId &&
+      form.getValues("designationId") !== selected.officeId
+    ) {
+      form.setValue("designationId", selected.officeId, { shouldDirty: true });
+    }
     if (
       selected.salaryGrade != null &&
       String(form.getValues("salaryGrade") ?? "") !== String(selected.salaryGrade)
@@ -1142,7 +1149,7 @@ export const EmployeesForm = ({
                                   ? "BIO auto-suggestion is disabled for archived or terminated employees."
                                   : suggesting
                                     ? "Finding next available BIO number..."
-                                    : "Auto-suggests after selecting Department / Assignment."}
+                                    : "Auto-suggests after selecting Office Designation."}
                               </FormDescription>
                             )}
                             <FormMessage className="text-[11px]" />
@@ -1151,24 +1158,41 @@ export const EmployeesForm = ({
                         }}
                       />
 
-                      {/* Plantilla Designation */}
+                      {/* Plantilla Designation — auto from Plantilla Item office */}
                       <FormField
                         control={form.control}
                         name="designationId"
-                        render={({ field }) => (
-                          <AutoField
-                            kind="select"
-                            label="Plantilla Designation"
-                            field={field}
-                            placeholder="Choose designation…"
-                            optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`}
-                            className="h-10 bg-secondary/20 border-transparent focus:bg-background"
-                            pinSuggestions
-                            searchable
-                            allowClear
-                            disabled={loading}
-                          />
-                        )}
+                        render={({ field }) => {
+                          const designationField = (
+                            <AutoField
+                              kind="select"
+                              label="Plantilla Designation"
+                              description={
+                                plantillaLocksCompensation
+                                  ? "From selected Plantilla Item’s office."
+                                  : "Optional. Auto-fills when a Plantilla Item is selected."
+                              }
+                              field={field}
+                              placeholder="Choose designation…"
+                              optionsEndpoint={`/api/offices?departmentId=${params.departmentId}`}
+                              className="h-10 bg-secondary/20 border-transparent focus:bg-background"
+                              pinSuggestions
+                              searchable
+                              allowClear={!plantillaLocksCompensation}
+                              disabled={loading || plantillaLocksCompensation}
+                            />
+                          );
+                          return plantillaLocksCompensation ? (
+                            <ActionTooltip
+                              label="Locked from selected Plantilla Item"
+                              description="Clear the plantilla to edit Plantilla Designation manually."
+                            >
+                              <div>{designationField}</div>
+                            </ActionTooltip>
+                          ) : (
+                            designationField
+                          );
+                        }}
                       />
                     </div>
 
@@ -1180,7 +1204,8 @@ export const EmployeesForm = ({
                         <div className="pt-4 border-t border-dashed border-border/60">
                           <AutoField
                             kind="select"
-                            label="Department / Assignment"
+                            label="Office Designation"
+                           
                             field={field}
                             required
                             options={offices.map((o) => ({
@@ -1202,7 +1227,7 @@ export const EmployeesForm = ({
                           <AutoField
                             kind="select"
                             label="Assignment Division"
-                            description="Under Department / Assignment only."
+                            description="Under Office Designation only."
                             field={{
                               ...field,
                               value: field.value ?? "",
@@ -1517,6 +1542,13 @@ export const EmployeesForm = ({
                           disabled={loading}
                         />
                       )}
+                      {selectedPlantilla?.officeName &&
+                      selectedPlantilla.officeName.trim().toLowerCase() !==
+                        (selectedOffice?.name ?? "").trim().toLowerCase() ? (
+                        <span className="inline-flex text-[11px] text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded w-fit max-w-full truncate">
+                          {selectedPlantilla.officeName}
+                        </span>
+                      ) : null}
                       {workforceIndicator ? (
                         <p className="text-[11px] font-medium text-muted-foreground">
                           Indicator: <span className="text-foreground">{workforceIndicator.indicatorName}</span>

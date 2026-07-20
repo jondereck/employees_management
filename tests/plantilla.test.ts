@@ -24,6 +24,7 @@ import {
   previewPlantillaAutoLinks,
   resolveDivisionLabel,
   resolvePlantillaLabel,
+  resolvePlantillaDesignationLabel,
   resolvePositionLabel,
   sortPlantillaByAssignmentOffice,
   sortPlantillaPositions,
@@ -280,6 +281,21 @@ test("dual-read label helpers prefer structured plantilla then legacy fallbacks"
     }),
     "Free text role"
   );
+
+  assert.equal(
+    resolvePlantillaDesignationLabel({
+      plantillaOfficeName: "Office of the Mayor",
+      designationName: "Old Designation",
+    }),
+    "Office of the Mayor"
+  );
+  assert.equal(
+    resolvePlantillaDesignationLabel({
+      designationName: "Old Designation",
+    }),
+    "Old Designation"
+  );
+  assert.equal(resolvePlantillaDesignationLabel({}), "");
 
   assert.equal(resolveDivisionLabel({ divisionName: " BAC " }), "BAC");
   assert.equal(resolveDivisionLabel({}), "");
@@ -568,6 +584,7 @@ test("buildEmployeePlantillaLinkUpdate syncs plantilla fields without changing o
   });
   assert.equal(sameOffice.plantillaPositionId, "p1");
   assert.equal(sameOffice.position, "Administrative Aide IV");
+  assert.equal(sameOffice.designationId, "office-a");
   assert.equal(sameOffice.salaryGrade, 4);
   assert.equal(sameOffice.employeeTypeId, "type-1");
   assert.equal(sameOffice.officeDivisionId, "div-1");
@@ -578,6 +595,7 @@ test("buildEmployeePlantillaLinkUpdate syncs plantilla fields without changing o
     officeId: "office-b",
     employeeNo: "1200040, A-1",
   });
+  assert.equal(crossOffice.designationId, "office-a");
   assert.equal(crossOffice.officeDivisionId, undefined);
   assert.equal(crossOffice.employeeNo, "1200040, A-1");
 });

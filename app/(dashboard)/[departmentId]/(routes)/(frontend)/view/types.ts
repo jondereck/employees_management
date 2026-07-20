@@ -121,6 +121,12 @@ export interface Employees {
   employeeLink: string,
   note: string;
   designation: { id: string; name: string } | null;
+  plantillaPosition?: {
+    id: string;
+    itemNumber?: string | null;
+    title?: string | null;
+    office?: { id: string; name: string } | null;
+  } | null;
   createdAt: Date;
   updatedAt: Date;
 

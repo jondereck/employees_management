@@ -1,10 +1,17 @@
 # Changelog
 
 Tracks changes made to this project. Newest entries go at the top of **Unreleased**.
-**Last updated: 2026-07-16**
+**Last updated: 2026-07-20**
 
 ## Unreleased
 
+- 2026-07-20 — style: use red badge for Inactive status on employees list
+- 2026-07-20 — feat: shade inactive employee rows in red on the employees list
+- 2026-07-20 — ui: hide Position plantilla-office badge when it matches Office Designation
+- 2026-07-20 — ui: employees table Department→Office Designation; plantilla office badge under Position
+- 2026-07-20 — feat: employee info Plantilla Designation shows office of linked plantilla item (legacy fallback)
+- 2026-07-20 — feat: Plantilla Designation auto-fills from selected Plantilla Item office and locks while linked
+- 2026-07-20 — ui: birthdays wider board, compact toolbar, readable Included chips, persist density
 - 2026-07-16 — fix: plantilla employee link search (wrong Prisma relation broke results)
 - 2026-07-16 — ui: plantilla/divisions simple loader + pagination; manual employee link on edit
 - 2026-07-16 — ui: Text Blast direct number uses +63 prefix with PH-only auto-format
