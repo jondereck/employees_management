@@ -1,10 +1,11 @@
 # Changelog
 
 Tracks changes made to this project. Newest entries go at the top of **Unreleased**.
-**Last updated: 2026-07-16**
+**Last updated: 2026-07-20**
 
 ## Unreleased
 
+- 2026-07-20 — docs: weekly security vulnerability scan report (2026-07-20)
 - 2026-07-16 — fix: plantilla employee link search (wrong Prisma relation broke results)
 - 2026-07-16 — ui: plantilla/divisions simple loader + pagination; manual employee link on edit
 - 2026-07-16 — ui: Text Blast direct number uses +63 prefix with PH-only auto-format
