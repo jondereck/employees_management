@@ -119,6 +119,15 @@ const mapEmployeeToColumn = (employee: any): EmployeesColumn => ({
       }
     : null,
 
+  plantillaOffice: employee.plantillaPosition?.office
+    ? {
+        id: employee.plantillaPosition.office.id,
+        name: employee.plantillaPosition.office.name,
+      }
+    : employee.designation
+      ? { id: employee.designation.id, name: employee.designation.name }
+      : null,
+
   createdAt: employee.createdAt ? employee.createdAt.toISOString() : null,
   updatedAt: employee.updatedAt ? employee.updatedAt.toISOString() : null,
 });

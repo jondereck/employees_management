@@ -5,12 +5,12 @@ import { computeTenure, formatTenureShort } from "@/utils/tenure";
 
 describe("tenure utility", () => {
   it("formats short tenure with correct units and plurals", () => {
-    assert.equal(formatTenureShort({ years: 0, months: 0, days: 0, totalDays: 0 }), "0 days");
-    assert.equal(formatTenureShort({ years: 0, months: 0, days: 1, totalDays: 1 }), "1 day");
-    assert.equal(formatTenureShort({ years: 0, months: 1, days: 0, totalDays: 30 }), "1 mo");
-    assert.equal(formatTenureShort({ years: 0, months: 8, days: 12, totalDays: 250 }), "8 mos");
-    assert.equal(formatTenureShort({ years: 1, months: 3, days: 0, totalDays: 450 }), "1 yr");
-    assert.equal(formatTenureShort({ years: 5, months: 0, days: 0, totalDays: 1825 }), "5 yrs");
+    assert.equal(formatTenureShort({ years: 0, months: 0, days: 0 }), "0 days");
+    assert.equal(formatTenureShort({ years: 0, months: 0, days: 1 }), "1 day");
+    assert.equal(formatTenureShort({ years: 0, months: 1, days: 0 }), "1 mo");
+    assert.equal(formatTenureShort({ years: 0, months: 8, days: 12 }), "8 mos");
+    assert.equal(formatTenureShort({ years: 1, months: 3, days: 0 }), "1 yr");
+    assert.equal(formatTenureShort({ years: 5, months: 0, days: 0 }), "5 yrs");
   });
 
   it("handles single continuous service", () => {

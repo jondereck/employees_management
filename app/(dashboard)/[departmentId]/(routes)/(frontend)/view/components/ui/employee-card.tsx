@@ -10,6 +10,7 @@ import usePreviewModal from "../../hooks/use-preview-modal";
 import { cn } from "@/lib/utils";
 import { StarFilledIcon } from "@radix-ui/react-icons";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
+import { EmployeesColumn } from "../../../../employees/components/columns";
 
 
 interface EmployeeCardProps {
@@ -24,7 +25,12 @@ const EmployeeCard = ({ data, isDisabled = false }: EmployeeCardProps) => {
   const onPreview: MouseEventHandler<HTMLButtonElement> = (event) => {
     if (isDisabled) return;
     event.stopPropagation();
-    previewModal.onOpen(data);
+    previewModal.onOpen({
+      ...(data as unknown as EmployeesColumn),
+      plantillaOffice: data.plantillaPosition?.office
+        ? { id: data.plantillaPosition.office.id, name: data.plantillaPosition.office.name }
+        : null,
+    });
   };
 
   const handleClick = () => {

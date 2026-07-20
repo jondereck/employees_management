@@ -5,6 +5,10 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-20 — chore: remove unused duplicate employee Info component (dfasf.tsx)
+- 2026-07-20 — fix: tenure short-format test drops unused totalDays property
+- 2026-07-20 — fix: plantillaOffice typing for preview, anniversaries, retirements, biometrics stub
+- 2026-07-20 — fix: employee preview Plantilla Office reads plantillaPosition or plantillaOffice
 - 2026-07-20 — style: use red badge for Inactive status on employees list
 - 2026-07-20 — feat: shade inactive employee rows in red on the employees list
 - 2026-07-20 — ui: hide Position plantilla-office badge when it matches Office Designation

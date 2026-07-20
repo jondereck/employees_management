@@ -1665,6 +1665,7 @@ const toPreviewEmployeeStub = (
     emergencyContactNumber: "",
     employeeLink: "",
     designation: null,
+    plantillaOffice: null,
     note: "",
     publicId: "",
     publicVersion: 0,
