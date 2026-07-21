@@ -28,16 +28,14 @@ test("Total Employees links to employees with blue border", () => {
   );
 });
 
-test("Active This Month uses emerald border without link", () => {
-  const activeBlock = pageSource.match(
-    /title="Active This Month"[\s\S]*?<\/MetricCard>/,
+test("Employee Movements uses indigo border in dedicated component", () => {
+  const componentSource = readFileSync(
+    "components/dashboard/dashboard-employee-movements-card.tsx",
+    "utf8",
   );
-  assert.ok(activeBlock, "expected Active This Month MetricCard block");
-  const block = activeBlock[0];
-  assert.doesNotMatch(block, /href=/);
   assert.match(
-    block,
-    /borderTone="border-emerald-400\/80 dark:border-emerald-500\/50"/,
+    componentSource,
+    /border-indigo-400\/80[\s\S]*dark:border-indigo-500\/50/,
   );
 });
 

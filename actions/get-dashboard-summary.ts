@@ -5,6 +5,11 @@ import {
   getMonthDayInTimeZone,
 } from "@/lib/birthday";
 import {
+  buildDashboardEmployeeMovementsSummary,
+  getManilaMonthUtcRange,
+  type DashboardEmployeeMovementsSummary,
+} from "@/lib/dashboard-employee-movements";
+import {
   buildDashboardPlantillaSummary,
   type DashboardPlantillaSummary,
 } from "@/lib/dashboard-plantilla";
@@ -84,6 +89,7 @@ export type DashboardSummary = {
   genderCountsByOffice: DashboardGenderCountRow[];
   genderCountsNested: DashboardGenderCountsNested;
   plantilla: DashboardPlantillaSummary;
+  employeeMovements: DashboardEmployeeMovementsSummary;
 };
 
 const FALLBACK_COLORS = [
@@ -230,6 +236,9 @@ const countUpcomingLoyaltyMilestones = (dateHired: Date) => {
 export const getDashboardSummary = async (
   departmentId: string,
 ): Promise<DashboardSummary> => {
+  const movementNow = new Date();
+  const movementRange = getManilaMonthUtcRange(movementNow);
+
   const [
     pendingApprovals,
     officeCount,
@@ -243,6 +252,8 @@ export const getDashboardSummary = async (
     activeEmployees,
     plantillaPositions,
     plantillaEmployees,
+    hiredThisMonth,
+    movementEventsThisMonth,
   ] = await Promise.all([
     prismadb.changeRequest.count({
       where: { departmentId, status: "PENDING" },
@@ -322,6 +333,52 @@ export const getDashboardSummary = async (
         officeId: true,
         plantillaPositionId: true,
         isArchived: true,
+      },
+    }),
+    prismadb.employee.findMany({
+      where: {
+        departmentId,
+        dateHired: { gte: movementRange.start, lt: movementRange.end },
+      },
+      select: {
+        id: true,
+        prefix: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        suffix: true,
+        nickname: true,
+        position: true,
+        dateHired: true,
+        offices: { select: { name: true } },
+      },
+    }),
+    prismadb.employmentEvent.findMany({
+      where: {
+        type: { in: ["PROMOTED", "TERMINATED"] },
+        deletedAt: null,
+        occurredAt: { gte: movementRange.start, lt: movementRange.end },
+        employee: { departmentId },
+      },
+      select: {
+        id: true,
+        type: true,
+        details: true,
+        occurredAt: true,
+        deletedAt: true,
+        employee: {
+          select: {
+            id: true,
+            prefix: true,
+            firstName: true,
+            middleName: true,
+            lastName: true,
+            suffix: true,
+            nickname: true,
+            position: true,
+            offices: { select: { name: true } },
+          },
+        },
       },
     }),
   ]);
@@ -709,6 +766,45 @@ export const getDashboardSummary = async (
       };
     });
 
+  const employeeMovements = buildDashboardEmployeeMovementsSummary(
+    {
+      hired: hiredThisMonth.map((employee) => ({
+        id: employee.id,
+        employeeId: employee.id,
+        name: fullNameFromParts(employee) || "Unnamed employee",
+        office: employee.offices?.name ?? null,
+        position: employee.position,
+        occurredAt: employee.dateHired,
+      })),
+      promoted: movementEventsThisMonth
+        .filter((event) => event.type === "PROMOTED")
+        .map((event) => ({
+          id: event.id,
+          employeeId: event.employee.id,
+          name: fullNameFromParts(event.employee) || "Unnamed employee",
+          office: event.employee.offices?.name ?? null,
+          position: event.employee.position,
+          occurredAt: event.occurredAt,
+          details: event.details,
+          deletedAt: event.deletedAt,
+        })),
+      separated: movementEventsThisMonth
+        .filter((event) => event.type === "TERMINATED")
+        .map((event) => ({
+          id: event.id,
+          employeeId: event.employee.id,
+          name: fullNameFromParts(event.employee) || "Unnamed employee",
+          office: event.employee.offices?.name ?? null,
+          position: event.employee.position,
+          occurredAt: event.occurredAt,
+          details: event.details,
+          deletedAt: event.deletedAt,
+        })),
+    },
+    departmentId,
+    movementNow,
+  );
+
   return {
     pendingApprovals,
     officeCount,
@@ -734,5 +830,6 @@ export const getDashboardSummary = async (
       plantillaPositions,
       employees: plantillaEmployees,
     }),
+    employeeMovements,
   };
 };

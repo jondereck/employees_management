@@ -1,6 +1,5 @@
 import {
   AlertCircle,
-  Bell,
   Briefcase,
   Building2,
   CalendarDays,
@@ -15,12 +14,12 @@ import { getDashboardSummary } from "@/actions/get-dashboard-summary";
 import { getDepartmentDataLastActivity } from "@/actions/get-department-data-last-activity";
 import { getGraph } from "@/actions/get-graph";
 import { getHeadcountTrend } from "@/actions/get-headcount-trend";
-import { getMonthlyEmployeeActivity } from "@/actions/get-monthly-employee-activity";
 import { getTotalEmployees } from "@/actions/get-total-employee";
 import { AnimatedNumber } from "@/components/animated-number";
 import { DashboardAnalyticsTabs } from "@/components/dashboard/dashboard-analytics-tabs";
 import { DashboardClock } from "@/components/dashboard/dashboard-clock";
 import { DashboardDataFreshness } from "@/components/dashboard/dashboard-data-freshness";
+import { DashboardEmployeeMovementsCard } from "@/components/dashboard/dashboard-employee-movements-card";
 import { DashboardWorkforceComposition } from "@/components/dashboard/dashboard-workforce-composition";
 import {
   DashboardNavLink,
@@ -45,14 +44,12 @@ const DashboardPage = async ({ params }: DashboardProps) => {
   const [
     totalEmployee,
     graphEmployee,
-    monthlyActivity,
     headcountTrend,
     dashboardSummary,
     dataLastActivityAt,
   ] = await Promise.all([
     getTotalEmployees(departmentId),
     getGraph(departmentId),
-    getMonthlyEmployeeActivity(departmentId),
     getHeadcountTrend(departmentId),
     getDashboardSummary(departmentId),
     getDepartmentDataLastActivity(departmentId),
@@ -132,17 +129,7 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                 Current active employee records.
               </p>
             </MetricCard>
-            <MetricCard
-              title="Active This Month"
-              value={monthlyActivity.currentCount}
-              icon={Bell}
-              borderTone="border-emerald-400/80 dark:border-emerald-500/50"
-              tone="text-emerald-600 bg-emerald-500/10 ring-emerald-500/20"
-            >
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Created or updated employee records.
-              </p>
-            </MetricCard>
+            <DashboardEmployeeMovementsCard {...dashboardSummary.employeeMovements} />
             <PlantillaMetricCard
               departmentId={departmentId}
               {...dashboardSummary.plantilla}

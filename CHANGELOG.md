@@ -5,6 +5,11 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-21 — feat: expand the dashboard monthly metric into hired, promoted, and separated employee movements
+- 2026-07-21 — fix: keep dashboard employee movement timing and event details consistent
+- 2026-07-21 — fix: polish new-hires modal empty state, list semantics, and summary test coverage
+- 2026-07-21 — feat: replace dashboard activity count with a clickable monthly new-hires modal
+- 2026-07-21 — feat: add Manila-calendar new hires summary to dashboard data
 - 2026-07-21 — ui: add matching borders and employee navigation to dashboard metric cards
 - 2026-07-21 — fix: use toggle-button semantics for workforce composition and clarify missing-data preview copy
 - 2026-07-21 — ui: compact the dashboard layout and mobile workforce composition
