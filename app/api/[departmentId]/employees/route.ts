@@ -5,6 +5,7 @@ import prismadb from "@/lib/prismadb";
 import { resolvePlantillaAssignment } from "@/lib/plantilla-assignment";
 import { createEmployeeHistorySnapshot, WORKFORCE_ACTIVE_STATUS } from "@/lib/workforce-history";
 import { publishWorkforceChanged } from "@/lib/workforce-realtime";
+import { employeeOfficeDisplayInclude } from "@/lib/employee-office-query";
 import { auth } from "@clerk/nextjs/server"; // ⬅️ server import
 import { MaritalStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -17,6 +18,7 @@ function toUTCNoonFromLocalDate(d: Date) {
   return new Date(Date.UTC(y, m, day, 12, 0, 0)); // 12:00Z
 }
 const employeeInclude = {
+  ...employeeOfficeDisplayInclude,
   designation: { select: { id: true, name: true } },
   images: true,
   offices: { select: { name: true } },
@@ -501,6 +503,7 @@ export async function GET(
         offices: true,
         employeeType: true,
         eligibility: true,
+        ...employeeOfficeDisplayInclude,
         designation: { select: { id: true, name: true } },
         plantillaPosition: {
           select: {

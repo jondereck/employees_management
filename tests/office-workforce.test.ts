@@ -141,6 +141,8 @@ test("includes empty offices and returns zero-safe vacancy math", () => {
   });
 
   assert.deepEqual(result.totals, {
+    activeAssignedEmployees: 0,
+    archivedAssignedEmployees: 0,
     totalPlantillaSlots: 0,
     activePlantillaSlots: 0,
     filledPlantillaSlots: 0,
@@ -215,6 +217,51 @@ test("inactive slots do not contribute cross-office counts", () => {
   );
 });
 
+test("counts active and archived employees by their assigned office", () => {
+  const result = aggregateOfficeWorkforce({
+    offices: [
+      { id: "a", name: "Office A" },
+      { id: "b", name: "Office B" },
+    ],
+    plantillaPositions: [{ id: "slot-a", officeId: "a", isActive: true }],
+    employees: [
+      {
+        id: "active-with-plantilla",
+        officeId: "a",
+        plantillaPositionId: "slot-a",
+        isArchived: false,
+      },
+      {
+        id: "active-without-plantilla",
+        officeId: "a",
+        plantillaPositionId: null,
+        isArchived: false,
+      },
+      {
+        id: "archived",
+        officeId: "a",
+        plantillaPositionId: null,
+        isArchived: true,
+      },
+      {
+        id: "active-in-b",
+        officeId: "b",
+        plantillaPositionId: null,
+        isArchived: false,
+      },
+    ],
+  });
+
+  const officeA = result.offices.find((office) => office.officeId === "a");
+  const officeB = result.offices.find((office) => office.officeId === "b");
+  assert.equal(officeA?.activeAssignedEmployees, 2);
+  assert.equal(officeA?.archivedAssignedEmployees, 1);
+  assert.equal(officeB?.activeAssignedEmployees, 1);
+  assert.equal(officeB?.archivedAssignedEmployees, 0);
+  assert.equal(result.totals.activeAssignedEmployees, 3);
+  assert.equal(result.totals.archivedAssignedEmployees, 1);
+});
+
 test("archived employees do not occupy slots or contribute cross-office counts", () => {
   const result = aggregateOfficeWorkforce({
     offices: [
@@ -287,6 +334,8 @@ test("calculates filled, vacant, vacancy rate, and overall totals from active sl
   });
 
   assert.deepEqual(result.totals, {
+    activeAssignedEmployees: 2,
+    archivedAssignedEmployees: 0,
     totalPlantillaSlots: 4,
     activePlantillaSlots: 3,
     filledPlantillaSlots: 2,

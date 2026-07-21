@@ -13,6 +13,8 @@ export type OfficesColumn = {
   name: string,
   billboardLabel: string,
   bioIndexCode: string | null;
+  activeAssignedEmployees: number;
+  archivedAssignedEmployees: number;
   plantillaCount: number;
   activePlantillaSlots: number;
   filledPlantillaSlots: number;
@@ -119,6 +121,41 @@ export const createOfficeColumns = (
       );
     },
     sortingFn: "alphanumeric",
+    enableSorting: true,
+  },
+  {
+    accessorKey: "activeAssignedEmployees",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Employees" />
+    ),
+    cell: ({ row }) =>
+      !workforceLoaded ? (
+        <span className="text-muted-foreground" aria-label="Employees loading">
+          …
+        </span>
+      ) : (
+        <div
+          className="flex items-center gap-1 tabular-nums"
+          title="Active | Archived"
+        >
+          <span
+            className="font-medium text-emerald-600 dark:text-emerald-400"
+            aria-label={`${row.original.activeAssignedEmployees} active employees`}
+          >
+            {row.original.activeAssignedEmployees}
+          </span>
+          <span className="text-muted-foreground" aria-hidden="true">
+            |
+          </span>
+          <span
+            className="font-medium text-red-600 dark:text-red-400"
+            aria-label={`${row.original.archivedAssignedEmployees} archived employees`}
+          >
+            {row.original.archivedAssignedEmployees}
+          </span>
+        </div>
+      ),
+    sortingFn: "basic",
     enableSorting: true,
   },
 

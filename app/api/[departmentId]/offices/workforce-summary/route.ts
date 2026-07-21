@@ -22,11 +22,7 @@ export async function GET(
         select: { id: true, officeId: true, isActive: true },
       }),
       prismadb.employee.findMany({
-        where: {
-          departmentId: params.departmentId,
-          isArchived: false,
-          plantillaPositionId: { not: null },
-        },
+        where: { departmentId: params.departmentId },
         select: {
           id: true,
           officeId: true,

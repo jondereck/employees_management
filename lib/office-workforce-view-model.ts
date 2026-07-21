@@ -12,6 +12,8 @@ export type OfficeWorkforceChartRow = {
 };
 
 const EMPTY_METRICS: OfficeWorkforceMetrics = {
+  activeAssignedEmployees: 0,
+  archivedAssignedEmployees: 0,
   totalPlantillaSlots: 0,
   activePlantillaSlots: 0,
   filledPlantillaSlots: 0,

@@ -30,6 +30,8 @@ const OfficesPage = async ({
     name: item.name,
     billboardLabel: item.billboard.label,
     bioIndexCode: item.bioIndexCode ?? null,
+    activeAssignedEmployees: 0,
+    archivedAssignedEmployees: 0,
     plantillaCount: item._count.plantillaPositions,
     activePlantillaSlots: 0,
     filledPlantillaSlots: 0,

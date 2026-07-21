@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildBulkOfficeReassignments,
   buildOfficeDeletionEmployeePatch,
   classifyOfficeDeletionEmployees,
   formatOfficeDeleteBlockedMessage,
@@ -9,6 +10,30 @@ import {
   hasStaleOfficeDeletionPreview,
   validateOfficeReassignments,
 } from "../lib/office-deletion";
+
+test("office deletion expands one destination selection for every affected employee", () => {
+  assert.deepEqual(
+    buildBulkOfficeReassignments(
+      [
+        { id: "employee-assigned", reasons: ["assigned", "plantilla"] },
+        { id: "employee-designated", reasons: ["designated"] },
+      ],
+      "office-destination",
+      "division-destination"
+    ),
+    [
+      {
+        employeeId: "employee-assigned",
+        officeId: "office-destination",
+        officeDivisionId: "division-destination",
+      },
+      {
+        employeeId: "employee-designated",
+        officeId: "office-destination",
+      },
+    ]
+  );
+});
 
 test("office deletion reports every employee relationship that blocks deletion", () => {
   const blockers = {

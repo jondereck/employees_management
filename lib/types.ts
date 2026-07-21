@@ -65,6 +65,7 @@ export interface EmployeeWithRelations {
   eligibility: { id: string; name: string; value: string };
   images: ImageFile[];
   designation?: { id: string; name: string } | null;
+  officeDivision?: { id: string; name: string } | null;
   plantillaOffice?: { id: string; name: string } | null;
   plantillaPosition?: {
     id: string;

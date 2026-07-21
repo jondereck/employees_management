@@ -11,6 +11,8 @@ import {
 } from "../lib/office-workforce-view-model";
 
 const metrics = {
+  activeAssignedEmployees: 10,
+  archivedAssignedEmployees: 3,
   totalPlantillaSlots: 8,
   activePlantillaSlots: 7,
   filledPlantillaSlots: 5,

@@ -20,6 +20,7 @@ import { formatTenureShort } from "@/utils/tenure"
 import { cn } from "@/lib/utils"
 import { salarySchedule } from "@/utils/salarySchedule"
 import { computeStep } from "@/utils/compute-step"
+import { getEmployeeOfficeDisplay } from "@/lib/employee-office-display"
 import {
   formatContactNumber,
   formatSalary,
@@ -79,6 +80,7 @@ export type EmployeesColumn = {
   emergencyContactNumber: string;
   employeeLink: string;
   designation: { id: string; name: string } | null;
+  officeDivision?: { id: string; name: string } | null;
   /** Office that owns the linked plantilla item (preferred badge under Position). */
   plantillaOffice: { id: string; name: string } | null;
   note: string;
@@ -223,11 +225,25 @@ export const columns: ColumnDef<EmployeesColumn>[] = [
       <DataTableColumnHeader column={column} title="Office Designation" />
     ),
     accessorFn: (row) => row.offices?.name ?? "",
-    cell: ({ row }) => (
-      <span className="text-xs font-semibold text-slate-600">
-        {row.original.offices?.name ?? "N/A"}
-      </span>
-    ),
+    cell: ({ row }) => {
+      const office = getEmployeeOfficeDisplay({
+        officeName: row.original.offices?.name,
+        divisionName: row.original.officeDivision?.name,
+      });
+
+      return (
+        <div className="flex min-w-[140px] flex-col">
+          <span className="text-xs font-semibold text-slate-600">
+            {office.officeName}
+          </span>
+          {office.divisionName ? (
+            <span className="text-[11px] italic text-muted-foreground">
+              {office.divisionName}
+            </span>
+          ) : null}
+        </div>
+      );
+    },
     filterFn: (row, columnId, filterValue) => {
       if (!filterValue || filterValue === "all") return true;
       return row.getValue(columnId) === filterValue;

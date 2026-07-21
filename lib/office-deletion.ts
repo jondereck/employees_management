@@ -34,6 +34,18 @@ export type OfficeReassignment = {
   officeDivisionId?: string | null;
 };
 
+export function buildBulkOfficeReassignments(
+  employees: Array<{ id: string; reasons: OfficeDeletionReason[] }>,
+  officeId: string,
+  officeDivisionId: string | null
+): OfficeReassignment[] {
+  return employees.map((employee) => ({
+    employeeId: employee.id,
+    officeId,
+    ...(employee.reasons.includes("assigned") ? { officeDivisionId } : {}),
+  }));
+}
+
 const stalePreviewError = {
   ok: false as const,
   code: "STALE_OFFICE_DELETION_PREVIEW" as const,

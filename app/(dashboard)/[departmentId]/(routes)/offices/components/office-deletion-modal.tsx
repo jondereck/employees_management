@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { buildBulkOfficeReassignments } from "@/lib/office-deletion";
 
 type Office = { id: string; name: string };
 type DestinationOffice = Office & { divisions: Office[] };
@@ -94,10 +95,10 @@ export function OfficeDeletionModal({
   onDeleted: () => void;
 }) {
   const [preview, setPreview] = useState<DeletionPreview | null>(null);
-  const [destinations, setDestinations] = useState<Record<string, string>>({});
-  const [destinationDivisions, setDestinationDivisions] = useState<
-    Record<string, string>
-  >({});
+  const [destinationOfficeId, setDestinationOfficeId] = useState("");
+  const [destinationDivisionId, setDestinationDivisionId] = useState(
+    OFFICE_LEVEL_DIVISION
+  );
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,8 +120,8 @@ export function OfficeDeletionModal({
         }
         const data = (await response.json()) as DeletionPreview;
         setPreview(data);
-        setDestinations({});
-        setDestinationDivisions({});
+        setDestinationOfficeId("");
+        setDestinationDivisionId(OFFICE_LEVEL_DIVISION);
       } catch (loadError) {
         if ((loadError as Error).name !== "AbortError") {
           setError(
@@ -139,8 +140,8 @@ export function OfficeDeletionModal({
   useEffect(() => {
     if (!isOpen) {
       setPreview(null);
-      setDestinations({});
-      setDestinationDivisions({});
+      setDestinationOfficeId("");
+      setDestinationDivisionId(OFFICE_LEVEL_DIVISION);
       setError(null);
       return;
     }
@@ -149,11 +150,8 @@ export function OfficeDeletionModal({
     return () => controller.abort();
   }, [isOpen, loadPreview]);
 
-  const allDestinationsSelected = useMemo(
-    () =>
-      !!preview &&
-      preview.employees.every((employee) => Boolean(destinations[employee.id])),
-    [destinations, preview]
+  const selectedDestinationOffice = preview?.destinationOffices.find(
+    (office) => office.id === destinationOfficeId
   );
   const hasAffectedEmployees = (preview?.employees.length ?? 0) > 0;
   const hasDestinationOffices = (preview?.destinationOffices.length ?? 0) > 0;
@@ -172,20 +170,13 @@ export function OfficeDeletionModal({
             : undefined,
           body: hasAffectedEmployees
             ? JSON.stringify({
-                reassignments: preview.employees.map((employee) => ({
-                  employeeId: employee.id,
-                  officeId: destinations[employee.id],
-                  ...(employee.reasons.includes("assigned")
-                    ? {
-                        officeDivisionId:
-                          destinationDivisions[employee.id] &&
-                          destinationDivisions[employee.id] !==
-                            OFFICE_LEVEL_DIVISION
-                            ? destinationDivisions[employee.id]
-                            : null,
-                      }
-                    : {}),
-                })),
+                reassignments: buildBulkOfficeReassignments(
+                  preview.employees,
+                  destinationOfficeId,
+                  destinationDivisionId !== OFFICE_LEVEL_DIVISION
+                    ? destinationDivisionId
+                    : null
+                ),
               })
             : undefined,
         }
@@ -195,8 +186,8 @@ export function OfficeDeletionModal({
         setError(problem.message);
         if (problem.code === "STALE_OFFICE_DELETION_PREVIEW") {
           setPreview(null);
-          setDestinations({});
-          setDestinationDivisions({});
+          setDestinationOfficeId("");
+          setDestinationDivisionId(OFFICE_LEVEL_DIVISION);
           await loadPreview(true);
         }
         return;
@@ -217,7 +208,7 @@ export function OfficeDeletionModal({
     submitting ||
     !preview ||
     (hasAffectedEmployees &&
-      (!hasDestinationOffices || !allDestinationsSelected));
+      (!hasDestinationOffices || !destinationOfficeId));
 
   return (
     <Dialog
@@ -231,7 +222,7 @@ export function OfficeDeletionModal({
           <DialogTitle>Delete {officeName}</DialogTitle>
           <DialogDescription>
             {hasAffectedEmployees
-              ? "Choose a destination office for every affected employee before deleting this office."
+              ? "Choose one destination office and optional division to apply to every affected employee."
               : "This action cannot be undone."}
           </DialogDescription>
         </DialogHeader>
@@ -252,22 +243,94 @@ export function OfficeDeletionModal({
 
           {preview?.employees.length ? (
             <div className="space-y-3 pb-2">
-              {preview.employees.map((employee) => {
-                const selectedDestination = preview.destinationOffices.find(
-                  (office) => office.id === destinations[employee.id]
-                );
-                const availableDivisions =
-                  employee.reasons.includes("assigned") &&
-                  selectedDestination?.divisions.length
-                    ? selectedDestination.divisions
-                    : [];
+              <section
+                className="rounded-lg border bg-muted/30 p-4"
+                aria-labelledby="bulk-reassignment-heading"
+              >
+                <h3 id="bulk-reassignment-heading" className="font-medium">
+                  Apply to all employees
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  This destination will be used for every employee listed
+                  below.
+                </p>
 
-                return (
-                  <section
-                    key={employee.id}
-                    className="rounded-lg border p-4"
-                    aria-labelledby={`employee-${employee.id}`}
+                <label
+                  className="mt-3 block text-sm font-medium"
+                  htmlFor="bulk-destination-office"
+                >
+                  Destination office <span aria-hidden="true">*</span>
+                </label>
+                <Select
+                  value={destinationOfficeId}
+                  onValueChange={(officeId) => {
+                    setDestinationOfficeId(officeId);
+                    setDestinationDivisionId(OFFICE_LEVEL_DIVISION);
+                  }}
+                  disabled={submitting || !hasDestinationOffices}
+                >
+                  <SelectTrigger
+                    id="bulk-destination-office"
+                    className="mt-1 min-h-11"
+                    aria-required={true}
+                    aria-label="Destination office for all affected employees"
                   >
+                    <SelectValue placeholder="Select destination office" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {preview.destinationOffices.map((office) => (
+                      <SelectItem key={office.id} value={office.id}>
+                        {office.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {selectedDestinationOffice?.divisions.length ? (
+                  <>
+                    <label
+                      className="mt-3 block text-sm font-medium"
+                      htmlFor="bulk-destination-division"
+                    >
+                      Destination division (optional)
+                    </label>
+                    <Select
+                      value={destinationDivisionId}
+                      onValueChange={setDestinationDivisionId}
+                      disabled={submitting}
+                    >
+                      <SelectTrigger
+                        id="bulk-destination-division"
+                        className="mt-1 min-h-11"
+                        aria-required={false}
+                        aria-label="Destination division for all assigned employees"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={OFFICE_LEVEL_DIVISION}>
+                          Office level / No division
+                        </SelectItem>
+                        {selectedDestinationOffice.divisions.map((division) => (
+                          <SelectItem key={division.id} value={division.id}>
+                            {division.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Division applies to employees with the Assigned badge.
+                    </p>
+                  </>
+                ) : null}
+              </section>
+
+              {preview.employees.map((employee) => (
+                <section
+                  key={employee.id}
+                  className="rounded-lg border p-4"
+                  aria-labelledby={`employee-${employee.id}`}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <h3
@@ -325,93 +388,8 @@ export function OfficeDeletionModal({
                     ) : null}
                   </dl>
 
-                  <label
-                    className="mt-3 block text-sm font-medium"
-                    htmlFor={`destination-${employee.id}`}
-                  >
-                    Destination office <span aria-hidden="true">*</span>
-                  </label>
-                  <Select
-                    value={destinations[employee.id]}
-                    onValueChange={(officeId) => {
-                      setDestinations((current) => ({
-                        ...current,
-                        [employee.id]: officeId,
-                      }));
-                      setDestinationDivisions((current) => {
-                        const next = { ...current };
-                        delete next[employee.id];
-                        return next;
-                      });
-                    }}
-                    disabled={submitting || !hasDestinationOffices}
-                  >
-                    <SelectTrigger
-                      id={`destination-${employee.id}`}
-                      className="mt-1 min-h-11"
-                      aria-required={true}
-                      aria-label={`Destination office for ${employeeName(
-                        employee
-                      )}`}
-                    >
-                      <SelectValue placeholder="Select destination office" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {preview.destinationOffices.map((office) => (
-                        <SelectItem key={office.id} value={office.id}>
-                          {office.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  {availableDivisions.length > 0 ? (
-                    <>
-                      <label
-                        className="mt-3 block text-sm font-medium"
-                        htmlFor={`destination-division-${employee.id}`}
-                      >
-                        Destination division (optional)
-                      </label>
-                      <Select
-                        value={
-                          destinationDivisions[employee.id] ??
-                          OFFICE_LEVEL_DIVISION
-                        }
-                        onValueChange={(officeDivisionId) =>
-                          setDestinationDivisions((current) => ({
-                            ...current,
-                            [employee.id]: officeDivisionId,
-                          }))
-                        }
-                        disabled={submitting}
-                      >
-                        <SelectTrigger
-                          id={`destination-division-${employee.id}`}
-                          className="mt-1 min-h-11"
-                          aria-required={false}
-                          aria-label={`Destination division for ${employeeName(
-                            employee
-                          )}`}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={OFFICE_LEVEL_DIVISION}>
-                            Office level / No division
-                          </SelectItem>
-                          {availableDivisions.map((division) => (
-                            <SelectItem key={division.id} value={division.id}>
-                              {division.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </>
-                  ) : null}
-                  </section>
-                );
-              })}
+                </section>
+              ))}
             </div>
           ) : null}
 

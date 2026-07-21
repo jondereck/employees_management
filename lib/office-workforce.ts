@@ -17,6 +17,8 @@ export type OfficeWorkforceEmployee = {
 };
 
 export type OfficeWorkforceMetrics = {
+  activeAssignedEmployees: number;
+  archivedAssignedEmployees: number;
   totalPlantillaSlots: number;
   activePlantillaSlots: number;
   filledPlantillaSlots: number;
@@ -174,6 +176,8 @@ export function mapEmployeeWorkforceDetail(
 
 function emptyMetrics(): OfficeWorkforceMetrics {
   return {
+    activeAssignedEmployees: 0,
+    archivedAssignedEmployees: 0,
     totalPlantillaSlots: 0,
     activePlantillaSlots: 0,
     filledPlantillaSlots: 0,
@@ -222,6 +226,19 @@ export function aggregateOfficeWorkforce(
   }
 
   for (const employee of input.employees) {
+    const assignmentOfficeMetrics = metricsByOfficeId.get(employee.officeId);
+    if (employee.isArchived) {
+      totals.archivedAssignedEmployees += 1;
+      if (assignmentOfficeMetrics) {
+        assignmentOfficeMetrics.archivedAssignedEmployees += 1;
+      }
+    } else {
+      totals.activeAssignedEmployees += 1;
+      if (assignmentOfficeMetrics) {
+        assignmentOfficeMetrics.activeAssignedEmployees += 1;
+      }
+    }
+
     if (employee.isArchived || !employee.plantillaPositionId) continue;
 
     const position = plantillaById.get(employee.plantillaPositionId);
@@ -232,7 +249,6 @@ export function aggregateOfficeWorkforce(
       totals.assignedHereButPlantillaElsewhere += 1;
       totals.plantillaHereButAssignedElsewhere += 1;
 
-      const assignmentOfficeMetrics = metricsByOfficeId.get(employee.officeId);
       if (assignmentOfficeMetrics) {
         assignmentOfficeMetrics.assignedHereButPlantillaElsewhere += 1;
       }

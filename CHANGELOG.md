@@ -5,6 +5,10 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-21 — fix: preserve employee division details after the live employee list loads
+- 2026-07-21 — ui: show employee divisions beneath Office Designation in the employee table
+- 2026-07-21 — feat: show live active and archived employee counts for each office
+- 2026-07-21 — ui: apply one office and optional division to all employees during office deletion
 - 2026-07-21 — ui: move the API request-card visibility control to Settings
 - 2026-07-21 — feat: support optional destination divisions during office deletion reassignment
 - 2026-07-21 — fix: make the office deletion employee list scrollable
