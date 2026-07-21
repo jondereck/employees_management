@@ -4,6 +4,10 @@ import {
   getCurrentYearInTimeZone,
   getMonthDayInTimeZone,
 } from "@/lib/birthday";
+import {
+  buildDashboardPlantillaSummary,
+  type DashboardPlantillaSummary,
+} from "@/lib/dashboard-plantilla";
 
 export type DashboardChartSlice = {
   name: string;
@@ -79,6 +83,7 @@ export type DashboardSummary = {
   genderCountsBySupervisory: DashboardGenderCountRow[];
   genderCountsByOffice: DashboardGenderCountRow[];
   genderCountsNested: DashboardGenderCountsNested;
+  plantilla: DashboardPlantillaSummary;
 };
 
 const FALLBACK_COLORS = [
@@ -236,6 +241,8 @@ export const getDashboardSummary = async (
     employeeTypes,
     eligibilities,
     activeEmployees,
+    plantillaPositions,
+    plantillaEmployees,
   ] = await Promise.all([
     prismadb.changeRequest.count({
       where: { departmentId, status: "PENDING" },
@@ -298,6 +305,23 @@ export const getDashboardSummary = async (
         employeeTypeId: true,
         eligibilityId: true,
         offices: { select: { id: true, name: true } },
+      },
+    }),
+    prismadb.plantillaPosition.findMany({
+      where: { departmentId },
+      select: { id: true, officeId: true, isActive: true },
+    }),
+    prismadb.employee.findMany({
+      where: {
+        departmentId,
+        isArchived: false,
+        plantillaPositionId: { not: null },
+      },
+      select: {
+        id: true,
+        officeId: true,
+        plantillaPositionId: true,
+        isArchived: true,
       },
     }),
   ]);
@@ -705,5 +729,10 @@ export const getDashboardSummary = async (
     genderCountsBySupervisory,
     genderCountsByOffice,
     genderCountsNested,
+    plantilla: buildDashboardPlantillaSummary({
+      offices: [],
+      plantillaPositions,
+      employees: plantillaEmployees,
+    }),
   };
 };

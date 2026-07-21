@@ -1,13 +1,13 @@
 import {
   AlertCircle,
   Bell,
+  Briefcase,
   Building2,
   CalendarDays,
   Cake,
   Clock3,
   FileWarning,
   Medal,
-  ShieldCheck,
   Users,
 } from "lucide-react";
 
@@ -137,17 +137,10 @@ const DashboardPage = async ({ params }: DashboardProps) => {
                 Created or updated employee records.
               </p>
             </MetricCard>
-            <MetricCard
-              title="Pending Approvals"
-              value={dashboardSummary.pendingApprovals}
-              icon={ShieldCheck}
-              href={`/${departmentId}/approvals`}
-              tone="text-amber-600 bg-amber-500/10 ring-amber-500/20"
-            >
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Change requests waiting for review.
-              </p>
-            </MetricCard>
+            <PlantillaMetricCard
+              departmentId={departmentId}
+              {...dashboardSummary.plantilla}
+            />
             <MetricCard
               title="Offices"
               value={dashboardSummary.officeCount}
@@ -357,6 +350,90 @@ const DashboardPage = async ({ params }: DashboardProps) => {
     </DashboardNavProvider>
   );
 };
+
+type PlantillaMetricCardProps = {
+  departmentId: string;
+  total: number;
+  filled: number;
+  vacant: number;
+  occupancyRate: number;
+};
+
+function PlantillaMetricCard({
+  departmentId,
+  total,
+  filled,
+  vacant,
+  occupancyRate,
+}: PlantillaMetricCardProps) {
+  const formattedOccupancy = `${occupancyRate.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  })}%`;
+
+  return (
+    <DashboardNavLink
+      href={`/${departmentId}/offices`}
+      className="block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+    >
+      <Card
+        className={`${glassCard} group relative h-full overflow-hidden rounded-2xl border-violet-400/80 transition hover:bg-white/60 dark:border-violet-500/50 dark:hover:bg-white/[0.07]`}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/30 to-transparent dark:from-white/[0.04]" />
+        <CardHeader className="relative z-10 flex flex-row items-center justify-between space-y-0 p-4 pb-2">
+          <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+            Plantilla
+          </CardTitle>
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 ring-1 ring-violet-500/20 dark:text-violet-300">
+            <Briefcase className="h-5 w-5" aria-hidden="true" />
+          </span>
+        </CardHeader>
+        <CardContent className="relative z-10 p-4 pt-0">
+          <div className="text-3xl font-bold tracking-tight text-slate-900 tabular-nums dark:text-slate-100">
+            <AnimatedNumber value={total} />
+          </div>
+
+          <div className="mt-2 flex items-start gap-5">
+            <div>
+              <AnimatedNumber
+                value={filled}
+                className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
+              />
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Filled</p>
+            </div>
+            <div>
+              <AnimatedNumber
+                value={vacant}
+                className="text-sm font-bold tabular-nums text-amber-600 dark:text-amber-400"
+              />
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Vacant</p>
+            </div>
+          </div>
+
+          <div
+            role="progressbar"
+            aria-label={`Plantilla occupancy ${formattedOccupancy}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={occupancyRate}
+            className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-700"
+          >
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300"
+              style={{ width: `${occupancyRate}%` }}
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+            <span>Occupancy</span>
+            <span className="font-medium tabular-nums text-slate-700 dark:text-slate-200">
+              {formattedOccupancy}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    </DashboardNavLink>
+  );
+}
 
 type MetricCardProps = {
   title: string;
