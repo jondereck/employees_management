@@ -1,4 +1,4 @@
-
+import React from "react"
 import { ColumnDef } from "@tanstack/react-table"
 
 import { Button } from "@/components/ui/button"
@@ -15,7 +15,8 @@ export type OfficesColumn = {
   id: string
   name: string,
   billboardLabel: string,
-    bioIndexCode: string | null;
+  bioIndexCode: string | null;
+  plantillaCount: number;
   createdAt: string
 }
 
@@ -65,6 +66,16 @@ export const columns: ColumnDef<OfficesColumn>[] = [
       );
     },
     sortingFn: "alphanumeric",
+    enableSorting: true,
+  },
+
+  {
+    accessorKey: "plantillaCount",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Total Plantilla" />
+    ),
+    cell: ({ row }) => row.original.plantillaCount,
+    sortingFn: "basic",
     enableSorting: true,
   },
 

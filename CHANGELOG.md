@@ -1,10 +1,11 @@
 # Changelog
 
 Tracks changes made to this project. Newest entries go at the top of **Unreleased**.
-**Last updated: 2026-07-20**
+**Last updated: 2026-07-21**
 
 ## Unreleased
 
+- 2026-07-21 — feat: Offices table shows sortable total plantilla count per office
 - 2026-07-20 — fix: Overview last updated shows latest DB record change not page load time
 - 2026-07-20 — ui: Overview shows visible Data last updated badge (Asia/Manila)
 - 2026-07-20 — feat: Overview Male/Female Counts Group by / Break down by Office

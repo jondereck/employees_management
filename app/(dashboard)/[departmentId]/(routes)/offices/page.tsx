@@ -13,7 +13,12 @@ const OfficesPage = async ({
       departmentId: params.departmentId
     },
     include: {
-      billboard: true
+      billboard: true,
+      _count: {
+        select: {
+          plantillaPositions: true,
+        },
+      },
     },
     orderBy: {
       createdAt: 'desc'
@@ -24,7 +29,8 @@ const OfficesPage = async ({
     id: item.id,
     name: item.name,
     billboardLabel: item.billboard.label,
-      bioIndexCode: item.bioIndexCode ?? null,
+    bioIndexCode: item.bioIndexCode ?? null,
+    plantillaCount: item._count.plantillaPositions,
     createdAt: format(item.createdAt, "MMMM do, yyyy"),
   }));
 
