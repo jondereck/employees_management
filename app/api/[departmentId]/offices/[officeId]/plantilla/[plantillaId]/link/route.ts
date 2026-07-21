@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { requireOfficeInDepartment } from "@/lib/office-access";
-import { buildEmployeePlantillaLinkUpdate } from "@/lib/plantilla";
+import {
+  buildEmployeePlantillaLinkUpdate,
+  buildPlantillaCandidateDepartmentScope,
+} from "@/lib/plantilla";
 import prismadb from "@/lib/prismadb";
+import { publishWorkforceChanged } from "@/lib/workforce-realtime";
 
 const plantillaInclude = {
   officeDivision: { select: { id: true, name: true } },
@@ -78,8 +82,7 @@ export async function POST(
     const employee = await prismadb.employee.findFirst({
       where: {
         id: employeeId,
-        departmentId: params.departmentId,
-        isArchived: false,
+        ...buildPlantillaCandidateDepartmentScope(params.departmentId),
       },
       select: {
         id: true,
@@ -109,6 +112,10 @@ export async function POST(
       include: plantillaInclude,
     });
 
+    await publishWorkforceChanged(params.departmentId, {
+      scope: "plantilla",
+      action: "linked",
+    });
     return NextResponse.json(updated);
   } catch (error) {
     console.log("[OFFICE_PLANTILLA_LINK_POST]", error);
@@ -153,6 +160,10 @@ export async function DELETE(
       include: plantillaInclude,
     });
 
+    await publishWorkforceChanged(params.departmentId, {
+      scope: "plantilla",
+      action: "unlinked",
+    });
     return NextResponse.json(updated);
   } catch (error) {
     console.log("[OFFICE_PLANTILLA_LINK_DELETE]", error);

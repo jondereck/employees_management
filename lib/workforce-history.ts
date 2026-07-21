@@ -1,4 +1,9 @@
-import type { Gender, MaritalStatus, PrismaClient } from "@prisma/client";
+import type {
+  Gender,
+  MaritalStatus,
+  Prisma,
+  PrismaClient,
+} from "@prisma/client";
 import { createHash } from "crypto";
 
 import prismadb from "@/lib/prismadb";
@@ -61,7 +66,7 @@ export type WorkforceSnapshotEmployee = {
   updatedAt?: Date;
 };
 
-type PrismaLike = PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+type PrismaLike = PrismaClient | Prisma.TransactionClient;
 
 function normalizeAiIndicatorName(value: unknown) {
   if (typeof value !== "string") return null;
@@ -169,8 +174,11 @@ export async function enhanceWorkforceSuggestionsWithAi(
   return output;
 }
 
-export async function ensureDefaultWorkforceIndicators(departmentId: string) {
-  const existing = await prismadb.workforceReportGroup.findMany({
+export async function ensureDefaultWorkforceIndicators(
+  departmentId: string,
+  db: PrismaLike = prismadb
+) {
+  const existing = await db.workforceReportGroup.findMany({
     where: { departmentId },
     select: { id: true, name: true, sortOrder: true },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -185,7 +193,7 @@ export async function ensureDefaultWorkforceIndicators(departmentId: string) {
   );
 
   if (missingDefaults.length > 0) {
-    await prismadb.workforceReportGroup.createMany({
+    await db.workforceReportGroup.createMany({
       data: missingDefaults.map((name, index) => ({
         departmentId,
         name,
@@ -209,17 +217,20 @@ export async function ensureDefaultWorkforceIndicators(departmentId: string) {
     .filter(Boolean) as Array<{ id: string; name: string; canonicalName: string }>;
 
   for (const indicator of renamedIndicators) {
-    await prismadb.workforceReportGroup.update({
+    await db.workforceReportGroup.update({
       where: { id: indicator.id },
       data: { name: indicator.canonicalName },
     });
   }
 
-  await cleanupDuplicateDefaultIndicators(departmentId);
+  await cleanupDuplicateDefaultIndicators(departmentId, db);
 }
 
-export async function cleanupDuplicateDefaultIndicators(departmentId: string) {
-  const indicators = await prismadb.workforceReportGroup.findMany({
+export async function cleanupDuplicateDefaultIndicators(
+  departmentId: string,
+  db: PrismaLike = prismadb
+) {
+  const indicators = await db.workforceReportGroup.findMany({
     where: { departmentId },
     include: {
       offices: { select: { id: true, officeId: true } },
@@ -247,13 +258,13 @@ export async function cleanupDuplicateDefaultIndicators(departmentId: string) {
     const duplicates = entries.filter((entry) => entry.id !== keeper.id);
 
     for (const duplicate of duplicates) {
-      await prismadb.employeeHistorySnapshot.updateMany({
+      await db.employeeHistorySnapshot.updateMany({
         where: { indicatorId: duplicate.id },
         data: { indicatorId: keeper.id },
       });
 
       for (const office of duplicate.offices) {
-        await prismadb.workforceReportGroupOffice.upsert({
+        await db.workforceReportGroupOffice.upsert({
           where: {
             groupId_officeId: {
               groupId: keeper.id,
@@ -268,13 +279,13 @@ export async function cleanupDuplicateDefaultIndicators(departmentId: string) {
         });
       }
 
-      await prismadb.workforceReportGroup.delete({
+      await db.workforceReportGroup.delete({
         where: { id: duplicate.id },
       });
     }
   }
 
-  const others = await prismadb.workforceReportGroup.findFirst({
+  const others = await db.workforceReportGroup.findFirst({
     where: {
       departmentId,
       name: WORKFORCE_OTHERS_INDICATOR,
@@ -286,13 +297,13 @@ export async function cleanupDuplicateDefaultIndicators(departmentId: string) {
   if (others) {
     const obsolete = indicators.filter((indicator) => !getIndicatorCanonicalKey(indicator.name));
     for (const indicator of obsolete) {
-      await prismadb.employeeHistorySnapshot.updateMany({
+      await db.employeeHistorySnapshot.updateMany({
         where: { indicatorId: indicator.id },
         data: { indicatorId: others.id },
       });
 
       for (const office of indicator.offices) {
-        await prismadb.workforceReportGroupOffice.upsert({
+        await db.workforceReportGroupOffice.upsert({
           where: {
             groupId_officeId: {
               groupId: others.id,
@@ -307,30 +318,30 @@ export async function cleanupDuplicateDefaultIndicators(departmentId: string) {
         });
       }
 
-      await prismadb.workforceReportGroup.delete({
+      await db.workforceReportGroup.delete({
         where: { id: indicator.id },
       });
     }
   }
 
-  await invalidateWorkforceReportCache(departmentId);
+  await invalidateWorkforceReportCache(departmentId, db);
 }
 
 async function resolveSuggestedWorkforceIndicatorId(
   db: PrismaLike,
   employee: Pick<WorkforceSnapshotEmployee, "departmentId" | "officeId" | "employeeTypeId" | "position">
 ) {
-  await ensureDefaultWorkforceIndicators(employee.departmentId);
+  await ensureDefaultWorkforceIndicators(employee.departmentId, db);
 
   const [office, employeeType] = await Promise.all([
     employee.officeId
-      ? (db as any).offices.findUnique({
+      ? db.offices.findUnique({
           where: { id: employee.officeId },
           select: { name: true },
         })
       : null,
     employee.employeeTypeId
-      ? (db as any).employeeType.findUnique({
+      ? db.employeeType.findUnique({
           where: { id: employee.employeeTypeId },
           select: { name: true },
         })
@@ -343,7 +354,7 @@ async function resolveSuggestedWorkforceIndicatorId(
     employeeTypeName: employeeType?.name ?? null,
   });
 
-  const indicator = await (db as any).workforceReportGroup.findFirst({
+  const indicator = await db.workforceReportGroup.findFirst({
     where: {
       departmentId: employee.departmentId,
       name: getCanonicalIndicatorLabel(suggestion.indicatorName),
@@ -352,18 +363,19 @@ async function resolveSuggestedWorkforceIndicatorId(
   });
 
   if (indicator?.id) return indicator.id;
-  return resolveWorkforceIndicatorId(employee.departmentId, null);
+  return resolveWorkforceIndicatorId(employee.departmentId, null, undefined, db);
 }
 
 export async function resolveWorkforceIndicatorId(
   departmentId: string,
   officeId?: string | null,
-  requestedIndicatorId?: string | null
+  requestedIndicatorId?: string | null,
+  db: PrismaLike = prismadb
 ) {
-  await ensureDefaultWorkforceIndicators(departmentId);
+  await ensureDefaultWorkforceIndicators(departmentId, db);
 
   if (requestedIndicatorId) {
-    const indicator = await prismadb.workforceReportGroup.findFirst({
+    const indicator = await db.workforceReportGroup.findFirst({
       where: { id: requestedIndicatorId, departmentId },
       select: { id: true },
     });
@@ -374,7 +386,7 @@ export async function resolveWorkforceIndicatorId(
   }
 
   if (officeId) {
-    const officeFallback = await prismadb.workforceReportGroupOffice.findFirst({
+    const officeFallback = await db.workforceReportGroupOffice.findFirst({
       where: {
         officeId,
         group: { departmentId },
@@ -385,7 +397,7 @@ export async function resolveWorkforceIndicatorId(
     if (officeFallback) return officeFallback.groupId;
   }
 
-  const others = await prismadb.workforceReportGroup.findFirst({
+  const others = await db.workforceReportGroup.findFirst({
     where: { departmentId, name: WORKFORCE_OTHERS_INDICATOR },
     select: { id: true },
   });
@@ -577,7 +589,7 @@ export async function createEmployeeHistorySnapshot(
     options.indicatorId ??
     (await resolveSuggestedWorkforceIndicatorId(db, employee)) ??
     previousIndicator?.indicatorId ??
-    (await resolveWorkforceIndicatorId(employee.departmentId, null));
+    (await resolveWorkforceIndicatorId(employee.departmentId, null, undefined, db));
 
   const snapshot = await db.employeeHistorySnapshot.create({
     data: {

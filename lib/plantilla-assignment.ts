@@ -25,6 +25,33 @@ export type PlantillaAssignmentResult =
     }
   | { ok: false; error: string };
 
+export type ArchivePlantillaUnlinkUpdate =
+  | { plantillaPositionId: null }
+  | { plantillaPositionId?: never };
+
+/**
+ * Returns the minimal employee update needed when changing archive state.
+ * Copied plantilla fields remain historical values on the employee record.
+ */
+export function buildArchivePlantillaUnlinkUpdate(
+  archived: boolean
+): ArchivePlantillaUnlinkUpdate {
+  return archived ? { plantillaPositionId: null } : {};
+}
+
+export function buildBulkArchiveEmployeeUpdate(input: {
+  archived: boolean;
+  terminateDate: string;
+  note?: string;
+}) {
+  return {
+    isArchived: input.archived,
+    terminateDate: input.terminateDate,
+    ...(input.note ? { note: input.note } : {}),
+    ...buildArchivePlantillaUnlinkUpdate(input.archived),
+  };
+}
+
 /**
  * Validates optional structured division + plantilla assignment for employee create/update.
  *

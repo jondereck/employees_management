@@ -1,6 +1,5 @@
 "use client";
 
-import axios from "axios";
 import { useState } from "react";
 import { Copy, Edit, MoreHorizontal, Trash } from "lucide-react";
 
@@ -14,11 +13,10 @@ import {
   DropdownMenuLabel, 
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { AlertModal } from "@/components/modals/alert-modal";
-
 import { OfficesColumn } from "./columns";
 import { toast } from "@/components/ui/use-toast";
 import toast2 from "react-hot-toast";
+import { OfficeDeletionModal } from "./office-deletion-modal";
 
 interface CellActionProps {
   data: OfficesColumn;
@@ -30,29 +28,14 @@ export const CellAction = ({
   const router = useRouter();
   const params = useParams();
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const departmentId = String(params.departmentId);
 
-  const onConfirm = async () => {
-    try {
-      setLoading(true);
-      await axios.delete(`/api/${params.departmentId}/offices/${data.id}`);
-      
-      window.location.reload()
-      toast({
-        title: "Success!",
-        description: "Office deleted",
-      })
-      
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Uh oh! Something went wrong.",
-        description: "There was a problem with your request.",
-      })
-    } finally {
-      setOpen(false);
-      setLoading(false);
-    }
+  const onDeleted = () => {
+    toast({
+      title: "Success!",
+      description: "Office deleted",
+    });
+    router.refresh();
   };
 
   const onCopy = (id: string) => {
@@ -64,11 +47,13 @@ export const CellAction = ({
   
   return (
     <>
-      <AlertModal 
+      <OfficeDeletionModal
         isOpen={open} 
         onClose={() => setOpen(false)}
-        onConfirm={onConfirm}
-        loading={loading}
+        departmentId={departmentId}
+        officeId={data.id}
+        officeName={data.name}
+        onDeleted={onDeleted}
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

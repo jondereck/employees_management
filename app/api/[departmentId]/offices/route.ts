@@ -1,6 +1,7 @@
 
 
 import prismadb from "@/lib/prismadb";
+import { publishWorkforceChanged } from "@/lib/workforce-realtime";
 import { auth } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
 
@@ -66,6 +67,10 @@ export async function POST(
       }
     })
 
+    await publishWorkforceChanged(params.departmentId, {
+      scope: "office",
+      action: "created",
+    });
     return NextResponse.json(office)
 
   } catch (error) {

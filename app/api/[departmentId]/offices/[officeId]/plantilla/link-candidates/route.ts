@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireOfficeInDepartment } from "@/lib/office-access";
+import { buildPlantillaCandidateDepartmentScope } from "@/lib/plantilla";
 import prismadb from "@/lib/prismadb";
 
 /**
@@ -35,8 +36,7 @@ export async function GET(
 
     const employees = await prismadb.employee.findMany({
       where: {
-        departmentId: params.departmentId,
-        isArchived: false,
+        ...buildPlantillaCandidateDepartmentScope(params.departmentId),
         AND: tokens.map((token) => ({
           OR: [
             { firstName: { contains: token, mode: "insensitive" as const } },

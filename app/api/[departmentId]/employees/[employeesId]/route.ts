@@ -1,5 +1,10 @@
 import prismadb from "@/lib/prismadb";
-import { resolvePlantillaAssignment } from "@/lib/plantilla-assignment";
+import { validateEmployeeDepartmentReferences } from "@/lib/employee-department-references";
+import { runEmployeeMutationTransaction } from "@/lib/employee-mutations";
+import {
+  buildArchivePlantillaUnlinkUpdate,
+  resolvePlantillaAssignment,
+} from "@/lib/plantilla-assignment";
 import {
   createEmployeeHistorySnapshot,
   parseEmployeeTerminationDate,
@@ -11,6 +16,7 @@ import {
   createEmploymentTimelineEventOnce,
   parseTimelineDate,
 } from "@/lib/employment-timeline";
+import { publishWorkforceChanged } from "@/lib/workforce-realtime";
 import { auth } from "@clerk/nextjs";
 import { MaritalStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -146,6 +152,7 @@ const normalizedMemberPolicyNo =
     if (!position) return new NextResponse("Position is required", { status: 400 });
     if (!officeId) return new NextResponse("Office is required", { status: 400 });
     if (!employeeTypeId) return new NextResponse("Appointment is required", { status: 400 });
+    if (!eligibilityId) return new NextResponse("Eligibility Id is required", { status: 400 });
 
     if (contactNumber && contactNumber.length !== 11)
       return new NextResponse(JSON.stringify({ error: "Contact number must be 11 digits" }), { status: 400 });
@@ -161,6 +168,29 @@ const normalizedMemberPolicyNo =
       where: { id: params.departmentId, userId },
     });
     if (!department) return new NextResponse("Unauthorized", { status: 403 });
+
+    const [validOffice, validEmployeeType, validEligibility] = await Promise.all([
+      prismadb.offices.findFirst({
+        where: { id: officeId, departmentId: params.departmentId },
+        select: { id: true },
+      }),
+      prismadb.employeeType.findFirst({
+        where: { id: employeeTypeId, departmentId: params.departmentId },
+        select: { id: true },
+      }),
+      prismadb.eligibility.findFirst({
+        where: { id: eligibilityId, departmentId: params.departmentId },
+        select: { id: true },
+      }),
+    ]);
+    const referenceError = validateEmployeeDepartmentReferences({
+      office: validOffice,
+      employeeType: validEmployeeType,
+      eligibility: validEligibility,
+    });
+    if (referenceError) {
+      return NextResponse.json({ error: referenceError }, { status: 400 });
+    }
 
     // Check contact number uniqueness
     if (contactNumber) {
@@ -228,7 +258,10 @@ const normalizedMemberPolicyNo =
     }
 
     const existing = await prismadb.employee.findUnique({
-      where: { id: params.employeesId },
+      where: {
+        id: params.employeesId,
+        departmentId: params.departmentId,
+      },
       select: {
         id: true,
         departmentId: true,
@@ -286,6 +319,7 @@ const normalizedMemberPolicyNo =
       return new NextResponse("Employee not found", { status: 404 });
     }
 
+    const willBeArchived = Boolean(isArchived);
     const assignment = await prismadb.$transaction(async (tx) =>
       resolvePlantillaAssignment(tx, {
         departmentId: params.departmentId,
@@ -293,7 +327,9 @@ const normalizedMemberPolicyNo =
         officeDivisionId:
           officeDivisionId === undefined ? existing.officeDivisionId : officeDivisionId,
         plantillaPositionId:
-          plantillaPositionId === undefined
+          willBeArchived
+            ? null
+            : plantillaPositionId === undefined
             ? existing.plantillaPositionId
             : plantillaPositionId,
         employeeId: params.employeesId,
@@ -309,7 +345,8 @@ const normalizedMemberPolicyNo =
 
     const hadTerminationDate = hasText(existing.terminateDate);
     const wasInactive = existing.isArchived || hadTerminationDate;
-    const willBeArchived = Boolean(isArchived);
+    const archivePlantillaUpdate =
+      buildArchivePlantillaUnlinkUpdate(willBeArchived);
     const willBeActive = !willBeArchived;
     const isRehire = wasInactive && willBeActive;
     const nextLatestAppointmentDate = parseTimelineDate(latestAppointment);
@@ -421,6 +458,7 @@ const normalizedMemberPolicyNo =
       designationId: normalizedNullableText(designationId),
       officeDivisionId: assignment.officeDivisionId,
       plantillaPositionId: assignment.plantillaPositionId,
+      ...archivePlantillaUpdate,
       maritalStatus: maritalStatus === undefined ? existing.maritalStatus : normalizedMaritalStatus,
       email: email === undefined ? existing.email : normalizedEmail,
       philSysNumber: philSysNumber === undefined ? existing.philSysNumber : normalizedPhilSysNumber,
@@ -482,9 +520,14 @@ const normalizedMemberPolicyNo =
       }
     }
 
+    const employee = await runEmployeeMutationTransaction({
+      mutation: async (tx) => {
     // Update employee with merged images
-    const employee = await prismadb.employee.update({
-      where: { id: params.employeesId },
+    const employee = await tx.employee.update({
+      where: {
+        id: params.employeesId,
+        departmentId: params.departmentId,
+      },
       data: {
         prefix,
         employeeNo,
@@ -544,6 +587,7 @@ memberPolicyNo: normalizedMemberPolicyNo,
         designationId: normalizedNullableText(designationId),
         officeDivisionId: assignment.officeDivisionId,
         plantillaPositionId: assignment.plantillaPositionId,
+        ...archivePlantillaUpdate,
       },
       include: {
         offices: { select: { name: true } },
@@ -568,7 +612,7 @@ memberPolicyNo: normalizedMemberPolicyNo,
       changedFields.has("officeDivisionId");
 
     if (isRehire) {
-      await createEmploymentTimelineEventOnce(prismadb, {
+      await createEmploymentTimelineEventOnce(tx, {
         employeeId: employee.id,
         type: "HIRED",
         occurredAt: parseTimelineDate(employee.latestAppointment) ?? new Date(),
@@ -579,7 +623,7 @@ memberPolicyNo: normalizedMemberPolicyNo,
         })}`,
       });
     } else if (isSalaryGradePromotion) {
-      await createEmploymentTimelineEventOnce(prismadb, {
+      await createEmploymentTimelineEventOnce(tx, {
         employeeId: employee.id,
         type: "PROMOTED",
         occurredAt: parseTimelineDate(employee.latestAppointment) ?? new Date(),
@@ -596,7 +640,7 @@ memberPolicyNo: normalizedMemberPolicyNo,
       const fromPosition = existing.position?.trim() || "previous position";
       const toPosition = employee.position?.trim() || "new position";
       const positionChanged = fromPosition.toLowerCase() !== toPosition.toLowerCase();
-      await createEmploymentTimelineEventOnce(prismadb, {
+      await createEmploymentTimelineEventOnce(tx, {
         employeeId: employee.id,
         type: "TRANSFERRED",
         occurredAt: parseTimelineDate(employee.latestAppointment) ?? new Date(),
@@ -610,7 +654,7 @@ memberPolicyNo: normalizedMemberPolicyNo,
     const becameArchived = !wasInactive && employee.isArchived;
     const gotTerminationDate = !hadTerminationDate && hasText(employee.terminateDate);
     if (becameArchived || gotTerminationDate) {
-      await createEmploymentTimelineEventOnce(prismadb, {
+      await createEmploymentTimelineEventOnce(tx, {
         employeeId: employee.id,
         type: "TERMINATED",
         occurredAt: parseTimelineDate(employee.terminateDate) ?? new Date(),
@@ -619,14 +663,14 @@ memberPolicyNo: normalizedMemberPolicyNo,
     }
 
     if (isRehire) {
-      await createEmployeeHistorySnapshot(prismadb, employee, {
+      await createEmployeeHistorySnapshot(tx, employee, {
         effectiveAt: parseTimelineDate(employee.latestAppointment) ?? new Date(),
         status: toSnapshotStatus(employee.isArchived),
         source: "REHIRE",
         note: "Active snapshot created when employee returned after termination/archive.",
       });
     } else if (snapshotFieldsChanged(existing, employee)) {
-      await createEmployeeHistorySnapshot(prismadb, employee, {
+      await createEmployeeHistorySnapshot(tx, employee, {
         effectiveAt:
           toSnapshotStatus(employee.isArchived) === "INACTIVE"
             ? parseEmployeeTerminationDate(employee.terminateDate) ?? new Date()
@@ -637,6 +681,20 @@ memberPolicyNo: normalizedMemberPolicyNo,
       });
     }
 
+        return employee;
+      },
+      transaction: (mutation) => prismadb.$transaction(mutation),
+      publish: (committedEmployee) =>
+        publishWorkforceChanged(params.departmentId, {
+          scope: "employee",
+          action:
+            existing.isArchived !== committedEmployee.isArchived
+              ? committedEmployee.isArchived
+                ? "archived"
+                : "unarchived"
+              : "updated",
+        }),
+    });
     return NextResponse.json(employee);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -655,6 +713,50 @@ memberPolicyNo: normalizedMemberPolicyNo,
       }
     }
     console.log("[EMPLOYEES_PATCH]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { departmentId: string; employeesId: string } }
+) {
+  try {
+    const { userId } = auth();
+    if (!userId) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+    if (!params.departmentId || !params.employeesId) {
+      return new NextResponse("Department and employee ids are required", {
+        status: 400,
+      });
+    }
+
+    const department = await prismadb.department.findFirst({
+      where: { id: params.departmentId, userId },
+      select: { id: true },
+    });
+    if (!department) {
+      return new NextResponse("Unauthorized", { status: 403 });
+    }
+
+    const deleted = await prismadb.employee.deleteMany({
+      where: {
+        id: params.employeesId,
+        departmentId: params.departmentId,
+      },
+    });
+    if (deleted.count === 0) {
+      return new NextResponse("Employee not found", { status: 404 });
+    }
+
+    await publishWorkforceChanged(params.departmentId, {
+      scope: "employee",
+      action: "deleted",
+    });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[EMPLOYEE_DELETE]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }

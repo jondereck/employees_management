@@ -31,6 +31,12 @@ const OfficesPage = async ({
     billboardLabel: item.billboard.label,
     bioIndexCode: item.bioIndexCode ?? null,
     plantillaCount: item._count.plantillaPositions,
+    activePlantillaSlots: 0,
+    filledPlantillaSlots: 0,
+    vacantPlantillaSlots: 0,
+    assignedHereButPlantillaElsewhere: 0,
+    plantillaHereButAssignedElsewhere: 0,
+    crossOfficeCount: 0,
     createdAt: format(item.createdAt, "MMMM do, yyyy"),
   }));
 

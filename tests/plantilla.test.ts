@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildEmployeePlantillaLinkUpdate,
+  buildPlantillaCandidateDepartmentScope,
   buildPlantillaItemNumbers,
   buildPlantillaSelectOptions,
   canonicalizeStatusKey,
@@ -11,6 +12,7 @@ import {
   findBioSuffixMatchForItemNumber,
   findEmployeeNameMatch,
   formatPlantillaSelectOptionLabel,
+  hasPlantillaUpdates,
   matchEmployeeTypeId,
   normalizeCreateQuantity,
   normalizeDivisionInput,
@@ -32,6 +34,10 @@ import {
   validateDivisionBelongsToOffice,
   validatePlantillaAssignment,
 } from "../lib/plantilla";
+import {
+  buildArchivePlantillaUnlinkUpdate,
+  buildBulkArchiveEmployeeUpdate,
+} from "../lib/plantilla-assignment";
 
 test("sortPlantillaPositions defaults to natural Item No. order", () => {
   assert.ok(comparePlantillaItemNumbers("A-1", "A-10") < 0);
@@ -84,6 +90,15 @@ test("normalizePlantillaInput allows empty item number and validates salary boun
   assert.equal(ok.value?.title, "Administrative Aide III");
   assert.equal(ok.value?.officeDivisionId, null);
   assert.equal(ok.value?.isActive, true);
+});
+
+test("plantilla updates reject an empty normalized PATCH payload", () => {
+  const empty = normalizePlantillaInput({}, { partial: true });
+  assert.deepEqual(empty.value, {});
+  assert.equal(hasPlantillaUpdates(empty.value), false);
+
+  const update = normalizePlantillaInput({ isActive: false }, { partial: true });
+  assert.equal(hasPlantillaUpdates(update.value), true);
 });
 
 test("buildPlantillaItemNumbers supports multi-create suffixes and empty bases", () => {
@@ -172,6 +187,13 @@ test("normalizeOptionalId treats blank and none as null", () => {
   assert.equal(normalizeOptionalId(""), null);
   assert.equal(normalizeOptionalId("none"), null);
   assert.equal(normalizeOptionalId(" abc "), "abc");
+});
+
+test("plantilla candidate scope excludes archived employees in the department", () => {
+  assert.deepEqual(buildPlantillaCandidateDepartmentScope("department-1"), {
+    departmentId: "department-1",
+    isArchived: false,
+  });
 });
 
 test("validateDivisionBelongsToOffice rejects cross-office divisions", () => {
@@ -598,4 +620,43 @@ test("buildEmployeePlantillaLinkUpdate syncs plantilla fields without changing o
   assert.equal(crossOffice.designationId, "office-a");
   assert.equal(crossOffice.officeDivisionId, undefined);
   assert.equal(crossOffice.employeeNo, "1200040, A-1");
+});
+
+test("archive unlink update clears only plantillaPositionId when archiving", () => {
+  assert.deepEqual(buildArchivePlantillaUnlinkUpdate(true), {
+    plantillaPositionId: null,
+  });
+});
+
+test("archive unlink update does nothing when employee remains active", () => {
+  assert.deepEqual(buildArchivePlantillaUnlinkUpdate(false), {});
+});
+
+test("bulk archive update unlinks plantilla while preserving unrelated fields", () => {
+  assert.deepEqual(
+    buildBulkArchiveEmployeeUpdate({
+      archived: true,
+      terminateDate: "07/21/2026",
+      note: "Retired",
+    }),
+    {
+      isArchived: true,
+      terminateDate: "07/21/2026",
+      note: "Retired",
+      plantillaPositionId: null,
+    }
+  );
+});
+
+test("bulk restore update does not relink plantilla", () => {
+  assert.deepEqual(
+    buildBulkArchiveEmployeeUpdate({
+      archived: false,
+      terminateDate: "",
+    }),
+    {
+      isArchived: false,
+      terminateDate: "",
+    }
+  );
 });

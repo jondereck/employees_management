@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireOfficeInDepartment } from "@/lib/office-access";
 import {
+  buildPlantillaCandidateDepartmentScope,
   buildEmployeePlantillaLinkUpdate,
   buildPlantillaItemNumbers,
   findBioSuffixMatchForItemNumber,
@@ -15,6 +16,7 @@ import {
   type NormalizedPlantilla,
 } from "@/lib/plantilla";
 import prismadb from "@/lib/prismadb";
+import { publishWorkforceChanged } from "@/lib/workforce-realtime";
 
 const plantillaInclude = {
   officeDivision: { select: { id: true, name: true } },
@@ -117,7 +119,7 @@ async function autoLinkEmployeesAfterCreate(args: {
 
   const candidates = await prismadb.employee.findMany({
     where: {
-      departmentId: args.departmentId,
+      ...buildPlantillaCandidateDepartmentScope(args.departmentId),
       plantillaPositionId: null,
     },
     select: {
@@ -393,6 +395,10 @@ export async function POST(
 
       const items = await reloadPlantillaItems(created.map((c) => c.id));
 
+      await publishWorkforceChanged(params.departmentId, {
+        scope: "plantilla",
+        action: "created",
+      });
       return NextResponse.json(
         { count: items.length, items, linked, warnings },
         { status: 201 }
@@ -479,6 +485,10 @@ export async function POST(
 
     const items = await reloadPlantillaItems(created.map((c) => c.id));
 
+    await publishWorkforceChanged(params.departmentId, {
+      scope: "plantilla",
+      action: "created",
+    });
     if (quantity === 1) {
       return NextResponse.json(
         linked > 0 || warnings.length

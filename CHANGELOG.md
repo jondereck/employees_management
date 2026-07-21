@@ -5,7 +5,13 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
-- 2026-07-21 — feat: Offices table shows sortable total plantilla count per office
+- 2026-07-21 — ui: move the API request-card visibility control to Settings
+- 2026-07-21 — feat: support optional destination divisions during office deletion reassignment
+- 2026-07-21 — fix: make the office deletion employee list scrollable
+- 2026-07-21 — feat: reassign affected employees in a guided office deletion modal
+- 2026-07-21 — ui: streamline Office Workforce cards and hide zero-plantilla offices
+- 2026-07-21 — ui: collapse the filled and vacant by office chart by default
+- 2026-07-21 — feat: add live Office Workforce analytics, atomic archive-safe occupancy, and API request-card visibility
 - 2026-07-20 — fix: Overview last updated shows latest DB record change not page load time
 - 2026-07-20 — ui: Overview shows visible Data last updated badge (Asia/Manila)
 - 2026-07-20 — feat: Overview Male/Female Counts Group by / Break down by Office

@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 
 import { requireOfficeInDepartment } from "@/lib/office-access";
 import {
+  hasPlantillaUpdates,
   normalizePlantillaInput,
   validateDivisionBelongsToOffice,
 } from "@/lib/plantilla";
 import prismadb from "@/lib/prismadb";
+import { publishWorkforceChanged } from "@/lib/workforce-realtime";
 
 export async function PATCH(
   req: Request,
@@ -42,6 +44,12 @@ export async function PATCH(
     }
 
     const value = normalized.value;
+    if (!hasPlantillaUpdates(value)) {
+      return NextResponse.json(
+        { error: "At least one plantilla field is required" },
+        { status: 400 }
+      );
+    }
 
     if (value.officeDivisionId) {
       const division = await prismadb.officeDivision.findFirst({
@@ -123,6 +131,10 @@ export async function PATCH(
       },
     });
 
+    await publishWorkforceChanged(params.departmentId, {
+      scope: "plantilla",
+      action: "updated",
+    });
     return NextResponse.json(updated);
   } catch (error) {
     console.log("[OFFICE_PLANTILLA_PATCH]", error);
@@ -166,6 +178,10 @@ export async function DELETE(
     }
 
     await prismadb.plantillaPosition.delete({ where: { id: params.plantillaId } });
+    await publishWorkforceChanged(params.departmentId, {
+      scope: "plantilla",
+      action: "deleted",
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.log("[OFFICE_PLANTILLA_DELETE]", error);

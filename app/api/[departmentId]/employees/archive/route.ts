@@ -11,6 +11,9 @@ import {
   createEmploymentTimelineEventOnce,
   parseTimelineDate,
 } from "@/lib/employment-timeline";
+import { runEmployeeMutationTransaction } from "@/lib/employee-mutations";
+import { buildBulkArchiveEmployeeUpdate } from "@/lib/plantilla-assignment";
+import { publishWorkforceChanged } from "@/lib/workforce-realtime";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
@@ -125,24 +128,21 @@ if (archived) {
         ? adminNotes.trim()
         : null;
 
-   const updated = await prismadb.employee.updateMany({
+    const updated = await runEmployeeMutationTransaction({
+      mutation: async (tx) => {
+   const updated = await tx.employee.updateMany({
   where: {
     id: { in: toUpdateIds },
     departmentId: params.departmentId,
   },
-  data: archived
-    ? {
-        isArchived: true,
-        terminateDate: finalTerminationDate ?? "",
-        ...(normalizedAdminNotes ? { note: normalizedAdminNotes } : {}),
-      }
-    : {
-        isArchived: false,
-        terminateDate: "", // clear when unarchiving
-      },
+  data: buildBulkArchiveEmployeeUpdate({
+    archived,
+    terminateDate: archived ? finalTerminationDate ?? "" : "",
+    ...(archived && normalizedAdminNotes ? { note: normalizedAdminNotes } : {}),
+  }),
 });
 
-    const snapshotEmployees = await prismadb.employee.findMany({
+    const snapshotEmployees = await tx.employee.findMany({
       where: {
         id: { in: toUpdateIds },
         departmentId: params.departmentId,
@@ -167,7 +167,7 @@ if (archived) {
     });
 
     for (const employee of snapshotEmployees) {
-      await createEmployeeHistorySnapshot(prismadb, employee, {
+      await createEmployeeHistorySnapshot(tx, employee, {
         effectiveAt: archived
           ? parseEmployeeTerminationDate(employee.terminateDate) ?? new Date()
           : new Date(),
@@ -179,7 +179,7 @@ if (archived) {
       });
 
       if (archived) {
-        await createEmploymentTimelineEventOnce(prismadb, {
+        await createEmploymentTimelineEventOnce(tx, {
           employeeId: employee.id,
           type: "TERMINATED",
           occurredAt: parseTimelineDate(employee.terminateDate) ?? new Date(),
@@ -189,6 +189,15 @@ if (archived) {
       }
     }
 
+        return updated;
+      },
+      transaction: (mutation) => prismadb.$transaction(mutation),
+      publish: () =>
+        publishWorkforceChanged(params.departmentId, {
+          scope: "employee",
+          action: archived ? "bulk-archived" : "bulk-unarchived",
+        }),
+    });
     return NextResponse.json({
       success: true,
       targetArchivedState: archived,

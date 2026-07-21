@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireOfficeInDepartment } from "@/lib/office-access";
 import {
+  buildPlantillaCandidateDepartmentScope,
   previewBioSuffixLinks,
   previewPlantillaAutoLinks,
 } from "@/lib/plantilla";
@@ -10,7 +11,7 @@ import prismadb from "@/lib/prismadb";
 async function loadUnassignedCandidates(departmentId: string) {
   return prismadb.employee.findMany({
     where: {
-      departmentId,
+      ...buildPlantillaCandidateDepartmentScope(departmentId),
       plantillaPositionId: null,
     },
     select: {

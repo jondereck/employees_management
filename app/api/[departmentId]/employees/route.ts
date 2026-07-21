@@ -4,6 +4,7 @@ import { findFirstFreeBioFlat } from "@/lib/bio-utils";
 import prismadb from "@/lib/prismadb";
 import { resolvePlantillaAssignment } from "@/lib/plantilla-assignment";
 import { createEmployeeHistorySnapshot, WORKFORCE_ACTIVE_STATUS } from "@/lib/workforce-history";
+import { publishWorkforceChanged } from "@/lib/workforce-realtime";
 import { auth } from "@clerk/nextjs/server"; // ⬅️ server import
 import { MaritalStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -398,6 +399,10 @@ export async function POST(
       return employeeRow;
     });
 
+    await publishWorkforceChanged(params.departmentId, {
+      scope: "employee",
+      action: "created",
+    });
     return NextResponse.json(created);
 
   } catch (error: any) {

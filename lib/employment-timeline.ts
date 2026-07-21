@@ -1,6 +1,10 @@
-import type { EmploymentEventType, PrismaClient } from "@prisma/client";
+import type {
+  EmploymentEventType,
+  Prisma,
+  PrismaClient,
+} from "@prisma/client";
 
-type PrismaLike = PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+type PrismaLike = PrismaClient | Prisma.TransactionClient;
 
 export function parseTimelineDate(value?: Date | string | null): Date | null {
   if (!value) return null;

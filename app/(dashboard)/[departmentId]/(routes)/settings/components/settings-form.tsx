@@ -18,6 +18,7 @@ import { AlertModal } from "@/components/modals/alert-modal";
 import { ApiAlert } from "@/components/api-alert";
 import { useOrigin } from "@/hooks/use-origin";
 import LogoUpload from "@/components/ui/logo-upload";
+import { ApiCardVisibilitySetting } from "./api-card-visibility-setting";
 
 
 
@@ -165,6 +166,7 @@ export const SettingsForm = ({
         </form>
       </Form>
 
+      <ApiCardVisibilitySetting />
       <Separator />
       <ApiAlert 
         title="NEXT_PUBLIC_API_URL" 

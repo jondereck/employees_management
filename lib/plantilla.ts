@@ -395,6 +395,12 @@ export type NormalizedPlantilla = {
   isActive: boolean;
 };
 
+export function hasPlantillaUpdates(
+  value: Partial<NormalizedPlantilla> | undefined
+) {
+  return Boolean(value && Object.keys(value).length > 0);
+}
+
 export function normalizeOptionalId(value: unknown): string | null {
   if (value === undefined || value === null || value === "" || value === "none") {
     return null;
@@ -402,6 +408,13 @@ export function normalizeOptionalId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+export function buildPlantillaCandidateDepartmentScope(departmentId: string) {
+  return {
+    departmentId,
+    isArchived: false,
+  } as const;
 }
 
 export function normalizeDivisionInput(
