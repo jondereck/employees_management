@@ -5,6 +5,9 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-21 — ui: add matching borders and employee navigation to dashboard metric cards
+- 2026-07-21 — fix: use toggle-button semantics for workforce composition and clarify missing-data preview copy
+- 2026-07-21 — ui: compact the dashboard layout and mobile workforce composition
 - 2026-07-21 — ui: replace the dashboard Pending Approvals metric with a compact Plantilla occupancy card
 - 2026-07-21 — ui: add Position Summary totals and highlight rows with vacancies
 - 2026-07-21 — feat: add live authorized-position summaries to Office Workforce and Excel exports
