@@ -42,6 +42,21 @@ export function filterOfficeWorkforceComparisonRows(
   return rows.filter((row) => row.activePlantillaSlots > 0);
 }
 
+export type OfficeWorkforceFilter = "all" | "vacant" | "cross-office";
+
+export function filterOfficeWorkforceRows(
+  rows: readonly OfficeWorkforceRow[],
+  filter: OfficeWorkforceFilter
+) {
+  if (filter === "vacant") {
+    return rows.filter((row) => row.vacantPlantillaSlots > 0);
+  }
+  if (filter === "cross-office") {
+    return rows.filter((row) => getCombinedCrossOfficeCount(row) > 0);
+  }
+  return rows;
+}
+
 export function buildOfficeWorkforceChartRows(
   rows: readonly OfficeWorkforceRow[]
 ): OfficeWorkforceChartRow[] {

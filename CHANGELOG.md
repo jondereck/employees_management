@@ -5,6 +5,14 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-21 — ui: add Position Summary totals and highlight rows with vacancies
+- 2026-07-21 — feat: add live authorized-position summaries to Office Workforce and Excel exports
+- 2026-07-21 — feat: add exact vacant plantilla details as a second workforce Excel sheet
+- 2026-07-21 — fix: restore the single-sheet workforce Excel report with a bottom total row
+- 2026-07-21 — ui: remove the redundant Office Workforce heading and subtitle
+- 2026-07-21 — fix: restore workforce collapse controls and export all raw data in separate Excel sheets
+- 2026-07-21 — feat: redesign Office Workforce with chart/table views and formatted Excel export
+- 2026-07-21 — fix: return a clear conflict when a plantilla item number already exists department-wide
 - 2026-07-21 — fix: preserve employee division details after the live employee list loads
 - 2026-07-21 — ui: show employee divisions beneath Office Designation in the employee table
 - 2026-07-21 — feat: show live active and archived employee counts for each office

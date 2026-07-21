@@ -9,6 +9,7 @@ import type {
   OfficeWorkforceRow,
   WorkforceDetailsView,
 } from "@/lib/office-workforce";
+import type { AuthorizedPositionSummaryRow } from "@/lib/office-workforce-position-summary";
 import {
   isOfficeWorkforceDetailsKey,
   officeWorkforceDetailsKey,
@@ -31,6 +32,7 @@ export {
 export type OfficeWorkforceSummaryResponse = {
   overall: OfficeWorkforceMetrics;
   perOffice: OfficeWorkforceRow[];
+  positionSummary: AuthorizedPositionSummaryRow[];
 };
 
 export type VacantWorkforceDetail = {

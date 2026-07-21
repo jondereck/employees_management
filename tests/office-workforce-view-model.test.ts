@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildOfficeWorkforceChartRows,
   enrichOfficeRowsWithWorkforce,
+  filterOfficeWorkforceRows,
   filterOfficeWorkforceComparisonRows,
   getCombinedCrossOfficeCount,
   getWorkforceViewLabel,
@@ -74,6 +75,45 @@ test("filterOfficeWorkforceComparisonRows omits offices without active plantilla
   ]);
 
   assert.deepEqual(rows.map((row) => row.officeId), ["active"]);
+});
+
+test("filterOfficeWorkforceRows supports vacancy and cross-office views", () => {
+  const rows = [
+    {
+      officeId: "stable",
+      officeName: "Stable",
+      ...metrics,
+      vacantPlantillaSlots: 0,
+      assignedHereButPlantillaElsewhere: 0,
+      plantillaHereButAssignedElsewhere: 0,
+    },
+    {
+      officeId: "vacant",
+      officeName: "Vacant",
+      ...metrics,
+      vacantPlantillaSlots: 2,
+      assignedHereButPlantillaElsewhere: 0,
+      plantillaHereButAssignedElsewhere: 0,
+    },
+    {
+      officeId: "cross",
+      officeName: "Cross",
+      ...metrics,
+      vacantPlantillaSlots: 0,
+      assignedHereButPlantillaElsewhere: 1,
+      plantillaHereButAssignedElsewhere: 0,
+    },
+  ];
+
+  assert.deepEqual(
+    filterOfficeWorkforceRows(rows, "vacant").map((row) => row.officeId),
+    ["vacant"]
+  );
+  assert.deepEqual(
+    filterOfficeWorkforceRows(rows, "cross-office").map((row) => row.officeId),
+    ["cross"]
+  );
+  assert.deepEqual(filterOfficeWorkforceRows(rows, "all"), rows);
 });
 
 test("getCombinedCrossOfficeCount includes both cross-office directions", () => {

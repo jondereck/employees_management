@@ -17,6 +17,7 @@ import {
 } from "@/lib/plantilla";
 import prismadb from "@/lib/prismadb";
 import { publishWorkforceChanged } from "@/lib/workforce-realtime";
+import { Prisma } from "@prisma/client";
 
 const plantillaInclude = {
   officeDivision: { select: { id: true, name: true } },
@@ -504,6 +505,15 @@ export async function POST(
     );
   } catch (error) {
     console.log("[OFFICE_PLANTILLA_POST]", error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        { error: "Item number already exists in this department." },
+        { status: 409 }
+      );
+    }
     const message = error instanceof Error ? error.message : "Internal Error";
     const short =
       typeof message === "string" && message.includes("Argument `")

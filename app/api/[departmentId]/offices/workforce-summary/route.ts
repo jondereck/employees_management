@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { aggregateOfficeWorkforce } from "@/lib/office-workforce";
+import { aggregateAuthorizedPositionSummary } from "@/lib/office-workforce-position-summary";
 import { requireOrgChartDepartmentAccess } from "@/lib/org-chart-access";
 import prismadb from "@/lib/prismadb";
 
@@ -19,7 +20,13 @@ export async function GET(
       }),
       prismadb.plantillaPosition.findMany({
         where: { departmentId: params.departmentId },
-        select: { id: true, officeId: true, isActive: true },
+        select: {
+          id: true,
+          officeId: true,
+          title: true,
+          isActive: true,
+          employeeType: { select: { name: true } },
+        },
       }),
       prismadb.employee.findMany({
         where: { departmentId: params.departmentId },
@@ -37,10 +44,22 @@ export async function GET(
       plantillaPositions,
       employees,
     });
+    const positionSummary = aggregateAuthorizedPositionSummary({
+      offices,
+      positions: plantillaPositions.map((position) => ({
+        id: position.id,
+        officeId: position.officeId,
+        title: position.title,
+        employeeTypeName: position.employeeType?.name ?? null,
+        isActive: position.isActive,
+      })),
+      employees,
+    });
 
     return NextResponse.json({
       overall: summary.totals,
       perOffice: summary.offices,
+      positionSummary,
     });
   } catch (error) {
     console.error("[OFFICE_WORKFORCE_SUMMARY_GET]", error);
