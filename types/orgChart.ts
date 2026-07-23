@@ -1,4 +1,4 @@
-export type OrgNodeType = "office" | "unit" | "person" | "annotation";
+export type OrgNodeType = "office" | "unit" | "person" | "annotation" | "junction";
 
 export type AnnotationWeight = "normal" | "bold";
 

@@ -18,7 +18,10 @@ import {
 import Image from "next/image";
 import ReactFlow, {
   Background,
+  BaseEdge,
+  BackgroundVariant,
   Controls,
+  EdgeLabelRenderer,
   MiniMap,
   addEdge,
   Connection,
@@ -26,6 +29,9 @@ import ReactFlow, {
   ConnectionMode,
   Edge,
   EdgeChange,
+  EdgeProps,
+  getSmoothStepPath,
+  getStraightPath,
   Handle,
   MarkerType,
   Node,
@@ -37,6 +43,7 @@ import ReactFlow, {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  useStore,
   getRectOfNodes,
 } from "reactflow";
 import { AlertModal } from "@/components/modals/alert-modal";
@@ -56,7 +63,9 @@ import {
   type AddPersonDialogSelection,
   type EmployeeSearchResult,
 } from "./dialogs/AddPersonDialog";
+import { BulkExportDialog } from "./dialogs/BulkExportDialog";
 import { cn } from "@/lib/utils";
+import { flushSync } from "react-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,9 +96,13 @@ import {
   Database,
   GitBranch,
   Hand,
+  Image as ImageIcon,
   Layers,
+  Link2,
   ListFilter,
   Lock,
+  Maximize2,
+  Minimize2,
   Minus,
   MoreHorizontal,
   MousePointer2,
@@ -113,6 +126,7 @@ const DEFAULT_NODE_COLORS: Record<OrgNodeType, string> = {
   unit: "#FB8C00",
   person: "#3949AB",
   annotation: "#111827",
+  junction: "#0F172A",
 };
 const DEFAULT_EDGE_COLOR = "#0F172A";
 const DEFAULT_EDGE_STROKE_WIDTH = 2;
@@ -390,6 +404,7 @@ const getMarkerReference = (
 
 type OrgChartToolProps = {
   departmentId: string;
+  logoUrl?: string | null;
 };
 
 type FlowNodeData = OrgNodeData;
@@ -406,6 +421,230 @@ type FlowEdge = Edge<FlowEdgeData>;
 
 type HandleOrientation = "t" | "r" | "b" | "l";
 type Tool = "select" | "hand" | "connect";
+
+type NodeBounds = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  centerX: number;
+  centerY: number;
+  width: number;
+  height: number;
+};
+
+const getFlowNodeBounds = (node: FlowNode): NodeBounds => {
+  const width =
+    node.width ??
+    (node.type === "person"
+      ? PERSON_CARD_WIDTH
+      : node.type === "junction"
+        ? JUNCTION_NODE_SIZE
+        : node.type === "office" || node.type === "unit"
+          ? GROUP_CARD_WIDTH
+          : DEFAULT_NODE_WIDTH);
+  const height =
+    node.height ??
+    (node.type === "person"
+      ? PERSON_CARD_HEIGHT
+      : node.type === "junction"
+        ? JUNCTION_NODE_SIZE
+        : node.type === "office" || node.type === "unit"
+          ? GROUP_CARD_HEIGHT
+          : DEFAULT_NODE_HEIGHT);
+  return {
+    left: node.position.x,
+    right: node.position.x + width,
+    top: node.position.y,
+    bottom: node.position.y + height,
+    centerX: node.position.x + width / 2,
+    centerY: node.position.y + height / 2,
+    width,
+    height,
+  };
+};
+
+const computeAlignmentGuides = (
+  dragging: FlowNode,
+  allNodes: FlowNode[],
+  threshold: number
+): {
+  vertical: number | null;
+  horizontal: number | null;
+  snapX: number | null;
+  snapY: number | null;
+} => {
+  const dragged = getFlowNodeBounds(dragging);
+  let vertical: number | null = null;
+  let horizontal: number | null = null;
+  let snapX: number | null = null;
+  let snapY: number | null = null;
+  let bestVerticalDistance = threshold;
+  let bestHorizontalDistance = threshold;
+
+  for (const other of allNodes) {
+    if (other.id === dragging.id || other.hidden) continue;
+    if (other.type === "annotation") continue;
+    const target = getFlowNodeBounds(other);
+
+    const verticalCandidates: Array<{ guide: number; distance: number; snap: number }> = [
+      {
+        guide: target.centerX,
+        distance: Math.abs(dragged.centerX - target.centerX),
+        snap: target.centerX - dragged.width / 2,
+      },
+      { guide: target.left, distance: Math.abs(dragged.left - target.left), snap: target.left },
+      {
+        guide: target.right,
+        distance: Math.abs(dragged.right - target.right),
+        snap: target.right - dragged.width,
+      },
+      {
+        guide: target.left,
+        distance: Math.abs(dragged.right - target.left),
+        snap: target.left - dragged.width,
+      },
+      { guide: target.right, distance: Math.abs(dragged.left - target.right), snap: target.right },
+    ];
+    for (const candidate of verticalCandidates) {
+      if (candidate.distance <= bestVerticalDistance) {
+        bestVerticalDistance = candidate.distance;
+        vertical = candidate.guide;
+        snapX = candidate.snap;
+      }
+    }
+
+    const horizontalCandidates: Array<{ guide: number; distance: number; snap: number }> = [
+      {
+        guide: target.centerY,
+        distance: Math.abs(dragged.centerY - target.centerY),
+        snap: target.centerY - dragged.height / 2,
+      },
+      { guide: target.top, distance: Math.abs(dragged.top - target.top), snap: target.top },
+      {
+        guide: target.bottom,
+        distance: Math.abs(dragged.bottom - target.bottom),
+        snap: target.bottom - dragged.height,
+      },
+      {
+        guide: target.top,
+        distance: Math.abs(dragged.bottom - target.top),
+        snap: target.top - dragged.height,
+      },
+      { guide: target.bottom, distance: Math.abs(dragged.top - target.bottom), snap: target.bottom },
+    ];
+    for (const candidate of horizontalCandidates) {
+      if (candidate.distance <= bestHorizontalDistance) {
+        bestHorizontalDistance = candidate.distance;
+        horizontal = candidate.guide;
+        snapY = candidate.snap;
+      }
+    }
+  }
+
+  return { vertical, horizontal, snapX, snapY };
+};
+
+const distanceToSegment = (
+  point: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number }
+): { distance: number; point: { x: number; y: number } } => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (dx === 0 && dy === 0) {
+    return {
+      distance: Math.hypot(point.x - a.x, point.y - a.y),
+      point: { ...a },
+    };
+  }
+  const t = Math.max(
+    0,
+    Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy))
+  );
+  const closest = { x: a.x + t * dx, y: a.y + t * dy };
+  return {
+    distance: Math.hypot(point.x - closest.x, point.y - closest.y),
+    point: closest,
+  };
+};
+
+const findNearestEdgeForBranch = (
+  flowPos: { x: number; y: number },
+  edges: FlowEdge[],
+  nodes: FlowNode[],
+  excludeNodeId: string,
+  maxDistance: number
+): { edgeId: string; point: { x: number; y: number } } | null => {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  let best: { edgeId: string; point: { x: number; y: number }; distance: number } | null = null;
+
+  for (const edge of edges) {
+    if (edge.hidden) continue;
+    if (edge.source === excludeNodeId || edge.target === excludeNodeId) continue;
+    const source = nodeById.get(edge.source);
+    const target = nodeById.get(edge.target);
+    if (!source || !target || source.hidden || target.hidden) continue;
+    if (source.type === "annotation" || target.type === "annotation") continue;
+
+    const sourceBounds = getFlowNodeBounds(source);
+    const targetBounds = getFlowNodeBounds(target);
+    const segment = distanceToSegment(
+      flowPos,
+      { x: sourceBounds.centerX, y: sourceBounds.centerY },
+      { x: targetBounds.centerX, y: targetBounds.centerY }
+    );
+    if (segment.distance > maxDistance) continue;
+    if (!best || segment.distance < best.distance) {
+      best = { edgeId: edge.id, point: segment.point, distance: segment.distance };
+    }
+  }
+
+  return best ? { edgeId: best.edgeId, point: best.point } : null;
+};
+
+function AlignmentGuides({
+  vertical,
+  horizontal,
+}: {
+  vertical: number | null;
+  horizontal: number | null;
+}) {
+  const transform = useStore((state) => state.transform);
+  const [tx, ty, zoom] = transform;
+
+  if (vertical == null && horizontal == null) return null;
+
+  return (
+    <svg
+      className="orgchart-align-guides pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible"
+      aria-hidden
+    >
+      {vertical != null ? (
+        <line
+          x1={vertical * zoom + tx}
+          y1={0}
+          x2={vertical * zoom + tx}
+          y2="100%"
+          stroke="#3b82f6"
+          strokeWidth={1.25}
+          strokeDasharray="5 4"
+        />
+      ) : null}
+      {horizontal != null ? (
+        <line
+          x1={0}
+          y1={horizontal * zoom + ty}
+          x2="100%"
+          y2={horizontal * zoom + ty}
+          stroke="#3b82f6"
+          strokeWidth={1.25}
+          strokeDasharray="5 4"
+        />
+      ) : null}
+    </svg>
+  );
+}
 
 const markerEquals = (a: Edge["markerStart"], b: Edge["markerStart"]): boolean => {
   if (a === b) return true;
@@ -613,17 +852,218 @@ const MarkerPreview = ({ type, color, direction }: { type: OrgMarkerType; color:
   );
 };
 
-const EDGE_ALIGNMENT_TOLERANCE = 6;
+const EDGE_ALIGNMENT_TOLERANCE = 12;
 const DEFAULT_NODE_WIDTH = 240;
 const DEFAULT_NODE_HEIGHT = 160;
+const JUNCTION_NODE_SIZE = 28;
+const JUNCTION_VISUAL_SIZE = 12;
+const PERSON_CARD_WIDTH = 260;
+const PERSON_CARD_HEIGHT = 100;
+const GROUP_CARD_WIDTH = 260;
+const GROUP_CARD_HEIGHT = 76;
+const ALIGN_GUIDE_THRESHOLD = 8;
 
 const getNodeCenter = (node: FlowNode | undefined): { x: number; y: number } | null => {
   if (!node) return null;
-  const baseX = node.positionAbsolute?.x ?? node.position.x;
-  const baseY = node.positionAbsolute?.y ?? node.position.y;
-  const width = node.width ?? DEFAULT_NODE_WIDTH;
-  const height = node.height ?? DEFAULT_NODE_HEIGHT;
-  return { x: baseX + width / 2, y: baseY + height / 2 };
+  const bounds = getFlowNodeBounds(node);
+  return { x: bounds.centerX, y: bounds.centerY };
+};
+
+/** Keep T-junction stems/bars orthogonal after moves.
+ * - Default / dragging a person: junction snaps under the stem and onto the bar.
+ * - Dragging the junction hub: keep hub on the orthogonal T (stem X × bar Y) so
+ *   the user can manually straighten a sagging V.
+ */
+const straightenJunctionNodes = (
+  nodeList: FlowNode[],
+  edgeList: FlowEdge[],
+  preferNodeIds?: Set<string>
+): FlowNode[] => {
+  if (!nodeList.some((node) => node.type === "junction")) {
+    return nodeList;
+  }
+
+  const byId = new Map(nodeList.map((node) => [node.id, node]));
+  let changed = false;
+  const nextPositions = new Map<string, { x: number; y: number }>();
+
+  for (const junction of nodeList) {
+    if (junction.type !== "junction") continue;
+
+    const neighbors = edgeList
+      .filter((edge) => edge.source === junction.id || edge.target === junction.id)
+      .map((edge) => byId.get(edge.source === junction.id ? edge.target : edge.source))
+      .filter((node): node is FlowNode => Boolean(node));
+
+    if (neighbors.length < 2) continue;
+
+    const junctionBounds = getFlowNodeBounds({
+      ...junction,
+      position: nextPositions.get(junction.id) ?? junction.position,
+    });
+
+    const horizontal: FlowNode[] = [];
+    const vertical: FlowNode[] = [];
+    for (const neighbor of neighbors) {
+      const neighborPos = nextPositions.get(neighbor.id) ?? neighbor.position;
+      const neighborBounds = getFlowNodeBounds({ ...neighbor, position: neighborPos });
+      const dx = Math.abs(neighborBounds.centerX - junctionBounds.centerX);
+      const dy = Math.abs(neighborBounds.centerY - junctionBounds.centerY);
+      if (dx >= dy) {
+        horizontal.push(neighbor);
+      } else {
+        vertical.push(neighbor);
+      }
+    }
+
+    // Ideal T point: under stem(s), on the bar through side peers.
+    let centerX = junctionBounds.centerX;
+    let centerY = junctionBounds.centerY;
+
+    if (vertical.length) {
+      centerX =
+        vertical.reduce((sum, node) => {
+          const pos = nextPositions.get(node.id) ?? node.position;
+          return sum + getFlowNodeBounds({ ...node, position: pos }).centerX;
+        }, 0) / vertical.length;
+    }
+
+    if (horizontal.length) {
+      centerY =
+        horizontal.reduce((sum, node) => {
+          const pos = nextPositions.get(node.id) ?? node.position;
+          return sum + getFlowNodeBounds({ ...node, position: pos }).centerY;
+        }, 0) / horizontal.length;
+    }
+
+    const half = JUNCTION_NODE_SIZE / 2;
+    const nextJunctionPos = { x: centerX - half, y: centerY - half };
+    const junctionDragged = preferNodeIds?.has(junction.id) ?? false;
+
+    // Always snap hub to the orthogonal T (manual drag still ends on a straight cross).
+    if (
+      Math.abs(nextJunctionPos.x - junction.position.x) > 0.5 ||
+      Math.abs(nextJunctionPos.y - junction.position.y) > 0.5
+    ) {
+      nextPositions.set(junction.id, nextJunctionPos);
+      changed = true;
+    }
+
+    // Flatten horizontal bar partners onto the same Y (centered through the hub).
+    for (const neighbor of horizontal) {
+      if (junctionDragged && preferNodeIds?.has(neighbor.id)) continue;
+      const bounds = getFlowNodeBounds(neighbor);
+      const currentPos = nextPositions.get(neighbor.id) ?? neighbor.position;
+      const alignedY = centerY - bounds.height / 2;
+      if (Math.abs(currentPos.y - alignedY) > 0.5) {
+        nextPositions.set(neighbor.id, { x: currentPos.x, y: alignedY });
+        changed = true;
+      }
+    }
+  }
+
+  if (!changed) return nodeList;
+  return nodeList.map((node) => {
+    const position = nextPositions.get(node.id);
+    return position ? { ...node, position } : node;
+  });
+};
+
+/**
+ * Level mostly-horizontal edges between non-junction nodes (no diagonal peer links).
+ * If preferNodeIds is set, those nodes keep their Y and peers snap to them.
+ */
+const alignHorizontalPeerEdges = (
+  nodeList: FlowNode[],
+  edgeList: FlowEdge[],
+  preferNodeIds?: Set<string>
+): FlowNode[] => {
+  if (!edgeList.length) return nodeList;
+
+  const byId = new Map(nodeList.map((node) => [node.id, node]));
+  const nextPositions = new Map<string, { x: number; y: number }>();
+  let changed = false;
+
+  const getPos = (node: FlowNode) => nextPositions.get(node.id) ?? node.position;
+  const getBounds = (node: FlowNode) => getFlowNodeBounds({ ...node, position: getPos(node) });
+
+  for (let pass = 0; pass < 4; pass += 1) {
+    let passChanged = false;
+    for (const edge of edgeList) {
+      if (edge.hidden) continue;
+      const source = byId.get(edge.source);
+      const target = byId.get(edge.target);
+      if (!source || !target) continue;
+      if (source.type === "junction" || target.type === "junction") continue;
+      if (source.type === "annotation" || target.type === "annotation") continue;
+
+      const sourceBounds = getBounds(source);
+      const targetBounds = getBounds(target);
+      const dx = Math.abs(targetBounds.centerX - sourceBounds.centerX);
+      const dy = Math.abs(targetBounds.centerY - sourceBounds.centerY);
+      if (dx < dy) continue;
+      if (dy < 1) continue;
+
+      const sourcePreferred = preferNodeIds?.has(source.id) ?? false;
+      const targetPreferred = preferNodeIds?.has(target.id) ?? false;
+
+      let lineY: number;
+      if (preferNodeIds?.size) {
+        if (sourcePreferred && !targetPreferred) {
+          lineY = sourceBounds.centerY;
+        } else if (targetPreferred && !sourcePreferred) {
+          lineY = targetBounds.centerY;
+        } else if (sourcePreferred || targetPreferred) {
+          lineY = (sourceBounds.centerY + targetBounds.centerY) / 2;
+        } else {
+          continue;
+        }
+      } else {
+        lineY = (sourceBounds.centerY + targetBounds.centerY) / 2;
+      }
+
+      const sourcePos = getPos(source);
+      const targetPos = getPos(target);
+      const nextSourceY = lineY - sourceBounds.height / 2;
+      const nextTargetY = lineY - targetBounds.height / 2;
+
+      if (!targetPreferred && Math.abs(targetPos.y - nextTargetY) > 0.5) {
+        nextPositions.set(target.id, { x: targetPos.x, y: nextTargetY });
+        passChanged = true;
+      }
+      if (!sourcePreferred && Math.abs(sourcePos.y - nextSourceY) > 0.5) {
+        nextPositions.set(source.id, { x: sourcePos.x, y: nextSourceY });
+        passChanged = true;
+      }
+      if (sourcePreferred && targetPreferred) {
+        if (Math.abs(sourcePos.y - nextSourceY) > 0.5) {
+          nextPositions.set(source.id, { x: sourcePos.x, y: nextSourceY });
+          passChanged = true;
+        }
+        if (Math.abs(targetPos.y - nextTargetY) > 0.5) {
+          nextPositions.set(target.id, { x: targetPos.x, y: nextTargetY });
+          passChanged = true;
+        }
+      }
+    }
+    if (!passChanged) break;
+    changed = true;
+  }
+
+  if (!changed) return nodeList;
+  return nodeList.map((node) => {
+    const position = nextPositions.get(node.id);
+    return position ? { ...node, position } : node;
+  });
+};
+
+const straightenChartGeometry = (
+  nodeList: FlowNode[],
+  edgeList: FlowEdge[],
+  preferNodeIds?: Set<string>
+): FlowNode[] => {
+  const withJunctions = straightenJunctionNodes(nodeList, edgeList, preferNodeIds);
+  return alignHorizontalPeerEdges(withJunctions, edgeList, preferNodeIds);
 };
 
 const resolveEdgeLayout = (
@@ -729,18 +1169,21 @@ const normalizePhotoLookupName = (value?: string | null) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const OrgChartTool = ({ departmentId }: OrgChartToolProps) => (
-  <ReactFlowProvider>
-    <OrgChartToolInner departmentId={departmentId} />
-  </ReactFlowProvider>
+const OrgChartTool = ({ departmentId, logoUrl }: OrgChartToolProps) => (
+  <div className="h-full min-h-0">
+    <ReactFlowProvider>
+      <OrgChartToolInner departmentId={departmentId} logoUrl={logoUrl} />
+    </ReactFlowProvider>
+  </div>
 );
 
 export default OrgChartTool;
 
-const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
+const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
   const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
   const pointerPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const connectingStartRef = useRef<{ nodeId: string; handleId: string | null } | null>(null);
   const docRef = useRef<OrgChartDocument>({ nodes: [], edges: [], edgeType: "orth" });
   const latestDraftRef = useRef<OrgChartDocument>({ nodes: [], edges: [], edgeType: "orth" });
   const lastSavedSnapshotRef = useRef<string>(JSON.stringify(docRef.current));
@@ -768,10 +1211,17 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [showPhotos, setShowPhotos] = useState(false);
     const [focusTrigger, setFocusTrigger] = useState(0);
     const [tool, setTool] = useState<Tool>("select");
+    const [isFullscreenEdit, setIsFullscreenEdit] = useState(false);
     const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
     const [isAddOfficeOpen, setIsAddOfficeOpen] = useState(false);
     const [isDeleteVersionOpen, setIsDeleteVersionOpen] = useState(false);
     const [isDeletingVersion, setIsDeletingVersion] = useState(false);
+    const [isBulkExportOpen, setIsBulkExportOpen] = useState(false);
+    const [watermarkSrc, setWatermarkSrc] = useState("/logo.png");
+    const [helperLines, setHelperLines] = useState<{ vertical: number | null; horizontal: number | null }>({
+      vertical: null,
+      horizontal: null,
+    });
   const versionStorageKey = useMemo(
     () => `org-chart:current-version:${departmentId}`,
     [departmentId]
@@ -810,7 +1260,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const [clipboardVersion, setClipboardVersion] = useState(0);
   const lastCopyPeopleRef = useRef(false);
 
-  const defaultEdgeOptions = useMemo(() => ({ type: "step" as Edge["type"] }), []);
+  const defaultEdgeOptions = useMemo(
+    () => ({ type: "step" as Edge["type"], interactionWidth: 28 }),
+    []
+  );
   const clipboardAvailable = useMemo(() => clipboardVersion > 0 && clipboardRef.current !== null, [clipboardVersion]);
   const employeePhotosById = useMemo(() => {
     const photos = new Map<string, string>();
@@ -965,17 +1418,25 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
     const handleToolHotkeys = (event: KeyboardEvent) => {
       const activeElement = document.activeElement;
-      if (event.key.toLowerCase() === "h") {
-        if (isEditable(activeElement)) {
-          return;
-        }
+      if (isEditable(activeElement)) return;
+
+      // Ctrl/Cmd+F toggles fullscreen edit (overrides browser Find while on this tool).
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
-        setTool("hand");
+        setIsFullscreenEdit((current) => !current);
         return;
       }
 
-      if (event.key === "Escape") {
+      if (event.key === "Escape" || event.key === "Esc") {
+        // Esc always returns to Select — never exits fullscreen (Exit button / Ctrl+F only).
+        event.preventDefault();
         setTool("select");
+        return;
+      }
+
+      if (event.key.toLowerCase() === "h") {
+        event.preventDefault();
+        setTool("hand");
       }
     };
 
@@ -984,6 +1445,47 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       window.removeEventListener("keydown", handleToolHotkeys);
     };
   }, [setTool]);
+
+  useEffect(() => {
+    if (!isFullscreenEdit) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreenEdit]);
+
+  useEffect(() => {
+    const fallback = "/logo.png";
+    const source = logoUrl?.trim();
+    if (!source) {
+      setWatermarkSrc(fallback);
+      return;
+    }
+    if (source.startsWith("/") || source.startsWith("data:")) {
+      setWatermarkSrc(source);
+      return;
+    }
+
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(source, { mode: "cors" });
+        if (!response.ok) throw new Error("Failed to load logo");
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setWatermarkSrc(objectUrl);
+      } catch {
+        if (!cancelled) setWatermarkSrc(fallback);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [logoUrl]);
 
   const cloneFlowNode = useCallback((node: FlowNode): FlowNode => ({
     ...node,
@@ -1018,9 +1520,9 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   const nodesRef = useRef<FlowNode[]>([]);
   const edgesRef = useRef<FlowEdge[]>([]);
   const focusTimeoutRef = useRef<number | null>(null);
-  const dragRecenterTimeoutRef = useRef<number | null>(null);
   const isDraggingRef = useRef(false);
   const isPanningRef = useRef(false);
+  const draggedNodeIdsRef = useRef<Set<string>>(new Set());
   const pendingHistoryEntryRef = useRef<GraphState | null>(null);
   const historyRef = useRef<{ past: GraphState[]; future: GraphState[] }>({ past: [], future: [] });
   const [historyStatus, setHistoryStatus] = useState({ canUndo: false, canRedo: false });
@@ -1036,9 +1538,6 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     () => () => {
       if (focusTimeoutRef.current) {
         window.clearTimeout(focusTimeoutRef.current);
-      }
-      if (dragRecenterTimeoutRef.current) {
-        window.clearTimeout(dragRecenterTimeoutRef.current);
       }
       pendingHistoryEntryRef.current = null;
     },
@@ -1709,7 +2208,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
   }, []);
 
   const focusOffice = useCallback(
-    (officeId: string | null, delay = 5000) => {
+    (officeId: string | null, delay = 0) => {
       if (isDraggingRef.current || isPanningRef.current) {
         return;
       }
@@ -1766,17 +2265,69 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     [collectNodesForOffice, focusOfficeId, getViewport, setCenter, setViewport]
   );
 
-  const handleNodeDragStart = useCallback(() => {
-    isDraggingRef.current = true;
-    pendingHistoryEntryRef.current = getCurrentGraphState();
-    if (dragRecenterTimeoutRef.current) {
-      window.clearTimeout(dragRecenterTimeoutRef.current);
-      dragRecenterTimeoutRef.current = null;
-    }
-  }, [getCurrentGraphState]);
+  const handleNodeDragStart = useCallback(
+    (_event: unknown, dragged: FlowNode) => {
+      isDraggingRef.current = true;
+      pendingHistoryEntryRef.current = getCurrentGraphState();
+      const preferred = new Set<string>([dragged.id]);
+      for (const id of selectedNodeIds) preferred.add(id);
+      draggedNodeIdsRef.current = preferred;
+      if (focusTimeoutRef.current) {
+        window.clearTimeout(focusTimeoutRef.current);
+        focusTimeoutRef.current = null;
+      }
+    },
+    [getCurrentGraphState, selectedNodeIds]
+  );
+
+  const handleNodeDrag = useCallback(
+    (_event: unknown, dragged: FlowNode) => {
+      const alignment = computeAlignmentGuides(dragged, nodesRef.current, ALIGN_GUIDE_THRESHOLD);
+      setHelperLines({
+        vertical: alignment.vertical,
+        horizontal: alignment.horizontal,
+      });
+
+      setNodes((nds) => {
+        let next = nds.map((node) => {
+          if (node.id !== dragged.id) return node;
+          return {
+            ...node,
+            position: {
+              x: alignment.snapX ?? node.position.x,
+              y: alignment.snapY ?? node.position.y,
+            },
+          };
+        });
+
+        // While dragging a person/unit, keep connected junction hubs under/on the T.
+        // While dragging the hub itself, allow free move — snap on drag stop.
+        if (dragged.type !== "junction") {
+          const touchesJunction = edgesRef.current.some((edge) => {
+            if (edge.source !== dragged.id && edge.target !== dragged.id) return false;
+            const otherId = edge.source === dragged.id ? edge.target : edge.source;
+            return next.find((n) => n.id === otherId)?.type === "junction";
+          });
+          if (touchesJunction) {
+            next = straightenJunctionNodes(next, edgesRef.current, new Set([dragged.id]));
+          }
+        }
+        return next;
+      });
+    },
+    [setNodes]
+  );
 
   const handleNodeDragStop = useCallback(() => {
     isDraggingRef.current = false;
+    setHelperLines({ vertical: null, horizontal: null });
+    const preferred = draggedNodeIdsRef.current;
+    const straightened = straightenChartGeometry(nodesRef.current, edgesRef.current, preferred);
+    draggedNodeIdsRef.current = new Set();
+    if (straightened !== nodesRef.current) {
+      setNodes(straightened);
+      nodesRef.current = straightened;
+    }
     if (pendingHistoryEntryRef.current) {
       const pending = pendingHistoryEntryRef.current;
       const hasMoved = pending.nodes.some((node) => {
@@ -1790,14 +2341,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         pendingHistoryEntryRef.current = null;
       }
     }
-    if (dragRecenterTimeoutRef.current) {
-      window.clearTimeout(dragRecenterTimeoutRef.current);
-    }
-    dragRecenterTimeoutRef.current = window.setTimeout(() => {
-      focusOffice(focusOfficeId);
-      dragRecenterTimeoutRef.current = null;
-    }, 5000);
-  }, [focusOffice, focusOfficeId, pushHistoryEntry]);
+  }, [pushHistoryEntry, setNodes]);
 
   const handleMoveStart = useCallback(() => {
     isPanningRef.current = true;
@@ -1872,6 +2416,23 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     const applyNodeDefaults = useCallback(
       (docNodes: OrgChartNode[]): FlowNode[] =>
         docNodes.map((node: OrgChartNode) => {
+          if (node.type === "junction") {
+            return {
+              id: node.id,
+              type: "junction",
+              position: node.position,
+              data: {
+                name: node.data.name || "Junction",
+                officeId: node.data.officeId,
+              },
+              width: node.width ?? JUNCTION_NODE_SIZE,
+              height: node.height ?? JUNCTION_NODE_SIZE,
+              style: {
+                width: node.width ?? JUNCTION_NODE_SIZE,
+                height: node.height ?? JUNCTION_NODE_SIZE,
+              },
+            };
+          }
           if (node.type === "annotation") {
             const text = node.data.text ?? node.data.name ?? DEFAULT_ANNOTATION_TEXT;
             const color = normalizeColor(node.data.color) ?? DEFAULT_ANNOTATION_COLOR;
@@ -1911,6 +2472,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
             (node.type === "person" ? normalizeColor(node.data.employeeTypeColor) : null) ??
             normalizeColor(DEFAULT_NODE_COLORS[node.type]) ??
             NEUTRAL_OUTLINE_COLOR;
+          const cardWidth =
+            node.type === "person" ? PERSON_CARD_WIDTH : GROUP_CARD_WIDTH;
+          const cardHeight =
+            node.type === "person" ? PERSON_CARD_HEIGHT : GROUP_CARD_HEIGHT;
           const baseNode: FlowNode = {
             id: node.id,
             type: node.type,
@@ -1929,8 +2494,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               notes: node.data.notes,
               imageUrl: node.data.imageUrl,
             },
-            width: node.width,
-            height: node.height,
+            width: cardWidth,
+            height: cardHeight,
+            style: {
+              width: cardWidth,
+              height: cardHeight,
+            },
           };
           if (node.type === "person") {
             baseNode.sourcePosition = Position.Right;
@@ -1979,13 +2548,16 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       const sourceNode = nodeLookup.get(edge.source);
       const targetNode = nodeLookup.get(edge.target);
       const currentCustomType = edge.data?.customType;
+      // Preserve intentionally straight edges (e.g. T-junction stems) so auto-layout
+      // does not rewrite them into stepped/bent orthogonal paths.
+      const lockStraight = currentCustomType === "straight";
       const fallbackType =
         currentCustomType === "smoothstep"
           ? mapDocEdgeTypeToFlow("smoothstep")
           : currentCustomType === "straight"
           ? "straight"
           : mapDocEdgeTypeToFlow(edgeType);
-      const layout = resolveEdgeLayout(sourceNode, targetNode, fallbackType);
+      const layout = lockStraight ? null : resolveEdgeLayout(sourceNode, targetNode, fallbackType);
 
       let desiredSourceHandle =
         edge.sourceHandle ??
@@ -1995,7 +2567,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         edge.targetHandle ??
         getTargetHandleId(normalizeHandleId(edge.targetHandle)) ??
         getTargetHandleId("l");
-      let desiredType: Edge["type"] = edge.type;
+      let desiredType: Edge["type"] = lockStraight ? "straight" : edge.type;
 
       let dataChanged = false;
       let edgeChanged = false;
@@ -2051,6 +2623,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           desiredTargetHandle = normalizedTargetHandle;
           edgeChanged = true;
         }
+        if (lockStraight && edge.type !== "straight") {
+          desiredType = "straight";
+          edgeChanged = true;
+        }
       }
 
       if (!edge.data?.color) {
@@ -2091,10 +2667,11 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     (document: OrgChartDocument, markSaved = true, shouldRefocus = false) => {
       const flowNodes = applyNodeDefaults(document.nodes);
       const flowEdges = normalizeEdges(applyEdgeDefaults(document.edges), flowNodes);
-      setNodes(flowNodes);
+      const alignedNodes = straightenChartGeometry(flowNodes, flowEdges);
+      setNodes(alignedNodes);
       setEdges(flowEdges);
       setEdgeType(document.edgeType ?? "orth");
-      const normalizedDocument = serializeDocument(flowNodes, flowEdges, document.edgeType ?? "orth");
+      const normalizedDocument = serializeDocument(alignedNodes, flowEdges, document.edgeType ?? "orth");
       docRef.current = normalizedDocument;
       const snapshot = JSON.stringify(normalizedDocument);
       setDraftSnapshot(snapshot);
@@ -2250,14 +2827,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       setAvailableEmployees(latestDraft.employees);
       setDocument(reconciledDocument, false, true);
       toast({
-        title: "Latest DB draft loaded",
+        title: "Synced from DB",
         description: selectedOfficeId
-          ? "Selected office was refreshed from DB while preserving the current arrangement."
-          : "Employee details were refreshed while preserving the current arrangement.",
+          ? "Selected office synced: inactive/removed people dropped; new active employees added. Layout kept."
+          : "Chart synced from DB. Layout kept.",
       });
     } catch (error) {
       toast({
-        title: "Failed to build from DB",
+        title: "Failed to sync from DB",
         description: error instanceof Error ? error.message : "Unable to load data",
         variant: "destructive",
       });
@@ -2483,10 +3060,269 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
       const newEdge = applyEdgePresentation(baseEdge);
 
       runWithHistory(() => {
+        setNodes((nds) => {
+          const nextEdges = [...edgesRef.current, newEdge];
+          return alignHorizontalPeerEdges(nds, nextEdges);
+        });
         setEdges((eds: FlowEdge[]) => addEdge(newEdge, eds));
       });
     },
-    [allowCrossOfficeEdges, edgeType, edges, getNode, runWithHistory, setEdges, toast]
+    [allowCrossOfficeEdges, edgeType, edges, getNode, runWithHistory, setEdges, setNodes, toast]
+  );
+
+  const handleConnectStart = useCallback(
+    (
+      _: unknown,
+      params: { nodeId: string | null; handleId: string | null }
+    ) => {
+      if (!params.nodeId) {
+        connectingStartRef.current = null;
+        return;
+      }
+      connectingStartRef.current = {
+        nodeId: params.nodeId,
+        handleId: params.handleId,
+      };
+    },
+    []
+  );
+
+  const handleConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      const start = connectingStartRef.current;
+      connectingStartRef.current = null;
+      if (!start?.nodeId || isHand) return;
+
+      const clientX = "clientX" in event ? event.clientX : event.changedTouches?.[0]?.clientX;
+      const clientY = "clientY" in event ? event.clientY : event.changedTouches?.[0]?.clientY;
+      if (clientX == null || clientY == null || !reactFlowWrapper.current) return;
+
+      const targetEl = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+      if (targetEl?.closest(".react-flow__handle") || targetEl?.closest(".react-flow__node")) {
+        return;
+      }
+
+      const bounds = reactFlowWrapper.current.getBoundingClientRect();
+      const dropPosition = project({
+        x: clientX - bounds.left,
+        y: clientY - bounds.top,
+      });
+
+      const edgeAttrHost = targetEl?.closest("[data-orgchart-edge-id]") as HTMLElement | null;
+      const edgeDom = targetEl?.closest(".react-flow__edge") as HTMLElement | null;
+      let edgeId =
+        edgeAttrHost?.getAttribute("data-orgchart-edge-id") ??
+        edgeDom?.getAttribute("data-testid")?.replace(/^rf__edge-/, "") ??
+        edgeDom?.dataset?.id ??
+        null;
+
+      let junctionAt = dropPosition;
+      if (!edgeId) {
+        const nearest = findNearestEdgeForBranch(
+          dropPosition,
+          edgesRef.current,
+          nodesRef.current,
+          start.nodeId,
+          36
+        );
+        if (!nearest) return;
+        edgeId = nearest.edgeId;
+        junctionAt = nearest.point;
+      }
+
+      const targetEdge = edgesRef.current.find((edge) => edge.id === edgeId);
+      if (!targetEdge) return;
+      if (targetEdge.source === start.nodeId || targetEdge.target === start.nodeId) {
+        toast({
+          title: "Invalid connection",
+          description: "That line is already connected to this node.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const junctionId = `junction-${crypto.randomUUID()}`;
+      const sourceNode = getNode(start.nodeId);
+      const edgeSourceNode = getNode(targetEdge.source);
+      const edgeTargetNode = getNode(targetEdge.target);
+      if (!edgeSourceNode || !edgeTargetNode) return;
+
+      const officeId =
+        sourceNode?.data.officeId ??
+        edgeSourceNode.data.officeId ??
+        edgeTargetNode.data.officeId ??
+        (edgeSourceNode.type === "office" ? edgeSourceNode.id : undefined);
+
+      if (!allowCrossOfficeEdges && officeId && sourceNode?.data.officeId && sourceNode.data.officeId !== officeId) {
+        toast({
+          title: "Connection blocked",
+          description: "Cross-office connections are disabled.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const sourceBounds = getFlowNodeBounds(edgeSourceNode);
+      const targetBounds = getFlowNodeBounds(edgeTargetNode);
+      const branchSourceBounds = sourceNode ? getFlowNodeBounds(sourceNode) : null;
+      const isHorizontalMain =
+        Math.abs(targetBounds.centerX - sourceBounds.centerX) >=
+        Math.abs(targetBounds.centerY - sourceBounds.centerY);
+
+      const half = JUNCTION_NODE_SIZE / 2;
+      let junctionCenter = { x: junctionAt.x, y: junctionAt.y };
+      let nextSourcePosition = edgeSourceNode.position;
+      let nextTargetPosition = edgeTargetNode.position;
+
+      if (isHorizontalMain) {
+        // Flatten the horizontal pair and put the junction on the true T point.
+        // Anchor X to the branch node — never move the branch (keeps parent stem straight).
+        const lineY = (sourceBounds.centerY + targetBounds.centerY) / 2;
+        const junctionX =
+          branchSourceBounds?.centerX ?? (sourceBounds.centerX + targetBounds.centerX) / 2;
+        junctionCenter = { x: junctionX, y: lineY };
+
+        nextSourcePosition = {
+          x: edgeSourceNode.position.x,
+          y: lineY - sourceBounds.height / 2,
+        };
+        nextTargetPosition = {
+          x: edgeTargetNode.position.x,
+          y: lineY - targetBounds.height / 2,
+        };
+      } else {
+        const lineX = (sourceBounds.centerX + targetBounds.centerX) / 2;
+        const junctionY =
+          branchSourceBounds?.centerY ?? (sourceBounds.centerY + targetBounds.centerY) / 2;
+        junctionCenter = { x: lineX, y: junctionY };
+
+        nextSourcePosition = {
+          x: lineX - sourceBounds.width / 2,
+          y: edgeSourceNode.position.y,
+        };
+        nextTargetPosition = {
+          x: lineX - targetBounds.width / 2,
+          y: edgeTargetNode.position.y,
+        };
+      }
+
+      const junctionNode: FlowNode = {
+        id: junctionId,
+        type: "junction",
+        // Exact center — do not grid-snap or the stem becomes diagonal.
+        position: {
+          x: junctionCenter.x - half,
+          y: junctionCenter.y - half,
+        },
+        data: {
+          name: "Junction",
+          officeId,
+        },
+        width: JUNCTION_NODE_SIZE,
+        height: JUNCTION_NODE_SIZE,
+        style: { width: JUNCTION_NODE_SIZE, height: JUNCTION_NODE_SIZE },
+      };
+
+      const leftIsSource = sourceBounds.centerX <= targetBounds.centerX;
+      const topIsSource = sourceBounds.centerY <= targetBounds.centerY;
+      const firstId = isHorizontalMain
+        ? leftIsSource
+          ? targetEdge.source
+          : targetEdge.target
+        : topIsSource
+          ? targetEdge.source
+          : targetEdge.target;
+      const secondId = firstId === targetEdge.source ? targetEdge.target : targetEdge.source;
+
+      const edgeStyleData = {
+        ...(targetEdge.data ? { ...targetEdge.data } : {}),
+        customType: "straight" as const,
+      };
+      const sharedEdgeProps = {
+        type: "straight" as Edge["type"],
+        label: typeof targetEdge.label === "string" ? targetEdge.label : "",
+        data: edgeStyleData,
+      };
+
+      const edgeToJunction: FlowEdge = applyEdgePresentation({
+        ...sharedEdgeProps,
+        id: `edge-${crypto.randomUUID()}`,
+        source: firstId,
+        target: junctionId,
+        sourceHandle: isHorizontalMain ? "r-source" : "b-source",
+        targetHandle: isHorizontalMain ? "l-target" : "t-target",
+      });
+      const edgeFromJunction: FlowEdge = applyEdgePresentation({
+        ...sharedEdgeProps,
+        id: `edge-${crypto.randomUUID()}`,
+        source: junctionId,
+        target: secondId,
+        sourceHandle: isHorizontalMain ? "r-source" : "b-source",
+        targetHandle: isHorizontalMain ? "l-target" : "t-target",
+        label: "",
+      });
+
+      const branchEdge: FlowEdge = applyEdgePresentation({
+        id: `edge-${crypto.randomUUID()}`,
+        source: start.nodeId,
+        target: junctionId,
+        sourceHandle: isHorizontalMain ? "b-source" : "r-source",
+        targetHandle: isHorizontalMain ? "t-target" : "l-target",
+        type: "straight",
+        label: "",
+        data: {
+          color: DEFAULT_EDGE_COLOR,
+          customType: "straight",
+          markerStartType: DEFAULT_MARKER_START,
+          markerEndType: DEFAULT_MARKER_END,
+          markerSize: DEFAULT_MARKER_SIZE,
+          markerColor: DEFAULT_EDGE_COLOR,
+        },
+      });
+
+      runWithHistory(() => {
+        setNodes((nds) => {
+          const withAligned = nds.map((node) => {
+            if (node.id === edgeSourceNode.id) {
+              return { ...node, position: nextSourcePosition };
+            }
+            if (node.id === edgeTargetNode.id) {
+              return { ...node, position: nextTargetPosition };
+            }
+            return node;
+          });
+          return straightenChartGeometry([...withAligned, junctionNode], [
+            ...edgesRef.current.filter((edge) => edge.id !== targetEdge.id),
+            edgeToJunction,
+            edgeFromJunction,
+            branchEdge,
+          ]);
+        });
+        setEdges((eds) => [
+          ...eds.filter((edge) => edge.id !== targetEdge.id),
+          edgeToJunction,
+          edgeFromJunction,
+          branchEdge,
+        ]);
+        setSelectedNodeIds([junctionId]);
+        setSelectedEdgeIds([]);
+      });
+
+      toast({
+        title: "Branch connected",
+        description: "Nodes auto-aligned for a straight T-junction.",
+      });
+    },
+    [
+      allowCrossOfficeEdges,
+      getNode,
+      isHand,
+      project,
+      runWithHistory,
+      setEdges,
+      setNodes,
+      toast,
+    ]
   );
 
   const duplicateNode = useCallback(
@@ -3298,50 +4134,93 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
     [applyCurrentVersionId, loadVersionById, toast]
   );
 
+  const waitAnimationFrames = useCallback(async (frames = 2) => {
+    for (let i = 0; i < frames; i += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+  }, []);
+
+  const captureChartPng = useCallback(async (): Promise<string> => {
+    if (!reactFlowWrapper.current) {
+      throw new Error("Chart canvas is not ready");
+    }
+    const nodesForExport = getNodes().filter((node) => !node.hidden && node.type !== "junction");
+    if (!nodesForExport.length) {
+      throw new Error("Nothing visible to export");
+    }
+
+    const wrapper = reactFlowWrapper.current;
+    const exportWidth = Math.max(wrapper.clientWidth, 1);
+    const exportHeight = Math.max(wrapper.clientHeight, 1);
+    const originalViewport = getViewport();
+    const exportStrokeWidth = Math.max(4, 4 / Math.max(originalViewport.zoom, 0.5));
+    const restoreInterface = hideInterfaceForExport();
+
+    wrapper.classList.add("orgchart-exporting");
+    wrapper.style.setProperty("--orgchart-export-stroke", `${exportStrokeWidth}px`);
+
+    try {
+      await fitView({
+        nodes: nodesForExport,
+        padding: 0.2,
+        duration: 0,
+        includeHiddenNodes: false,
+        minZoom: 0.1,
+        maxZoom: 2,
+      });
+      await waitAnimationFrames(2);
+
+      return await htmlToImage.toPng(wrapper, {
+        backgroundColor: "#ffffff",
+        pixelRatio: 3,
+        filter: (node) =>
+          !(node instanceof HTMLElement && node.dataset.orgchartExportIgnore === "true"),
+        width: exportWidth,
+        height: exportHeight,
+        canvasWidth: exportWidth * 3,
+        canvasHeight: exportHeight * 3,
+        style: {
+          transform: "none",
+          transformOrigin: "top left",
+        },
+      });
+    } finally {
+      wrapper.classList.remove("orgchart-exporting");
+      wrapper.style.removeProperty("--orgchart-export-stroke");
+      setViewport(originalViewport, { duration: 0 });
+      restoreInterface();
+    }
+  }, [fitView, getNodes, getViewport, hideInterfaceForExport, setViewport, waitAnimationFrames]);
+
+  const downloadPdfFromPngPages = useCallback(async (pages: Array<{ dataUrl: string; label?: string }>) => {
+    const pdf = await PDFDocument.create();
+    for (const pageImage of pages) {
+      const page = pdf.addPage([1122, 793]);
+      const image = await pdf.embedPng(pageImage.dataUrl);
+      const { width, height } = image.scaleToFit(page.getWidth() - 40, page.getHeight() - 40);
+      page.drawImage(image, {
+        x: (page.getWidth() - width) / 2,
+        y: (page.getHeight() - height) / 2,
+        width,
+        height,
+      });
+    }
+    const bytes = await pdf.save();
+    const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const blob = new Blob([arrayBuffer], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `org-chart-${new Date().toISOString()}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
   const handleExport = useCallback(
     async (format: "png" | "pdf") => {
-      if (!reactFlowWrapper.current) return;
-      const nodesForExport = getNodes().filter((node) => !node.hidden);
-      if (!nodesForExport.length) {
-        toast({ title: "Nothing to export", description: "Add some nodes before exporting." });
-        return;
-      }
-
-      const restoreInterface = hideInterfaceForExport();
-      const wrapper = reactFlowWrapper.current;
-      const originalViewport = getViewport();
-      const exportWidth = Math.max(wrapper.clientWidth, 1);
-      const exportHeight = Math.max(wrapper.clientHeight, 1);
-      const exportStrokeWidth = Math.max(4, 4 / Math.max(originalViewport.zoom, 0.5));
-
       try {
         setIsExporting(true);
-        wrapper.classList.add("orgchart-exporting");
-        wrapper.style.setProperty("--orgchart-export-stroke", `${exportStrokeWidth}px`);
-        await fitView({
-          nodes: nodesForExport,
-          padding: 0.2,
-          duration: 0,
-          includeHiddenNodes: false,
-          minZoom: 0.1,
-          maxZoom: 2,
-        });
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-        const dataUrl = await htmlToImage.toPng(wrapper, {
-          backgroundColor: "#ffffff",
-          pixelRatio: 3,
-          filter: (node) =>
-            !(node instanceof HTMLElement && node.dataset.orgchartExportIgnore === "true"),
-          width: exportWidth,
-          height: exportHeight,
-          canvasWidth: exportWidth * 3,
-          canvasHeight: exportHeight * 3,
-          style: {
-            transform: "none",
-            transformOrigin: "top left",
-          },
-        });
+        const dataUrl = await captureChartPng();
 
         if (format === "png") {
           const link = document.createElement("a");
@@ -3352,25 +4231,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           return;
         }
 
-        const pdf = await PDFDocument.create();
-        const page = pdf.addPage([1122, 793]);
-        const image = await pdf.embedPng(dataUrl);
-        const { width, height } = image.scaleToFit(page.getWidth() - 40, page.getHeight() - 40);
-        page.drawImage(image, {
-          x: (page.getWidth() - width) / 2,
-          y: (page.getHeight() - height) / 2,
-          width,
-          height,
-        });
-        const bytes = await pdf.save();
-        const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-        const blob = new Blob([arrayBuffer], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `org-chart-${new Date().toISOString()}.pdf`;
-        link.click();
-        URL.revokeObjectURL(url);
+        await downloadPdfFromPngPages([{ dataUrl }]);
         toast({ title: "PDF exported" });
       } catch (error) {
         toast({
@@ -3379,14 +4240,72 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           variant: "destructive",
         });
       } finally {
-        wrapper.classList.remove("orgchart-exporting");
-        wrapper.style.removeProperty("--orgchart-export-stroke");
-        setViewport(originalViewport, { duration: 0 });
-        restoreInterface();
         setIsExporting(false);
       }
     },
-    [fitView, getNodes, getViewport, hideInterfaceForExport, setViewport, toast]
+    [captureChartPng, downloadPdfFromPngPages, toast]
+  );
+
+  const bulkExportOffices = useMemo(
+    () =>
+      offices.map((office) => ({
+        id: office.data.officeId ?? office.id,
+        name: office.data.name,
+      })),
+    [offices]
+  );
+
+  const handleBulkExport = useCallback(
+    async (officeIds: string[]) => {
+      if (!officeIds.length) return;
+      const previousFocus = focusOfficeId;
+      try {
+        setIsExporting(true);
+        const pages: Array<{ dataUrl: string; label?: string }> = [];
+
+        for (const officeId of officeIds) {
+          flushSync(() => {
+            setFocusOfficeId(officeId);
+          });
+          await waitAnimationFrames(3);
+          focusOffice(officeId, 0);
+          await waitAnimationFrames(3);
+          const dataUrl = await captureChartPng();
+          const label =
+            bulkExportOffices.find((office) => office.id === officeId)?.name ?? officeId;
+          pages.push({ dataUrl, label });
+        }
+
+        await downloadPdfFromPngPages(pages);
+        setIsBulkExportOpen(false);
+        toast({
+          title: "Bulk PDF exported",
+          description: `${pages.length} office page${pages.length === 1 ? "" : "s"} merged.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Bulk export failed",
+          description: error instanceof Error ? error.message : "Unable to export",
+          variant: "destructive",
+        });
+      } finally {
+        flushSync(() => {
+          setFocusOfficeId(previousFocus);
+        });
+        await waitAnimationFrames(2);
+        focusOffice(previousFocus, 0);
+        setIsExporting(false);
+      }
+    },
+    [
+      bulkExportOffices,
+      captureChartPng,
+      downloadPdfFromPngPages,
+      focusOffice,
+      focusOfficeId,
+      toast,
+      waitAnimationFrames,
+    ]
   );
 
     const updateSelectedNode = useCallback(
@@ -3506,11 +4425,13 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-140px)] items-center justify-center rounded-lg border bg-muted/10">
+      <div className="flex h-full min-h-[320px] items-center justify-center rounded-lg border bg-muted/10">
         <p className="text-sm text-muted-foreground">Preparing org chart...</p>
       </div>
     );
   }
+
+  const showFullscreenInspector = isFullscreenEdit && Boolean(selectedNode || selectedEdge);
 
   return (
     <>
@@ -3525,19 +4446,247 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         .orgchart-exporting .react-flow__edge .react-flow__edge-interaction {
           display: none !important;
         }
+        .orgchart-exporting .react-flow__handle,
+        .orgchart-exporting [data-orgchart-edge-id],
+        .orgchart-exporting .react-flow__node-junction,
+        .orgchart-exporting .orgchart-align-guides {
+          opacity: 0 !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+        }
+        .orgchart-exporting .react-flow__node.selected,
+        .orgchart-exporting .react-flow__edge.selected {
+          box-shadow: none !important;
+        }
+        .orgchart-watermark {
+          display: none;
+        }
+        .orgchart-exporting .orgchart-watermark {
+          display: flex;
+        }
+        /* Lucidchart-like: handles hidden until hover/select/connecting */
+        .react-flow__handle {
+          width: 10px !important;
+          height: 10px !important;
+          background: #3b82f6 !important;
+          border: 2px solid #ffffff !important;
+          box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+          opacity: 0;
+          pointer-events: auto;
+          transition: opacity 140ms ease, transform 140ms ease;
+        }
+        .react-flow__node:hover .react-flow__handle,
+        .react-flow__node.selected .react-flow__handle,
+        .react-flow__handle.connecting,
+        .react-flow__handle-connecting,
+        .react-flow__handle-valid,
+        .react-flow.connecting .react-flow__handle {
+          opacity: 1;
+        }
+        /* Scale via size, not transform — transform would override handle centering translates. */
+        .react-flow__node:hover .react-flow__handle,
+        .react-flow__node.selected .react-flow__handle {
+          width: 12px !important;
+          height: 12px !important;
+        }
+        [data-orgchart-edge-id] {
+          background: #3b82f6 !important;
+          transition: opacity 140ms ease, transform 140ms ease;
+        }
+        .react-flow.connecting [data-orgchart-edge-id] {
+          opacity: 1 !important;
+          transform: translate(-50%, -50%) scale(1.35);
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+        }
+        .react-flow__node-junction {
+          opacity: 0.55;
+          transition: opacity 140ms ease;
+          cursor: grab;
+        }
+        .react-flow__node-junction:hover,
+        .react-flow__node-junction.selected,
+        .react-flow.connecting .react-flow__node-junction {
+          opacity: 1;
+        }
+        .react-flow__node-junction:active {
+          cursor: grabbing;
+        }
+        /* Handles must NOT steal drag — only accept connections while connecting. */
+        .react-flow__node-junction .react-flow__handle {
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+        .react-flow.connecting .react-flow__node-junction .react-flow__handle,
+        .orgchart-connect-mode .react-flow__node-junction .react-flow__handle {
+          pointer-events: all !important;
+        }
+        .orgchart-connect-mode .react-flow__handle {
+          opacity: 1 !important;
+        }
       `}</style>
       <CanvasSettingsContext.Provider
         value={{ showPhotos, focusedOfficeId: focusOfficeId, employeePhotosById, employeePhotosByName }}
       >
         <CanvasActionsContext.Provider value={actionsContextValue}>
           <div
-            className="relative flex h-[calc(100dvh-170px)] min-h-0 flex-col gap-3 overflow-hidden origin-top-left"
-            style={{
-              transform: `scale(${DEFAULT_TOOL_UI_SCALE})`,
-              width: `${100 / DEFAULT_TOOL_UI_SCALE}%`,
-              height: `calc((100dvh - 170px) / ${DEFAULT_TOOL_UI_SCALE})`,
-            }}
+            className={cn(
+              "relative flex min-h-0 flex-col gap-3 overflow-hidden origin-top-left",
+              isFullscreenEdit
+                ? "fixed inset-0 z-[200] gap-2 bg-background p-3"
+                : "h-full",
+              tool === "connect" && "orgchart-connect-mode"
+            )}
+            style={
+              isFullscreenEdit
+                ? { width: "100%", height: "100dvh" }
+                : {
+                    transform: `scale(${DEFAULT_TOOL_UI_SCALE})`,
+                    width: `${100 / DEFAULT_TOOL_UI_SCALE}%`,
+                    height: `calc(100% / ${DEFAULT_TOOL_UI_SCALE})`,
+                  }
+            }
           >
+            {isFullscreenEdit ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background px-3 py-2 shadow-sm">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => setIsFullscreenEdit(false)}
+                  title="Exit fullscreen (Ctrl+F)"
+                >
+                  <Minimize2 className="mr-2 h-4 w-4" /> Exit
+                </Button>
+                {unsavedChanges ? (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800"
+                  >
+                    Unsaved - save to keep this version
+                  </Badge>
+                ) : null}
+                <div className="rounded-md border px-2 py-1">
+                  <p className="text-[10px] leading-none text-muted-foreground">Version</p>
+                  <Select value={currentVersionId ?? "__unsaved__"} onValueChange={handleVersionChange}>
+                    <SelectTrigger className="h-7 w-[160px] border-0 p-0 shadow-none">
+                      <SelectValue placeholder="Latest version" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {!currentVersionId ? (
+                        <SelectItem value="__unsaved__" disabled>
+                          {versions.length ? "Unsaved changes" : "No saved version"}
+                        </SelectItem>
+                      ) : null}
+                      {versions.map((version) => (
+                        <SelectItem key={version.id} value={version.id}>
+                          {version.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  onClick={handleBuildFromDb}
+                  variant="outline"
+                  size="sm"
+                  className="h-9"
+                  title="Sync active employees from DB. If an office is selected, only that office is updated."
+                >
+                  <Database className="mr-2 h-4 w-4" /> Sync
+                </Button>
+                <Button
+                  onClick={handleSaveVersion}
+                  size="sm"
+                  disabled={isSaving}
+                  className={cn(
+                    "h-9",
+                    unsavedChanges
+                      ? "bg-amber-600 text-white hover:bg-amber-500"
+                      : "bg-indigo-600 text-white hover:bg-indigo-500"
+                  )}
+                >
+                  <Plus className="mr-2 h-4 w-4" /> {unsavedChanges ? "Save" : "Save version"}
+                </Button>
+                <div className="mx-1 hidden h-7 w-px bg-border sm:block" />
+                <div className="flex items-center gap-2 rounded-md border px-2.5 py-1">
+                  <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Label htmlFor="fullscreen-show-photos" className="cursor-pointer text-xs font-medium">
+                    Show photos
+                  </Label>
+                  <Switch
+                    id="fullscreen-show-photos"
+                    checked={showPhotos}
+                    onCheckedChange={(state) => setShowPhotos(Boolean(state))}
+                  />
+                </div>
+                <div className="mx-1 hidden h-7 w-px bg-border sm:block" />
+                <div className="ml-auto flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => undo()}
+                    disabled={!historyStatus.canUndo}
+                    title="Undo"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => redo()}
+                    disabled={!historyStatus.canRedo}
+                    title="Redo"
+                  >
+                    <Redo2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => {
+                      const vp = getViewport();
+                      zoomToOfficeContent(vp.zoom - 0.1);
+                    }}
+                    title="Zoom out"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 min-w-[56px]"
+                    onClick={() => {
+                      setViewport({ x: 0, y: 0, zoom: DEFAULT_CANVAS_ZOOM }, { duration: 200 });
+                      setCanvasZoom(DEFAULT_CANVAS_ZOOM);
+                    }}
+                  >
+                    {`${Math.round(canvasZoom * 100)}%`}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => {
+                      const vp = getViewport();
+                      zoomToOfficeContent(vp.zoom + 0.1);
+                    }}
+                    title="Zoom in"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9"
+                    onClick={() => focusOffice(focusOfficeId, 0)}
+                  >
+                    Fit
+                  </Button>
+                </div>
+              </div>
+            ) : (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background px-6 py-4 shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-500 text-white shadow">
@@ -3577,8 +4726,14 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleBuildFromDb} variant="outline" size="sm" className="h-11 px-5">
-                  <Database className="mr-2 h-4 w-4" /> Build from DB
+                <Button
+                  onClick={handleBuildFromDb}
+                  variant="outline"
+                  size="sm"
+                  className="h-11 px-5"
+                  title="Sync active employees from DB. If an office is selected, only that office is updated."
+                >
+                  <Database className="mr-2 h-4 w-4" /> Sync from DB
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -3590,6 +4745,12 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => void handleExport("png")}>Export PNG</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => void handleExport("pdf")}>Export PDF</DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setIsBulkExportOpen(true)}
+                      disabled={!bulkExportOffices.length}
+                    >
+                      Bulk PDF (offices)…
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button
@@ -3604,6 +4765,15 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   )}
                 >
                   <Plus className="mr-2 h-4 w-4" /> {unsavedChanges ? "Save unsaved version" : "Save version"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-11 px-5"
+                  onClick={() => setIsFullscreenEdit(true)}
+                  title="Fullscreen edit (Ctrl+F)"
+                >
+                  <Maximize2 className="mr-2 h-4 w-4" /> Fullscreen edit
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -3624,8 +4794,19 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 </DropdownMenu>
               </div>
             </div>
-            <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[280px,1fr,320px]">
-        <aside className="flex min-h-0 flex-col gap-3 overflow-hidden">
+            )}
+            <div
+              className={cn(
+                "grid min-h-0 flex-1 gap-4 overflow-hidden",
+                isFullscreenEdit ? "grid-cols-1" : "lg:grid-cols-[280px,1fr,320px]"
+              )}
+            >
+        <aside
+          className={cn(
+            "flex min-h-0 flex-col gap-3 overflow-hidden",
+            isFullscreenEdit && "hidden"
+          )}
+        >
           <Card className="min-h-0 flex-1">
             <CardContent className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pt-4">
               <div className="rounded-lg border p-3">
@@ -3732,37 +4913,10 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
 
         </aside>
 
-        <section className="relative flex min-h-0 flex-col overflow-hidden rounded-lg border bg-background">
-          <div className="flex items-center border-b px-4 py-2">
+        <section className="relative flex min-h-0 flex-col overflow-hidden rounded-lg border bg-[#f3f4f6]">
+          <div className={cn("flex items-center border-b px-4 py-2", isFullscreenEdit && "hidden")}>
             <div className="flex w-full items-center justify-between gap-2 rounded-md border bg-background p-1">
               <div className="flex items-center gap-1">
-              <Button
-                variant={tool === "select" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setTool("select")}
-              >
-                <MousePointer2 className="mr-2 h-4 w-4" /> Select
-              </Button>
-              <Button
-                variant={tool === "hand" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setTool((current) => (current === "hand" ? "select" : "hand"))}
-                title="Hand (H) - pan the canvas"
-                aria-pressed={tool === "hand"}
-              >
-                <Hand className="mr-2 h-4 w-4" /> Hand / Pan
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => addStandaloneNode("annotation")}
-                title="Add text annotation"
-                className="flex items-center gap-2"
-              >
-                <span className="text-sm font-semibold leading-none">T</span>
-                Text
-              </Button>
-              <div className="mx-1 h-7 w-px bg-border" />
               <div className="relative pt-1.5">
                 <span className="absolute left-1 top-0 text-[9px] leading-none text-muted-foreground">Connector style</span>
                 <Select value={edgeType} onValueChange={handleEdgeTypeChange}>
@@ -3864,14 +5018,115 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
               onPointerMove={updatePointerPosition}
               onPointerLeave={clearPointerPosition}
             >
+              {/* Lucidchart-style tool rail — left of canvas (above React Flow hit layer) */}
+              <div
+                className="nodrag nopan pointer-events-auto absolute left-2 top-1/2 z-[80] flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border bg-background/95 p-1.5 shadow-lg backdrop-blur-sm"
+                role="toolbar"
+                aria-label="Canvas tools"
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <Button
+                  type="button"
+                  variant={tool === "select" ? "default" : "ghost"}
+                  size="icon"
+                  className="h-9 w-9"
+                  title="Select"
+                  aria-pressed={tool === "select"}
+                  onClick={() => setTool("select")}
+                >
+                  <MousePointer2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant={tool === "hand" ? "default" : "ghost"}
+                  size="icon"
+                  className="h-9 w-9"
+                  title="Hand / Pan (H)"
+                  aria-pressed={tool === "hand"}
+                  onClick={() => setTool((current) => (current === "hand" ? "select" : "hand"))}
+                >
+                  <Hand className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant={tool === "connect" ? "default" : "ghost"}
+                  size="icon"
+                  className="h-9 w-9"
+                  title="Connect — drag from a node handle"
+                  aria-pressed={tool === "connect"}
+                  onClick={() => setTool("connect")}
+                >
+                  <Link2 className="h-4 w-4" />
+                </Button>
+                <div className="my-0.5 h-px w-7 bg-border" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  title="Add text"
+                  onClick={() => {
+                    setTool("select");
+                    addStandaloneNode("annotation");
+                  }}
+                >
+                  <Type className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  title="Add office"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setTool("select");
+                    setIsAddOfficeOpen(true);
+                  }}
+                >
+                  <Building2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  title="Add unit"
+                  onClick={() => {
+                    setTool("select");
+                    addStandaloneNode("unit");
+                  }}
+                >
+                  <Users className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  title="Add person"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setTool("select");
+                    setIsAddPersonOpen(true);
+                  }}
+                >
+                  <User className="h-4 w-4" />
+                </Button>
+              </div>
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={handleNodesChange}
                 onEdgesChange={handleEdgesChange}
                 onConnect={handleConnect}
+                onConnectStart={handleConnectStart}
+                onConnectEnd={handleConnectEnd}
                 onSelectionChange={handleSelectionChange}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 snapToGrid
                 snapGrid={[10, 10]}
                 selectionOnDrag={!isHand}
@@ -3883,6 +5138,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                 nodesConnectable={!isHand}
                 elementsSelectable={!isHand}
                 onNodeDragStart={handleNodeDragStart}
+                onNodeDrag={handleNodeDrag}
                 onNodeDragStop={handleNodeDragStop}
                 onMoveStart={handleMoveStart}
                 onMoveEnd={handleMoveEnd}
@@ -3895,10 +5151,16 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   edgeType === "smoothstep" ? SMOOTH_CONNECTION_LINE : ORTHOGONAL_CONNECTION_LINE
                 }
                 proOptions={{ hideAttribution: true }}
-                style={{ width: "100%", height: "100%" }}
+                style={{ width: "100%", height: "100%", backgroundColor: "#f3f4f6" }}
               >
                 <MarkerDefinitionsLayer definitions={customMarkerDefinitions} />
-                <Background gap={10} color="rgba(15,23,42,0.08)" size={1} />
+                <Background
+                  id="org-chart-dots"
+                  variant={BackgroundVariant.Dots}
+                  gap={18}
+                  size={1.4}
+                  color="#cfd4dc"
+                />
                 <MiniMap
                   className="rounded-md border bg-background"
                   zoomable
@@ -3912,8 +5174,21 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   position="bottom-left"
                 />
                 <Controls showInteractive={false} position="bottom-right" />
+                <AlignmentGuides vertical={helperLines.vertical} horizontal={helperLines.horizontal} />
 
               </ReactFlow>
+              <div
+                className="orgchart-watermark pointer-events-none absolute inset-0 z-[5] items-center justify-center"
+                aria-hidden
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={watermarkSrc}
+                  alt=""
+                  className="max-h-[55%] max-w-[55%] object-contain opacity-[0.07]"
+                  draggable={false}
+                />
+              </div>
               <div
                 data-orgchart-export-ignore="true"
                 className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full border bg-background/95 px-4 py-1.5 text-sm text-muted-foreground shadow-sm"
@@ -3932,7 +5207,15 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
           </div>
         </section>
 
-          <aside className="min-h-0 space-y-4 overflow-auto pr-1">
+          <aside
+            className={cn(
+              "min-h-0 space-y-4 overflow-auto pr-1",
+              isFullscreenEdit && !showFullscreenInspector && "hidden",
+              isFullscreenEdit &&
+                showFullscreenInspector &&
+                "absolute right-3 top-[4.75rem] z-40 w-[min(320px,calc(100%-1.5rem))] max-h-[calc(100dvh-5.5rem)] rounded-xl border bg-background p-1 shadow-xl"
+            )}
+          >
             <Card>
               <CardContent className="space-y-4 pt-6">
                 <div className="flex items-center justify-between">
@@ -3946,6 +5229,8 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                       <Users className="h-4 w-4" />
                     ) : selectedNode.type === "annotation" ? (
                       <Type className="h-4 w-4" />
+                    ) : selectedNode.type === "junction" ? (
+                      <GitBranch className="h-4 w-4" />
                     ) : (
                       <Building2 className="h-4 w-4" />
                     )
@@ -3954,7 +5239,40 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
                   ) : null}
                 </div>
                 {selectedNode ? (
-                  selectedNode.type === "annotation" ? (
+                  selectedNode.type === "junction" ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Connection junction — drag this hub, then release to snap into a straight T. Or click Straighten.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex w-full items-center gap-2"
+                        onClick={() => {
+                          const straightened = straightenChartGeometry(
+                            nodesRef.current,
+                            edgesRef.current,
+                            new Set([selectedNode.id])
+                          );
+                          if (straightened !== nodesRef.current) {
+                            runWithHistory(() => {
+                              setNodes(straightened);
+                              nodesRef.current = straightened;
+                            });
+                          }
+                          toast({
+                            title: "Junction straightened",
+                            description: "Hub snapped to a level T with centered stem.",
+                          });
+                        }}
+                      >
+                        <GitBranch className="h-4 w-4" /> Straighten
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={removeSelectedNode} className="flex items-center gap-2">
+                        <Trash2 className="h-4 w-4" /> Remove junction
+                      </Button>
+                    </div>
+                  ) : selectedNode.type === "annotation" ? (
                     <div className="space-y-3">
                       <div className="space-y-1">
                         <Label htmlFor="annotation-text">Text</Label>
@@ -4418,7 +5736,7 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={cn(isFullscreenEdit && "hidden")}>
             <CardContent className="space-y-3 pt-6 text-sm text-muted-foreground">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-foreground">Summary</p>
@@ -4477,6 +5795,13 @@ const OrgChartToolInner = ({ departmentId }: OrgChartToolProps) => {
         departmentId={departmentId}
         onSelect={handleAddOfficeSelection}
       />
+      <BulkExportDialog
+        open={isBulkExportOpen}
+        onOpenChange={setIsBulkExportOpen}
+        offices={bulkExportOffices}
+        isExporting={isExporting}
+        onConfirm={handleBulkExport}
+      />
       <AlertModal
         title="Delete version?"
         description="This permanently removes the selected org chart version. Current draft is not affected."
@@ -4504,25 +5829,193 @@ const nodeTypes = {
   ),
   person: (props: NodeProps<FlowNodeData>) => <FlowNodeCard {...props} icon={<User className="h-4 w-4" />} />,
   annotation: (props: NodeProps<FlowNodeData>) => <AnnotationNode {...props} />,
+  junction: (props: NodeProps<FlowNodeData>) => <JunctionNode {...props} />,
 };
+
+const edgeTypes = {
+  step: (props: EdgeProps) => <OrgChartBranchEdge {...props} pathVariant="step" />,
+  smoothstep: (props: EdgeProps) => <OrgChartBranchEdge {...props} pathVariant="smoothstep" />,
+  straight: (props: EdgeProps) => <OrgChartBranchEdge {...props} pathVariant="straight" />,
+  default: (props: EdgeProps) => <OrgChartBranchEdge {...props} pathVariant="smoothstep" />,
+};
+
+function OrgChartBranchEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style,
+  markerEnd,
+  markerStart,
+  label,
+  selected,
+  pathVariant,
+}: EdgeProps & { pathVariant: "step" | "smoothstep" | "straight" }) {
+  const [isHovered, setIsHovered] = useState(false);
+  const isConnecting = useStore((state) => Boolean(state.connectionNodeId));
+  const [edgePath, labelX, labelY] =
+    pathVariant === "straight"
+      ? getStraightPath({ sourceX, sourceY, targetX, targetY })
+      : getSmoothStepPath({
+          sourceX,
+          sourceY,
+          targetX,
+          targetY,
+          sourcePosition,
+          targetPosition,
+          borderRadius: pathVariant === "step" ? 0 : 8,
+        });
+
+  const showMidpoint = selected || isHovered || isConnecting;
+
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        style={style}
+        markerEnd={markerEnd}
+        markerStart={markerStart}
+        interactionWidth={36}
+      />
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={36}
+        className="react-flow__edge-interaction"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      />
+      <EdgeLabelRenderer>
+        <div
+          data-orgchart-edge-id={id}
+          className={cn(
+            "nodrag nopan pointer-events-auto rounded-full border-2 border-white bg-[#3b82f6] shadow-sm transition-opacity duration-150",
+            isConnecting ? "h-5 w-5" : "h-3.5 w-3.5",
+            showMidpoint ? "opacity-100" : "opacity-0"
+          )}
+          style={{
+            position: "absolute",
+            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            zIndex: 5,
+            pointerEvents: "all",
+          }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          title="Drop connection here to make a T-branch"
+        />
+        {label ? (
+          <div
+            className="nodrag nopan pointer-events-none rounded bg-background/90 px-1 text-[10px] text-foreground"
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + 14}px)`,
+            }}
+          >
+            {label}
+          </div>
+        ) : null}
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+function JunctionNode({ selected }: NodeProps<FlowNodeData>) {
+  const handles = getHandlesForType("junction");
+  return (
+    <div
+      className={cn(
+        "relative flex items-center justify-center",
+        selected && "ring-2 ring-indigo-400 ring-offset-1 rounded-full"
+      )}
+      style={{ width: JUNCTION_NODE_SIZE, height: JUNCTION_NODE_SIZE }}
+      title="Drag hub to straighten the T-junction"
+    >
+      <div
+        className="rounded-full border-2 border-white bg-slate-900 shadow"
+        style={{ width: JUNCTION_VISUAL_SIZE, height: JUNCTION_VISUAL_SIZE }}
+      />
+      {handles.map((handle) => (
+        <Handle
+          key={handle.id}
+          type={handle.type}
+          position={handle.position}
+          id={handle.id}
+          className="!h-3 !w-3 !min-h-0 !min-w-0 !rounded-full !border-0 !bg-transparent"
+          style={handle.style}
+        />
+      ))}
+    </div>
+  );
+}
 
 type FlowNodeCardProps = NodeProps<FlowNodeData> & { icon: ReactNode; showHeaderLabel?: boolean };
 
-function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }: FlowNodeCardProps) {
+function AutoFitTextBlock({
+  children,
+  className,
+  maxFontSize,
+  minFontSize,
+  fitKey,
+}: {
+  children: ReactNode;
+  className?: string;
+  maxFontSize: number;
+  minFontSize: number;
+  fitKey: string;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content) return;
+
+    let size = maxFontSize;
+    content.style.fontSize = `${size}px`;
+    content.style.lineHeight = "1.2";
+
+    const fits = () =>
+      content.scrollHeight <= container.clientHeight + 0.5 &&
+      content.scrollWidth <= container.clientWidth + 0.5;
+
+    while (size > minFontSize && !fits()) {
+      size -= 0.5;
+      content.style.fontSize = `${size}px`;
+    }
+  }, [fitKey, maxFontSize, minFontSize]);
+
+  return (
+    <div ref={containerRef} className={cn("min-h-0 min-w-0 flex-1 overflow-hidden", className)}>
+      <div ref={contentRef} className="w-full break-words [overflow-wrap:anywhere]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
   const actions = useCanvasActions();
   const handles = getHandlesForType(type as OrgNodeType);
   const { showPhotos, focusedOfficeId, employeePhotosById, employeePhotosByName } = useCanvasSettings();
   const outlineColor = normalizeColor(data.outlineColor) ?? NEUTRAL_OUTLINE_COLOR;
   const borderWidth = data.isHead ? 3 : 2;
   const glowSize = data.isHead ? 6 : 3;
+  const isPerson = type === "person";
+  const cardWidth = isPerson ? PERSON_CARD_WIDTH : GROUP_CARD_WIDTH;
+  const cardHeight = isPerson ? PERSON_CARD_HEIGHT : GROUP_CARD_HEIGHT;
   const cardStyles: CSSProperties = {
     borderColor: outlineColor,
     borderWidth,
     boxShadow: `0 0 0 ${glowSize}px ${colorWithAlpha(outlineColor, data.isHead ? 0.25 : 0.15)}`,
+    width: cardWidth,
+    height: cardHeight,
   };
-  const headerLabel =
-    data.label ?? (type === "person" ? data.title ?? data.name : data.name);
-  const showHeaderBar = showHeaderLabel && type !== "person" && Boolean(data.label);
 
   const renderAvatar = () => {
     const belongsToFocusedOffice =
@@ -4535,24 +6028,28 @@ function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }
       ? undefined
       : employeePhotosByName.get(normalizePhotoLookupName(data.name));
     const imageUrl = latestImageUrl ?? data.imageUrl ?? matchedImageUrl;
+    const avatarSizeClass = isPerson ? "h-12 w-12" : "h-10 w-10";
 
     if (showPhotos && belongsToFocusedOffice && imageUrl) {
       return (
         <Image
           src={imageUrl}
           alt={data.name}
-          width={56}
-          height={56}
-          sizes="56px"
+          width={isPerson ? 48 : 40}
+          height={isPerson ? 48 : 40}
+          sizes={isPerson ? "48px" : "40px"}
           unoptimized
-          className="h-14 w-14 rounded-full border-2 object-cover shadow-md"
+          className={cn(avatarSizeClass, "shrink-0 rounded-full border-2 object-cover shadow-md")}
           style={{ borderColor: colorWithAlpha(outlineColor, 0.35) }}
         />
       );
     }
     return (
       <div
-        className="flex h-14 w-14 items-center justify-center rounded-full text-sm text-foreground"
+        className={cn(
+          "flex shrink-0 items-center justify-center rounded-full text-sm text-foreground",
+          avatarSizeClass
+        )}
         style={{
           border: `2px solid ${colorWithAlpha(outlineColor, 0.3)}`,
           backgroundColor: colorWithAlpha(outlineColor, 0.12),
@@ -4566,7 +6063,7 @@ function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }
   return (
     <div
       className={cn(
-        "group relative min-w-[220px] max-w-xs overflow-visible rounded-lg border bg-card transition-shadow",
+        "group relative box-border overflow-visible rounded-lg border bg-card transition-shadow",
         selected && "ring-2 ring-primary/40"
       )}
       style={cardStyles}
@@ -4592,32 +6089,45 @@ function FlowNodeCard({ id, data, type, selected, icon, showHeaderLabel = true }
           type={handle.type}
           position={handle.position}
           id={handle.id}
-          className="h-3 w-3"
+          className="!h-3.5 !w-3.5 !rounded-full !border-2 !border-white !bg-[#3b82f6]"
           style={handle.style}
         />
       ))}
 
-      {showHeaderBar ? (
-        <div className="rounded-t-lg border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {data.label}
-        </div>
-      ) : null}
-      <div className="flex items-center gap-3 px-4 py-3">
+      <div className="flex h-full min-h-0 items-center gap-3 overflow-hidden px-3 py-2">
         {renderAvatar()}
-        <div className="flex-1 space-y-1">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-foreground">{data.name}</p>
-              {data.title ? <p className="text-xs text-muted-foreground">{data.title}</p> : null}
+        <AutoFitTextBlock
+          maxFontSize={isPerson ? 13 : 14}
+          minFontSize={9}
+          fitKey={`${data.name}|${data.title ?? ""}|${data.employeeTypeName ?? ""}|${data.isHead ? 1 : 0}|${type}`}
+          className="flex items-center"
+        >
+          <div className="space-y-0.5 pr-1">
+            <div className="flex items-start gap-1.5">
+              <p className="min-w-0 flex-1 font-semibold leading-tight text-foreground">
+                {data.name}
+              </p>
+              {data.isHead ? (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 border-none bg-transparent px-1 py-0 text-[9px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Head
+                </Badge>
+              ) : null}
             </div>
-            {data.isHead ? (
-              <Badge variant="outline" className="border-none bg-transparent px-2 py-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-                Head
-              </Badge>
+            {data.title ? (
+              <p className="leading-tight text-muted-foreground" style={{ fontSize: "0.92em" }}>
+                {data.title}
+              </p>
+            ) : null}
+            {data.employeeTypeName ? (
+              <p className="leading-tight text-muted-foreground" style={{ fontSize: "0.88em" }}>
+                {data.employeeTypeName}
+              </p>
             ) : null}
           </div>
-          {data.employeeTypeName ? <p className="text-xs text-muted-foreground">{data.employeeTypeName}</p> : null}
-        </div>
+        </AutoFitTextBlock>
       </div>
     </div>
   );
@@ -4783,6 +6293,21 @@ const HANDLE_POSITIONS: Array<{
 ];
 
 function getHandlesForType(type: OrgNodeType): HandleConfig[] {
+  if (type === "junction") {
+    // All handles share the center so T-junction lines meet at one point (no bend).
+    const centerStyle: CSSProperties = {
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)",
+      zIndex: 5,
+      opacity: 0,
+      pointerEvents: "all",
+    };
+    return HANDLE_POSITIONS.flatMap(({ id, position }) => [
+      { id: `${id}-target`, type: "target" as const, position, style: { ...centerStyle } },
+      { id: `${id}-source`, type: "source" as const, position, style: { ...centerStyle } },
+    ]);
+  }
   return HANDLE_POSITIONS.flatMap(({ id, position, style }) => [
     { id: `${id}-target`, type: "target" as const, position, style: { ...style, zIndex: 5 } },
     { id: `${id}-source`, type: "source" as const, position, style: { ...style, zIndex: 5 } },

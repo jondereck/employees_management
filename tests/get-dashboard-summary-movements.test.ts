@@ -68,13 +68,15 @@ test("hired query filters department and dateHired range without isArchived", ()
 test("employment event query filters promoted and terminated events in range", () => {
   const eventBlock = extractEmploymentEventFindManyBlock();
 
-  assert.match(eventBlock, /type:\s*\{\s*in:\s*\["PROMOTED",\s*"TERMINATED"\]\s*\}/);
+  assert.match(
+    eventBlock,
+    /OR:\s*\[[\s\S]*type:\s*"PROMOTED"[\s\S]*employee:\s*\{\s*departmentId,\s*isArchived:\s*false\s*\}[\s\S]*type:\s*"TERMINATED"[\s\S]*employee:\s*\{\s*departmentId\s*\}[\s\S]*\]/,
+  );
   assert.match(eventBlock, /deletedAt:\s*null/);
   assert.match(
     eventBlock,
     /occurredAt:\s*\{\s*gte:\s*movementRange\.start,\s*lt:\s*movementRange\.end\s*\}/,
   );
-  assert.match(eventBlock, /employee:\s*\{\s*departmentId\s*\}/);
 });
 
 test("uses the same movementNow for range creation and summary builder", () => {

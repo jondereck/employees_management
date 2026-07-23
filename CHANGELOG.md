@@ -5,6 +5,26 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-23 — fix: remove duplicate fullscreen Person button; make icon-rail Add person reliably open
+- 2026-07-23 — ui: show unsaved badge in fullscreen; Ctrl+F toggles fullscreen edit
+- 2026-07-23 — fix: Add person + Show photos work in org chart fullscreen (dialog z-index + toolbar)
+- 2026-07-23 — ui: Esc returns org chart tool to Select; exit fullscreen via Exit button only
+- 2026-07-23 — fix: make org chart T-junction hubs draggable and keep stems centered while adjusting
+- 2026-07-23 — ui: Lucidchart-style canvas icon rail for Select / Hand / Connect / Add
+- 2026-07-23 — fix: auto-level mostly-horizontal org chart peer connections
+- 2026-07-23 — fix: keep org chart canvas above the fixed footer (bottom clearance)
+- 2026-07-23 — fix: keep org chart T-junction stems straight (junction follows branch; no hover transform fight)
+- 2026-07-23 — fix: stop org chart auto zoom-out after dragging nodes
+- 2026-07-23 — fix: keep T-junction stems straight (lock straight edges + center junction handles)
+- 2026-07-23 — fix: auto-align nodes on T-junction so branch lines stay straight
+- 2026-07-23 — fix: make org chart T-junction branching easier (visible mid-line targets + near-edge drop)
+- 2026-07-23 — feat: show X/Y alignment guides (with snap) while dragging org chart nodes
+- 2026-07-23 — ui: fixed org chart card sizes with auto-shrinking text (full text, no ellipsis)
+- 2026-07-23 — ui: Lucidchart-like org chart handles (hover-only) and soft dotted canvas background
+- 2026-07-23 — feat: hide org chart handles on export, add subtle logo watermark, and bulk office PDF merge
+- 2026-07-23 — feat: allow org chart connections to branch from edge midpoints via junction nodes
+- 2026-07-23 — feat: add org chart fullscreen edit mode and taller canvas layout
+- 2026-07-23 — ui: rename org chart “Build from DB” to “Sync from DB” with clearer toasts
 - 2026-07-23 — feat: add formatted Excel download for the current workforce pivot matrix
 - 2026-07-23 — feat: support nested Office × Employee Type × Gender in workforce pivot matrix
 - 2026-07-21 — fix: keep dashboard employee movement timing and event details consistent

@@ -14,6 +14,8 @@ export type ToolsLayoutProps = {
   children: React.ReactNode;
   className?: string; // Prop for the outermost wrapper
   contentClassName?: string; // Prop specifically for the children container
+  /** Tighter padding/title for tools that need max canvas height (e.g. org chart). */
+  compact?: boolean;
 };
 
 /**
@@ -67,6 +69,7 @@ export function ToolsLayout({
   children,
   className,
   contentClassName,
+  compact = false,
 }: ToolsLayoutProps) {
   const baseCrumb: BreadcrumbItem = breadcrumbs.length
     ? { label: "Tools", href: `/${params.departmentId}/tools` }
@@ -77,26 +80,50 @@ export function ToolsLayout({
     <ToolsNavigationProvider>
       <div 
         className={cn(
-          "min-h-screen bg-[#f8fafc] bg-[radial-gradient(at_top_right,_#f1f5f9_0%,_#ffffff_100%)] transition-colors duration-500",
+          "bg-[#f8fafc] bg-[radial-gradient(at_top_right,_#f1f5f9_0%,_#ffffff_100%)] transition-colors duration-500",
+          // Viewport minus navbar (~4rem) and fixed footer clearance (~3.5rem).
+          // Do not use negative margin — that pulls the canvas under the footer.
+          compact ? "flex h-[calc(100dvh-4rem-3.5rem)] flex-col overflow-hidden" : "min-h-screen",
           className
         )}
       >
-        <div className="space-y-8 p-6 md:p-10 lg:p-12">
+        <div
+          className={cn(
+            compact
+              ? "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 md:p-4"
+              : "space-y-8 p-6 md:p-10 lg:p-12"
+          )}
+        >
           
           {/* Header Section */}
-          <div className="max-w-8xl mx-auto space-y-6">
+          <div className={cn("mx-auto w-full max-w-8xl", compact ? "shrink-0 space-y-2" : "space-y-6")}>
             <ToolsBreadcrumbs 
               items={items} 
               className="text-indigo-600/70 font-bold text-[10px] uppercase tracking-[0.2em]"
             />
             
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between border-b border-slate-200 pb-8">
-              <div className="space-y-2">
-                <h1 className="text-4xl font-black tracking-tighter text-slate-900 sm:text-5xl">
+            <div
+              className={cn(
+                "flex flex-col sm:flex-row sm:items-end sm:justify-between border-b border-slate-200",
+                compact ? "gap-2 pb-3" : "gap-6 pb-8"
+              )}
+            >
+              <div className={cn(compact ? "space-y-0.5" : "space-y-2")}>
+                <h1
+                  className={cn(
+                    "font-black tracking-tighter text-slate-900",
+                    compact ? "text-2xl sm:text-3xl" : "text-4xl sm:text-5xl"
+                  )}
+                >
                   {title}
                 </h1>
                 {description ? (
-                  <p className="max-w-2xl text-base font-medium text-slate-500 leading-relaxed">
+                  <p
+                    className={cn(
+                      "max-w-2xl font-medium text-slate-500 leading-relaxed",
+                      compact ? "text-sm" : "text-base"
+                    )}
+                  >
                     {description}
                   </p>
                 ) : null}
@@ -114,7 +141,8 @@ export function ToolsLayout({
 
           {/* Content Area */}
           <div className={cn(
-            "mx-auto w-full max-w-8xl animate-in fade-in slide-in-from-bottom-4 duration-700", 
+            "mx-auto w-full max-w-8xl animate-in fade-in slide-in-from-bottom-4 duration-700",
+            compact && "flex min-h-0 flex-1 flex-col overflow-hidden",
             contentClassName
           )}>
             {children}
