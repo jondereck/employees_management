@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -6,6 +7,11 @@ import {
   resolvePivotAxes,
   type PivotEmployeeInput,
 } from "../lib/workforce-pivot";
+
+const routeSource = readFileSync(
+  "app/api/[departmentId]/analytics/workforce-pivot/route.ts",
+  "utf8"
+);
 
 function emp(partial: Partial<PivotEmployeeInput> & Pick<PivotEmployeeInput, "id">): PivotEmployeeInput {
   return {
@@ -125,4 +131,12 @@ test("buildWorkforcePivot single office × gender has no group fields", () => {
   assert.equal(result.rows[1].name, "HRMO");
   assert.deepEqual(result.matrix[1], [1, 1]);
   assert.equal(result.grandTotal, 3);
+});
+
+test("route wires resolvePivotAxes, office filter, and office relation", () => {
+  assert.match(routeSource, /resolvePivotAxes/);
+  assert.match(routeSource, /buildWorkforcePivot/);
+  assert.match(routeSource, /officeIds/);
+  assert.match(routeSource, /officeId:\s*\{\s*in:\s*officeIds\s*\}/);
+  assert.match(routeSource, /offices:\s*\{\s*select:\s*\{\s*name:\s*true\s*\}\s*\}/);
 });
