@@ -66,6 +66,7 @@ import {
   type EmployeeSearchResult,
 } from "./dialogs/AddPersonDialog";
 import { BulkExportDialog } from "./dialogs/BulkExportDialog";
+import LoadingWithProgress from "@/components/loading-with-progress";
 import { cn } from "@/lib/utils";
 import { flushSync } from "react-dom";
 import {
@@ -1229,6 +1230,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
   const [availableEmployees, setAvailableEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [isChartLoading, setIsChartLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [canvasZoom, setCanvasZoom] = useState(DEFAULT_CANVAS_ZOOM);
@@ -2871,7 +2873,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
 
   const handleBuildFromDb = useCallback(async () => {
     try {
-      setIsChartLoading(true);
+      setIsSyncing(true);
       const latestDraft = await fetchLatestDbDraft();
       const currentDocument = serializeDocument(nodesRef.current, edgesRef.current, edgeType);
       const selectedOfficeId =
@@ -2893,7 +2895,8 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
       );
       latestDraftRef.current = latestDraft.document;
       setAvailableEmployees(latestDraft.employees);
-      setDocument(reconciledDocument, false, true);
+      // Keep current office focus — do not treat sync as office navigation.
+      setDocument(reconciledDocument, false, false);
       toast({
         title: "Synced from DB",
         description: selectedOfficeId
@@ -2907,7 +2910,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
         variant: "destructive",
       });
     } finally {
-      setIsChartLoading(false);
+      setIsSyncing(false);
     }
   }, [
     edgeType,
@@ -4846,6 +4849,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                   variant="outline"
                   size="sm"
                   className="h-9"
+                  disabled={isSyncing}
                   title="Sync active employees from DB. If an office is selected, only that office is updated."
                 >
                   <Database className="mr-2 h-4 w-4" /> Sync
@@ -4987,6 +4991,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                   variant="outline"
                   size="sm"
                   className="h-11 px-5"
+                  disabled={isSyncing}
                   title="Sync active employees from DB. If an office is selected, only that office is updated."
                 >
                   <Database className="mr-2 h-4 w-4" /> Sync from DB
@@ -6137,6 +6142,11 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
         variant="destructive"
         confirmText="Delete"
       />
+      {isSyncing ? (
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <LoadingWithProgress active />
+        </div>
+      ) : null}
     </>
   );
 };
