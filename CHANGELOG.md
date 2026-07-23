@@ -1,11 +1,11 @@
 # Changelog
 
 Tracks changes made to this project. Newest entries go at the top of **Unreleased**.
-**Last updated: 2026-07-21**
+**Last updated: 2026-07-23**
 
 ## Unreleased
 
-- 2026-07-21 — feat: expand the dashboard monthly metric into hired, promoted, and separated employee movements
+- 2026-07-23 — feat: support nested Office × Employee Type × Gender in workforce pivot matrix
 - 2026-07-21 — fix: keep dashboard employee movement timing and event details consistent
 - 2026-07-21 — fix: polish new-hires modal empty state, list semantics, and summary test coverage
 - 2026-07-21 — feat: replace dashboard activity count with a clickable monthly new-hires modal

@@ -37,14 +37,22 @@ const AUTORUN_DEBOUNCE_MS = 350;
 const DRILLDOWN_DEBOUNCE_MS = 250;
 
 type Option = { id: string; name: string };
-type PivotField = "employeeType" | "eligibility" | "supervisory" | "gender";
+type PivotField = "office" | "employeeType" | "eligibility" | "supervisory" | "gender";
 type PivotMode = "matrix" | "csc";
+type SecondaryRowField = PivotField | "none";
 type Tag = { key: string; name: string };
 
+type PivotRow = Tag & {
+  groupKey?: string;
+  groupLabel?: string;
+  leafKey?: string;
+  leafLabel?: string;
+};
+
 type PivotResult = {
-  rowField: PivotField;
+  rowFields: PivotField[];
   colField: PivotField;
-  rows: Tag[];
+  rows: PivotRow[];
   cols: Tag[];
   matrix: number[][];
   rowTotals: number[];
@@ -108,11 +116,14 @@ type DrilldownTarget = {
 };
 
 const FIELD_LABELS: Record<PivotField, string> = {
+  office: "Office",
   employeeType: "Employee Type",
   eligibility: "Eligibility Type",
   supervisory: "Supervisory Level",
   gender: "Gender",
 };
+
+const PIVOT_FIELD_OPTIONS = Object.keys(FIELD_LABELS) as PivotField[];
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const monthFormatter = new Intl.NumberFormat("en-US", {
@@ -142,15 +153,19 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
 
   const [employeeTypeOptions, setEmployeeTypeOptions] = useState<Option[]>([]);
   const [eligibilityOptions, setEligibilityOptions] = useState<Option[]>([]);
+  const [officeOptions, setOfficeOptions] = useState<Option[]>([]);
   const [optionsLoading, setOptionsLoading] = useState(false);
 
   const [employeeTypeSearch, setEmployeeTypeSearch] = useState("");
   const [eligibilitySearch, setEligibilitySearch] = useState("");
+  const [officeSearch, setOfficeSearch] = useState("");
 
   const [employeeTypeIds, setEmployeeTypeIds] = useState<string[]>([]);
   const [eligibilityIds, setEligibilityIds] = useState<string[]>([]);
+  const [officeIds, setOfficeIds] = useState<string[]>([]);
 
   const [rowField, setRowField] = useState<PivotField>("supervisory");
+  const [secondaryRowField, setSecondaryRowField] = useState<SecondaryRowField>("none");
   const [colField, setColField] = useState<PivotField>("gender");
 
   const [result, setResult] = useState<PivotResult | null>(null);
@@ -172,14 +187,17 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
     (async () => {
       try {
         setOptionsLoading(true);
-        const [employeeTypeRes, eligibilityRes] = await Promise.all([
+        const [employeeTypeRes, eligibilityRes, officeRes] = await Promise.all([
           fetch(`/api/${departmentId}/employee_type`),
           fetch(`/api/${departmentId}/eligibility`),
+          fetch(`/api/${departmentId}/offices`),
         ]);
         if (!employeeTypeRes.ok) throw new Error(await employeeTypeRes.text());
         if (!eligibilityRes.ok) throw new Error(await eligibilityRes.text());
+        if (!officeRes.ok) throw new Error(await officeRes.text());
         const employeeTypeData = (await employeeTypeRes.json()) as Option[];
         const eligibilityData = (await eligibilityRes.json()) as Option[];
+        const officeData = (await officeRes.json()) as Option[];
         if (!active) return;
         setEmployeeTypeOptions(
           employeeTypeData
@@ -192,6 +210,15 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
         );
         setEligibilityOptions(
           eligibilityData
+            .filter(
+              (item): item is Option =>
+                typeof item?.id === "string" && typeof item?.name === "string"
+            )
+            .map((item) => ({ id: item.id, name: item.name }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
+        setOfficeOptions(
+          officeData
             .filter(
               (item): item is Option =>
                 typeof item?.id === "string" && typeof item?.name === "string"
@@ -219,6 +246,7 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
 
   const employeeTypeSelectedSet = useMemo(() => new Set(employeeTypeIds), [employeeTypeIds]);
   const eligibilitySelectedSet = useMemo(() => new Set(eligibilityIds), [eligibilityIds]);
+  const officeSelectedSet = useMemo(() => new Set(officeIds), [officeIds]);
 
   const filteredEmployeeTypes = useMemo(() => {
     if (!employeeTypeSearch.trim()) return employeeTypeOptions;
@@ -232,12 +260,33 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
     return eligibilityOptions.filter((option) => option.name.toLowerCase().includes(query));
   }, [eligibilityOptions, eligibilitySearch]);
 
+  const filteredOffices = useMemo(() => {
+    if (!officeSearch.trim()) return officeOptions;
+    const query = officeSearch.toLowerCase();
+    return officeOptions.filter((option) => option.name.toLowerCase().includes(query));
+  }, [officeOptions, officeSearch]);
+
+  const rowFields = useMemo((): PivotField[] => {
+    if (secondaryRowField !== "none" && secondaryRowField !== rowField) {
+      return [rowField, secondaryRowField];
+    }
+    return [rowField];
+  }, [rowField, secondaryRowField]);
+
+  const isNested = rowFields.length === 2;
+
+  const matrixTitle = useMemo(() => {
+    const rowLabel = rowFields.map((field) => FIELD_LABELS[field]).join(" + ");
+    return `${rowLabel} × ${FIELD_LABELS[colField]}`;
+  }, [colField, rowFields]);
+
   const requestPayload = useMemo(
     () => ({
       employeeTypeIds,
       eligibilityIds,
+      officeIds,
     }),
-    [eligibilityIds, employeeTypeIds]
+    [eligibilityIds, employeeTypeIds, officeIds]
   );
 
   const handleMatrixQuery = useCallback(async () => {
@@ -253,7 +302,7 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
       const response = await fetch(`/api/${departmentId}/analytics/workforce-pivot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rowField, colField, ...requestPayload }),
+        body: JSON.stringify({ rowFields, colField, ...requestPayload }),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -275,7 +324,7 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
       }
       setLoading(false);
     }
-  }, [colField, departmentId, requestPayload, rowField, toast]);
+  }, [colField, departmentId, requestPayload, rowFields, toast]);
 
   const handleCscQuery = useCallback(async () => {
     if (activeRequest.current) {
@@ -327,42 +376,65 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
     return () => {
       if (debounceTimer.current) window.clearTimeout(debounceTimer.current);
     };
-  }, [handleCscQuery, handleMatrixQuery, mode, rowField, colField, employeeTypeIds, eligibilityIds]);
+  }, [handleCscQuery, handleMatrixQuery, mode, rowFields, colField, employeeTypeIds, eligibilityIds, officeIds]);
 
   const handleReset = useCallback(() => {
     setEmployeeTypeIds([]);
     setEligibilityIds([]);
+    setOfficeIds([]);
     setRowField("supervisory");
+    setSecondaryRowField("none");
     setColField("gender");
     setEmployeeTypeSearch("");
     setEligibilitySearch("");
+    setOfficeSearch("");
     setDrilldownSearch("");
+  }, []);
+
+  const pickFallbackField = useCallback((blocked: PivotField[]) => {
+    return PIVOT_FIELD_OPTIONS.find((field) => !blocked.includes(field));
   }, []);
 
   const handleRowFieldChange = useCallback(
     (value: PivotField) => {
       setRowField(value);
       if (value === colField) {
-        const fallback = (Object.keys(FIELD_LABELS) as PivotField[]).find(
-          (field) => field !== value
-        );
+        const fallback = pickFallbackField([value, ...(secondaryRowField !== "none" ? [secondaryRowField] : [])]);
+        if (fallback) setColField(fallback);
+      }
+      if (secondaryRowField === value) {
+        setSecondaryRowField("none");
+      }
+    },
+    [colField, pickFallbackField, secondaryRowField]
+  );
+
+  const handleSecondaryRowFieldChange = useCallback(
+    (value: SecondaryRowField) => {
+      setSecondaryRowField(value);
+      if (value !== "none" && value === colField) {
+        const fallback = pickFallbackField([rowField, value]);
         if (fallback) setColField(fallback);
       }
     },
-    [colField]
+    [colField, pickFallbackField, rowField]
   );
 
   const handleColFieldChange = useCallback(
     (value: PivotField) => {
       setColField(value);
       if (value === rowField) {
-        const fallback = (Object.keys(FIELD_LABELS) as PivotField[]).find(
-          (field) => field !== value
-        );
+        const fallback = pickFallbackField([
+          value,
+          ...(secondaryRowField !== "none" ? [secondaryRowField] : []),
+        ]);
         if (fallback) setRowField(fallback);
       }
+      if (secondaryRowField === value) {
+        setSecondaryRowField("none");
+      }
     },
-    [rowField]
+    [pickFallbackField, rowField, secondaryRowField]
   );
 
   const loadDrilldown = useCallback(async () => {
@@ -570,7 +642,7 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
             {mode === "matrix" ? (
               <div className="grid gap-3">
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Rows</Label>
+                  <Label className="text-sm font-medium">Rows (primary)</Label>
                   <Select
                     value={rowField}
                     onValueChange={(value) => handleRowFieldChange(value as PivotField)}
@@ -579,8 +651,33 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {(Object.keys(FIELD_LABELS) as PivotField[]).map((field) => (
+                      {PIVOT_FIELD_OPTIONS.map((field) => (
                         <SelectItem key={field} value={field} disabled={field === colField}>
+                          {FIELD_LABELS[field]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Rows (secondary)</Label>
+                  <Select
+                    value={secondaryRowField}
+                    onValueChange={(value) =>
+                      handleSecondaryRowFieldChange(value as SecondaryRowField)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {PIVOT_FIELD_OPTIONS.map((field) => (
+                        <SelectItem
+                          key={field}
+                          value={field}
+                          disabled={field === rowField || field === colField}
+                        >
                           {FIELD_LABELS[field]}
                         </SelectItem>
                       ))}
@@ -597,8 +694,15 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {(Object.keys(FIELD_LABELS) as PivotField[]).map((field) => (
-                        <SelectItem key={field} value={field} disabled={field === rowField}>
+                      {PIVOT_FIELD_OPTIONS.map((field) => (
+                        <SelectItem
+                          key={field}
+                          value={field}
+                          disabled={
+                            field === rowField ||
+                            (secondaryRowField !== "none" && field === secondaryRowField)
+                          }
+                        >
                           {FIELD_LABELS[field]}
                         </SelectItem>
                       ))}
@@ -607,6 +711,21 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
                 </div>
               </div>
             ) : null}
+
+            {renderMultiSelect({
+              label: "Office filter",
+              selectedIds: officeIds,
+              selectedSet: officeSelectedSet,
+              options: officeOptions,
+              filteredOptions: filteredOffices,
+              searchValue: officeSearch,
+              onSearchChange: setOfficeSearch,
+              onSelectionChange: setOfficeIds,
+              onClear: () => setOfficeIds([]),
+              onSelectAll: () => setOfficeIds(officeOptions.map((option) => option.id)),
+              fallbackLabel: "All offices",
+              emptyLabel: "No offices found.",
+            })}
 
             {renderMultiSelect({
               label: "Employee Type filter",
@@ -662,9 +781,7 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
         {mode === "matrix" ? (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">
-                {FIELD_LABELS[rowField]} x {FIELD_LABELS[colField]}
-              </CardTitle>
+              <CardTitle className="text-lg">{matrixTitle}</CardTitle>
               <CardDescription>
                 {result
                   ? `${numberFormatter.format(result.grandTotal)} employees matched`
@@ -677,9 +794,20 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b">
-                        <th className="px-3 py-2 text-left font-semibold text-muted-foreground">
-                          {FIELD_LABELS[rowField]}
-                        </th>
+                        {isNested ? (
+                          <>
+                            <th className="px-3 py-2 text-left font-semibold text-muted-foreground">
+                              {FIELD_LABELS[rowFields[0]]}
+                            </th>
+                            <th className="px-3 py-2 text-left font-semibold text-muted-foreground">
+                              {FIELD_LABELS[rowFields[1]]}
+                            </th>
+                          </>
+                        ) : (
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground">
+                            {FIELD_LABELS[rowFields[0]]}
+                          </th>
+                        )}
                         {result.cols.map((col) => (
                           <th
                             key={col.key}
@@ -692,26 +820,46 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
                       </tr>
                     </thead>
                     <tbody>
-                      {result.rows.map((row, rowIndex) => (
-                        <tr key={row.key} className="border-b last:border-0 hover:bg-muted/40">
-                          <td className="px-3 py-2 font-medium">{row.name}</td>
-                          {result.matrix[rowIndex].map((value, colIndex) => (
-                            <td
-                              key={result.cols[colIndex].key}
-                              className="px-3 py-2 text-right tabular-nums"
-                            >
-                              {numberFormatter.format(value)}
+                      {result.rows.map((row, rowIndex) => {
+                        const showGroupLabel =
+                          isNested &&
+                          (rowIndex === 0 ||
+                            result.rows[rowIndex - 1].groupKey !== row.groupKey);
+                        return (
+                          <tr key={row.key} className="border-b last:border-0 hover:bg-muted/40">
+                            {isNested ? (
+                              <>
+                                <td className="px-3 py-2 font-medium">
+                                  {showGroupLabel ? row.groupLabel : ""}
+                                </td>
+                                <td className="px-3 py-2">{row.leafLabel ?? row.name}</td>
+                              </>
+                            ) : (
+                              <td className="px-3 py-2 font-medium">{row.name}</td>
+                            )}
+                            {result.matrix[rowIndex].map((value, colIndex) => (
+                              <td
+                                key={result.cols[colIndex].key}
+                                className="px-3 py-2 text-right tabular-nums"
+                              >
+                                {numberFormatter.format(value)}
+                              </td>
+                            ))}
+                            <td className="px-3 py-2 text-right font-bold tabular-nums">
+                              {numberFormatter.format(result.rowTotals[rowIndex])}
                             </td>
-                          ))}
-                          <td className="px-3 py-2 text-right font-bold tabular-nums">
-                            {numberFormatter.format(result.rowTotals[rowIndex])}
-                          </td>
-                        </tr>
-                      ))}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="border-t bg-muted/30">
-                        <td className="px-3 py-2 font-bold">Total</td>
+                        <td
+                          className="px-3 py-2 font-bold"
+                          colSpan={isNested ? 2 : 1}
+                        >
+                          Total
+                        </td>
                         {result.colTotals.map((value, colIndex) => (
                           <td
                             key={result.cols[colIndex].key}
