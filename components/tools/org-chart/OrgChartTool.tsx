@@ -124,6 +124,11 @@ import {
 import * as htmlToImage from "html-to-image";
 import { PDFDocument } from "pdf-lib";
 import { reconcileOrgChartDocument } from "@/lib/org-chart-reconcile";
+import {
+  computeDragGuides,
+  type GuideBounds,
+  type SpacingGuide,
+} from "@/lib/org-chart-guides";
 
 const DEFAULT_NODE_COLORS: Record<OrgNodeType, string> = {
   office: "#1E88E5",
@@ -484,85 +489,17 @@ const getFlowNodeBounds = (node: FlowNode): NodeBounds => {
   };
 };
 
-const computeAlignmentGuides = (
-  dragging: FlowNode,
-  allNodes: FlowNode[],
-  threshold: number
-): {
-  vertical: number | null;
-  horizontal: number | null;
-  snapX: number | null;
-  snapY: number | null;
-} => {
-  const dragged = getFlowNodeBounds(dragging);
-  let vertical: number | null = null;
-  let horizontal: number | null = null;
-  let snapX: number | null = null;
-  let snapY: number | null = null;
-  let bestVerticalDistance = threshold;
-  let bestHorizontalDistance = threshold;
+const toGuideBounds = (node: FlowNode): GuideBounds => {
+  const bounds = getFlowNodeBounds(node);
+  return { id: node.id, ...bounds };
+};
 
-  for (const other of allNodes) {
-    if (other.id === dragging.id || other.hidden) continue;
-    if (other.type === "annotation") continue;
-    const target = getFlowNodeBounds(other);
-
-    const verticalCandidates: Array<{ guide: number; distance: number; snap: number }> = [
-      {
-        guide: target.centerX,
-        distance: Math.abs(dragged.centerX - target.centerX),
-        snap: target.centerX - dragged.width / 2,
-      },
-      { guide: target.left, distance: Math.abs(dragged.left - target.left), snap: target.left },
-      {
-        guide: target.right,
-        distance: Math.abs(dragged.right - target.right),
-        snap: target.right - dragged.width,
-      },
-      {
-        guide: target.left,
-        distance: Math.abs(dragged.right - target.left),
-        snap: target.left - dragged.width,
-      },
-      { guide: target.right, distance: Math.abs(dragged.left - target.right), snap: target.right },
-    ];
-    for (const candidate of verticalCandidates) {
-      if (candidate.distance <= bestVerticalDistance) {
-        bestVerticalDistance = candidate.distance;
-        vertical = candidate.guide;
-        snapX = candidate.snap;
-      }
-    }
-
-    const horizontalCandidates: Array<{ guide: number; distance: number; snap: number }> = [
-      {
-        guide: target.centerY,
-        distance: Math.abs(dragged.centerY - target.centerY),
-        snap: target.centerY - dragged.height / 2,
-      },
-      { guide: target.top, distance: Math.abs(dragged.top - target.top), snap: target.top },
-      {
-        guide: target.bottom,
-        distance: Math.abs(dragged.bottom - target.bottom),
-        snap: target.bottom - dragged.height,
-      },
-      {
-        guide: target.top,
-        distance: Math.abs(dragged.bottom - target.top),
-        snap: target.top - dragged.height,
-      },
-      { guide: target.bottom, distance: Math.abs(dragged.top - target.bottom), snap: target.bottom },
-    ];
-    for (const candidate of horizontalCandidates) {
-      if (candidate.distance <= bestHorizontalDistance) {
-        bestHorizontalDistance = candidate.distance;
-        horizontal = candidate.guide;
-        snapY = candidate.snap;
-      }
-    }
+const isSpacingGuideTarget = (node: FlowNode): boolean => {
+  if (node.hidden) return false;
+  if (node.type === "annotation" || node.type === "junction" || node.type === "lineEndpoint") {
+    return false;
   }
-
-  return { vertical, horizontal, snapX, snapY };
+  return true;
 };
 
 const distanceToSegment = (
@@ -626,14 +563,20 @@ const findNearestEdgeForBranch = (
 function AlignmentGuides({
   vertical,
   horizontal,
+  spacings,
 }: {
   vertical: number | null;
   horizontal: number | null;
+  spacings: SpacingGuide[];
 }) {
   const transform = useStore((state) => state.transform);
   const [tx, ty, zoom] = transform;
 
-  if (vertical == null && horizontal == null) return null;
+  if (vertical == null && horizontal == null && spacings.length === 0) return null;
+
+  const toScreenX = (x: number) => x * zoom + tx;
+  const toScreenY = (y: number) => y * zoom + ty;
+  const tick = 6;
 
   return (
     <svg
@@ -642,9 +585,9 @@ function AlignmentGuides({
     >
       {vertical != null ? (
         <line
-          x1={vertical * zoom + tx}
+          x1={toScreenX(vertical)}
           y1={0}
-          x2={vertical * zoom + tx}
+          x2={toScreenX(vertical)}
           y2="100%"
           stroke="#3b82f6"
           strokeWidth={1.25}
@@ -654,14 +597,82 @@ function AlignmentGuides({
       {horizontal != null ? (
         <line
           x1={0}
-          y1={horizontal * zoom + ty}
+          y1={toScreenY(horizontal)}
           x2="100%"
-          y2={horizontal * zoom + ty}
+          y2={toScreenY(horizontal)}
           stroke="#3b82f6"
           strokeWidth={1.25}
           strokeDasharray="5 4"
         />
       ) : null}
+      {spacings.map((spacing, index) => {
+        const gapLabel = String(spacing.gap);
+        const labelW = Math.max(28, gapLabel.length * 8 + 10);
+        if (spacing.axis === "x") {
+          const x1 = toScreenX(spacing.from);
+          const x2 = toScreenX(spacing.to);
+          const y = toScreenY(spacing.cross);
+          const midX = (x1 + x2) / 2;
+          return (
+            <g key={`spacing-x-${index}`}>
+              <line x1={x1} y1={y - tick} x2={x1} y2={y + tick} stroke="#ec4899" strokeWidth={1.5} />
+              <line x1={x2} y1={y - tick} x2={x2} y2={y + tick} stroke="#ec4899" strokeWidth={1.5} />
+              <line x1={x1} y1={y} x2={x2} y2={y} stroke="#ec4899" strokeWidth={1.5} />
+              <rect
+                x={midX - labelW / 2}
+                y={y - 10}
+                width={labelW}
+                height={18}
+                rx={4}
+                fill="#ffffff"
+                stroke="#ec4899"
+                strokeWidth={1}
+              />
+              <text
+                x={midX}
+                y={y + 3}
+                textAnchor="middle"
+                fontSize={11}
+                fill="#ec4899"
+                fontFamily="ui-sans-serif, system-ui, sans-serif"
+              >
+                {gapLabel}
+              </text>
+            </g>
+          );
+        }
+        const y1 = toScreenY(spacing.from);
+        const y2 = toScreenY(spacing.to);
+        const x = toScreenX(spacing.cross);
+        const midY = (y1 + y2) / 2;
+        return (
+          <g key={`spacing-y-${index}`}>
+            <line x1={x - tick} y1={y1} x2={x + tick} y2={y1} stroke="#ec4899" strokeWidth={1.5} />
+            <line x1={x - tick} y1={y2} x2={x + tick} y2={y2} stroke="#ec4899" strokeWidth={1.5} />
+            <line x1={x} y1={y1} x2={x} y2={y2} stroke="#ec4899" strokeWidth={1.5} />
+            <rect
+              x={x - labelW / 2}
+              y={midY - 10}
+              width={labelW}
+              height={18}
+              rx={4}
+              fill="#ffffff"
+              stroke="#ec4899"
+              strokeWidth={1}
+            />
+            <text
+              x={x}
+              y={midY + 3}
+              textAnchor="middle"
+              fontSize={11}
+              fill="#ec4899"
+              fontFamily="ui-sans-serif, system-ui, sans-serif"
+            >
+              {gapLabel}
+            </text>
+          </g>
+        );
+      })}
     </svg>
   );
 }
@@ -1249,9 +1260,14 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
     const [isDeletingVersion, setIsDeletingVersion] = useState(false);
     const [isBulkExportOpen, setIsBulkExportOpen] = useState(false);
     const [watermarkSrc, setWatermarkSrc] = useState("/logo.png");
-    const [helperLines, setHelperLines] = useState<{ vertical: number | null; horizontal: number | null }>({
+    const [helperLines, setHelperLines] = useState<{
+      vertical: number | null;
+      horizontal: number | null;
+      spacings: SpacingGuide[];
+    }>({
       vertical: null,
       horizontal: null,
+      spacings: [],
     });
   const versionStorageKey = useMemo(
     () => `org-chart:current-version:${departmentId}`,
@@ -2335,10 +2351,18 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
 
   const handleNodeDrag = useCallback(
     (_event: unknown, dragged: FlowNode) => {
-      const alignment = computeAlignmentGuides(dragged, nodesRef.current, ALIGN_GUIDE_THRESHOLD);
+      const peers = nodesRef.current.filter(
+        (node) => node.id !== dragged.id && isSpacingGuideTarget(node)
+      );
+      const alignment = computeDragGuides(
+        toGuideBounds(dragged),
+        peers.map(toGuideBounds),
+        { alignThreshold: ALIGN_GUIDE_THRESHOLD }
+      );
       setHelperLines({
         vertical: alignment.vertical,
         horizontal: alignment.horizontal,
+        spacings: alignment.spacings,
       });
 
       setNodes((nds) => {
@@ -2373,7 +2397,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
 
   const handleNodeDragStop = useCallback(() => {
     isDraggingRef.current = false;
-    setHelperLines({ vertical: null, horizontal: null });
+    setHelperLines({ vertical: null, horizontal: null, spacings: [] });
     const preferred = draggedNodeIdsRef.current;
     const straightened = straightenChartGeometry(nodesRef.current, edgesRef.current, preferred);
     draggedNodeIdsRef.current = new Set();
@@ -5482,7 +5506,11 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                   position="bottom-left"
                 />
                 <Controls showInteractive={false} position="bottom-right" />
-                <AlignmentGuides vertical={helperLines.vertical} horizontal={helperLines.horizontal} />
+                <AlignmentGuides
+                  vertical={helperLines.vertical}
+                  horizontal={helperLines.horizontal}
+                  spacings={helperLines.spacings}
+                />
 
               </ReactFlow>
               <div
