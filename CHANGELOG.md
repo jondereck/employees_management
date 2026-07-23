@@ -5,6 +5,7 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-23 — chore: add AGENTS.md with Cursor Cloud dev-environment setup notes
 - 2026-07-23 — feat: org chart drag spacing guides (gap labels + equal-spacing snap)
 - 2026-07-23 — ui: use universal loader for org chart Sync from DB (not when switching offices)
 - 2026-07-23 — fix: align org chart connection handles with edge endpoints (RF handle transforms)
