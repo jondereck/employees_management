@@ -44,6 +44,7 @@ import ReactFlow, {
   useNodesState,
   useReactFlow,
   useStore,
+  useUpdateNodeInternals,
   getRectOfNodes,
 } from "reactflow";
 import { AlertModal } from "@/components/modals/alert-modal";
@@ -57,6 +58,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AddOfficeDialog, type OfficeSearchResult } from "./dialogs/AddOfficeDialog";
 import {
   AddPersonDialog,
@@ -90,6 +92,7 @@ import {
   AlignRight,
   Bold,
   Building2,
+  Check,
   ClipboardPaste,
   Copy,
   Download,
@@ -127,6 +130,7 @@ const DEFAULT_NODE_COLORS: Record<OrgNodeType, string> = {
   person: "#3949AB",
   annotation: "#111827",
   junction: "#0F172A",
+  lineEndpoint: "#3b82f6",
 };
 const DEFAULT_EDGE_COLOR = "#0F172A";
 const DEFAULT_EDGE_STROKE_WIDTH = 2;
@@ -143,9 +147,20 @@ const MAX_ANNOTATION_FONT_SIZE = 64;
 const MIN_ANNOTATION_ROTATION = -45;
 const MAX_ANNOTATION_ROTATION = 45;
 
-const EDGE_TYPE_OPTIONS: Array<{ label: string; value: "orth" | "smoothstep" }> = [
+const EDGE_TYPE_OPTIONS: Array<{ label: string; value: "orth" | "smoothstep" | "straight" }> = [
   { label: "Orthogonal", value: "orth" },
   { label: "Smooth", value: "smoothstep" },
+  { label: "Straight", value: "straight" },
+];
+
+const LINE_FLYOUT_OPTIONS: Array<{
+  label: string;
+  value: "straight" | "orth" | "smoothstep";
+  hint?: string;
+}> = [
+  { label: "Straight line", value: "straight" },
+  { label: "Elbow line", value: "orth", hint: "Orthogonal" },
+  { label: "Bendy line", value: "smoothstep", hint: "Smooth" },
 ];
 
 const MARKER_TYPE_OPTIONS: Array<{ label: string; value: OrgMarkerType; description: string }> = [
@@ -440,6 +455,8 @@ const getFlowNodeBounds = (node: FlowNode): NodeBounds => {
       ? PERSON_CARD_WIDTH
       : node.type === "junction"
         ? JUNCTION_NODE_SIZE
+        : node.type === "lineEndpoint"
+          ? LINE_ENDPOINT_SIZE
         : node.type === "office" || node.type === "unit"
           ? GROUP_CARD_WIDTH
           : DEFAULT_NODE_WIDTH);
@@ -449,6 +466,8 @@ const getFlowNodeBounds = (node: FlowNode): NodeBounds => {
       ? PERSON_CARD_HEIGHT
       : node.type === "junction"
         ? JUNCTION_NODE_SIZE
+        : node.type === "lineEndpoint"
+          ? LINE_ENDPOINT_SIZE
         : node.type === "office" || node.type === "unit"
           ? GROUP_CARD_HEIGHT
           : DEFAULT_NODE_HEIGHT);
@@ -857,6 +876,8 @@ const DEFAULT_NODE_WIDTH = 240;
 const DEFAULT_NODE_HEIGHT = 160;
 const JUNCTION_NODE_SIZE = 28;
 const JUNCTION_VISUAL_SIZE = 12;
+const LINE_ENDPOINT_SIZE = 16;
+const LINE_ENDPOINT_VISUAL = 10;
 const PERSON_CARD_WIDTH = 260;
 const PERSON_CARD_HEIGHT = 100;
 const GROUP_CARD_WIDTH = 260;
@@ -1108,6 +1129,7 @@ const resolveEdgeLayout = (
 // Use the enum instead of a string cast to avoid runtime/type issues.
 const ORTHOGONAL_CONNECTION_LINE = ConnectionLineType.Step;
 const SMOOTH_CONNECTION_LINE = ConnectionLineType.Bezier;
+const STRAIGHT_CONNECTION_LINE = ConnectionLineType.Straight;
 
 type EmployeeOption = {
   id: string;
@@ -1184,6 +1206,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
   const pointerPositionRef = useRef<{ x: number; y: number } | null>(null);
   const connectingStartRef = useRef<{ nodeId: string; handleId: string | null } | null>(null);
+  const pendingFreeLineStartRef = useRef<{ x: number; y: number } | null>(null);
   const docRef = useRef<OrgChartDocument>({ nodes: [], edges: [], edgeType: "orth" });
   const latestDraftRef = useRef<OrgChartDocument>({ nodes: [], edges: [], edgeType: "orth" });
   const lastSavedSnapshotRef = useRef<string>(JSON.stringify(docRef.current));
@@ -1191,7 +1214,13 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdgeData>([]);
-  const [edgeType, setEdgeType] = useState<"orth" | "smoothstep">("orth");
+  const [edgeType, setEdgeType] = useState<"orth" | "smoothstep" | "straight">("orth");
+  const [lineMenuOpen, setLineMenuOpen] = useState(false);
+  const [freeLineDraft, setFreeLineDraft] = useState<{
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+  } | null>(null);
+  const freeLineDrawingRef = useRef(false);
   const [allowCrossOfficeEdges, setAllowCrossOfficeEdges] = useState(true);
   const [versions, setVersions] = useState<OrgChartVersionSummary[]>([]);
   const [currentVersionId, setCurrentVersionId] = useState<string | null>(null);
@@ -1326,6 +1355,18 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
   }, []);
 
   const offices = useMemo(() => nodes.filter((node: FlowNode) => node.type === "office"), [nodes]);
+  const officesSortedByName = useMemo(
+    () => [...offices].sort((a, b) => a.data.name.localeCompare(b.data.name)),
+    [offices]
+  );
+  const focusedOfficeSelectValue = useMemo(() => {
+    if (!focusOfficeId) return undefined;
+    const match = offices.find((office) => {
+      const officeId = office.data.officeId ?? office.id;
+      return officeId === focusOfficeId || office.id === focusOfficeId;
+    });
+    return match ? match.data.officeId ?? match.id : undefined;
+  }, [focusOfficeId, offices]);
   const filteredOffices = useMemo(() => {
     const query = officeSearch.trim().toLowerCase();
     if (!query) return offices;
@@ -1364,7 +1405,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
   const isHand = tool === "hand";
   const customMarkerDefinitions = useMemo(() => getCustomMarkerDefinitions(edges), [edges]);
   const handleEdgeTypeChange = useCallback(
-    (value: "orth" | "smoothstep") => {
+    (value: "orth" | "smoothstep" | "straight") => {
       setEdgeType(value);
       setEdges((currentEdges: FlowEdge[]) =>
         currentEdges.map((edge: FlowEdge) => ({
@@ -1379,6 +1420,16 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
     },
     [setEdges]
   );
+
+  const selectLineStyleFromFlyout = useCallback((value: "orth" | "smoothstep" | "straight") => {
+    // Default for new connections only — do not rewrite the whole chart.
+    setEdgeType(value);
+    setTool("connect");
+    setLineMenuOpen(false);
+    pendingFreeLineStartRef.current = null;
+    freeLineDrawingRef.current = false;
+    setFreeLineDraft(null);
+  }, []);
   const hideInterfaceForExport = useCallback(() => {
     const targets = [
       ".react-flow__controls",
@@ -2356,7 +2407,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
   }, []);
 
     const serializeDocument = useCallback(
-      (flowNodes: FlowNode[], flowEdges: FlowEdge[], currentEdgeType: "orth" | "smoothstep"): OrgChartDocument => ({
+      (flowNodes: FlowNode[], flowEdges: FlowEdge[], currentEdgeType: "orth" | "smoothstep" | "straight"): OrgChartDocument => ({
         nodes: flowNodes.map((node: FlowNode) => ({
           id: node.id,
           type: node.type as OrgNodeType,
@@ -2430,6 +2481,23 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
               style: {
                 width: node.width ?? JUNCTION_NODE_SIZE,
                 height: node.height ?? JUNCTION_NODE_SIZE,
+              },
+            };
+          }
+          if (node.type === "lineEndpoint") {
+            return {
+              id: node.id,
+              type: "lineEndpoint",
+              position: node.position,
+              data: {
+                name: node.data.name || "Endpoint",
+                officeId: node.data.officeId,
+              },
+              width: node.width ?? LINE_ENDPOINT_SIZE,
+              height: node.height ?? LINE_ENDPOINT_SIZE,
+              style: {
+                width: node.width ?? LINE_ENDPOINT_SIZE,
+                height: node.height ?? LINE_ENDPOINT_SIZE,
               },
             };
           }
@@ -2852,8 +2920,10 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
   ]);
 
   useEffect(() => {
+    // Only reload when department changes — not when edgeType / helpers recreate loadInitialData.
     void loadInitialData();
-  }, [loadInitialData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: avoid remount flash on line-style edits
+  }, [departmentId]);
 
   useEffect(() => {
     if (saveTimer.current) {
@@ -3323,6 +3393,148 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
       setNodes,
       toast,
     ]
+  );
+
+  useEffect(() => {
+    if (tool !== "connect") {
+      pendingFreeLineStartRef.current = null;
+      freeLineDrawingRef.current = false;
+      setFreeLineDraft(null);
+    }
+  }, [tool]);
+
+  const clientToFlowPosition = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!reactFlowWrapper.current) return null;
+      const bounds = reactFlowWrapper.current.getBoundingClientRect();
+      return project({
+        x: clientX - bounds.left,
+        y: clientY - bounds.top,
+      });
+    },
+    [project]
+  );
+
+  const isFreeLinePaneTarget = useCallback((target: EventTarget | null) => {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    if (el.closest(".react-flow__node") || el.closest(".react-flow__edge") || el.closest(".react-flow__handle")) {
+      return false;
+    }
+    if (el.closest("[data-orgchart-edge-id]") || el.closest("[role='toolbar']")) {
+      return false;
+    }
+    return Boolean(el.classList.contains("react-flow__pane") || el.closest(".react-flow__pane"));
+  }, []);
+
+  const commitFreeLine = useCallback(
+    (start: { x: number; y: number }, end: { x: number; y: number }) => {
+      if (Math.hypot(end.x - start.x, end.y - start.y) < 12) {
+        return;
+      }
+
+      const half = LINE_ENDPOINT_SIZE / 2;
+      const startId = `lineEndpoint-${crypto.randomUUID()}`;
+      const endId = `lineEndpoint-${crypto.randomUUID()}`;
+      const officeId = focusOfficeId ?? undefined;
+
+      const startNode: FlowNode = {
+        id: startId,
+        type: "lineEndpoint",
+        position: { x: start.x - half, y: start.y - half },
+        data: { name: "Endpoint", officeId },
+        width: LINE_ENDPOINT_SIZE,
+        height: LINE_ENDPOINT_SIZE,
+        style: { width: LINE_ENDPOINT_SIZE, height: LINE_ENDPOINT_SIZE },
+      };
+      const endNode: FlowNode = {
+        id: endId,
+        type: "lineEndpoint",
+        position: { x: end.x - half, y: end.y - half },
+        data: { name: "Endpoint", officeId },
+        width: LINE_ENDPOINT_SIZE,
+        height: LINE_ENDPOINT_SIZE,
+        style: { width: LINE_ENDPOINT_SIZE, height: LINE_ENDPOINT_SIZE },
+      };
+
+      const flowType = mapDocEdgeTypeToFlow(edgeType);
+      const lineEdge = applyEdgePresentation({
+        id: `edge-${crypto.randomUUID()}`,
+        source: startId,
+        target: endId,
+        sourceHandle: "r-source",
+        targetHandle: "l-target",
+        type: flowType,
+        label: "",
+        data: {
+          color: DEFAULT_EDGE_COLOR,
+          customType: edgeType,
+          markerStartType: DEFAULT_MARKER_START,
+          markerEndType: DEFAULT_MARKER_END,
+          markerSize: DEFAULT_MARKER_SIZE,
+          markerColor: DEFAULT_EDGE_COLOR,
+        },
+      });
+
+      runWithHistory(() => {
+        setNodes((nds) => [...nds, startNode, endNode]);
+        setEdges((eds) => [...eds, lineEdge]);
+        setSelectedNodeIds([]);
+        setSelectedEdgeIds([lineEdge.id]);
+      });
+    },
+    [edgeType, focusOfficeId, runWithHistory, setEdges, setNodes, setSelectedEdgeIds, setSelectedNodeIds]
+  );
+
+  const handleFreeLinePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (tool !== "connect" || isHand) return;
+      if (event.button !== 0) return;
+      if (!isFreeLinePaneTarget(event.target)) return;
+
+      const position = clientToFlowPosition(event.clientX, event.clientY);
+      if (!position) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      freeLineDrawingRef.current = true;
+      pendingFreeLineStartRef.current = position;
+      setFreeLineDraft({ start: position, end: position });
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [clientToFlowPosition, isFreeLinePaneTarget, isHand, tool]
+  );
+
+  const handleFreeLinePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!freeLineDrawingRef.current || !pendingFreeLineStartRef.current) return;
+      const position = clientToFlowPosition(event.clientX, event.clientY);
+      if (!position) return;
+      setFreeLineDraft({ start: pendingFreeLineStartRef.current, end: position });
+    },
+    [clientToFlowPosition]
+  );
+
+  const handleFreeLinePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!freeLineDrawingRef.current) return;
+      freeLineDrawingRef.current = false;
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // ignore if capture already released
+      }
+
+      const start = pendingFreeLineStartRef.current;
+      pendingFreeLineStartRef.current = null;
+      setFreeLineDraft(null);
+      if (!start) return;
+
+      const end = clientToFlowPosition(event.clientX, event.clientY);
+      if (!end) return;
+      commitFreeLine(start, end);
+    },
+    [clientToFlowPosition, commitFreeLine]
   );
 
   const duplicateNode = useCallback(
@@ -4144,7 +4356,9 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
     if (!reactFlowWrapper.current) {
       throw new Error("Chart canvas is not ready");
     }
-    const nodesForExport = getNodes().filter((node) => !node.hidden && node.type !== "junction");
+    const nodesForExport = getNodes().filter(
+      (node) => !node.hidden && node.type !== "junction" && node.type !== "lineEndpoint"
+    );
     if (!nodesForExport.length) {
       throw new Error("Nothing visible to export");
     }
@@ -4449,6 +4663,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
         .orgchart-exporting .react-flow__handle,
         .orgchart-exporting [data-orgchart-edge-id],
         .orgchart-exporting .react-flow__node-junction,
+        .orgchart-exporting .react-flow__node-lineEndpoint,
         .orgchart-exporting .orgchart-align-guides {
           opacity: 0 !important;
           visibility: hidden !important;
@@ -4468,12 +4683,15 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
         .react-flow__handle {
           width: 10px !important;
           height: 10px !important;
+          min-width: 10px !important;
+          min-height: 10px !important;
           background: #3b82f6 !important;
           border: 2px solid #ffffff !important;
           box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
           opacity: 0;
           pointer-events: auto;
-          transition: opacity 140ms ease, transform 140ms ease;
+          /* Do not transition transform — it fights handle centering and misaligns edges. */
+          transition: opacity 140ms ease, width 140ms ease, height 140ms ease;
         }
         .react-flow__node:hover .react-flow__handle,
         .react-flow__node.selected .react-flow__handle,
@@ -4518,6 +4736,20 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
         }
         .react-flow.connecting .react-flow__node-junction .react-flow__handle,
         .orgchart-connect-mode .react-flow__node-junction .react-flow__handle {
+          pointer-events: all !important;
+        }
+        .react-flow__node-lineEndpoint {
+          cursor: grab;
+        }
+        .react-flow__node-lineEndpoint:active {
+          cursor: grabbing;
+        }
+        .react-flow__node-lineEndpoint .react-flow__handle {
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+        .react-flow.connecting .react-flow__node-lineEndpoint .react-flow__handle,
+        .orgchart-connect-mode .react-flow__node-lineEndpoint .react-flow__handle {
           pointer-events: all !important;
         }
         .orgchart-connect-mode .react-flow__handle {
@@ -4582,6 +4814,30 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                           {version.label}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="rounded-md border px-2 py-1">
+                  <p className="text-[10px] leading-none text-muted-foreground">Office</p>
+                  <Select
+                    value={focusedOfficeSelectValue}
+                    onValueChange={(value) => setFocusOfficeId(value)}
+                  >
+                    <SelectTrigger className="h-7 w-[200px] max-w-[40vw] border-0 p-0 shadow-none">
+                      <div className="flex min-w-0 items-center gap-1.5 truncate">
+                        <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <SelectValue placeholder="Select office" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {officesSortedByName.map((office) => {
+                        const officeIdentifier = office.data.officeId ?? office.id;
+                        return (
+                          <SelectItem key={office.id} value={officeIdentifier}>
+                            {office.data.name}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -5013,10 +5269,20 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
               ref={reactFlowWrapper}
               className={cn(
                 "relative h-full w-full",
-                isHand ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+                isHand
+                  ? "cursor-grab active:cursor-grabbing"
+                  : tool === "connect"
+                    ? "cursor-crosshair"
+                    : "cursor-default"
               )}
-              onPointerMove={updatePointerPosition}
+              onPointerMove={(event) => {
+                updatePointerPosition(event);
+                handleFreeLinePointerMove(event);
+              }}
               onPointerLeave={clearPointerPosition}
+              onPointerDown={handleFreeLinePointerDown}
+              onPointerUp={handleFreeLinePointerUp}
+              onPointerCancel={handleFreeLinePointerUp}
             >
               {/* Lucidchart-style tool rail — left of canvas (above React Flow hit layer) */}
               <div
@@ -5047,17 +5313,50 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                 >
                   <Hand className="h-4 w-4" />
                 </Button>
-                <Button
-                  type="button"
-                  variant={tool === "connect" ? "default" : "ghost"}
-                  size="icon"
-                  className="h-9 w-9"
-                  title="Connect — drag from a node handle"
-                  aria-pressed={tool === "connect"}
-                  onClick={() => setTool("connect")}
-                >
-                  <Link2 className="h-4 w-4" />
-                </Button>
+                <Popover open={lineMenuOpen} onOpenChange={setLineMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant={tool === "connect" || lineMenuOpen ? "default" : "ghost"}
+                      size="icon"
+                      className="h-9 w-9"
+                      title="Line / Connect"
+                      aria-pressed={tool === "connect"}
+                      aria-expanded={lineMenuOpen}
+                    >
+                      <Link2 className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="right"
+                    align="center"
+                    sideOffset={10}
+                    className="z-[10000] w-48 border-slate-700 bg-slate-800 p-1.5 text-slate-50 shadow-xl"
+                  >
+                    <p className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Line
+                    </p>
+                    <div className="flex flex-col gap-0.5">
+                      {LINE_FLYOUT_OPTIONS.map((option) => {
+                        const isActive = edgeType === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={cn(
+                              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                              isActive ? "bg-slate-700 text-white" : "text-slate-100 hover:bg-slate-700/80"
+                            )}
+                            onClick={() => selectLineStyleFromFlyout(option.value)}
+                          >
+                            <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                            {isActive ? <Check className="h-3.5 w-3.5 shrink-0 text-sky-300" /> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
                 <div className="my-0.5 h-px w-7 bg-border" />
                 <Button
                   type="button"
@@ -5148,7 +5447,11 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                 defaultViewport={{ x: 0, y: 0, zoom: DEFAULT_CANVAS_ZOOM }}
                 deleteKeyCode={["Delete", "Backspace"]}
                 connectionLineType={
-                  edgeType === "smoothstep" ? SMOOTH_CONNECTION_LINE : ORTHOGONAL_CONNECTION_LINE
+                  edgeType === "smoothstep"
+                    ? SMOOTH_CONNECTION_LINE
+                    : edgeType === "straight"
+                      ? STRAIGHT_CONNECTION_LINE
+                      : ORTHOGONAL_CONNECTION_LINE
                 }
                 proOptions={{ hideAttribution: true }}
                 style={{ width: "100%", height: "100%", backgroundColor: "#f3f4f6" }}
@@ -5193,8 +5496,15 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                 data-orgchart-export-ignore="true"
                 className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full border bg-background/95 px-4 py-1.5 text-sm text-muted-foreground shadow-sm"
               >
-                Drag to pan • Scroll to zoom • Click a node to edit
+                {tool === "connect"
+                  ? freeLineDraft
+                    ? "Release to place the line"
+                    : "Click-drag on empty canvas to draw (+) • Or drag from node handles"
+                  : "Drag to pan • Scroll to zoom • Click a node to edit"}
               </div>
+              {freeLineDraft ? (
+                <FreeLinePreview draft={freeLineDraft} getViewport={getViewport} />
+              ) : null}
               {isHand ? (
                 <div
                   data-orgchart-export-ignore="true"
@@ -5231,6 +5541,8 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                       <Type className="h-4 w-4" />
                     ) : selectedNode.type === "junction" ? (
                       <GitBranch className="h-4 w-4" />
+                    ) : selectedNode.type === "lineEndpoint" ? (
+                      <Link2 className="h-4 w-4" />
                     ) : (
                       <Building2 className="h-4 w-4" />
                     )
@@ -5239,7 +5551,16 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                   ) : null}
                 </div>
                 {selectedNode ? (
-                  selectedNode.type === "junction" ? (
+                  selectedNode.type === "lineEndpoint" ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Line endpoint — drag to reshape the standalone line, or remove it.
+                      </p>
+                      <Button variant="destructive" size="sm" onClick={removeSelectedNode} className="flex items-center gap-2">
+                        <Trash2 className="h-4 w-4" /> Remove endpoint
+                      </Button>
+                    </div>
+                  ) : selectedNode.type === "junction" ? (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">
                         Connection junction — drag this hub, then release to snap into a straight T. Or click Straighten.
@@ -5584,7 +5905,7 @@ const OrgChartToolInner = ({ departmentId, logoUrl }: OrgChartToolProps) => {
                     <Label htmlFor="edge-type">Style</Label>
                   <Select
                     value={selectedEdge.data?.customType ?? mapFlowEdgeTypeToDoc(selectedEdge.type)}
-                    onValueChange={(value: "orth" | "smoothstep") =>
+                    onValueChange={(value: "orth" | "smoothstep" | "straight") =>
                       updateSelectedEdge({
                         type: mapDocEdgeTypeToFlow(value),
                         data: { ...selectedEdge.data, customType: value },
@@ -5830,6 +6151,7 @@ const nodeTypes = {
   person: (props: NodeProps<FlowNodeData>) => <FlowNodeCard {...props} icon={<User className="h-4 w-4" />} />,
   annotation: (props: NodeProps<FlowNodeData>) => <AnnotationNode {...props} />,
   junction: (props: NodeProps<FlowNodeData>) => <JunctionNode {...props} />,
+  lineEndpoint: (props: NodeProps<FlowNodeData>) => <LineEndpointNode {...props} />,
 };
 
 const edgeTypes = {
@@ -5924,6 +6246,41 @@ function OrgChartBranchEdge({
   );
 }
 
+function FreeLinePreview({
+  draft,
+  getViewport,
+}: {
+  draft: { start: { x: number; y: number }; end: { x: number; y: number } };
+  getViewport: () => { x: number; y: number; zoom: number };
+}) {
+  const viewport = getViewport();
+  const x1 = draft.start.x * viewport.zoom + viewport.x;
+  const y1 = draft.start.y * viewport.zoom + viewport.y;
+  const x2 = draft.end.x * viewport.zoom + viewport.x;
+  const y2 = draft.end.y * viewport.zoom + viewport.y;
+
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 z-[25]"
+      width="100%"
+      height="100%"
+      aria-hidden
+    >
+      <line
+        x1={x1}
+        y1={y1}
+        x2={x2}
+        y2={y2}
+        stroke="#3b82f6"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <circle cx={x1} cy={y1} r={4} fill="#fff" stroke="#3b82f6" strokeWidth={2} />
+      <circle cx={x2} cy={y2} r={4} fill="#fff" stroke="#3b82f6" strokeWidth={2} />
+    </svg>
+  );
+}
+
 function JunctionNode({ selected }: NodeProps<FlowNodeData>) {
   const handles = getHandlesForType("junction");
   return (
@@ -5938,6 +6295,35 @@ function JunctionNode({ selected }: NodeProps<FlowNodeData>) {
       <div
         className="rounded-full border-2 border-white bg-slate-900 shadow"
         style={{ width: JUNCTION_VISUAL_SIZE, height: JUNCTION_VISUAL_SIZE }}
+      />
+      {handles.map((handle) => (
+        <Handle
+          key={handle.id}
+          type={handle.type}
+          position={handle.position}
+          id={handle.id}
+          className="!h-3 !w-3 !min-h-0 !min-w-0 !rounded-full !border-0 !bg-transparent"
+          style={handle.style}
+        />
+      ))}
+    </div>
+  );
+}
+
+function LineEndpointNode({ selected }: NodeProps<FlowNodeData>) {
+  const handles = getHandlesForType("lineEndpoint");
+  return (
+    <div
+      className={cn(
+        "relative flex items-center justify-center",
+        selected && "ring-2 ring-sky-400 ring-offset-1 rounded-full"
+      )}
+      style={{ width: LINE_ENDPOINT_SIZE, height: LINE_ENDPOINT_SIZE }}
+      title="Drag endpoint to reshape the line"
+    >
+      <div
+        className="rounded-full border-2 border-sky-500 bg-white shadow"
+        style={{ width: LINE_ENDPOINT_VISUAL, height: LINE_ENDPOINT_VISUAL }}
       />
       {handles.map((handle) => (
         <Handle
@@ -6001,6 +6387,7 @@ function AutoFitTextBlock({
 
 function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
   const actions = useCanvasActions();
+  const updateNodeInternals = useUpdateNodeInternals();
   const handles = getHandlesForType(type as OrgNodeType);
   const { showPhotos, focusedOfficeId, employeePhotosById, employeePhotosByName } = useCanvasSettings();
   const outlineColor = normalizeColor(data.outlineColor) ?? NEUTRAL_OUTLINE_COLOR;
@@ -6016,6 +6403,10 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
     width: cardWidth,
     height: cardHeight,
   };
+
+  useLayoutEffect(() => {
+    updateNodeInternals(id);
+  }, [id, selected, cardWidth, cardHeight, borderWidth, updateNodeInternals]);
 
   const renderAvatar = () => {
     const belongsToFocusedOffice =
@@ -6089,7 +6480,7 @@ function FlowNodeCard({ id, data, type, selected, icon }: FlowNodeCardProps) {
           type={handle.type}
           position={handle.position}
           id={handle.id}
-          className="!h-3.5 !w-3.5 !rounded-full !border-2 !border-white !bg-[#3b82f6]"
+          className="!min-h-0 !min-w-0 !rounded-full !border-2 !border-white !bg-[#3b82f6]"
           style={handle.style}
         />
       ))}
@@ -6273,7 +6664,8 @@ const HANDLE_POSITIONS: Array<{
   {
     id: "t",
     position: Position.Top,
-    style: { top: 0, left: "50%", transform: "translateX(-50%)" },
+    // Match React Flow defaults so edge endpoints sit on the handle center.
+    style: { top: 0, left: "50%", transform: "translate(-50%, -50%)" },
   },
   {
     id: "r",
@@ -6283,7 +6675,7 @@ const HANDLE_POSITIONS: Array<{
   {
     id: "b",
     position: Position.Bottom,
-    style: { bottom: 0, left: "50%", transform: "translateX(-50%)" },
+    style: { bottom: 0, left: "50%", transform: "translate(-50%, 50%)" },
   },
   {
     id: "l",
@@ -6293,8 +6685,8 @@ const HANDLE_POSITIONS: Array<{
 ];
 
 function getHandlesForType(type: OrgNodeType): HandleConfig[] {
-  if (type === "junction") {
-    // All handles share the center so T-junction lines meet at one point (no bend).
+  if (type === "junction" || type === "lineEndpoint") {
+    // All handles share the center so lines meet at one point (no bend).
     const centerStyle: CSSProperties = {
       top: "50%",
       left: "50%",

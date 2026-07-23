@@ -5,6 +5,11 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-23 — fix: align org chart connection handles with edge endpoints (RF handle transforms)
+- 2026-07-23 — ui: draw free lines with click-drag (+ cursor) like Lucidchart
+- 2026-07-23 — fix: stop “Preparing org chart” remount when changing line style; add standalone free lines
+- 2026-07-23 — ui: Lucidchart-style Connect flyout (Straight / Elbow / Bendy) on org chart tool rail
+- 2026-07-23 — ui: add Office picker dropdown to org chart fullscreen toolbar
 - 2026-07-23 — fix: remove duplicate fullscreen Person button; make icon-rail Add person reliably open
 - 2026-07-23 — ui: show unsaved badge in fullscreen; Ctrl+F toggles fullscreen edit
 - 2026-07-23 — fix: Add person + Show photos work in org chart fullscreen (dialog z-index + toolbar)

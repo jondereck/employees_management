@@ -1,4 +1,4 @@
-export type OrgNodeType = "office" | "unit" | "person" | "annotation" | "junction";
+export type OrgNodeType = "office" | "unit" | "person" | "annotation" | "junction" | "lineEndpoint";
 
 export type AnnotationWeight = "normal" | "bold";
 
@@ -57,7 +57,7 @@ export type OrgChartEdge = {
 export type OrgChartDocument = {
   nodes: OrgChartNode[];
   edges: OrgChartEdge[];
-  edgeType?: "orth" | "smoothstep";
+  edgeType?: "orth" | "smoothstep" | "straight";
 };
 
 export type OrgChartVersion = {
