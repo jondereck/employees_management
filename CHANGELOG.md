@@ -5,6 +5,7 @@ Tracks changes made to this project. Newest entries go at the top of **Unrelease
 
 ## Unreleased
 
+- 2026-07-23 — feat: add formatted Excel download for the current workforce pivot matrix
 - 2026-07-23 — feat: support nested Office × Employee Type × Gender in workforce pivot matrix
 - 2026-07-21 — fix: keep dashboard employee movement timing and event details consistent
 - 2026-07-21 — fix: polish new-hires modal empty state, list semantics, and summary test coverage

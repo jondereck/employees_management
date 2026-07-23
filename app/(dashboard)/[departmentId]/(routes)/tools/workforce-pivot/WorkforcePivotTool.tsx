@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Download, Loader2, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
+import { exportWorkforcePivotExcel } from "@/lib/workforce-pivot-export";
 
 const AUTORUN_DEBOUNCE_MS = 350;
 const DRILLDOWN_DEBOUNCE_MS = 250;
@@ -437,6 +438,23 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
     [pickFallbackField, rowField, secondaryRowField]
   );
 
+  const handleDownloadExcel = useCallback(() => {
+    if (!result || result.rows.length === 0) return;
+    try {
+      exportWorkforcePivotExcel({
+        result,
+        fieldLabels: FIELD_LABELS,
+      });
+    } catch (error) {
+      console.error("[workforce-pivot] excel export error", error);
+      toast({
+        title: "Excel export failed",
+        description: error instanceof Error ? error.message : "Unable to download the file",
+        variant: "destructive",
+      });
+    }
+  }, [result, toast]);
+
   const loadDrilldown = useCallback(async () => {
     if (!drilldownTarget) return;
 
@@ -780,13 +798,25 @@ export default function WorkforcePivotTool({ departmentId }: WorkforcePivotToolP
 
         {mode === "matrix" ? (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">{matrixTitle}</CardTitle>
-              <CardDescription>
-                {result
-                  ? `${numberFormatter.format(result.grandTotal)} employees matched`
-                  : "Adjust filters to populate the table."}
-              </CardDescription>
+            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+              <div className="space-y-1.5">
+                <CardTitle className="text-lg">{matrixTitle}</CardTitle>
+                <CardDescription>
+                  {result
+                    ? `${numberFormatter.format(result.grandTotal)} employees matched`
+                    : "Adjust filters to populate the table."}
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="flex items-center gap-2"
+                onClick={handleDownloadExcel}
+                disabled={loading || !result || result.rows.length === 0}
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Download Excel
+              </Button>
             </CardHeader>
             <CardContent>
               {result && result.rows.length > 0 ? (
